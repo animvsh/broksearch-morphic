@@ -3,15 +3,16 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+
 import { toast } from 'sonner'
 
+import type { ThemeId } from '@/lib/presentations/themes'
 import { cn } from '@/lib/utils'
+
 import { Button } from '@/components/ui/button'
 
 import { PromptBox } from '@/components/presentations/creator/prompt-box'
 import { SettingsPanel } from '@/components/presentations/creator/settings-panel'
-
-import type { ThemeId } from '@/lib/presentations/themes'
 
 const DEFAULT_SETTINGS = {
   slideCount: 8,

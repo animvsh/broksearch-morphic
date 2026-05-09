@@ -27,6 +27,7 @@ export interface SlideContent {
   quote?: string;
   quoteAttribution?: string;
   stats?: Array<{ label: string; value: string }>;
+  speakerNotes?: string;
 }
 
 export interface StyledSlide {
