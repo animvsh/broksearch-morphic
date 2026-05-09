@@ -36,7 +36,7 @@ export default async function SearchPage(props: {
   const chat = await loadChat(id, userId)
 
   if (!chat) {
-    notFound()
+    redirect('/')
   }
 
   if (chat.visibility === 'private' && !userId) {
