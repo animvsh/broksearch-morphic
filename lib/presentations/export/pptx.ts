@@ -111,7 +111,23 @@ export async function exportToPptx(
   }
 
   // Return as Buffer
-  return pptx.writeBuffer()
+  const result = await pptx.write()
+  // write() returns Promise<string | ArrayBuffer | Blob | Uint8Array>
+  // We need to handle all cases
+  let arrayBuffer: ArrayBuffer
+  if (typeof result === 'string') {
+    // If string, convert to ArrayBuffer
+    arrayBuffer = new TextEncoder().encode(result).buffer as ArrayBuffer
+  } else if (result instanceof Uint8Array) {
+    // Slice the underlying ArrayBuffer to get just our portion
+    arrayBuffer = result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength) as ArrayBuffer
+  } else if (result instanceof Blob) {
+    arrayBuffer = await result.arrayBuffer()
+  } else {
+    // Already an ArrayBuffer
+    arrayBuffer = result
+  }
+  return Buffer.from(arrayBuffer)
 }
 
 /**
@@ -295,34 +311,26 @@ function renderImageLeftSlide(
   const heading = content.heading || ''
   const bullets = content.bullets || []
 
-  // Image on left side (placeholder if no URL)
-  if (imageUrl) {
-    slide.addImage({
-      url: imageUrl,
-      x: 0.5,
-      y: 1,
-      w: 4,
-      h: 5
-    })
-  } else {
-    // Placeholder rectangle
-    slide.addShape(pptxgen.ShapeType.rect, {
-      x: 0.5,
-      y: 1,
-      w: 4,
-      h: 5,
-      fill: { color: 'E5E7EB' },
-      line: { color: 'D1D5DB', width: 1 }
-    })
-    slide.addText('[Image]', {
-      color: '9CA3AF',
-      fontFace: bodyFont,
-      align: 'center',
-      x: 0.5,
-      y: 3,
-      w: 4
-    })
-  }
+  // Image on left side
+  // Note: pptxgenjs doesn't support remote URLs directly in Node.js
+  // For production, you'd want to fetch the image and use base64
+  // For now, show a placeholder rectangle
+  slide.addShape(pptxgen.ShapeType.rect, {
+    x: 0.5,
+    y: 1,
+    w: 4,
+    h: 5,
+    fill: { color: 'E5E7EB' },
+    line: { color: 'D1D5DB', width: 1 }
+  })
+  slide.addText(imageUrl ? '[Image URL]' : '[No Image]', {
+    color: '9CA3AF',
+    fontFace: bodyFont,
+    align: 'center',
+    x: 0.5,
+    y: 3,
+    w: 4
+  })
 
   // Text content on right side
   let yOffset = 1.0

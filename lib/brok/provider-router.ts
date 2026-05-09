@@ -6,13 +6,36 @@ export interface ProviderRequest {
   stream?: boolean;
   temperature?: number;
   maxTokens?: number;
+  tools?: Array<{
+    type: string;
+    web_search?: {
+      top_n?: number;
+    };
+  }>;
+  toolChoice?: {
+    type: string;
+    web_search?: {
+      top_n?: number;
+    };
+  };
 }
 
 export interface ProviderResponse {
   id: string;
   model: string;
   choices: Array<{
-    message: { role: string; content: string };
+    message: {
+      role: string;
+      content: string;
+      tool_calls?: Array<{
+        id: string;
+        type: string;
+        function: {
+          name: string;
+          arguments: string;
+        };
+      }>;
+    };
     finish_reason: string;
   }>;
   usage?: {
@@ -20,6 +43,12 @@ export interface ProviderResponse {
     completion_tokens: number;
     total_tokens: number;
   };
+  citations?: Array<{
+    title?: string;
+    url: string;
+    publisher?: string;
+    snippet?: string;
+  }>;
 }
 
 export async function routeToProvider(
@@ -64,13 +93,24 @@ function transformToProviderRequest(
   request: ProviderRequest
 ) {
   const modelConfig = BROK_MODELS[model];
-  return {
+
+  const providerRequest: Record<string, unknown> = {
     model: modelConfig.providerModel,
     messages: request.messages,
     stream: request.stream,
     temperature: request.temperature,
     max_tokens: request.maxTokens,
   };
+
+  // Add web search tools if supported and requested
+  if (request.tools && modelConfig.supportsTools) {
+    providerRequest.tools = request.tools;
+    if (request.toolChoice) {
+      providerRequest.tool_choice = request.toolChoice;
+    }
+  }
+
+  return providerRequest;
 }
 
 export function calculateCost(

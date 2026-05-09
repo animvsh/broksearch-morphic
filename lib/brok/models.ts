@@ -27,7 +27,7 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
   },
   'brok-search': {
     name: 'Brok Search',
-    description: 'Search-powered answers with citations',
+    description: 'Search-powered answers with citations using MiniMax native web search',
     provider: 'minimax',
     providerModel: 'minimax-text',
     inputCostPerMillion: 0.10,
@@ -35,11 +35,11 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     maxTokens: 16000,
     supportsStreaming: true,
     supportsSearch: true,
-    supportsTools: false,
+    supportsTools: true,
   },
   'brok-search-pro': {
     name: 'Brok Search Pro',
-    description: 'Deep search with 10-20 sources',
+    description: 'Deep search with 10-20 sources using MiniMax native web search',
     provider: 'minimax',
     providerModel: 'minimax-text',
     inputCostPerMillion: 0.15,
@@ -47,7 +47,7 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     maxTokens: 32000,
     supportsStreaming: true,
     supportsSearch: true,
-    supportsTools: false,
+    supportsTools: true,
   },
   'brok-code': {
     name: 'Brok Code',

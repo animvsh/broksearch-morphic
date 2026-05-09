@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { X, Copy, Check, Globe, Lock, Users } from 'lucide-react'
+import { useEffect,useState } from 'react'
+
+import { Check, Copy, Globe, Lock, Users,X } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface ShareModalProps {

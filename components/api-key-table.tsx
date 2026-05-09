@@ -14,7 +14,10 @@ interface ApiKey {
   environment: 'test' | 'live';
   status: 'active' | 'paused' | 'revoked';
   scopes: string[];
-  rpmLimit: number;
+  allowedModels: string[];
+  rpmLimit: number | null;
+  dailyRequestLimit: number | null;
+  monthlyBudgetCents: number | null;
   lastUsedAt: Date | null;
   createdAt: Date;
 }

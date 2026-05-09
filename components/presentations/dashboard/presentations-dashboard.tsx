@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useMemo,useState } from 'react'
 import Link from 'next/link'
 
 import type { FilterTab, Presentation } from '@/lib/presentations/types'
@@ -12,91 +12,93 @@ import { FilterTabs } from './filter-tabs'
 import { PresentationCard } from './presentation-card'
 
 // Mock data for development - replace with actual data fetching
-const mockPresentations: Presentation[] = [
-  {
-    id: '1',
-    userId: 'user-1',
-    title: 'Brok Pitch Deck',
-    description: 'Investor presentation for Brok platform',
-    status: 'ready',
-    slideCount: 12,
-    themeId: 'theme-1',
-    language: 'en',
-    style: 'startup',
-    isPublic: false,
-    createdAt: new Date(Date.now() - 86400000 * 2),
-    updatedAt: new Date(Date.now() - 180000)
-  },
-  {
-    id: '2',
-    userId: 'user-1',
-    title: 'Q4 Sales Deck',
-    description: 'Quarterly sales performance overview',
-    status: 'draft',
-    slideCount: 8,
-    themeId: 'theme-2',
-    language: 'en',
-    style: 'professional',
-    isPublic: false,
-    createdAt: new Date(Date.now() - 86400000 * 5),
-    updatedAt: new Date(Date.now() - 3600000 * 3)
-  },
-  {
-    id: '3',
-    userId: 'user-1',
-    title: 'Product Roadmap 2026',
-    description: 'Strategic product planning presentation',
-    status: 'ready',
-    slideCount: 15,
-    themeId: 'theme-3',
-    language: 'en',
-    style: 'professional',
-    isPublic: true,
-    shareId: 'share-abc123',
-    createdAt: new Date(Date.now() - 86400000 * 10),
-    updatedAt: new Date(Date.now() - 86400000)
-  },
-  {
-    id: '4',
-    userId: 'user-1',
-    title: 'Company Introduction',
-    description: 'New hire orientation deck',
-    status: 'generating',
-    slideCount: 20,
-    themeId: 'theme-1',
-    language: 'en',
-    style: 'casual',
-    isPublic: false,
-    createdAt: new Date(Date.now() - 3600000),
-    updatedAt: new Date(Date.now() - 1800000)
-  },
-  {
-    id: '5',
-    userId: 'user-1',
-    title: 'Marketing Strategy',
-    status: 'slides_generating',
-    slideCount: 0,
-    themeId: 'theme-4',
-    language: 'en',
-    style: 'professional',
-    isPublic: false,
-    createdAt: new Date(Date.now() - 7200000),
-    updatedAt: new Date(Date.now() - 300000)
-  },
-  {
-    id: '6',
-    userId: 'user-1',
-    title: 'Weekly Team Standup',
-    status: 'draft',
-    slideCount: 5,
-    themeId: 'theme-2',
-    language: 'en',
-    style: 'casual',
-    isPublic: false,
-    createdAt: new Date(Date.now() - 86400000 * 3),
-    updatedAt: new Date(Date.now() - 86400000 * 2)
-  }
-]
+function createMockPresentations(now: number): Presentation[] {
+  return [
+    {
+      id: '1',
+      userId: 'user-1',
+      title: 'Brok Pitch Deck',
+      description: 'Investor presentation for Brok platform',
+      status: 'ready',
+      slideCount: 12,
+      themeId: 'theme-1',
+      language: 'en',
+      style: 'startup',
+      isPublic: false,
+      createdAt: new Date(now - 86400000 * 2),
+      updatedAt: new Date(now - 180000)
+    },
+    {
+      id: '2',
+      userId: 'user-1',
+      title: 'Q4 Sales Deck',
+      description: 'Quarterly sales performance overview',
+      status: 'draft',
+      slideCount: 8,
+      themeId: 'theme-2',
+      language: 'en',
+      style: 'professional',
+      isPublic: false,
+      createdAt: new Date(now - 86400000 * 5),
+      updatedAt: new Date(now - 3600000 * 3)
+    },
+    {
+      id: '3',
+      userId: 'user-1',
+      title: 'Product Roadmap 2026',
+      description: 'Strategic product planning presentation',
+      status: 'ready',
+      slideCount: 15,
+      themeId: 'theme-3',
+      language: 'en',
+      style: 'professional',
+      isPublic: true,
+      shareId: 'share-abc123',
+      createdAt: new Date(now - 86400000 * 10),
+      updatedAt: new Date(now - 86400000)
+    },
+    {
+      id: '4',
+      userId: 'user-1',
+      title: 'Company Introduction',
+      description: 'New hire orientation deck',
+      status: 'generating',
+      slideCount: 20,
+      themeId: 'theme-1',
+      language: 'en',
+      style: 'casual',
+      isPublic: false,
+      createdAt: new Date(now - 3600000),
+      updatedAt: new Date(now - 1800000)
+    },
+    {
+      id: '5',
+      userId: 'user-1',
+      title: 'Marketing Strategy',
+      status: 'slides_generating',
+      slideCount: 0,
+      themeId: 'theme-4',
+      language: 'en',
+      style: 'professional',
+      isPublic: false,
+      createdAt: new Date(now - 7200000),
+      updatedAt: new Date(now - 300000)
+    },
+    {
+      id: '6',
+      userId: 'user-1',
+      title: 'Weekly Team Standup',
+      status: 'draft',
+      slideCount: 5,
+      themeId: 'theme-2',
+      language: 'en',
+      style: 'casual',
+      isPublic: false,
+      createdAt: new Date(now - 86400000 * 3),
+      updatedAt: new Date(now - 86400000 * 2)
+    }
+  ]
+}
 
 interface PresentationsDashboardProps {
   initialPresentations?: Presentation[]
@@ -162,8 +164,10 @@ export function PresentationsDashboard({
   isLoading = false
 }: PresentationsDashboardProps) {
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all')
+  const [now] = useState(() => Date.now())
 
   // Use initial data or mock data
+  const mockPresentations = useMemo(() => createMockPresentations(now), [now])
   const presentations = initialPresentations ?? mockPresentations
 
   // Filter presentations based on active filter
@@ -172,7 +176,7 @@ export function PresentationsDashboard({
       case 'recent':
         // Last 7 days
         return (
-          p.updatedAt.getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000
+          p.updatedAt.getTime() > now - 7 * 24 * 60 * 60 * 1000
         )
       case 'shared':
         return p.isPublic && p.shareId

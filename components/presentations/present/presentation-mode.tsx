@@ -53,7 +53,6 @@ export function PresentationMode({
   const enterFullscreen = useCallback(async () => {
     try {
       await document.documentElement.requestFullscreen();
-      setIsFullscreen(true);
     } catch {
       // Fullscreen may not be supported or allowed
     }
@@ -63,7 +62,6 @@ export function PresentationMode({
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
-    setIsFullscreen(false);
   }, []);
 
   const toggleFullscreen = useCallback(() => {
@@ -88,7 +86,10 @@ export function PresentationMode({
   useEffect(() => {
     enterFullscreen();
     return () => {
-      exitFullscreen();
+      // Defer exitFullscreen to avoid setState during render
+      setTimeout(() => {
+        exitFullscreen();
+      }, 0);
     };
   }, [enterFullscreen, exitFullscreen]);
 

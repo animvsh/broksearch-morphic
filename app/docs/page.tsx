@@ -3,7 +3,7 @@ export default function DocsPage() {
     <div className="container py-8">
       <h1 className="text-4xl font-bold mb-4">Brok Documentation</h1>
       <p className="text-xl text-muted-foreground mb-8">
-        Build with Brok's AI API in minutes
+        Build with Brok API in minutes
       </p>
 
       <div className="grid md:grid-cols-3 gap-6">

@@ -103,7 +103,15 @@ export async function POST(
       await updateExportStatus(exportRecord.id, 'completed')
 
       // Return the buffer as a downloadable file
-      return new Response(pptxBuffer, {
+      // Convert Buffer to Uint8Array for proper ReadableStream handling
+      const uint8Array = new Uint8Array(pptxBuffer.buffer, pptxBuffer.byteOffset, pptxBuffer.byteLength)
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(uint8Array)
+          controller.close()
+        }
+      })
+      return new Response(stream, {
         status: 200,
         headers: {
           'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',

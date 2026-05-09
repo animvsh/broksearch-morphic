@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import { generateApiKey, hashApiKey } from '@/lib/api-key';
+
 import { verifyRequestAuth } from '../auth';
 
 // Create mock functions using vi.hoisted so they are available in vi.mock

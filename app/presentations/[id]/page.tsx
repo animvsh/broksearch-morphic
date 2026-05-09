@@ -15,6 +15,7 @@ import {
   OutlineChatBar,
   OutlineEditor} from '@/components/presentations/outline'
 import type { OutlineSlide } from '@/components/presentations/outline/types'
+import type { PresentationStatus } from '@/lib/presentations/types'
 
 // Mock data for development
 function getMockPresentation(id: string) {
@@ -22,7 +23,7 @@ function getMockPresentation(id: string) {
     id,
     title: 'Investor Pitch Deck',
     description: 'A compelling pitch for our startup',
-    status: 'draft' as const,
+    status: 'draft' as PresentationStatus,
     slideCount: 0,
     language: 'en',
     style: 'startup' as const,

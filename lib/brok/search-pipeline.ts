@@ -1,5 +1,3 @@
-import { BROK_MODELS } from './models';
-
 export interface SearchResult {
   id: string;
   title: string;
@@ -31,143 +29,51 @@ const SEARCH_CONFIG = {
 
 export async function runSearchPipeline(request: SearchRequest): Promise<SearchResponse> {
   const config = SEARCH_CONFIG[request.depth];
-  const startTime = Date.now();
 
-  // Step 1: Rewrite query for search (could use a separate model)
-  const searchQuery = await rewriteQuery(request.query);
-
-  // Step 2: Run web searches
-  const searchResults = await runWebSearch(searchQuery, config.sources, request.recencyDays, request.domains);
-
-  // Step 3: Fetch and extract content from top sources
-  const enrichedResults = await enrichSearchResults(searchResults.slice(0, config.sources));
-
-  // Step 4: Deduplicate and rank
-  const deduplicated = deduplicateResults(enrichedResults);
-
-  // Step 5: Build context for synthesis
-  const context = buildContext(deduplicated);
-
-  // Step 6: Generate answer with MiniMax
-  const answer = await synthesizeAnswer(request.query, context, config.maxTokens);
-
-  const latencyMs = Date.now() - startTime;
+  // Use MiniMax web search tool to get search results with citations
+  const { results: searchResults, answer, tokensUsed } = await runMiniMaxWebSearch(
+    request.query,
+    config.sources,
+    config.maxTokens,
+    request.recencyDays
+  );
 
   return {
     answer,
-    citations: deduplicated.map((r, i) => ({
+    citations: searchResults.map((r, i) => ({
       id: `src_${i + 1}`,
       title: r.title,
       url: r.url,
       publisher: r.publisher,
       snippet: r.snippet,
-      retrievedAt: new Date().toISOString(),
+      retrievedAt: r.retrievedAt,
     })),
-    searchQueries: searchResults.length,
-    tokensUsed: Math.round(context.length / 4), // Rough estimate
+    searchQueries: 1,
+    tokensUsed,
   };
 }
 
-async function rewriteQuery(query: string): Promise<string> {
-  // Use a simple approach - could be enhanced with a model
-  return query;
+interface MiniMaxSearchResult {
+  id: string;
+  title: string;
+  url: string;
+  publisher?: string;
+  snippet: string;
+  retrievedAt: string;
 }
 
-async function runWebSearch(
+interface MiniMaxWebSearchResponse {
+  results: MiniMaxSearchResult[];
+  answer: string;
+  tokensUsed: number;
+}
+
+async function runMiniMaxWebSearch(
   query: string,
   numResults: number,
-  recencyDays?: number,
-  domains?: string[]
-): Promise<SearchResult[]> {
-  const tavilyKey = process.env.TAVILY_API_KEY;
-  const results: SearchResult[] = [];
-
-  if (tavilyKey) {
-    const params = new URLSearchParams({
-      api_key: tavilyKey,
-      query,
-      max_results: String(numResults),
-    });
-    if (recencyDays) params.set('recency_days', String(recencyDays));
-    if (domains?.length) params.set('domains', domains.join(','));
-
-    const response = await fetch(`https://api.tavily.com/search?${params}`);
-    const data = await response.json();
-
-    results.push(
-      ...(data.results || []).map((r: any, i: number) => ({
-        id: `tavily_${i}`,
-        title: r.title,
-        url: r.url,
-        publisher: r.source,
-        snippet: r.content,
-        retrievedAt: new Date().toISOString(),
-      }))
-    );
-  }
-
-  return results.slice(0, numResults);
-}
-
-async function enrichSearchResults(results: SearchResult[]): Promise<SearchResult[]> {
-  // Extract clean content from pages using Firecrawl or similar
-  const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-
-  if (!firecrawlKey) {
-    return results;
-  }
-
-  const enriched = await Promise.all(
-    results.map(async (result) => {
-      try {
-        const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${firecrawlKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            url: result.url,
-            pageOptions: { onlyMainContent: true },
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          return {
-            ...result,
-            snippet: data.data?.content?.slice(0, 500) || result.snippet,
-          };
-        }
-      } catch {}
-      return result;
-    })
-  );
-
-  return enriched;
-}
-
-function deduplicateResults(results: SearchResult[]): SearchResult[] {
-  const seen = new Set<string>();
-  return results.filter((r) => {
-    const key = r.url.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function buildContext(results: SearchResult[]): string {
-  return results
-    .map((r, i) => `[Source ${i + 1}] ${r.title}\nURL: ${r.url}\n${r.snippet}`)
-    .join('\n\n');
-}
-
-async function synthesizeAnswer(
-  query: string,
-  context: string,
-  maxTokens: number
-): Promise<string> {
+  maxTokens: number,
+  recencyDays?: number
+): Promise<MiniMaxWebSearchResponse> {
   const minimaxKey = process.env.MINIMAX_API_KEY;
 
   if (!minimaxKey) {
@@ -184,18 +90,86 @@ async function synthesizeAnswer(
       model: 'minimax-text',
       messages: [
         {
-          role: 'system',
-          content: `You are a helpful assistant. Answer the user's question based on the provided search results. Cite your sources using the format [Source N].`,
-        },
-        {
           role: 'user',
-          content: `Search Results:\n${context}\n\nQuestion: ${query}`,
+          content: query,
         },
       ],
+      tools: [
+        {
+          type: 'web_search',
+          web_search: {
+            top_n: numResults,
+          },
+        },
+      ],
+      tool_choice: {
+        type: 'web_search',
+        web_search: {
+          top_n: numResults,
+        },
+      },
       max_tokens: maxTokens,
     }),
   });
 
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`MiniMax web search error: ${response.status} - ${error}`);
+  }
+
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || 'No answer generated.';
+
+  // Extract search results and answer from tool calls or content
+  const searchResults: MiniMaxSearchResult[] = [];
+  let answer = '';
+
+  // Check if there are tool calls in the response
+  if (data.choices?.[0]?.message?.tool_calls) {
+    const toolCall = data.choices[0].message.tool_calls[0];
+    if (toolCall.function?.arguments) {
+      const parsed = JSON.parse(toolCall.function.arguments);
+      if (parsed.result?.web_pages) {
+        searchResults.push(
+          ...parsed.result.web_pages.map((page: any, i: number) => ({
+            id: `minimax_${i}`,
+            title: page.title || 'Untitled',
+            url: page.url,
+            publisher: page.publisher,
+            snippet: page.description || page.snippet || '',
+            retrievedAt: new Date().toISOString(),
+          }))
+        );
+      }
+      if (parsed.result?.answer) {
+        answer = parsed.result.answer;
+      }
+    }
+  }
+
+  // If no tool calls, check for content with citations
+  if (searchResults.length === 0 && data.choices?.[0]?.message?.content) {
+    answer = data.choices[0].message.content;
+  }
+
+  // Fallback: if we have citations in the response, extract them
+  if (data.citations && Array.isArray(data.citations)) {
+    searchResults.push(
+      ...data.citations.map((cite: any, i: number) => ({
+        id: `minimax_${i}`,
+        title: cite.title || 'Untitled',
+        url: cite.url,
+        publisher: cite.publisher,
+        snippet: cite.snippet || cite.description || '',
+        retrievedAt: new Date().toISOString(),
+      }))
+    );
+  }
+
+  const tokensUsed = data.usage?.total_tokens || Math.round((answer.length + searchResults.join('').length) / 4);
+
+  return {
+    results: searchResults.slice(0, numResults),
+    answer: answer || 'No answer generated.',
+    tokensUsed,
+  };
 }

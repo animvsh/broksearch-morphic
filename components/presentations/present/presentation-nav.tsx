@@ -47,8 +47,12 @@ export function PresentationNav({
     }, 2000);
   }, []);
 
-  useEffect(() => {
-    resetInactivityTimer();
+   
+  useLayoutEffect(() => {
+    // Defer the initial timer setup to avoid setState during render
+    const timeoutId = setTimeout(() => {
+      resetInactivityTimer();
+    }, 0);
 
     const handleMouseMove = () => resetInactivityTimer();
     window.addEventListener("mousemove", handleMouseMove);
@@ -58,7 +62,9 @@ export function PresentationNav({
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
+      clearTimeout(timeoutId);
     };
+
   }, [resetInactivityTimer]);
 
   return (
