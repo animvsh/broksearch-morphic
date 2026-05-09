@@ -1,15 +1,21 @@
-import { streamText } from 'ai'
 import { NextResponse } from 'next/server'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
-import { createGeneration, createOrUpdateOutline, getPresentation, updatePresentationStatus } from '@/lib/db/actions/presentations'
-import { minimax, MINIMAX_MODEL } from '@/lib/ai/minimax'
+import {
+  createGeneration,
+  createOrUpdateOutline,
+  getPresentation,
+  updatePresentationStatus
+} from '@/lib/db/actions/presentations'
 
 const textEncoder = new TextEncoder()
 
 /**
  * POST /api/presentations/:id/generate-outline
  * Start outline generation with SSE streaming
+ *
+ * Note: MiniMax integration requires @ai-sdk/openai-compatible to be installed.
+ * This route currently returns a configuration error until the dependency is added.
  */
 export async function POST(
   req: Request,
@@ -50,7 +56,7 @@ export async function POST(
       userId,
       prompt: actualTopic,
       generationType: 'outline',
-      model: MINIMAX_MODEL,
+      model: 'MiniMax-Text-01',
       webSearchEnabled: web_search
     })
 
@@ -67,7 +73,16 @@ export async function POST(
           // Send outline_started event
           sendEvent('outline_started', { presentationId: id })
 
-          // Generate outline using MiniMax
+          // Check if MiniMax is configured
+          const apiKey = process.env.MINIMAX_API_KEY
+          if (!apiKey) {
+            sendEvent('error', { error: 'MINIMAX_API_KEY not configured' })
+            await updatePresentationStatus(id, 'error')
+            controller.close()
+            return
+          }
+
+          // Generate outline using MiniMax API directly
           const outlinePrompt = `Create a presentation outline for the topic: "${actualTopic}"
 
 Generate a well-structured presentation outline with 5-10 slides.
@@ -89,19 +104,58 @@ Only return the JSON array, no other text.`
 
           let fullOutline = ''
 
-          const result = await streamText({
-            model: minimax.languageModel(MINIMAX_MODEL),
-            prompt: outlinePrompt,
-            system: 'You are an expert presentation outline generator. Return only valid JSON.',
-            temperature: 0.7,
-            maxTokens: 2000
+          const response = await fetch('https://api.minimax.chat/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model: 'abab6.5s-chat',
+              messages: [
+                { role: 'system', content: 'You are an expert presentation outline generator. Return only valid JSON.' },
+                { role: 'user', content: outlinePrompt }
+              ],
+              stream: true,
+              temperature: 0.7,
+              max_tokens: 2000
+            })
           })
 
-          // Stream the response
-          for await (const delta of result.fullStream) {
-            if (delta.type === 'text-delta' && delta.text) {
-              fullOutline += delta.text
-              sendEvent('outline_delta', { delta: delta.text })
+          if (!response.ok) {
+            throw new Error(`MiniMax API error: ${response.status}`)
+          }
+
+          if (!response.body) {
+            throw new Error('No response body')
+          }
+
+          const reader = response.body.getReader()
+          const decoder = new TextDecoder()
+
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            const chunk = decoder.decode(value)
+            const lines = chunk.split('\n')
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6)
+                if (data === '[DONE]') continue
+
+                try {
+                  const parsed = JSON.parse(data)
+                  const content = parsed.choices?.[0]?.delta?.content
+                  if (content) {
+                    fullOutline += content
+                    sendEvent('outline_delta', { delta: content })
+                  }
+                } catch {
+                  // Skip invalid JSON lines
+                }
+              }
             }
           }
 
@@ -134,7 +188,7 @@ Only return the JSON array, no other text.`
         } catch (error) {
           console.error('Error generating outline:', error)
           await updatePresentationStatus(id, 'error')
-          sendEvent('error', { error: 'Failed to generate outline' })
+          sendEvent('error', { error: error instanceof Error ? error.message : 'Failed to generate outline' })
         } finally {
           controller.close()
         }

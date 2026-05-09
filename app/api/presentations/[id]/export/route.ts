@@ -1,19 +1,19 @@
 import { NextResponse } from 'next/server'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import { getThemeById } from '@/lib/presentations/theme-utils'
 import {
   createExport,
   getExport,
   getPresentationWithSlides,
   updateExportStatus
 } from '@/lib/db/actions/presentations'
+import { exportToPptx } from '@/lib/presentations/export/pptx'
+import type { SlideContent } from '@/lib/presentations/theme-utils'
 
 /**
  * POST /api/presentations/:id/export
- * Export presentation to PPTX/PDF/images
- *
- * Note: pptxgenjs needs to be installed for PPTX export:
- * bun add pptxgenjs
+ * Export presentation to PPTX format
  */
 export async function POST(
   req: Request,
@@ -30,7 +30,19 @@ export async function POST(
       )
     }
 
+    const body = await req.json()
+    const format = body.format || 'pptx'
+
+    if (format !== 'pptx') {
+      return NextResponse.json(
+        { error: 'Only PPTX format is currently supported' },
+        { status: 400 }
+      )
+    }
+
+    // Get presentation with slides
     const presentation = await getPresentationWithSlides(id, userId)
+
     if (!presentation) {
       return NextResponse.json(
         { error: 'Presentation not found' },
@@ -45,56 +57,67 @@ export async function POST(
       )
     }
 
-    const body = await req.json()
-    const { format } = body
-
-    if (!format || !['pptx', 'pdf', 'images'].includes(format)) {
-      return NextResponse.json(
-        { error: 'format must be one of: pptx, pdf, images' },
-        { status: 400 }
-      )
-    }
-
     // Create export record
     const exportRecord = await createExport({
       presentationId: id,
-      exportType: format
+      exportType: 'pptx'
     })
 
     // Mark as processing
     await updateExportStatus(exportRecord.id, 'processing')
 
-    // TODO: Implement actual export logic using pptxgenjs
-    // For now, return a placeholder response
-    //
-    // Example pptxgenjs implementation:
-    // const pptxgen = require('pptxgenjs')
-    // const pres = new pptxgen()
-    //
-    // for (const slide of presentation.slides) {
-    //   const pptSlide = pres.addSlide()
-    //   pptSlide.addText(slide.title, { fontSize: 24, bold: true })
-    //   if (slide.contentJson.bullets) {
-    //     slide.contentJson.bullets.forEach((bullet: string, idx: number) => {
-    //       pptSlide.addText(bullet, { bullet: true, breakLine: idx < slide.contentJson.bullets.length - 1 })
-    //     })
-    //   }
-    // }
-    //
-    // const buffer = await pres.writeBuffer()
-    // Upload to S3 and get URL...
+    try {
+      // Get theme
+      const theme = getThemeById(presentation.themeId || 'minimal_light')
 
-    // For demo purposes, return a placeholder URL
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const placeholderUrl = `${baseUrl}/exports/${exportRecord.id}.${format === 'images' ? 'zip' : format}`
+      if (!theme) {
+        throw new Error('Theme not found')
+      }
 
-    await updateExportStatus(exportRecord.id, 'completed', placeholderUrl)
+      // Convert slides to SlideContent format
+      const slides: SlideContent[] = presentation.slides.map(slide => {
+        const content = slide.contentJson as Record<string, unknown>
+        const slideContent: SlideContent = {
+          id: slide.id,
+          layout: slide.layoutType,
+          heading: slide.title,
+          bullets: content.bullets as string[] | undefined,
+          body: content.body as SlideContent['body'],
+          imageUrl: content.imageUrl as string | undefined,
+          quote: content.quote as string | undefined,
+          quoteAttribution: content.quoteAttribution as string | undefined,
+          stats: content.stats as SlideContent['stats'],
+          speakerNotes: slide.speakerNotes || undefined
+        }
+        return slideContent
+      })
 
-    return NextResponse.json({
-      file_url: placeholderUrl,
-      status: 'completed',
-      export_id: exportRecord.id
-    })
+      // Generate PPTX
+      const pptxBuffer = await exportToPptx({
+        title: presentation.title,
+        slides,
+        theme
+      })
+
+      // Mark export as completed
+      await updateExportStatus(exportRecord.id, 'completed')
+
+      // Return the buffer as a downloadable file
+      return new Response(pptxBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'Content-Disposition': `attachment; filename="${presentation.title.replace(/[^a-z0-9]/gi, '_')}.pptx"`
+        }
+      })
+    } catch (exportError) {
+      console.error('Error generating PPTX:', exportError)
+      await updateExportStatus(exportRecord.id, 'failed')
+      return NextResponse.json(
+        { error: 'Failed to generate PPTX' },
+        { status: 500 }
+      )
+    }
   } catch (error) {
     console.error('Error exporting presentation:', error)
     return NextResponse.json(

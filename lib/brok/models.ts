@@ -2,69 +2,89 @@ export interface BrokModelConfig {
   name: string;
   description: string;
   provider: string;
+  providerModel: string;
   inputCostPerMillion: number;
   outputCostPerMillion: number;
   maxTokens: number;
   supportsSearch: boolean;
   supportsStreaming: boolean;
   supportsTools: boolean;
+  supportsCode?: boolean;
 }
 
 export const BROK_MODELS: Record<string, BrokModelConfig> = {
+  'brok-lite': {
+    name: 'Brok Lite',
+    description: 'Fast, low-cost reasoning for simple tasks',
+    provider: 'minimax',
+    providerModel: 'minimax-m2.7',
+    inputCostPerMillion: 0.10,
+    outputCostPerMillion: 0.40,
+    maxTokens: 16000,
+    supportsStreaming: true,
+    supportsSearch: false,
+    supportsTools: false,
+  },
   'brok-search': {
     name: 'Brok Search',
-    description: 'Search-optimized model with web search capabilities',
+    description: 'Search-powered answers with citations',
     provider: 'minimax',
+    providerModel: 'minimax-text',
     inputCostPerMillion: 0.10,
-    outputCostPerMillion: 0.10,
+    outputCostPerMillion: 0.40,
     maxTokens: 16000,
-    supportsSearch: true,
     supportsStreaming: true,
+    supportsSearch: true,
     supportsTools: false,
   },
   'brok-search-pro': {
     name: 'Brok Search Pro',
-    description: 'Advanced search model with deeper analysis',
+    description: 'Deep search with 10-20 sources',
     provider: 'minimax',
-    inputCostPerMillion: 0.20,
-    outputCostPerMillion: 0.40,
+    providerModel: 'minimax-text',
+    inputCostPerMillion: 0.15,
+    outputCostPerMillion: 0.60,
     maxTokens: 32000,
+    supportsStreaming: true,
     supportsSearch: true,
-    supportsStreaming: true,
     supportsTools: false,
   },
-  'brok-lite': {
-    name: 'Brok Lite',
-    description: 'Fast, efficient model for simple tasks',
+  'brok-code': {
+    name: 'Brok Code',
+    description: 'Code understanding and generation',
     provider: 'minimax',
-    inputCostPerMillion: 0.05,
-    outputCostPerMillion: 0.05,
-    maxTokens: 8000,
-    supportsSearch: false,
-    supportsStreaming: true,
-    supportsTools: false,
-  },
-  'brok-standard': {
-    name: 'Brok Standard',
-    description: 'Balanced model for general use',
-    provider: 'minimax',
+    providerModel: 'minimax-code',
     inputCostPerMillion: 0.10,
-    outputCostPerMillion: 0.10,
+    outputCostPerMillion: 0.40,
     maxTokens: 16000,
-    supportsSearch: false,
     supportsStreaming: true,
+    supportsSearch: false,
+    supportsTools: false,
+    supportsCode: true,
+  },
+  'brok-agent': {
+    name: 'Brok Agent',
+    description: 'Tool-using agent with browser and search',
+    provider: 'minimax',
+    providerModel: 'minimax-agent',
+    inputCostPerMillion: 0.15,
+    outputCostPerMillion: 0.60,
+    maxTokens: 32000,
+    supportsStreaming: true,
+    supportsSearch: true,
     supportsTools: true,
   },
   'brok-reasoning': {
     name: 'Brok Reasoning',
-    description: 'Enhanced reasoning and analysis',
+    description: 'Advanced reasoning for complex problems',
     provider: 'minimax',
+    providerModel: 'minimax-reasoning',
     inputCostPerMillion: 0.20,
-    outputCostPerMillion: 0.40,
+    outputCostPerMillion: 0.80,
     maxTokens: 32000,
-    supportsSearch: false,
     supportsStreaming: true,
-    supportsTools: true,
+    supportsSearch: false,
+    supportsTools: false,
   },
 };
 

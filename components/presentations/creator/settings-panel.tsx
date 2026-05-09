@@ -1,9 +1,12 @@
 'use client'
 
 import React, { useState } from 'react'
+
 import { ChevronDown, ChevronUp, Settings2, Sparkles } from 'lucide-react'
 
+import type { ThemeId } from '@/lib/presentations/themes'
 import { cn } from '@/lib/utils'
+
 import { Button } from '@/components/ui/button'
 import {
   Collapsible,
@@ -20,8 +23,6 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 import { ThemePicker } from '@/components/presentations/theme/theme-picker'
-
-import type { ThemeId } from '@/lib/presentations/themes'
 
 const SLIDE_COUNTS = [5, 8, 10, 12]
 

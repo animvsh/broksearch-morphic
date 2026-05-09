@@ -1,4 +1,3 @@
-import { streamText } from 'ai'
 import { NextResponse } from 'next/server'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
@@ -9,7 +8,6 @@ import {
   getPresentation,
   updatePresentationStatus
 } from '@/lib/db/actions/presentations'
-import { minimax, MINIMAX_MODEL } from '@/lib/ai/minimax'
 import { themes } from '@/lib/presentations/themes'
 
 const textEncoder = new TextEncoder()
@@ -24,6 +22,9 @@ interface SlideContent {
 /**
  * POST /api/presentations/:id/generate-slides
  * Start slide generation with SSE streaming
+ *
+ * Note: MiniMax integration requires @ai-sdk/openai-compatible to be installed.
+ * This route currently uses direct API calls until the dependency is added.
  */
 export async function POST(
   req: Request,
@@ -71,7 +72,7 @@ export async function POST(
       userId,
       prompt: `Generate slides for presentation: ${presentation.title}`,
       generationType: 'slides',
-      model: MINIMAX_MODEL,
+      model: 'abab6.5s-chat',
       webSearchEnabled: false
     })
 
@@ -87,6 +88,15 @@ export async function POST(
         try {
           const slides: SlideContent[] = []
           const outlineSlides = outline.outlineJson
+
+          // Check if MiniMax is configured
+          const apiKey = process.env.MINIMAX_API_KEY
+          if (!apiKey) {
+            sendEvent('error', { error: 'MINIMAX_API_KEY not configured' })
+            await updatePresentationStatus(id, 'error')
+            controller.close()
+            return
+          }
 
           for (let i = 0; i < outlineSlides.length; i++) {
             const outlineSlide = outlineSlides[i]
@@ -122,17 +132,55 @@ Only return valid JSON.`
 
             let slideContent = ''
 
-            const result = await streamText({
-              model: minimax.languageModel(MINIMAX_MODEL),
-              prompt: slidePrompt,
-              system: 'You are an expert slide content generator. Return only valid JSON.',
-              temperature: 0.7,
-              maxTokens: 500
+            const response = await fetch('https://api.minimax.chat/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+              },
+              body: JSON.stringify({
+                model: 'abab6.5s-chat',
+                messages: [
+                  { role: 'system', content: 'You are an expert slide content generator. Return only valid JSON.' },
+                  { role: 'user', content: slidePrompt }
+                ],
+                stream: true,
+                temperature: 0.7,
+                max_tokens: 500
+              })
             })
 
-            for await (const delta of result.fullStream) {
-              if (delta.type === 'text-delta' && delta.text) {
-                slideContent += delta.text
+            if (!response.ok) {
+              throw new Error(`MiniMax API error: ${response.status}`)
+            }
+
+            if (response.body) {
+              const reader = response.body.getReader()
+              const decoder = new TextDecoder()
+
+              while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+
+                const chunk = decoder.decode(value)
+                const lines = chunk.split('\n')
+
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    const data = line.slice(6)
+                    if (data === '[DONE]') continue
+
+                    try {
+                      const parsed = JSON.parse(data)
+                      const content = parsed.choices?.[0]?.delta?.content
+                      if (content) {
+                        slideContent += content
+                      }
+                    } catch {
+                      // Skip invalid JSON lines
+                    }
+                  }
+                }
               }
             }
 
@@ -158,7 +206,6 @@ Only return valid JSON.`
             }
 
             slides.push({
-              slideIndex: i,
               title: slideData.title || outlineSlide.title,
               layoutType: slideData.layoutType || (i === 0 ? 'title' : 'bullet'),
               contentJson: slideData.contentJson || { bullets: outlineSlide.bullets },
@@ -192,7 +239,7 @@ Only return valid JSON.`
         } catch (error) {
           console.error('Error generating slides:', error)
           await updatePresentationStatus(id, 'error')
-          sendEvent('error', { error: 'Failed to generate slides' })
+          sendEvent('error', { error: error instanceof Error ? error.message : 'Failed to generate slides' })
         } finally {
           controller.close()
         }
