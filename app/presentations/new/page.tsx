@@ -50,6 +50,14 @@ export default function NewPresentationPage() {
         })
       })
 
+      if (response.status === 401) {
+        toast.error('Please sign in to create a presentation')
+        router.replace(
+          `/auth/login?redirectTo=${encodeURIComponent('/presentations/new')}`
+        )
+        return
+      }
+
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || 'Failed to create presentation')
@@ -118,25 +126,21 @@ export default function NewPresentationPage() {
             {/* Settings Panel */}
             <SettingsPanel
               slideCount={settings.slideCount}
-              onSlideCountChange={(count) =>
-                setSettings((s) => ({ ...s, slideCount: count }))
+              onSlideCountChange={count =>
+                setSettings(s => ({ ...s, slideCount: count }))
               }
               style={settings.style}
-              onStyleChange={(style) =>
-                setSettings((s) => ({ ...s, style }))
-              }
+              onStyleChange={style => setSettings(s => ({ ...s, style }))}
               language={settings.language}
-              onLanguageChange={(language) =>
-                setSettings((s) => ({ ...s, language }))
+              onLanguageChange={language =>
+                setSettings(s => ({ ...s, language }))
               }
               webSearch={settings.webSearch}
-              onWebSearchChange={(webSearch) =>
-                setSettings((s) => ({ ...s, webSearch }))
+              onWebSearchChange={webSearch =>
+                setSettings(s => ({ ...s, webSearch }))
               }
               theme={settings.theme}
-              onThemeChange={(theme) =>
-                setSettings((s) => ({ ...s, theme }))
-              }
+              onThemeChange={theme => setSettings(s => ({ ...s, theme }))}
             />
 
             {/* Submit Button */}
