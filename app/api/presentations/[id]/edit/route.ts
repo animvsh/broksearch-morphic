@@ -23,7 +23,8 @@ export async function POST(
   let userId: string | null = null
 
   try {
-    userId = await getCurrentUserId()
+    const currentUserId = await getCurrentUserId()
+    userId = currentUserId ?? null
 
     if (!userId) {
       return NextResponse.json(

@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
       headers: {
         'X-Brok-Request-Id': requestId,
         'X-Brok-RateLimit-Limit': String(rateLimit.limit),
-        'X-Brok-RateLimit-Remaining': String(Math.max(0, rateLimit.remaining - 1)),
+        'X-Brok-RateLimit-Remaining': String(Math.max(0, rateLimit.limit - rateLimit.current - 1)),
         'X-Brok-RateLimit-Reset': String(rateLimit.resetAt),
       }
     });

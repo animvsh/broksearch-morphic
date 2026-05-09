@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { ChevronLeft, ChevronRight, Maximize2, Minimize2,X } from "lucide-react";
 
