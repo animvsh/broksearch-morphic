@@ -23,13 +23,20 @@ import { PasswordInput } from './ui/password-input'
 
 export function LoginForm({
   className,
+  redirectTo,
   ...props
-}: React.ComponentPropsWithoutRef<'div'>) {
+}: React.ComponentPropsWithoutRef<'div'> & { redirectTo?: string }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const safeRedirectTo =
+    redirectTo && redirectTo.startsWith('/') ? redirectTo : '/'
+  const signUpHref =
+    safeRedirectTo === '/'
+      ? '/auth/sign-up'
+      : `/auth/sign-up?redirectTo=${encodeURIComponent(safeRedirectTo)}`
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -43,8 +50,8 @@ export function LoginForm({
         password
       })
       if (error) throw error
-      // Redirect to root and refresh to ensure server components get updated session
-      router.push('/')
+      // Redirect to the requested page and refresh to ensure server components get updated session
+      router.replace(safeRedirectTo)
       router.refresh()
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'An error occurred')
@@ -62,7 +69,7 @@ export function LoginForm({
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${location.origin}/auth/oauth`
+          redirectTo: `${location.origin}/auth/oauth?next=${encodeURIComponent(safeRedirectTo)}`
         }
       })
       if (error) throw error
@@ -148,7 +155,7 @@ export function LoginForm({
           </div>
           <div className="mt-6 text-center text-sm">
             Don&apos;t have an account?{' '}
-            <Link href="/auth/sign-up" className="underline underline-offset-4">
+            <Link href={signUpHref} className="underline underline-offset-4">
               Sign Up
             </Link>
           </div>

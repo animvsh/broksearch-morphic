@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname, useSearchParams } from 'next/navigation'
 
 import {
   Link2,
@@ -25,6 +26,14 @@ import { ExternalLinkItems } from './external-link-items'
 import { ThemeMenuItems } from './theme-menu-items'
 
 export default function GuestMenu() {
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const currentPath = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
+  const loginHref =
+    currentPath === '/'
+      ? '/auth/login'
+      : `/auth/login?redirectTo=${encodeURIComponent(currentPath)}`
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -35,7 +44,7 @@ export default function GuestMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuItem asChild>
-          <Link href="/auth/login">
+          <Link href={loginHref}>
             <LogIn className="mr-2 h-4 w-4" />
             <span>Sign In</span>
           </Link>

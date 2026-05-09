@@ -21,14 +21,21 @@ import { PasswordInput } from '@/components/ui/password-input'
 
 export function SignUpForm({
   className,
+  redirectTo,
   ...props
-}: React.ComponentPropsWithoutRef<'div'>) {
+}: React.ComponentPropsWithoutRef<'div'> & { redirectTo?: string }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [repeatPassword, setRepeatPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const safeRedirectTo =
+    redirectTo && redirectTo.startsWith('/') ? redirectTo : '/'
+  const signInHref =
+    safeRedirectTo === '/'
+      ? '/auth/login'
+      : `/auth/login?redirectTo=${encodeURIComponent(safeRedirectTo)}`
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -121,7 +128,7 @@ export function SignUpForm({
             </div>
             <div className="mt-6 text-center text-sm">
               Already have an account?{' '}
-              <Link href="/auth/login" className="underline underline-offset-4">
+              <Link href={signInHref} className="underline underline-offset-4">
                 Sign In
               </Link>
             </div>
