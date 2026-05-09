@@ -1,12 +1,13 @@
 'use client'
 
 import React, { useCallback } from 'react'
-import { AlignLeft, AlignCenter, AlignRight } from 'lucide-react'
+
+import { AlignCenter, AlignLeft, AlignRight } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import { Label } from '@/components/ui/label'
+
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -15,9 +16,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
+import { Textarea } from '@/components/ui/textarea'
 
-import { usePresentationEditorStore, selectActiveSlide, selectSelectedElement } from '@/states/presentation-editor-store'
 import type { LayoutType } from '@/states/presentation-editor-store'
+import { selectActiveSlide, selectSelectedElement,usePresentationEditorStore } from '@/states/presentation-editor-store'
 
 // ---------------------------------------------------------------------------
 // Font families available
@@ -214,7 +216,7 @@ function TextElementInspector() {
 // Slide-level inspector
 // ---------------------------------------------------------------------------
 
-function SlideInspector() {
+function SlidePropertiesPanel() {
   const activeSlide = usePresentationEditorStore(selectActiveSlide)
   const { updateSlide, activeSlideIndex } = usePresentationEditorStore()
 
@@ -338,7 +340,7 @@ export function SlideInspector() {
         ) : (
           <div className="space-y-6">
             {/* Slide-level properties */}
-            <SlideInspector />
+            <SlidePropertiesPanel />
           </div>
         )}
       </div>

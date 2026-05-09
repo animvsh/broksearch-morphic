@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { DataTable, Column } from '@/components/admin/presentations/data-table'
+
+import { Column,DataTable } from '@/components/admin/presentations/data-table'
 
 interface Deck {
   id: string

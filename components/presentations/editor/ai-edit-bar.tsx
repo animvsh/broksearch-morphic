@@ -1,18 +1,20 @@
 'use client'
 
 import React, { useCallback, useRef, useState } from 'react'
-import { Send, Sparkles, ChevronDown } from 'lucide-react'
+
+import { ChevronDown,Send, Sparkles } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Spinner } from '@/components/ui/spinner'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Spinner } from '@/components/ui/spinner'
+import { Textarea } from '@/components/ui/textarea'
 
 import { usePresentationEditorStore } from '@/states/presentation-editor-store'
 

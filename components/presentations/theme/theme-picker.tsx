@@ -1,7 +1,8 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { themes, type Theme, type ThemeId } from "@/lib/presentations/themes";
+
+import { type Theme, type ThemeId,themes } from "@/lib/presentations/themes";
 import { cn } from "@/lib/utils";
 
 interface ThemePickerProps {

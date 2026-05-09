@@ -147,3 +147,7 @@ export const themes: Theme[] = [
 ];
 
 export type ThemeId = (typeof themes)[number]["id"];
+
+export function getThemeById(id: string): Theme | undefined {
+  return themes.find((theme) => theme.id === id);
+}

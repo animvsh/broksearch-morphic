@@ -2,19 +2,21 @@
 
 import React, { useState } from 'react'
 
+import { ChevronDownIcon, ChevronUpIcon, GripVerticalIcon,TrashIcon } from 'lucide-react'
+
 import { cn } from '@/lib/utils'
+
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { ChevronUpIcon, ChevronDownIcon, TrashIcon, GripVerticalIcon } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 
-import type { OutlineSlide, LayoutType } from './types'
-import { LAYOUT_OPTIONS, LAYOUT_LABELS } from './types'
+import type { LayoutType,OutlineSlide } from './types'
+import { LAYOUT_LABELS,LAYOUT_OPTIONS } from './types'
 
 interface OutlineSlideRowProps {
   slide: OutlineSlide

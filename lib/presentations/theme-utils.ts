@@ -1,4 +1,4 @@
-import { themes, type Theme } from "./themes";
+import { type Theme,themes } from "./themes";
 
 /**
  * Get a theme by its ID.

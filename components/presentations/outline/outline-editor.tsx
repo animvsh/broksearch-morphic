@@ -2,12 +2,14 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 
-import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import { PlusIcon } from 'lucide-react'
 
+import { cn } from '@/lib/utils'
+
+import { Button } from '@/components/ui/button'
+
 import { OutlineSlideRow } from './outline-slide-row'
-import type { OutlineSlide, LayoutType } from './types'
+import type { LayoutType,OutlineSlide } from './types'
 
 interface OutlineEditorProps {
   initialOutline: OutlineSlide[]

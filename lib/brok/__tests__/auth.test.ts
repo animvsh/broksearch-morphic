@@ -1,29 +1,38 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { generateApiKey, hashApiKey } from '@/lib/api-key';
 import { verifyRequestAuth } from '../auth';
-import { hashApiKey, generateApiKey } from '@/lib/api-key';
+
+// Create mock functions using vi.hoisted so they are available in vi.mock
+const { mockSelect, mockFrom, mockWhere, mockLimit } = vi.hoisted(() => {
+  const mockWhere = vi.fn().mockReturnThis();
+  const mockLimit = vi.fn().mockReturnThis();
+  const mockFrom = vi.fn().mockReturnValue({
+    where: mockWhere,
+    limit: mockLimit,
+  });
+  const mockSelect = vi.fn().mockReturnValue({
+    from: mockFrom,
+  });
+  return { mockSelect, mockFrom, mockWhere, mockLimit };
+});
 
 // Mock the db
 vi.mock('@/lib/db', () => ({
   db: {
-    select: vi.fn(),
+    select: mockSelect,
     insert: vi.fn(),
     update: vi.fn(),
   },
 }));
 
-// Mock apiKeys and workspaces from schema
+// Mock schema
 vi.mock('@/lib/db/schema', () => ({
-  apiKeys: {
-    $inferSelect: {},
-  },
-  workspaces: {
-    $inferSelect: {},
-  },
+  apiKeys: {},
+  workspaces: {},
 }));
 
 describe('verifyRequestAuth', () => {
   const testKey = generateApiKey('live');
-  const testHash = hashApiKey(testKey);
 
   it('returns error for missing authorization header', async () => {
     const mockRequest = {
@@ -56,6 +65,15 @@ describe('verifyRequestAuth', () => {
   });
 
   it('returns error for unknown API key', async () => {
+    // Setup mock chain: db.select().from().where().limit() returns empty array
+    mockSelect.mockReturnValueOnce({
+      from: mockFrom.mockReturnValueOnce({
+        where: mockWhere.mockReturnValueOnce({
+          limit: mockLimit.mockReturnValueOnce([]), // Empty array = no key found
+        }),
+      }),
+    });
+
     const mockRequest = {
       headers: {
         get: (name: string) => name === 'authorization' ? `Bearer ${testKey}` : null,

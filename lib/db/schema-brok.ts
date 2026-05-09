@@ -1,5 +1,5 @@
-import { pgTable, text, timestamp, boolean, integer, pgEnum, jsonb, uuid, decimal, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+import { boolean, decimal, index,integer, jsonb, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 // Enums
 export const planEnum = pgEnum('plan', ['free', 'starter', 'pro', 'team', 'scale', 'enterprise']);

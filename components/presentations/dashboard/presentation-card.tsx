@@ -3,12 +3,12 @@
 import React from 'react'
 import Link from 'next/link'
 
-import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-
 import type { Presentation, PresentationStatus } from '@/lib/presentations/types'
 import { STATUS_LABELS } from '@/lib/presentations/types'
+import { cn } from '@/lib/utils'
+
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 interface PresentationCardProps {
   presentation: Presentation

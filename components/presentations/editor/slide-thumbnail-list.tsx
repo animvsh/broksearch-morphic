@@ -1,9 +1,11 @@
 'use client'
 
 import React, { useCallback } from 'react'
-import { Plus, Trash2, Copy, ChevronUp, ChevronDown } from 'lucide-react'
+
+import { ChevronDown,ChevronUp, Copy, Plus, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -13,8 +15,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
-import { usePresentationEditorStore } from '@/states/presentation-editor-store'
 import type { SlideContent } from '@/states/presentation-editor-store'
+import { usePresentationEditorStore } from '@/states/presentation-editor-store'
 
 function SlideThumbnail({
   slide,

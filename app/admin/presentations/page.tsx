@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { StatsCard } from '@/components/admin/presentations/stats-card'
-import { Button } from '@/components/ui/button'
+
 import { cn } from '@/lib/utils'
+
+import { Button } from '@/components/ui/button'
+
+import { StatsCard } from '@/components/admin/presentations/stats-card'
 
 interface Stats {
   presentationsToday: number

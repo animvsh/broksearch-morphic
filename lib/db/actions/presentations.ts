@@ -4,17 +4,16 @@ import { desc, eq } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
 import {
-  presentationExports,
-  presentationGenerations,
-  presentationOutlines,
-  presentationSlides,
-  presentations,
   type Presentation,
   type PresentationExport,
+  presentationExports,
   type PresentationGeneration,
+  presentationGenerations,
   type PresentationOutline,
-  type PresentationSlide
-} from '@/lib/presentations/schema'
+  presentationOutlines,
+  presentations,
+  type PresentationSlide,
+  presentationSlides} from '@/lib/presentations/schema'
 
 // ============================================================================
 // Presentation CRUD
@@ -103,7 +102,7 @@ export async function getPresentationsByUser(
     .select()
     .from(presentations)
     .where(eq(presentations.userId, userId))
-    .orderBy(presentations.createdAt.desc())
+    .orderBy(desc(presentations.createdAt))
     .limit(limit)
     .offset(offset)
 

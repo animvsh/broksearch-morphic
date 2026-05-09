@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { DataTable, Column } from '@/components/admin/presentations/data-table'
+
+import { Column,DataTable } from '@/components/admin/presentations/data-table'
 
 interface Generation {
   id: string

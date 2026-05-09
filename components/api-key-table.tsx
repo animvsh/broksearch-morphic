@@ -1,9 +1,10 @@
 'use client';
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { pauseApiKey, resumeApiKey, revokeApiKey } from '@/lib/actions/api-keys';
+
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { pauseApiKey, resumeApiKey, revokeApiKey } from '@/lib/actions/api-keys';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface ApiKey {
   id: string;

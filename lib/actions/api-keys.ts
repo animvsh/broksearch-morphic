@@ -1,10 +1,12 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
+
+import { eq } from 'drizzle-orm';
+
+import { generateApiKey, getKeyPrefix,hashApiKey, maskApiKey } from '@/lib/api-key';
 import { db } from '@/lib/db';
 import { apiKeys, workspaces } from '@/lib/db/schema';
-import { generateApiKey, hashApiKey, maskApiKey, getKeyPrefix } from '@/lib/api-key';
-import { eq } from 'drizzle-orm';
-import { revalidatePath } from 'next/cache';
 
 export interface CreateApiKeyInput {
   name: string;

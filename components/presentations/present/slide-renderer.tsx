@@ -1,7 +1,7 @@
 "use client";
 
-import { type Theme } from "@/lib/presentations/themes";
 import { type SlideContent } from "@/lib/presentations/theme-utils";
+import { type Theme } from "@/lib/presentations/themes";
 import { cn } from "@/lib/utils";
 
 interface SlideRendererProps {
@@ -272,7 +272,7 @@ function QuoteLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
           className="absolute -left-8 -top-4 text-8xl opacity-20"
           style={{ color: theme.colors.accent }}
         >
-          "
+          &ldquo;
         </div>
         {slide.quote && (
           <blockquote

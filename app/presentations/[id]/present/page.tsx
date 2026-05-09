@@ -1,25 +1,11 @@
 import { notFound } from "next/navigation";
-import dynamic from "next/dynamic";
+
 import { getCurrentUserId } from "@/lib/auth/get-current-user";
 import { getPresentationWithSlides } from "@/lib/db/actions/presentations";
-import { getThemeById } from "@/lib/presentations/themes";
 import { type SlideContent } from "@/lib/presentations/theme-utils";
+import { getThemeById } from "@/lib/presentations/themes";
 
-// Dynamic import to avoid SSR hydration issues with fullscreen API
-const PresentationMode = dynamic(
-  () =>
-    import("@/components/presentations/present/presentation-mode").then(
-      (mod) => mod.PresentationMode
-    ),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-screen w-screen items-center justify-center bg-neutral-900">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-      </div>
-    ),
-  }
-);
+import { PresentationModeWrapper } from "@/components/presentations/present/presentation-mode-wrapper";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -64,9 +50,21 @@ export default async function PresentPage({ params }: PageProps) {
   const { id } = await params;
   const userId = await getCurrentUserId();
 
-  const presentation = await getPresentationWithSlides(id, userId ?? undefined);
+  // Try to get presentation - first with user ownership, then without (for public access)
+  let presentation = await getPresentationWithSlides(id, userId ?? undefined);
+
+  // If not found with user access, try without user (for public presentations)
+  if (!presentation) {
+    presentation = await getPresentationWithSlides(id, undefined);
+  }
 
   if (!presentation) {
+    notFound();
+  }
+
+  // Check if presentation is public - if not and user doesn't own it, deny access
+  const isOwner = userId && presentation.userId === userId;
+  if (!isOwner && !presentation.isPublic) {
     notFound();
   }
 
@@ -77,8 +75,12 @@ export default async function PresentPage({ params }: PageProps) {
 
   const slides = transformSlides(presentation.slides);
 
+  if (slides.length === 0) {
+    notFound();
+  }
+
   return (
-    <PresentationMode
+    <PresentationModeWrapper
       slides={slides}
       theme={theme}
       presentationId={id}

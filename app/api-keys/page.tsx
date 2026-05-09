@@ -1,7 +1,10 @@
-import { listApiKeys } from '@/lib/actions/api-keys';
-import { ApiKeyTable } from '@/components/api-key-table';
-import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+
+import { listApiKeys } from '@/lib/actions/api-keys';
+
+import { Button } from '@/components/ui/button';
+
+import { ApiKeyTable } from '@/components/api-key-table';
 
 export default async function ApiKeysPage() {
   // Get workspace from session (placeholder)

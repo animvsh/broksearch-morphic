@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, X, Maximize2, Minimize2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2,X } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 interface PresentationNavProps {
@@ -35,7 +37,7 @@ export function PresentationNav({
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-hide nav after inactivity
-  const resetInactivityTimer = () => {
+  const resetInactivityTimer = useCallback(() => {
     setVisible(true);
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -43,12 +45,13 @@ export function PresentationNav({
     timeoutRef.current = setTimeout(() => {
       setVisible(false);
     }, 2000);
-  };
+  }, []);
 
   useEffect(() => {
+    resetInactivityTimer();
+
     const handleMouseMove = () => resetInactivityTimer();
     window.addEventListener("mousemove", handleMouseMove);
-    resetInactivityTimer(); // initial show
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
@@ -56,7 +59,7 @@ export function PresentationNav({
         clearTimeout(timeoutRef.current);
       }
     };
-  }, []);
+  }, [resetInactivityTimer]);
 
   return (
     <>

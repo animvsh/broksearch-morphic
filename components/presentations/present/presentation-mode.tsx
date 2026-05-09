@@ -7,10 +7,12 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { type Theme } from "@/lib/presentations/themes";
+
 import { type SlideContent } from "@/lib/presentations/theme-utils";
-import { SlideRenderer } from "./slide-renderer";
+import { type Theme } from "@/lib/presentations/themes";
+
 import { PresentationNav } from "./presentation-nav";
+import { SlideRenderer } from "./slide-renderer";
 import { SpeakerNotes } from "./speaker-notes";
 
 interface PresentationModeProps {
@@ -91,6 +93,14 @@ export function PresentationMode({
   }, [enterFullscreen, exitFullscreen]);
 
   // ---------------------------------------------------------------------------
+  // Exit presentation (defined before useEffect to satisfy lint rule)
+  // ---------------------------------------------------------------------------
+  const exitPresentation = useCallback(() => {
+    exitFullscreen();
+    router.push(`/presentations/${presentationId}/editor`);
+  }, [exitFullscreen, router, presentationId]);
+
+  // ---------------------------------------------------------------------------
   // Keyboard navigation
   // ---------------------------------------------------------------------------
   useEffect(() => {
@@ -128,7 +138,7 @@ export function PresentationMode({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [slides.length, toggleFullscreen, exitFullscreen]);
+  }, [slides.length, toggleFullscreen, exitPresentation]);
 
   // ---------------------------------------------------------------------------
   // Touch / swipe navigation
@@ -152,14 +162,6 @@ export function PresentationMode({
     }
     touchStartX.current = null;
   };
-
-  // ---------------------------------------------------------------------------
-  // Exit presentation
-  // ---------------------------------------------------------------------------
-  const exitPresentation = useCallback(() => {
-    exitFullscreen();
-    router.push(`/presentations/${presentationId}/editor`);
-  }, [exitFullscreen, router, presentationId]);
 
   // ---------------------------------------------------------------------------
   // Current slide data

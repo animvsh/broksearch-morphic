@@ -1,8 +1,9 @@
 'use client'
 
 import { create } from 'zustand'
-import { generateUUID } from '@/lib/utils'
+
 import type { Theme } from '@/lib/presentations/themes'
+import { generateUUID } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
 // Slide content types

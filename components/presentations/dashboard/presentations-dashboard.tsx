@@ -3,13 +3,13 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 
+import type { FilterTab, Presentation } from '@/lib/presentations/types'
 import { cn } from '@/lib/utils'
+
 import { Button } from '@/components/ui/button'
 
 import { FilterTabs } from './filter-tabs'
 import { PresentationCard } from './presentation-card'
-
-import type { FilterTab, Presentation } from '@/lib/presentations/types'
 
 // Mock data for development - replace with actual data fetching
 const mockPresentations: Presentation[] = [

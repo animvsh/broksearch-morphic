@@ -4,8 +4,8 @@ import React, { useCallback, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
-import { usePresentationEditorStore, selectActiveSlide } from '@/states/presentation-editor-store'
 import type { LayoutType, SlideElement } from '@/states/presentation-editor-store'
+import { selectActiveSlide,usePresentationEditorStore } from '@/states/presentation-editor-store'
 
 // ---------------------------------------------------------------------------
 // Layout renderers

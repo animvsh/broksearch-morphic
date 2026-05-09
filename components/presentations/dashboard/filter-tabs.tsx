@@ -2,10 +2,9 @@
 
 import React from 'react'
 
-import { cn } from '@/lib/utils'
-
 import type { FilterTab } from '@/lib/presentations/types'
 import { FILTER_TAB_LABELS } from '@/lib/presentations/types'
+import { cn } from '@/lib/utils'
 
 interface FilterTabsProps {
   activeFilter: FilterTab

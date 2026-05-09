@@ -2,10 +2,12 @@
 
 import React, { useState } from 'react'
 
+import { Loader2Icon,SendIcon } from 'lucide-react'
+
 import { cn } from '@/lib/utils'
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { SendIcon, Loader2Icon } from 'lucide-react'
 
 interface OutlineChatBarProps {
   presentationId: string

@@ -1,15 +1,18 @@
 'use client';
 
 import { useState } from 'react';
+
+import { BROK_MODELS } from '@/lib/brok/models';
+
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ResponseViewer } from './response-viewer';
+import { Textarea } from '@/components/ui/textarea';
+
 import { CodeSnippet } from './code-snippet';
-import { BROK_MODELS } from '@/lib/brok/models';
+import { ResponseViewer } from './response-viewer';
 
 const MODELS = Object.entries(BROK_MODELS).map(([id, config]) => ({
   id,

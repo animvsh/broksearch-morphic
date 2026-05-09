@@ -1,18 +1,14 @@
-import { db } from '@/lib/db';
-import { apiKeys, workspaces } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
-import { hashApiKey } from '@/lib/api-key';
 import { NextResponse } from 'next/server';
 
-export interface AuthResult {
-  success: true;
-  apiKey: typeof apiKeys.$inferSelect;
-  workspace: typeof workspaces.$inferSelect;
-} | {
-  success: false;
-  error: 'missing_authorization' | 'invalid_authorization_format' | 'invalid_api_key' | 'inactive_key' | 'workspace_inactive';
-  status: number;
-};
+import { eq } from 'drizzle-orm';
+
+import { hashApiKey } from '@/lib/api-key';
+import { db } from '@/lib/db';
+import { apiKeys, workspaces } from '@/lib/db/schema';
+
+export type AuthResult =
+  | { success: true; apiKey: typeof apiKeys.$inferSelect; workspace: typeof workspaces.$inferSelect }
+  | { success: false; error: 'missing_authorization' | 'invalid_authorization_format' | 'invalid_api_key' | 'inactive_key' | 'workspace_inactive'; status: number };
 
 export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   const authHeader = request.headers.get('authorization');
@@ -55,7 +51,7 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   return { success: true, apiKey: keyRecord, workspace };
 }
 
-export function unauthorizedResponse(error: AuthResult): NextResponse {
+export function unauthorizedResponse(error: Extract<AuthResult, { success: false }>): NextResponse {
   const body = {
     error: {
       type: 'authentication_error',

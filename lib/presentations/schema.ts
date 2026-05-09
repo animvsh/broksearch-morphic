@@ -318,12 +318,12 @@ export const presentationExportsRelations = relations(
 // Placeholder references to existing tables (defined in lib/db/schema.ts)
 // These allow Drizzle to understand the foreign key relationships
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom()
 })
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 const workspaces = pgTable('workspaces', {
   id: uuid('id').primaryKey().defaultRandom()
 })

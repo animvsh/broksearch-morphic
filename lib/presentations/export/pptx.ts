@@ -1,6 +1,7 @@
 import pptxgen from 'pptxgenjs'
-import type { Theme } from '../themes'
+
 import type { SlideContent } from '../theme-utils'
+import type { Theme } from '../themes'
 
 /**
  * Export a presentation to PowerPoint (.pptx) format.

@@ -4,15 +4,16 @@ import React, { useCallback, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
+import { ArrowLeftIcon, Loader2Icon,SettingsIcon } from 'lucide-react'
+
 import { cn } from '@/lib/utils'
+
 import { Button } from '@/components/ui/button'
-import { ArrowLeftIcon, SettingsIcon, Loader2Icon } from 'lucide-react'
 
 import {
-  OutlineEditor,
+  GenerationProgress,
   OutlineChatBar,
-  GenerationProgress
-} from '@/components/presentations/outline'
+  OutlineEditor} from '@/components/presentations/outline'
 import type { OutlineSlide } from '@/components/presentations/outline/types'
 
 // Mock data for development

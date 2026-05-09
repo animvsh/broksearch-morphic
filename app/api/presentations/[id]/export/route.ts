@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
-import { getThemeById } from '@/lib/presentations/theme-utils'
 import {
   createExport,
   getExport,
@@ -10,6 +9,7 @@ import {
 } from '@/lib/db/actions/presentations'
 import { exportToPptx } from '@/lib/presentations/export/pptx'
 import type { SlideContent } from '@/lib/presentations/theme-utils'
+import { getThemeById } from '@/lib/presentations/theme-utils'
 
 /**
  * POST /api/presentations/:id/export

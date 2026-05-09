@@ -1,5 +1,6 @@
-import { CreateApiKeyForm } from '@/components/create-api-key-form';
 import { createApiKey } from '@/lib/actions/api-keys';
+
+import { CreateApiKeyForm } from '@/components/create-api-key-form';
 
 export default function NewApiKeyPage() {
   return (

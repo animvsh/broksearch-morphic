@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+import { Check,Copy } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
-import { Copy, Check } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface CodeSnippetProps {
   model: string;
