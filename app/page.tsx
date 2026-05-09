@@ -5,7 +5,7 @@ import { Chat } from '@/components/chat'
 
 export default async function Page() {
   const userId = await getCurrentUserId()
-  const isCloudDeployment = process.env.MORPHIC_CLOUD_DEPLOYMENT === 'true'
+  const isCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT === 'true'
   const modelSelectorData = await getModelSelectorData()
 
   return (
