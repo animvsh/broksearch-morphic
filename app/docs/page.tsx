@@ -37,6 +37,16 @@ export default function DocsPage() {
           description="Understanding Brok's rate limits"
           href="/docs/rate-limits"
         />
+        <DocCard
+          title="Errors"
+          description="Error codes and handling strategies"
+          href="/docs/errors"
+        />
+        <DocCard
+          title="Security"
+          description="API key security best practices"
+          href="/docs/security"
+        />
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 
 import { ArrowLeftIcon, Loader2Icon,SettingsIcon } from 'lucide-react'
 
+import type { Presentation, PresentationStatus } from '@/lib/presentations/types'
 import { cn } from '@/lib/utils'
 
 import { Button } from '@/components/ui/button'
@@ -15,7 +16,6 @@ import {
   OutlineChatBar,
   OutlineEditor} from '@/components/presentations/outline'
 import type { OutlineSlide } from '@/components/presentations/outline/types'
-import type { PresentationStatus } from '@/lib/presentations/types'
 
 // Mock data for development
 function getMockPresentation(id: string) {
@@ -72,9 +72,7 @@ export default function PresentationsOutlinePage({
   params
 }: PresentationsOutlinePageProps) {
   const router = useRouter()
-  const [presentation, setPresentation] = useState<ReturnType<
-    typeof getMockPresentation
-  > | null>(null)
+  const [presentation, setPresentation] = useState<Presentation | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false)
   const [outlineId, setOutlineId] = useState<string | null>(null)

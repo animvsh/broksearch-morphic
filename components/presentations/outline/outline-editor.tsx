@@ -17,7 +17,7 @@ interface OutlineEditorProps {
   onOutlineChange?: (outline: OutlineSlide[]) => void
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function debounce<T extends (...args: any[]) => void>(
   fn: T,
   delay: number

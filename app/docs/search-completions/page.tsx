@@ -2,8 +2,10 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { CopyButton } from '@/components/copy-button'
+
 import { BROK_MODELS } from '@/lib/brok/models'
+
+import { CopyButton } from '@/components/copy-button'
 
 const pageContent = `# Search Completions API
 
