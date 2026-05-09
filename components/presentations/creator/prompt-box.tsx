@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { sparkles } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
