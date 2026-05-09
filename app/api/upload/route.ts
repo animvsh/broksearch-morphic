@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import { LOCAL_PUBLIC_URL, LOCAL_STORAGE_PATH,uploadFileLocal } from '@/lib/storage/local-file-client'
 import {
   getR2Client,
   R2_BUCKET_NAME,
@@ -20,14 +21,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (!isObjectStorageConfigured()) {
-      return NextResponse.json(
-        {
-          error: 'File upload storage is not configured',
-          message:
-            'Set R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PUBLIC_URL, and either R2_ACCOUNT_ID or S3_ENDPOINT.'
-        },
-        { status: 400 }
-      )
+      // Fall back to local storage
+      return handleLocalUpload(req, userId)
     }
 
     const contentType = req.headers.get('content-type') || ''
@@ -101,6 +96,48 @@ async function uploadFileToR2(file: File, userId: string, chatId: string) {
     }
   } catch (error: any) {
     throw new Error('Upload failed: ' + error.message)
+  }
+}
+
+async function handleLocalUpload(req: NextRequest, userId: string) {
+  const contentType = req.headers.get('content-type') || ''
+  if (!contentType.includes('multipart/form-data')) {
+    return NextResponse.json(
+      { error: 'Invalid content type' },
+      { status: 400 }
+    )
+  }
+
+  const formData = await req.formData()
+  const file = formData.get('file') as File
+  const chatId = formData.get('chatId') as string
+  if (!file) {
+    return NextResponse.json({ error: 'File is required' }, { status: 400 })
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    return NextResponse.json(
+      { error: 'File too large (max 5MB)' },
+      { status: 400 }
+    )
+  }
+
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    return NextResponse.json(
+      { error: 'Unsupported file type' },
+      { status: 400 }
+    )
+  }
+
+  try {
+    const result = await uploadFileLocal(file, userId, chatId)
+    return NextResponse.json({ success: true, file: result }, { status: 200 })
+  } catch (err: any) {
+    console.error('Local Upload Error:', err)
+    return NextResponse.json(
+      { error: 'Upload failed', message: err.message },
+      { status: 500 }
+    )
   }
 }
 
