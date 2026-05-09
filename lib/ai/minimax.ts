@@ -1,29 +1,16 @@
 /**
  * MiniMax AI Provider
  *
- * This module exports constants and configuration for the MiniMax API.
- * The actual API calls use direct fetch in the route handlers.
- *
- * Note: For full AI SDK integration with MiniMax, install @ai-sdk/openai-compatible:
- * bun add @ai-sdk/openai-compatible
- *
- * Then update this file to use createOpenAICompatible:
- * import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
- * export const minimax = createOpenAICompatible({ baseURL: 'https://api.minimax.chat/v1' })
+ * Uses the OPENAI_COMPATIBLE_API_KEY and OPENAI_COMPATIBLE_API_BASE_URL
+ * environment variables to configure the MiniMax OpenAI-compatible API.
  */
 
 export const MINIMAX_MODEL = 'MiniMax-Text-01'
 export const MINIMAX_CHAT_MODEL = 'abab6.5s-chat'
 
-// Base URL for MiniMax API
-export const MINIMAX_BASE_URL = 'https://api.minimax.chat/v1'
+// Base URL for MiniMax API (OpenAI-compatible endpoint)
+export const MINIMAX_BASE_URL =
+  process.env.OPENAI_COMPATIBLE_API_BASE_URL || 'https://api.minimax.io/v1'
 
-// Re-export for convenience (compatibility with existing imports)
-export const minimax = {
-  languageModel: (modelId: string) => {
-    throw new Error(
-      `Direct AI SDK integration with MiniMax requires @ai-sdk/openai-compatible.\n` +
-      `For now, use direct API calls via fetch to ${MINIMAX_BASE_URL}`
-    )
-  }
-}
+// API key
+export const MINIMAX_API_KEY = process.env.OPENAI_COMPATIBLE_API_KEY || ''

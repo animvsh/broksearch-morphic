@@ -74,9 +74,9 @@ export async function POST(
           sendEvent('outline_started', { presentationId: id })
 
           // Check if MiniMax is configured
-          const apiKey = process.env.MINIMAX_API_KEY
+          const apiKey = process.env.OPENAI_COMPATIBLE_API_KEY
           if (!apiKey) {
-            sendEvent('error', { error: 'MINIMAX_API_KEY not configured' })
+            sendEvent('error', { error: 'MiniMax API key not configured' })
             await updatePresentationStatus(id, 'error')
             controller.close()
             return
@@ -104,7 +104,9 @@ Only return the JSON array, no other text.`
 
           let fullOutline = ''
 
-          const response = await fetch('https://api.minimax.chat/v1/chat/completions', {
+          const response = await fetch(
+            `${process.env.OPENAI_COMPATIBLE_API_BASE_URL || 'https://api.minimax.io/v1'}/chat/completions`,
+            {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

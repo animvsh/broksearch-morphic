@@ -65,12 +65,12 @@ export async function POST(
     })
 
     // Check if MiniMax is configured
-    const apiKey = process.env.MINIMAX_API_KEY
+    const apiKey = process.env.OPENAI_COMPATIBLE_API_KEY
     if (!apiKey) {
       await updatePresentationStatus(presentationId, 'ready')
       return NextResponse.json({
         updated_slides: [],
-        message: 'MINIMAX_API_KEY not configured. Cannot process edit request.'
+        message: 'MiniMax API key not configured. Cannot process edit request.'
       })
     }
 
@@ -110,7 +110,9 @@ Only return valid JSON.`
 
     let editResult = ''
 
-    const response = await fetch('https://api.minimax.chat/v1/chat/completions', {
+    const response = await fetch(
+      `${process.env.OPENAI_COMPATIBLE_API_BASE_URL || 'https://api.minimax.io/v1'}/chat/completions`,
+      {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
