@@ -4,7 +4,7 @@ import React, { useCallback, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
-import { ArrowLeftIcon, Loader2Icon,SettingsIcon } from 'lucide-react'
+import { ArrowLeftIcon, Loader2Icon, SettingsIcon } from 'lucide-react'
 
 import type { Presentation, PresentationStatus } from '@/lib/presentations/types'
 import { cn } from '@/lib/utils'
@@ -14,19 +14,25 @@ import { Button } from '@/components/ui/button'
 import {
   GenerationProgress,
   OutlineChatBar,
-  OutlineEditor} from '@/components/presentations/outline'
+  OutlineEditor
+} from '@/components/presentations/outline'
 import type { OutlineSlide } from '@/components/presentations/outline/types'
 
+interface PresentationWithOutline extends Presentation {
+  outline?: { slides: OutlineSlide[] }
+}
+
 // Mock data for development
-function getMockPresentation(id: string) {
+function getMockPresentation(id: string): PresentationWithOutline {
   return {
     id,
+    userId: 'mock-user-id',
     title: 'Investor Pitch Deck',
     description: 'A compelling pitch for our startup',
-    status: 'draft' as PresentationStatus,
+    status: 'draft',
     slideCount: 0,
     language: 'en',
-    style: 'startup' as const,
+    style: 'startup',
     isPublic: false,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -72,7 +78,7 @@ export default function PresentationsOutlinePage({
   params
 }: PresentationsOutlinePageProps) {
   const router = useRouter()
-  const [presentation, setPresentation] = useState<Presentation | null>(null)
+  const [presentation, setPresentation] = useState<PresentationWithOutline | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false)
   const [outlineId, setOutlineId] = useState<string | null>(null)
@@ -198,8 +204,7 @@ export default function PresentationsOutlinePage({
     )
   }
 
-  const outline = (presentation as { outline?: { slides: OutlineSlide[] } })
-    .outline
+  const outline = presentation?.outline
   const slides = outline?.slides ?? []
 
   const isGenerating =
