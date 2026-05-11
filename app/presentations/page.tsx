@@ -32,8 +32,8 @@ export default async function PresentationsPage() {
   }))
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="container py-8">
+    <div className="platform-page">
+      <main className="platform-container">
         <Suspense fallback={<div className="animate-pulse">Loading...</div>}>
           <PresentationsDashboard initialPresentations={presentations} />
         </Suspense>

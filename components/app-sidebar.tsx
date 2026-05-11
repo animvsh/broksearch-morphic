@@ -40,13 +40,13 @@ import { IconBlinkingLogo } from './ui/icons'
 export default function AppSidebar() {
   const pathname = usePathname()
   const navButtonClass =
-    'group/sidebar relative h-10 rounded-2xl border border-transparent px-2 text-[13px] font-medium text-zinc-500 transition-all duration-200 hover:border-zinc-200 hover:bg-zinc-50 hover:text-zinc-950 data-[active=true]:border-purple-100 data-[active=true]:bg-purple-100 data-[active=true]:text-purple-700'
+    'group/sidebar relative h-10 rounded-2xl border border-transparent px-2 text-[13px] font-medium text-zinc-500 transition-all duration-150 hover:-translate-y-0.5 hover:border-zinc-200 hover:bg-white hover:text-zinc-950 hover:shadow-sm active:translate-y-0 data-[active=true]:border-violet-200 data-[active=true]:bg-white data-[active=true]:text-violet-700 data-[active=true]:shadow-sm'
   const subButtonClass =
-    'group/subnav rounded-2xl border border-transparent px-2 text-zinc-400 transition-all duration-200 hover:border-zinc-200 hover:bg-zinc-50 hover:text-zinc-950 data-[active=true]:border-purple-100 data-[active=true]:bg-purple-100 data-[active=true]:text-purple-700'
+    'group/subnav rounded-2xl border border-transparent px-2 text-zinc-400 transition-all duration-150 hover:-translate-y-0.5 hover:border-zinc-200 hover:bg-white hover:text-zinc-950 hover:shadow-sm active:translate-y-0 data-[active=true]:border-violet-200 data-[active=true]:bg-white data-[active=true]:text-violet-700 data-[active=true]:shadow-sm'
   const iconShellClass =
-    'flex size-7 items-center justify-center rounded-xl border border-transparent text-zinc-400 transition-all duration-200 group-data-[active=true]/sidebar:bg-purple-600 group-data-[active=true]/sidebar:text-white group-hover/sidebar:bg-zinc-100 group-hover/sidebar:text-zinc-900'
+    'flex size-7 items-center justify-center rounded-xl border border-transparent text-zinc-400 transition-all duration-150 group-data-[active=true]/sidebar:bg-violet-600 group-data-[active=true]/sidebar:text-white group-hover/sidebar:bg-zinc-100 group-hover/sidebar:text-zinc-900'
   const subIconShellClass =
-    'flex size-6 items-center justify-center rounded-xl border border-transparent text-zinc-400 transition-all duration-200 group-data-[active=true]/subnav:bg-purple-600 group-data-[active=true]/subnav:text-white group-hover/subnav:bg-zinc-100 group-hover/subnav:text-zinc-900'
+    'flex size-6 items-center justify-center rounded-xl border border-transparent text-zinc-400 transition-all duration-150 group-data-[active=true]/subnav:bg-violet-600 group-data-[active=true]/subnav:text-white group-hover/subnav:bg-zinc-100 group-hover/subnav:text-zinc-900'
   const isActive = (href: string) =>
     href === '/'
       ? pathname === '/'
@@ -59,9 +59,9 @@ export default function AppSidebar() {
       side="left"
       variant="sidebar"
       collapsible="icon"
-      className="border-r border-zinc-100 bg-white text-zinc-950 shadow-none"
+      className="border-r border-zinc-200/70 bg-zinc-50/80 text-zinc-950 shadow-none backdrop-blur-xl"
     >
-      <SidebarHeader className="flex flex-row items-center justify-between border-b border-zinc-100">
+      <SidebarHeader className="flex flex-row items-center justify-between border-b border-zinc-200/70 bg-white/70">
         <Link href="/" className="flex items-center gap-2 px-2 py-3">
           <span className="brand-mark rounded-full p-1.5">
             <IconBlinkingLogo className={cn('size-5')} />
