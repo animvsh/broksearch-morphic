@@ -7,8 +7,6 @@ CHECK (
   "status" IN (
     'started',
     'completed',
-    'failed',
-    'success',
-    'error'
+    'failed'
   )
 );
