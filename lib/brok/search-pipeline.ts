@@ -6,7 +6,7 @@ import {
   MINIMAX_CHAT_MODEL,
   MINIMAX_MODEL
 } from '@/lib/ai/minimax'
-import { searchWithMiniMaxMcp } from '@/lib/brok/minimax-web-mcp'
+import { searchWithMiniMaxWebSearch } from '@/lib/brok/minimax-web-search'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 export interface SearchResult {
@@ -44,7 +44,7 @@ export async function runSearchPipeline(
   const config = SEARCH_CONFIG[request.depth]
 
   try {
-    return await runMiniMaxMcpSearch(
+    return await runMiniMaxWebSearch(
       request.query,
       config.sources,
       config.maxTokens,
@@ -60,7 +60,7 @@ export async function runSearchPipeline(
   }
 }
 
-async function runMiniMaxMcpSearch(
+async function runMiniMaxWebSearch(
   query: string,
   numResults: number,
   maxTokens: number,
@@ -69,8 +69,8 @@ async function runMiniMaxMcpSearch(
   const searchQuery = recencyDays
     ? `${query} within ${recencyDays} days`
     : query
-  const mcpResults = await searchWithMiniMaxMcp(searchQuery)
-  const citations = mcpResults
+  const webResults = await searchWithMiniMaxWebSearch(searchQuery, numResults)
+  const citations = webResults
     .filter(result => result.link)
     .slice(0, numResults)
     .map((result, index): SearchResult => {

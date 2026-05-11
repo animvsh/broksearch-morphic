@@ -1,10 +1,10 @@
-import { searchWithMiniMaxMcp } from '@/lib/brok/minimax-web-mcp'
+import { searchWithMiniMaxWebSearch } from '@/lib/brok/minimax-web-search'
 import { SearchResults } from '@/lib/types'
 import { sanitizeUrl } from '@/lib/utils'
 
 import { SearchProvider } from './base'
 
-export class MiniMaxMcpSearchProvider implements SearchProvider {
+export class MiniMaxWebSearchProvider implements SearchProvider {
   async search(
     query: string,
     maxResults: number = 10,
@@ -12,7 +12,7 @@ export class MiniMaxMcpSearchProvider implements SearchProvider {
     includeDomains: string[] = [],
     excludeDomains: string[] = []
   ): Promise<SearchResults> {
-    const results = await searchWithMiniMaxMcp(query)
+    const results = await searchWithMiniMaxWebSearch(query, maxResults)
     const includeSet = new Set(
       includeDomains.map(domain => domain.toLowerCase())
     )

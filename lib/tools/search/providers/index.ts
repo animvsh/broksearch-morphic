@@ -2,18 +2,19 @@ import { SearchProvider } from './base'
 import { BraveSearchProvider } from './brave'
 import { ExaSearchProvider } from './exa'
 import { FirecrawlSearchProvider } from './firecrawl'
-import { MiniMaxMcpSearchProvider } from './minimax-mcp'
+import { MiniMaxWebSearchProvider } from './minimax'
 import { SearXNGSearchProvider } from './searxng'
 import { TavilySearchProvider } from './tavily'
 
 export type SearchProviderType =
+  | 'minimax'
   | 'minimax-mcp'
   | 'tavily'
   | 'exa'
   | 'searxng'
   | 'firecrawl'
   | 'brave'
-export const DEFAULT_PROVIDER: SearchProviderType = 'minimax-mcp'
+export const DEFAULT_PROVIDER: SearchProviderType = 'minimax'
 
 export function createSearchProvider(
   type?: SearchProviderType
@@ -22,8 +23,9 @@ export function createSearchProvider(
     type || (process.env.SEARCH_API as SearchProviderType) || DEFAULT_PROVIDER
 
   switch (providerType) {
+    case 'minimax':
     case 'minimax-mcp':
-      return new MiniMaxMcpSearchProvider()
+      return new MiniMaxWebSearchProvider()
     case 'tavily':
       return new TavilySearchProvider()
     case 'exa':
@@ -43,7 +45,7 @@ export function createSearchProvider(
 export { BraveSearchProvider } from './brave'
 export type { ExaSearchProvider } from './exa'
 export type { FirecrawlSearchProvider } from './firecrawl'
-export { MiniMaxMcpSearchProvider } from './minimax-mcp'
+export { MiniMaxWebSearchProvider } from './minimax'
 export { SearXNGSearchProvider } from './searxng'
 export { TavilySearchProvider } from './tavily'
 export type { SearchProvider }
