@@ -260,7 +260,7 @@ export function ChatPanel({
         )}
         {messages.length > 0 && isLoading && (
           <div className="mx-auto mb-2 max-w-3xl px-1">
-            <div className="overflow-hidden rounded-xl border border-border/70 bg-card/88 px-3 py-2 shadow-[0_16px_38px_-30px_rgba(15,23,42,0.32)] backdrop-blur-sm">
+            <div className="overflow-hidden rounded-lg border border-border bg-card px-3 py-2">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <IconBlinkingLogo className="size-3.5" />
                 <span className="inline-flex min-w-0 items-center gap-1">
@@ -286,14 +286,14 @@ export function ChatPanel({
 
         <div
           className={cn(
-            'relative flex w-full flex-col gap-2 overflow-hidden rounded-2xl border border-zinc-200 bg-white/94 shadow-[0_22px_60px_-44px_rgba(15,23,42,0.42)] backdrop-blur-xl transition-shadow',
+            'relative flex w-full flex-col gap-2 overflow-hidden rounded-xl border border-zinc-200 bg-white transition-colors',
             isInputFocused &&
-              'ring-2 ring-violet-500/15 ring-offset-2 ring-offset-background/70'
+              'ring-2 ring-zinc-300 ring-offset-1 ring-offset-background'
           )}
         >
           <div
             className={cn(
-              'pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent opacity-0 transition-opacity duration-200',
+              'pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-zinc-300 to-transparent opacity-0 transition-opacity duration-100',
               (isInputFocused || isLoading) && 'opacity-100'
             )}
           />
@@ -310,7 +310,7 @@ export function ChatPanel({
             placeholder={
               messages.length > 0
                 ? 'Reply, refine, or ask for the next step...'
-                : 'Ask Brok to search, build, draft, analyze, or explain...'
+                : 'Ask anything...'
             }
             spellCheck={false}
             value={input}
@@ -344,7 +344,7 @@ export function ChatPanel({
           />
 
           {/* Bottom menu area */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 bg-zinc-50/60 p-2.5 md:p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 bg-zinc-50 p-2.5 md:p-3">
             <div className="flex items-center gap-2">
               <FileUploadButton
                 onFileSelect={files => {
@@ -377,7 +377,7 @@ export function ChatPanel({
                 size={'icon'}
                 className={cn(
                   isLoading && 'animate-pulse',
-                  'size-8 rounded-lg shadow-[0_12px_24px_-18px_rgba(37,99,235,0.45)] md:size-10'
+                  'size-8 rounded-lg md:size-10'
                 )}
                 disabled={
                   (!isLoading &&

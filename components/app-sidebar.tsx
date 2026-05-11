@@ -6,16 +6,10 @@ import { usePathname } from 'next/navigation'
 
 import {
   BookOpen,
-  Code2,
   Compass,
-  FlaskConical,
-  Mail,
   PanelLeft,
-  PlugZap,
   Plus,
-  Presentation,
-  Search,
-  TerminalSquare
+  Search
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -40,40 +34,33 @@ import { IconBlinkingLogo } from './ui/icons'
 export default function AppSidebar() {
   const pathname = usePathname()
   const navButtonClass =
-    'group/sidebar relative h-10 rounded-2xl border border-transparent px-2 text-[13px] font-medium text-zinc-500 transition-all duration-150 hover:-translate-y-0.5 hover:border-zinc-200 hover:bg-white hover:text-zinc-950 hover:shadow-sm active:translate-y-0 data-[active=true]:border-violet-200 data-[active=true]:bg-white data-[active=true]:text-violet-700 data-[active=true]:shadow-sm'
+    'group/sidebar relative h-10 rounded-xl border border-transparent px-2 text-[13px] font-medium text-zinc-600 transition-colors duration-100 hover:border-zinc-200 hover:bg-white hover:text-zinc-950 data-[active=true]:border-zinc-300 data-[active=true]:bg-white data-[active=true]:text-zinc-950'
   const subButtonClass =
-    'group/subnav rounded-2xl border border-transparent px-2 text-zinc-400 transition-all duration-150 hover:-translate-y-0.5 hover:border-zinc-200 hover:bg-white hover:text-zinc-950 hover:shadow-sm active:translate-y-0 data-[active=true]:border-violet-200 data-[active=true]:bg-white data-[active=true]:text-violet-700 data-[active=true]:shadow-sm'
+    'group/subnav rounded-xl border border-transparent px-2 text-zinc-500 transition-colors duration-100 hover:border-zinc-200 hover:bg-white hover:text-zinc-950 data-[active=true]:border-zinc-300 data-[active=true]:bg-white data-[active=true]:text-zinc-950'
   const iconShellClass =
-    'flex size-7 items-center justify-center rounded-xl border border-transparent text-zinc-400 transition-all duration-150 group-data-[active=true]/sidebar:bg-violet-600 group-data-[active=true]/sidebar:text-white group-hover/sidebar:bg-zinc-100 group-hover/sidebar:text-zinc-900'
+    'flex size-7 items-center justify-center rounded-lg border border-transparent text-zinc-400 transition-colors duration-100 group-data-[active=true]/sidebar:bg-zinc-900 group-data-[active=true]/sidebar:text-white group-hover/sidebar:bg-zinc-100 group-hover/sidebar:text-zinc-900'
   const subIconShellClass =
-    'flex size-6 items-center justify-center rounded-xl border border-transparent text-zinc-400 transition-all duration-150 group-data-[active=true]/subnav:bg-violet-600 group-data-[active=true]/subnav:text-white group-hover/subnav:bg-zinc-100 group-hover/subnav:text-zinc-900'
+    'flex size-6 items-center justify-center rounded-lg border border-transparent text-zinc-400 transition-colors duration-100 group-data-[active=true]/subnav:bg-zinc-900 group-data-[active=true]/subnav:text-white group-hover/subnav:bg-zinc-100 group-hover/subnav:text-zinc-900'
   const isActive = (href: string) =>
     href === '/'
       ? pathname === '/'
       : pathname === href || pathname.startsWith(`${href}/`)
-  const isCodeActive =
-    pathname.startsWith('/brokcode') && !pathname.startsWith('/brokcode/tui')
 
   return (
     <Sidebar
       side="left"
       variant="sidebar"
       collapsible="icon"
-      className="border-r border-zinc-200/70 bg-zinc-50/80 text-zinc-950 shadow-none backdrop-blur-xl"
+      className="border-r border-zinc-200 bg-zinc-50 text-zinc-950 shadow-none"
     >
-      <SidebarHeader className="flex flex-row items-center justify-between border-b border-zinc-200/70 bg-white/70">
+      <SidebarHeader className="flex flex-row items-center justify-between border-b border-zinc-200 bg-white">
         <Link href="/" className="flex items-center gap-2 px-2 py-3">
           <span className="brand-mark rounded-full p-1.5">
             <IconBlinkingLogo className={cn('size-5')} />
           </span>
-          <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
-            <span className="brand-wordmark truncate text-sm font-semibold text-zinc-950">
-              brok
-            </span>
-            <span className="sidebar-section-label text-[10px] font-medium leading-none">
-              agent studio
-            </span>
-          </div>
+          <span className="brand-wordmark truncate text-sm font-semibold text-zinc-950 group-data-[collapsible=icon]:hidden">
+            brok
+          </span>
         </Link>
       </SidebarHeader>
       <SidebarContent className="flex flex-col px-2 py-4 h-full">
@@ -104,9 +91,6 @@ export default function AppSidebar() {
                   <Search className="size-4" />
                 </span>
                 <span className="flex-1">Search</span>
-                {isActive('/') || isActive('/search') ? (
-                  <span className="nav-live-dot" aria-hidden />
-                ) : null}
               </Link>
             </SidebarMenuButton>
             <SidebarMenuSub>
@@ -122,9 +106,6 @@ export default function AppSidebar() {
                       <Compass className="size-4" />
                     </span>
                     <span className="flex-1">Discover</span>
-                    {isActive('/discover') ? (
-                      <span className="nav-live-dot" aria-hidden />
-                    ) : null}
                   </Link>
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
@@ -140,9 +121,6 @@ export default function AppSidebar() {
                       <BookOpen className="size-4" />
                     </span>
                     <span className="flex-1">Library</span>
-                    {isActive('/library') ? (
-                      <span className="nav-live-dot" aria-hidden />
-                    ) : null}
                   </Link>
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
@@ -158,121 +136,10 @@ export default function AppSidebar() {
                       <PanelLeft className="size-4" />
                     </span>
                     <span className="flex-1">Spaces</span>
-                    {isActive('/spaces') ? (
-                      <span className="nav-live-dot" aria-hidden />
-                    ) : null}
                   </Link>
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
             </SidebarMenuSub>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="BrokMail"
-              className={navButtonClass}
-              isActive={isActive('/brokmail')}
-            >
-              <Link href="/brokmail" className="flex items-center gap-2">
-                <span className={iconShellClass}>
-                  <Mail className="size-4" />
-                </span>
-                <span className="flex-1">BrokMail</span>
-                {isActive('/brokmail') ? (
-                  <span className="nav-live-dot" aria-hidden />
-                ) : null}
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="Brok Code"
-              className={navButtonClass}
-              isActive={isCodeActive}
-            >
-              <Link href="/brokcode" className="flex items-center gap-2">
-                <span className={iconShellClass}>
-                  <Code2 className="size-4" />
-                </span>
-                <span className="flex-1">Brok Code</span>
-                {isCodeActive ? (
-                  <span className="nav-live-dot" aria-hidden />
-                ) : null}
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="BrokCode TUI"
-              className={navButtonClass}
-              isActive={isActive('/brokcode/tui')}
-            >
-              <Link href="/brokcode/tui" className="flex items-center gap-2">
-                <span className={iconShellClass}>
-                  <TerminalSquare className="size-4" />
-                </span>
-                <span className="flex-1">TUI</span>
-                {isActive('/brokcode/tui') ? (
-                  <span className="nav-live-dot" aria-hidden />
-                ) : null}
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="Playground"
-              className={navButtonClass}
-              isActive={isActive('/playground')}
-            >
-              <Link href="/playground" className="flex items-center gap-2">
-                <span className={iconShellClass}>
-                  <FlaskConical className="size-4" />
-                </span>
-                <span className="flex-1">Playground</span>
-                {isActive('/playground') ? (
-                  <span className="nav-live-dot" aria-hidden />
-                ) : null}
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="Presentations"
-              className={navButtonClass}
-              isActive={isActive('/presentations')}
-            >
-              <Link href="/presentations" className="flex items-center gap-2">
-                <span className={iconShellClass}>
-                  <Presentation className="size-4" />
-                </span>
-                <span className="flex-1">Slides</span>
-                {isActive('/presentations') ? (
-                  <span className="nav-live-dot" aria-hidden />
-                ) : null}
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="Integrations"
-              className={navButtonClass}
-              isActive={isActive('/integrations')}
-            >
-              <Link href="/integrations" className="flex items-center gap-2">
-                <span className={iconShellClass}>
-                  <PlugZap className="size-4" />
-                </span>
-                <span className="flex-1">Integrations</span>
-                {isActive('/integrations') ? (
-                  <span className="nav-live-dot" aria-hidden />
-                ) : null}
-              </Link>
-            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
         <div className="hidden flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden group-data-[collapsible=offcanvas]:hidden 2xl:block">

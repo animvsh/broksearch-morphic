@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
-import { Code2, Github } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { ChatProvider } from '@/lib/contexts/chat-context'
@@ -26,15 +25,6 @@ import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 import { useFileDropzone } from '@/hooks/use-file-dropzone'
 
-import { Button } from './ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from './ui/dialog'
 import { ChatMessages } from './chat-messages'
 import { ChatPanel } from './chat-panel'
 import { DragOverlay } from './drag-overlay'
@@ -45,29 +35,6 @@ interface ChatSection {
   id: string // User message ID
   userMessage: UIMessage
   assistantMessages: UIMessage[]
-}
-
-function hasCodingIntent(value: string) {
-  const text = value.toLowerCase()
-  return [
-    /\bbuild\b/,
-    /\bcode\b/,
-    /\bdo\s*code\b/,
-    /\bdocode\b/,
-    /\bbrok\s*code\b/,
-    /\bimplement\b/,
-    /\bship\b/,
-    /\bdeploy\b/,
-    /\bdebug\b/,
-    /\bsecurity\s+scan\b/,
-    /\bvulnerability\s+scan\b/,
-    /\bdeepsec\b/,
-    /\/securityscan\b/,
-    /\brefactor\b/,
-    /\bfix (the|this|a)?\s*(bug|error|issue|ui|api|route|page|component|app|site|website)?/,
-    /\b(add|make|create)\b.*\b(component|route|endpoint|api|app|site|website|page|feature|button|sidebar|modal|dashboard|landing page)\b/,
-    /\b(github|pull request|pr|repo|repository|worktree)\b/
-  ].some(pattern => pattern.test(text))
 }
 
 export function Chat({
@@ -110,9 +77,6 @@ export function Chat({
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [input, setInput] = useState('')
-  const [pendingCodingPrompt, setPendingCodingPrompt] = useState<string | null>(
-    null
-  )
   const [errorModal, setErrorModal] = useState<{
     open: boolean
     type: 'rate-limit' | 'auth' | 'forbidden' | 'general'
@@ -512,26 +476,8 @@ export function Chat({
     }
   }
 
-  const openBrokCodeCloud = (prompt: string) => {
-    const url = new URL('/brokcode', window.location.origin)
-    url.searchParams.set('prompt', prompt)
-    url.searchParams.set('connect', 'github')
-    url.searchParams.set('autostart', '1')
-    setInput('')
-    setUploadedFiles([])
-    setPendingCodingPrompt(null)
-    router.push(`${url.pathname}${url.search}`)
-  }
-
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-
-    const promptText = input.trim()
-    if (promptText && hasCodingIntent(promptText)) {
-      setPendingCodingPrompt(promptText)
-      return
-    }
-
     submitToSearch()
   }
 
@@ -552,7 +498,7 @@ export function Chat({
     <ChatProvider sendMessage={sendMessage}>
       <div
         className={cn(
-          'dashboard-shell playful-canvas relative flex h-full min-w-0 flex-1 flex-col',
+          'relative flex h-full min-w-0 flex-1 flex-col bg-background',
           messages.length === 0 ? 'items-center justify-center pb-14' : ''
         )}
         data-testid="full-chat"
@@ -654,58 +600,6 @@ export function Chat({
             router.push('/')
           }}
         />
-        <Dialog
-          open={Boolean(pendingCodingPrompt)}
-          onOpenChange={open => {
-            if (!open) setPendingCodingPrompt(null)
-          }}
-        >
-          <DialogContent className="rounded-md sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Code2 className="size-4" />
-                Start Brok Code?
-              </DialogTitle>
-              <DialogDescription>
-                This looks like a coding request. I will connect GitHub first,
-                then hand it to the Brok Code coding agent in brokcode-cloud.
-              </DialogDescription>
-            </DialogHeader>
-
-            {pendingCodingPrompt && (
-              <div className="rounded-md border bg-muted/30 p-3 text-sm">
-                <p className="line-clamp-4 whitespace-pre-wrap">
-                  {pendingCodingPrompt}
-                </p>
-              </div>
-            )}
-
-            <DialogFooter className="gap-2 sm:gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  const prompt = pendingCodingPrompt
-                  setPendingCodingPrompt(null)
-                  if (prompt) submitToSearch(prompt)
-                }}
-              >
-                Keep In Chat
-              </Button>
-              <Button
-                type="button"
-                className="gap-2"
-                onClick={() => {
-                  if (pendingCodingPrompt)
-                    openBrokCodeCloud(pendingCodingPrompt)
-                }}
-              >
-                <Github className="size-4" />
-                Connect GitHub + Start Brok Code
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </ChatProvider>
   )

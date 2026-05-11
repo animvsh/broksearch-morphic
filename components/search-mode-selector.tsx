@@ -27,6 +27,9 @@ import {
 import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card'
 
 export function SearchModeSelector() {
+  const visibleModeConfigs = SEARCH_MODE_CONFIGS.filter(
+    config => config.value !== 'code'
+  )
   const value = useSyncExternalStore(
     subscribeToCookieChange,
     () => normalizeSearchMode(getCookie('searchMode')),
@@ -39,6 +42,10 @@ export function SearchModeSelector() {
   useEffect(() => {
     const savedMode = getCookie('searchMode')
     const normalizedMode = normalizeSearchMode(savedMode)
+    if (normalizedMode === 'code') {
+      setCookie('searchMode', 'search')
+      return
+    }
     if (savedMode !== normalizedMode) {
       setCookie('searchMode', normalizedMode)
     }
@@ -56,15 +63,13 @@ export function SearchModeSelector() {
     }, 500)
   }
 
-  const selectedMode = SEARCH_MODE_CONFIGS.find(
-    config => config.value === value
-  )
+  const selectedMode = visibleModeConfigs.find(config => config.value === value)
   const SelectedIcon = selectedMode?.icon
   const selectedIndex = Math.max(
-    SEARCH_MODE_CONFIGS.findIndex(config => config.value === value),
+    visibleModeConfigs.findIndex(config => config.value === value),
     0
   )
-  const modeCount = SEARCH_MODE_CONFIGS.length
+  const modeCount = visibleModeConfigs.length
 
   return (
     <>
@@ -95,7 +100,7 @@ export function SearchModeSelector() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-64" sideOffset={5}>
-            {SEARCH_MODE_CONFIGS.map(config => {
+            {visibleModeConfigs.map(config => {
               const ModeIcon = config.icon
               const isSelected = value === config.value
               return (
@@ -139,7 +144,7 @@ export function SearchModeSelector() {
 
           {/* Mode buttons */}
           <div className="relative flex items-center">
-            {SEARCH_MODE_CONFIGS.map((config, index) => {
+            {visibleModeConfigs.map(config => {
               const Icon = config.icon
               const isSelected = value === config.value
 
