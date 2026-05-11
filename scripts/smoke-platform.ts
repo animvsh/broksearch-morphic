@@ -16,7 +16,7 @@ const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3001'
 const smokeUserId = process.env.ANONYMOUS_USER_ID || 'anonymous-user'
 
 const uiChecks: UiCheck[] = [
-  { path: '/', expectedText: 'Customize your AI workspace' },
+  { path: '/', expectedText: 'What should Brok help with today?' },
   { path: '/docs', expectedText: 'Brok Documentation' },
   { path: '/docs/quickstart', expectedText: 'Quickstart' },
   { path: '/playground', expectedText: 'Brok Playground' },

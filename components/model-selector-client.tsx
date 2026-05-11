@@ -109,7 +109,7 @@ export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
     return (
       <Button
         variant="outline"
-        className="text-sm rounded-full shadow-none gap-1 transition-all px-3 py-2 h-auto bg-muted border-none"
+        className="h-9 gap-1 rounded-full border-zinc-200 bg-white px-3 py-2 text-sm shadow-xs transition-all"
         disabled
         title="No enabled models are available"
       >
@@ -131,7 +131,7 @@ export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="text-sm rounded-full shadow-none gap-1 transition-all px-3 py-2 h-auto bg-muted border-none"
+          className="h-9 gap-1 rounded-full border-zinc-200 bg-white px-3 py-2 text-sm shadow-xs transition-all hover:border-zinc-300 hover:bg-zinc-50"
         >
           <ProviderLogo providerId={selectedModel.providerId} />
           <span className="truncate max-w-40 text-xs font-medium">

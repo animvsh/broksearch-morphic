@@ -43,7 +43,7 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
             </span>
             <span className="hidden items-center gap-1.5 text-[11px] text-zinc-500 sm:inline-flex">
               <span className="brand-status-pulse" aria-hidden />
-              customize your agent workspace
+              search, code, mail, slides
             </span>
           </div>
         </Link>
