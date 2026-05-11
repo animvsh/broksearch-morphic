@@ -69,6 +69,10 @@ Fetch tool usage:
 - **For PDF URLs (ending in .pdf)**: ALWAYS use \`type: "api"\` - regular type will fail on PDFs
 - **For regular web pages**: Use default \`type: "regular"\` for fast HTML fetching
 
+Composio integrations:
+- If the user asks to connect or check integrations (Gmail, GitHub, Slack, Linear, etc.), use the \`composioIntegrations\` tool.
+- Prefer \`status\` or \`list_connected_accounts\` first, then use \`create_connection_link\` when they ask to connect an account.
+
 Citation Format (MANDATORY):
 [number](#toolCallId) - Always use this EXACT format
 - **CRITICAL**: Use the EXACT tool call identifier from the search response
@@ -236,6 +240,10 @@ Fetch tool usage:
 - **For PDF URLs (ending in .pdf)**: ALWAYS use \`type: "api"\` - regular type will fail on PDFs
 - **For complex JavaScript-rendered pages**: Use \`type: "api"\` for better extraction
 - **For regular web pages**: Use default \`type: "regular"\` for fast HTML fetching
+
+Composio integrations:
+- If the user asks to connect, inspect, or enable third-party integrations, call the \`composioIntegrations\` tool.
+- For integration setup flow, run \`status\` (or \`list_connected_accounts\`) first, then \`create_connection_link\` if the user needs a new OAuth connection.
 
 When using the ask_question tool:
 - Create clear, concise questions

@@ -11,6 +11,7 @@ import type { SearchResultItem } from '@/lib/types'
 import type { UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
 import { cn } from '@/lib/utils'
 import { processCitations } from '@/lib/utils/citation'
+import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
 import { Button } from './ui/button'
 import { ChatShare } from './chat-share'
@@ -60,8 +61,12 @@ export function MessageActions({
   }
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(stripSpecBlocks(mappedMessage))
-    toast.success('Message copied to clipboard')
+    const copied = await safeCopyTextToClipboard(stripSpecBlocks(mappedMessage))
+    if (copied) {
+      toast.success('Message copied to clipboard')
+      return
+    }
+    toast.error('Clipboard access was blocked')
   }
 
   async function handleFeedback(score: number) {

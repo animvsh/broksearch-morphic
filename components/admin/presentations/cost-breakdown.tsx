@@ -23,7 +23,7 @@ export function CostBreakdown({ items, className }: CostBreakdownProps) {
         <CardTitle className="text-base font-medium">Cost Breakdown</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {items.map((item) => (
+        {items.map(item => (
           <div key={item.label} className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">{item.label}</span>
             <span className="text-sm font-medium">

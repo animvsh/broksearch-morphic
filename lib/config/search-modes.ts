@@ -1,8 +1,6 @@
-import { Search } from 'lucide-react'
+import { Braces, Brain, Search, Zap } from 'lucide-react'
 
 import { SearchMode } from '@/lib/types/search'
-
-import { IconLogoOutline } from '@/components/ui/icons'
 
 export interface SearchModeConfig {
   value: SearchMode
@@ -12,21 +10,43 @@ export interface SearchModeConfig {
   color: string
 }
 
+export const DEFAULT_SEARCH_MODE: SearchMode = 'quick'
+export const VALID_SEARCH_MODES: SearchMode[] = [
+  'quick',
+  'search',
+  'deep',
+  'code'
+]
+
 // Centralized search mode configuration
 export const SEARCH_MODE_CONFIGS: SearchModeConfig[] = [
   {
     value: 'quick',
-    label: 'AI Search',
-    description: 'Fast, concise AI-powered search results',
-    icon: Search,
+    label: 'Quick Answer',
+    description: 'Instant answer with minimal tool hops',
+    icon: Zap,
     color: 'text-amber-500'
   },
   {
-    value: 'adaptive',
+    value: 'search',
+    label: 'Search',
+    description: 'Balanced web research with clear citations',
+    icon: Search,
+    color: 'text-sky-500'
+  },
+  {
+    value: 'deep',
     label: 'Deep Search',
     description: 'Deep research with comprehensive analysis',
-    icon: IconLogoOutline,
+    icon: Brain,
     color: 'text-violet-500'
+  },
+  {
+    value: 'code',
+    label: 'Code',
+    description: 'Coding-focused answers and implementation help',
+    icon: Braces,
+    color: 'text-emerald-500'
   }
 ]
 
@@ -35,4 +55,24 @@ export function getSearchModeConfig(
   mode: SearchMode
 ): SearchModeConfig | undefined {
   return SEARCH_MODE_CONFIGS.find(config => config.value === mode)
+}
+
+export function isSearchMode(
+  value: string | null | undefined
+): value is SearchMode {
+  if (!value) {
+    return false
+  }
+
+  return VALID_SEARCH_MODES.includes(value as SearchMode)
+}
+
+export function normalizeSearchMode(
+  value: string | null | undefined
+): SearchMode {
+  if (value === 'adaptive') {
+    return 'deep'
+  }
+
+  return isSearchMode(value) ? value : DEFAULT_SEARCH_MODE
 }

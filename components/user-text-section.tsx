@@ -6,6 +6,7 @@ import TextareaAutosize from 'react-textarea-autosize'
 import { Check, ChevronDown, ChevronUp, Copy, Pencil } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
 import { Button } from './ui/button'
 import { CollapsibleMessage } from './collapsible-message'
@@ -46,13 +47,13 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
 
   const handleCopyClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation()
-    try {
-      await navigator.clipboard.writeText(content)
+    const copiedToClipboard = await safeCopyTextToClipboard(content)
+    if (copiedToClipboard) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard access denied — silently ignore
+      return
     }
+    // Clipboard access denied — silently ignore
   }
 
   const handleEditClick = (e: React.MouseEvent<HTMLButtonElement>) => {

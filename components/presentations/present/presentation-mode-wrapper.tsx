@@ -6,8 +6,7 @@ import { type SlideContent } from '@/lib/presentations/theme-utils'
 import { type Theme } from '@/lib/presentations/themes'
 
 const PresentationModeClient = dynamic(
-  () =>
-    import('./presentation-mode').then((mod) => mod.PresentationMode),
+  () => import('./presentation-mode').then(mod => mod.PresentationMode),
   {
     ssr: false,
     loading: () => (

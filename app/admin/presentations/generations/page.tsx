@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
-import { Column,DataTable } from '@/components/admin/presentations/data-table'
+import { Column, DataTable } from '@/components/admin/presentations/data-table'
 
 interface Generation {
   id: string
@@ -39,9 +39,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-        isCompleted
-          ? 'bg-green-100 text-green-800'
-          : 'bg-red-100 text-red-800'
+        isCompleted ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
       }`}
     >
       {status}
@@ -55,11 +53,7 @@ export default function GenerationsPage() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchGenerations()
-  }, [page])
-
-  const fetchGenerations = async () => {
+  const fetchGenerations = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -77,14 +71,18 @@ export default function GenerationsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page])
+
+  useEffect(() => {
+    fetchGenerations()
+  }, [fetchGenerations])
 
   const columns: Column<Generation>[] = [
     {
       key: 'created_at',
       label: 'Time',
       sortable: true,
-      render: (row) => (
+      render: row => (
         <span className="text-muted-foreground text-xs">
           {formatRelativeTime(row.created_at)}
         </span>
@@ -94,34 +92,36 @@ export default function GenerationsPage() {
       key: 'user_id',
       label: 'User',
       sortable: true,
-      render: (row) => (
+      render: row => (
         <span className="font-mono text-xs">{row.user_id.slice(0, 8)}...</span>
       )
     },
     {
       key: 'presentation_id',
       label: 'Presentation',
-      render: (row) => (
-        <span className="font-mono text-xs">{row.presentation_id.slice(0, 8)}...</span>
+      render: row => (
+        <span className="font-mono text-xs">
+          {row.presentation_id.slice(0, 8)}...
+        </span>
       )
     },
     {
       key: 'generation_type',
       label: 'Type',
       sortable: true,
-      render: (row) => (
+      render: row => (
         <span className="capitalize text-sm">{row.generation_type}</span>
       )
     },
     {
       key: 'model',
       label: 'Model',
-      render: (row) => <span className="text-sm">{row.model}</span>
+      render: row => <span className="text-sm">{row.model}</span>
     },
     {
       key: 'web_search_enabled',
       label: 'Web Search',
-      render: (row) => (
+      render: row => (
         <span
           className={`text-sm ${row.web_search_enabled ? 'text-green-600' : 'text-muted-foreground'}`}
         >
@@ -133,27 +133,33 @@ export default function GenerationsPage() {
       key: 'input_tokens',
       label: 'Input Tokens',
       sortable: true,
-      render: (row) => <span className="text-sm">{row.input_tokens.toLocaleString()}</span>
+      render: row => (
+        <span className="text-sm">{row.input_tokens.toLocaleString()}</span>
+      )
     },
     {
       key: 'output_tokens',
       label: 'Output Tokens',
       sortable: true,
-      render: (row) => <span className="text-sm">{row.output_tokens.toLocaleString()}</span>
+      render: row => (
+        <span className="text-sm">{row.output_tokens.toLocaleString()}</span>
+      )
     },
     {
       key: 'cost_usd',
       label: 'Cost',
       sortable: true,
-      render: (row) => (
-        <span className="text-sm font-medium">${(row.cost_usd / 100).toFixed(4)}</span>
+      render: row => (
+        <span className="text-sm font-medium">
+          ${(row.cost_usd / 100).toFixed(4)}
+        </span>
       )
     },
     {
       key: 'status',
       label: 'Status',
       sortable: true,
-      render: (row) => <StatusBadge status={row.status} />
+      render: row => <StatusBadge status={row.status} />
     }
   ]
 
@@ -161,7 +167,9 @@ export default function GenerationsPage() {
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Generations Log</h1>
+          <h1 className="text-3xl font-bold text-foreground">
+            Generations Log
+          </h1>
           <p className="text-muted-foreground mt-1">
             Track all presentation generation requests
           </p>
@@ -170,21 +178,22 @@ export default function GenerationsPage() {
         <div className="bg-card rounded-lg border p-6">
           <div className="mb-6">
             <h2 className="text-lg font-semibold">Generation History</h2>
-            <p className="text-sm text-muted-foreground">{total} total generations</p>
+            <p className="text-sm text-muted-foreground">
+              {total} total generations
+            </p>
           </div>
 
           {loading ? (
             <div className="space-y-3">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-12 bg-muted/50 rounded animate-pulse" />
+                <div
+                  key={i}
+                  className="h-12 bg-muted/50 rounded animate-pulse"
+                />
               ))}
             </div>
           ) : (
-            <DataTable
-              data={generations}
-              columns={columns}
-              pageSize={20}
-            />
+            <DataTable data={generations} columns={columns} pageSize={20} />
           )}
         </div>
       </div>

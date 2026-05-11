@@ -2,6 +2,7 @@ import {
   isCloudDeployment,
   loadModelsConfig
 } from '@/lib/config/load-models-config'
+import { VALID_SEARCH_MODES } from '@/lib/config/search-modes'
 import { OllamaClient } from '@/lib/ollama/client'
 import { Model } from '@/lib/types/models'
 
@@ -25,10 +26,8 @@ async function getConfiguredOllamaModels(): Promise<Model[]> {
   try {
     const config = await loadModelsConfig()
 
-    // Check quick/adaptive models
-    const cloudModels = [config.models.quick, config.models.adaptive]
-
-    for (const model of cloudModels) {
+    for (const mode of VALID_SEARCH_MODES) {
+      const model = config.models[mode]
       if (model?.providerId === 'ollama') {
         ollamaModels.push(model)
       }

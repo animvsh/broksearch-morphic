@@ -1,9 +1,11 @@
 'use client'
 
-import { useTheme } from 'next-themes'
-
 import { toast } from 'sonner'
 
+import {
+  normalizeSearchMode,
+  VALID_SEARCH_MODES
+} from '@/lib/config/search-modes'
 import { SHORTCUT_EVENTS, SHORTCUTS } from '@/lib/keyboard-shortcuts'
 import { SearchMode } from '@/lib/types/search'
 import { getCookie, setCookie } from '@/lib/utils/cookies'
@@ -12,16 +14,19 @@ import { useKeyboardShortcut } from '@/hooks/use-keyboard-shortcut'
 
 import { useSidebar } from './ui/sidebar'
 import { KeyboardShortcutDialog } from './keyboard-shortcut-dialog'
+import { Theme, useTheme } from './theme-provider'
 
-const THEME_CYCLE: Record<string, string> = {
+const THEME_CYCLE: Record<Theme, Theme> = {
   dark: 'light',
   light: 'system',
   system: 'dark'
 }
 
 const SEARCH_MODE_LABELS: Record<SearchMode, string> = {
-  quick: 'Quick',
-  adaptive: 'Adaptive'
+  quick: 'Quick Answer',
+  search: 'Search',
+  deep: 'Deep Search',
+  code: 'Code'
 }
 
 export function KeyboardShortcutHandler() {
@@ -47,8 +52,10 @@ export function KeyboardShortcutHandler() {
   })
 
   useKeyboardShortcut(SHORTCUTS.toggleSearchMode, () => {
-    const current = getCookie('searchMode') || 'quick'
-    const next: SearchMode = current === 'quick' ? 'adaptive' : 'quick'
+    const current = normalizeSearchMode(getCookie('searchMode'))
+    const index = VALID_SEARCH_MODES.indexOf(current)
+    const next =
+      VALID_SEARCH_MODES[(index + 1) % VALID_SEARCH_MODES.length] ?? 'quick'
     setCookie('searchMode', next)
     toast.info(`Search mode: ${SEARCH_MODE_LABELS[next]}`)
   })

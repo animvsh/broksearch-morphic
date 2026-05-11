@@ -23,6 +23,11 @@ export default function DocsPage() {
           href="/docs/chat-completions"
         />
         <DocCard
+          title="Brok Code"
+          description="Use Brok Code in cloud, terminal, and coding-agent tools"
+          href="/docs/brokcode"
+        />
+        <DocCard
           title="Search Completions"
           description="Add search-powered AI to your app"
           href="/docs/search-completions"
@@ -49,10 +54,18 @@ export default function DocsPage() {
         />
       </div>
     </div>
-  );
+  )
 }
 
-function DocCard({ title, description, href }: { title: string; description: string; href: string }) {
+function DocCard({
+  title,
+  description,
+  href
+}: {
+  title: string
+  description: string
+  href: string
+}) {
   return (
     <a
       href={href}
@@ -61,5 +74,5 @@ function DocCard({ title, description, href }: { title: string; description: str
       <h2 className="text-lg font-semibold mb-2">{title}</h2>
       <p className="text-sm text-muted-foreground">{description}</p>
     </a>
-  );
+  )
 }

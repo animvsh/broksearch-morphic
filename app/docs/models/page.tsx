@@ -1,10 +1,10 @@
-import { BROK_MODELS } from '@/lib/brok/models';
+import { BROK_MODELS } from '@/lib/brok/models'
 
 export default function ModelsPage() {
   const models = Object.entries(BROK_MODELS).map(([id, config]) => ({
     id,
-    ...config,
-  }));
+    ...config
+  }))
 
   return (
     <div className="container py-8 max-w-3xl">
@@ -15,16 +15,22 @@ export default function ModelsPage() {
       </div>
 
       <div className="space-y-6">
-        {models.map((model) => (
+        {models.map(model => (
           <div key={model.id} className="border rounded-lg p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h2 className="text-xl font-semibold">{model.name}</h2>
-                <code className="text-sm text-muted-foreground">{model.id}</code>
+                <code className="text-sm text-muted-foreground">
+                  {model.id}
+                </code>
               </div>
               <div className="text-right">
-                <div className="text-sm">${model.inputCostPerMillion}/1M in</div>
-                <div className="text-sm text-muted-foreground">${model.outputCostPerMillion}/1M out</div>
+                <div className="text-sm">
+                  ${model.inputCostPerMillion}/1M in
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  ${model.outputCostPerMillion}/1M out
+                </div>
               </div>
             </div>
             <p className="text-muted-foreground mb-4">{model.description}</p>
@@ -49,5 +55,5 @@ export default function ModelsPage() {
         ))}
       </div>
     </div>
-  );
+  )
 }

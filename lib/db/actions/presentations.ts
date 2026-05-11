@@ -1,8 +1,9 @@
 'use server'
 
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, notInArray, sql } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
+import { localPresentationStore } from '@/lib/presentations/local-store'
 import {
   type Presentation,
   type PresentationExport,
@@ -13,7 +14,27 @@ import {
   presentationOutlines,
   presentations,
   type PresentationSlide,
-  presentationSlides} from '@/lib/presentations/schema'
+  presentationSlides
+} from '@/lib/presentations/schema'
+
+let presentationDatabaseUnavailable =
+  process.env.PRESENTATIONS_LOCAL_STORE === '1'
+
+function shouldUseLocalPresentationStore() {
+  return presentationDatabaseUnavailable
+}
+
+function fallbackToLocalPresentationStore<T>(
+  error: unknown,
+  fallback: () => Promise<T>
+) {
+  presentationDatabaseUnavailable = true
+  const message = error instanceof Error ? error.message : String(error)
+  console.warn(
+    `[presentations] Database unavailable, using local store fallback: ${message}`
+  )
+  return fallback()
+}
 
 // ============================================================================
 // Presentation CRUD
@@ -36,61 +57,115 @@ export async function createPresentation({
   slideCount?: number
   themeId?: string
 }): Promise<Presentation> {
-  const [presentation] = await db
-    .insert(presentations)
-    .values({
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.createPresentation({
       title,
       userId,
       description,
       language,
       style,
       slideCount,
-      themeId,
-      status: 'draft'
+      themeId
     })
-    .returning()
+  }
 
-  return presentation
+  try {
+    const [presentation] = await db
+      .insert(presentations)
+      .values({
+        title,
+        userId,
+        description,
+        language,
+        style,
+        slideCount,
+        themeId,
+        status: 'draft'
+      })
+      .returning()
+
+    return presentation
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.createPresentation({
+        title,
+        userId,
+        description,
+        language,
+        style,
+        slideCount,
+        themeId
+      })
+    )
+  }
 }
 
 export async function getPresentation(
   id: string,
   userId?: string
 ): Promise<Presentation | null> {
-  const [presentation] = await db
-    .select()
-    .from(presentations)
-    .where(eq(presentations.id, id))
-    .limit(1)
-
-  if (!presentation) {
-    return null
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.getPresentation(id, userId)
   }
 
-  // If userId provided, verify ownership
-  if (userId && presentation.userId !== userId) {
-    return null
-  }
+  try {
+    const [presentation] = userId
+      ? await db
+          .select()
+          .from(presentations)
+          .where(eq(presentations.id, id))
+          .limit(1)
+      : await db
+          .select()
+          .from(presentations)
+          .where(
+            and(eq(presentations.id, id), eq(presentations.isPublic, true))
+          )
+          .limit(1)
 
-  return presentation
+    if (!presentation) {
+      return null
+    }
+
+    // If userId provided, verify ownership
+    if (userId && presentation.userId !== userId) {
+      return null
+    }
+
+    return presentation
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.getPresentation(id, userId)
+    )
+  }
 }
 
 export async function getPresentationWithSlides(
   id: string,
   userId?: string
 ): Promise<(Presentation & { slides: PresentationSlide[] }) | null> {
-  const presentation = await getPresentation(id, userId)
-  if (!presentation) {
-    return null
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.getPresentationWithSlides(id, userId)
   }
 
-  const slides = await db
-    .select()
-    .from(presentationSlides)
-    .where(eq(presentationSlides.presentationId, id))
-    .orderBy(presentationSlides.slideIndex)
+  try {
+    const presentation = await getPresentation(id, userId)
+    if (!presentation) {
+      return null
+    }
 
-  return { ...presentation, slides }
+    const slides = await db
+      .select()
+      .from(presentationSlides)
+      .where(eq(presentationSlides.presentationId, id))
+      .orderBy(presentationSlides.slideIndex)
+
+    return { ...presentation, slides }
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.getPresentationWithSlides(id, userId)
+    )
+  }
 }
 
 export async function getPresentationsByUser(
@@ -98,16 +173,26 @@ export async function getPresentationsByUser(
   limit = 20,
   offset = 0
 ): Promise<{ presentations: Presentation[]; nextOffset: number | null }> {
-  const results = await db
-    .select()
-    .from(presentations)
-    .where(eq(presentations.userId, userId))
-    .orderBy(desc(presentations.createdAt))
-    .limit(limit)
-    .offset(offset)
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.getPresentationsByUser(userId, limit, offset)
+  }
 
-  const nextOffset = results.length === limit ? offset + limit : null
-  return { presentations: results, nextOffset }
+  try {
+    const results = await db
+      .select()
+      .from(presentations)
+      .where(eq(presentations.userId, userId))
+      .orderBy(desc(presentations.createdAt))
+      .limit(limit)
+      .offset(offset)
+
+    const nextOffset = results.length === limit ? offset + limit : null
+    return { presentations: results, nextOffset }
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.getPresentationsByUser(userId, limit, offset)
+    )
+  }
 }
 
 export async function updatePresentation(
@@ -121,27 +206,41 @@ export async function updatePresentation(
     status?: Presentation['status']
   }
 ): Promise<Presentation | null> {
-  const presentation = await getPresentation(id, userId)
-  if (!presentation) {
-    return null
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.updatePresentation(id, userId, updates)
   }
 
-  const [updated] = await db
-    .update(presentations)
-    .set({
-      ...updates,
-      updatedAt: new Date()
-    })
-    .where(eq(presentations.id, id))
-    .returning()
+  try {
+    const presentation = await getPresentation(id, userId)
+    if (!presentation) {
+      return null
+    }
 
-  return updated
+    const [updated] = await db
+      .update(presentations)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(presentations.id, id))
+      .returning()
+
+    return updated
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.updatePresentation(id, userId, updates)
+    )
+  }
 }
 
 export async function deletePresentation(
   id: string,
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.deletePresentation(id, userId)
+  }
+
   try {
     const presentation = await getPresentation(id, userId)
     if (!presentation) {
@@ -154,7 +253,9 @@ export async function deletePresentation(
     return { success: true }
   } catch (error) {
     console.error('Error deleting presentation:', error)
-    return { success: false, error: 'Failed to delete presentation' }
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.deletePresentation(id, userId)
+    )
   }
 }
 
@@ -171,58 +272,97 @@ export async function createOrUpdateOutline({
   outlineJson: Array<{ title: string; bullets: string[] }>
   status?: 'generating' | 'ready' | 'error'
 }): Promise<PresentationOutline> {
-  // Check if outline exists
-  const [existing] = await db
-    .select()
-    .from(presentationOutlines)
-    .where(eq(presentationOutlines.presentationId, presentationId))
-    .limit(1)
-
-  if (existing) {
-    const [updated] = await db
-      .update(presentationOutlines)
-      .set({
-        outlineJson,
-        status,
-        updatedAt: new Date()
-      })
-      .where(eq(presentationOutlines.presentationId, presentationId))
-      .returning()
-    return updated
-  }
-
-  const [outline] = await db
-    .insert(presentationOutlines)
-    .values({
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.createOrUpdateOutline({
       presentationId,
       outlineJson,
       status
     })
-    .returning()
+  }
 
-  return outline
+  try {
+    // Check if outline exists
+    const [existing] = await db
+      .select()
+      .from(presentationOutlines)
+      .where(eq(presentationOutlines.presentationId, presentationId))
+      .limit(1)
+
+    if (existing) {
+      const [updated] = await db
+        .update(presentationOutlines)
+        .set({
+          outlineJson,
+          status,
+          updatedAt: new Date()
+        })
+        .where(eq(presentationOutlines.presentationId, presentationId))
+        .returning()
+      return updated
+    }
+
+    const [outline] = await db
+      .insert(presentationOutlines)
+      .values({
+        presentationId,
+        outlineJson,
+        status
+      })
+      .returning()
+
+    return outline
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.createOrUpdateOutline({
+        presentationId,
+        outlineJson,
+        status
+      })
+    )
+  }
 }
 
 export async function getOutline(
   presentationId: string
 ): Promise<PresentationOutline | null> {
-  const [outline] = await db
-    .select()
-    .from(presentationOutlines)
-    .where(eq(presentationOutlines.presentationId, presentationId))
-    .limit(1)
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.getOutline(presentationId)
+  }
 
-  return outline || null
+  try {
+    const [outline] = await db
+      .select()
+      .from(presentationOutlines)
+      .where(eq(presentationOutlines.presentationId, presentationId))
+      .limit(1)
+
+    return outline || null
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.getOutline(presentationId)
+    )
+  }
 }
 
 export async function updateOutlineStatus(
   presentationId: string,
   status: 'generating' | 'ready' | 'error'
 ): Promise<void> {
-  await db
-    .update(presentationOutlines)
-    .set({ status, updatedAt: new Date() })
-    .where(eq(presentationOutlines.presentationId, presentationId))
+  if (shouldUseLocalPresentationStore()) {
+    await localPresentationStore.updateOutlineStatus(presentationId, status)
+    return
+  }
+
+  try {
+    await db
+      .update(presentationOutlines)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(presentationOutlines.presentationId, presentationId))
+  } catch (error) {
+    await fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.updateOutlineStatus(presentationId, status)
+    )
+  }
 }
 
 // ============================================================================
@@ -242,47 +382,95 @@ export async function createSlides({
     speakerNotes?: string
   }>
 }): Promise<PresentationSlide[]> {
-  // Delete existing slides first
-  await db
-    .delete(presentationSlides)
-    .where(eq(presentationSlides.presentationId, presentationId))
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.createSlides({ presentationId, slides })
+  }
 
-  // Insert new slides
-  const createdSlides = await db
-    .insert(presentationSlides)
-    .values(
-      slides.map(slide => ({
-        presentationId,
-        slideIndex: slide.slideIndex,
-        title: slide.title,
-        layoutType: slide.layoutType,
-        contentJson: slide.contentJson,
-        speakerNotes: slide.speakerNotes
-      }))
-    )
-    .returning()
+  try {
+    return db.transaction(async tx => {
+      const slideIndexes = slides.map(slide => slide.slideIndex)
 
-  // Update presentation slide count and status
-  await db
-    .update(presentations)
-    .set({
-      slideCount: slides.length,
-      status: 'ready',
-      updatedAt: new Date()
+      const createdSlides =
+        slides.length > 0
+          ? await tx
+              .insert(presentationSlides)
+              .values(
+                slides.map(slide => ({
+                  presentationId,
+                  slideIndex: slide.slideIndex,
+                  title: slide.title,
+                  layoutType: slide.layoutType,
+                  contentJson: slide.contentJson,
+                  speakerNotes: slide.speakerNotes
+                }))
+              )
+              .onConflictDoUpdate({
+                target: [
+                  presentationSlides.presentationId,
+                  presentationSlides.slideIndex
+                ],
+                set: {
+                  title: sql.raw('excluded.title'),
+                  layoutType: sql.raw('excluded.layout_type'),
+                  contentJson: sql.raw('excluded.content_json'),
+                  speakerNotes: sql.raw('excluded.speaker_notes'),
+                  updatedAt: new Date()
+                }
+              })
+              .returning()
+          : []
+
+      if (slideIndexes.length > 0) {
+        await tx
+          .delete(presentationSlides)
+          .where(
+            and(
+              eq(presentationSlides.presentationId, presentationId),
+              notInArray(presentationSlides.slideIndex, slideIndexes)
+            )
+          )
+      } else {
+        await tx
+          .delete(presentationSlides)
+          .where(eq(presentationSlides.presentationId, presentationId))
+      }
+
+      await tx
+        .update(presentations)
+        .set({
+          slideCount: slides.length,
+          status: 'ready',
+          updatedAt: new Date()
+        })
+        .where(eq(presentations.id, presentationId))
+
+      return createdSlides
     })
-    .where(eq(presentations.id, presentationId))
-
-  return createdSlides
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.createSlides({ presentationId, slides })
+    )
+  }
 }
 
 export async function getSlides(
   presentationId: string
 ): Promise<PresentationSlide[]> {
-  return db
-    .select()
-    .from(presentationSlides)
-    .where(eq(presentationSlides.presentationId, presentationId))
-    .orderBy(presentationSlides.slideIndex)
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.getSlides(presentationId)
+  }
+
+  try {
+    return db
+      .select()
+      .from(presentationSlides)
+      .where(eq(presentationSlides.presentationId, presentationId))
+      .orderBy(presentationSlides.slideIndex)
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.getSlides(presentationId)
+    )
+  }
 }
 
 export async function updateSlide(
@@ -295,20 +483,40 @@ export async function updateSlide(
     speakerNotes?: string
   }
 ): Promise<PresentationSlide | null> {
-  // First verify ownership via presentation
-  const presentation = await db
-    .select()
-    .from(presentations)
-    .where(eq(presentations.id, userId)) // This is wrong, need to fix
-    .limit(1)
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.updateSlide(id, userId, updates)
+  }
 
-  const [slide] = await db
-    .update(presentationSlides)
-    .set({ ...updates, updatedAt: new Date() })
-    .where(eq(presentationSlides.id, id))
-    .returning()
+  try {
+    // First verify ownership via presentation
+    const presentation = await db
+      .select()
+      .from(presentations)
+      .innerJoin(
+        presentationSlides,
+        eq(presentationSlides.presentationId, presentations.id)
+      )
+      .where(
+        and(eq(presentationSlides.id, id), eq(presentations.userId, userId))
+      )
+      .limit(1)
 
-  return slide || null
+    if (presentation.length === 0) {
+      return null
+    }
+
+    const [slide] = await db
+      .update(presentationSlides)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(presentationSlides.id, id))
+      .returning()
+
+    return slide || null
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.updateSlide(id, userId, updates)
+    )
+  }
 }
 
 export async function updateSlides(
@@ -321,27 +529,37 @@ export async function updateSlides(
     speakerNotes?: string
   }>
 ): Promise<PresentationSlide[]> {
-  const updatedSlides: PresentationSlide[] = []
-
-  for (const update of updates) {
-    const [slide] = await db
-      .update(presentationSlides)
-      .set({
-        title: update.title,
-        layoutType: update.layoutType,
-        contentJson: update.contentJson,
-        speakerNotes: update.speakerNotes,
-        updatedAt: new Date()
-      })
-      .where(eq(presentationSlides.id, update.id))
-      .returning()
-
-    if (slide) {
-      updatedSlides.push(slide)
-    }
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.updateSlides(presentationId, updates)
   }
 
-  return updatedSlides
+  try {
+    const updatedSlides: PresentationSlide[] = []
+
+    for (const update of updates) {
+      const [slide] = await db
+        .update(presentationSlides)
+        .set({
+          title: update.title,
+          layoutType: update.layoutType,
+          contentJson: update.contentJson,
+          speakerNotes: update.speakerNotes,
+          updatedAt: new Date()
+        })
+        .where(eq(presentationSlides.id, update.id))
+        .returning()
+
+      if (slide) {
+        updatedSlides.push(slide)
+      }
+    }
+
+    return updatedSlides
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.updateSlides(presentationId, updates)
+    )
+  }
 }
 
 // ============================================================================
@@ -363,20 +581,44 @@ export async function createGeneration({
   model: string
   webSearchEnabled?: boolean
 }): Promise<PresentationGeneration> {
-  const [generation] = await db
-    .insert(presentationGenerations)
-    .values({
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.createGeneration({
       presentationId,
       userId,
       prompt,
       generationType,
       model,
-      webSearchEnabled: webSearchEnabled ?? false,
-      status: 'started'
+      webSearchEnabled
     })
-    .returning()
+  }
 
-  return generation
+  try {
+    const [generation] = await db
+      .insert(presentationGenerations)
+      .values({
+        presentationId,
+        userId,
+        prompt,
+        generationType,
+        model,
+        webSearchEnabled: webSearchEnabled ?? false,
+        status: 'started'
+      })
+      .returning()
+
+    return generation
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.createGeneration({
+        presentationId,
+        userId,
+        prompt,
+        generationType,
+        model,
+        webSearchEnabled
+      })
+    )
+  }
 }
 
 export async function updateGenerationStatus(
@@ -384,15 +626,26 @@ export async function updateGenerationStatus(
   status: 'started' | 'completed' | 'failed',
   tokens?: { inputTokens?: number; outputTokens?: number; costUsd?: number }
 ): Promise<void> {
-  await db
-    .update(presentationGenerations)
-    .set({
-      status,
-      inputTokens: tokens?.inputTokens,
-      outputTokens: tokens?.outputTokens,
-      costUsd: tokens?.costUsd
-    })
-    .where(eq(presentationGenerations.id, id))
+  if (shouldUseLocalPresentationStore()) {
+    await localPresentationStore.updateGenerationStatus(id, status, tokens)
+    return
+  }
+
+  try {
+    await db
+      .update(presentationGenerations)
+      .set({
+        status,
+        inputTokens: tokens?.inputTokens,
+        outputTokens: tokens?.outputTokens,
+        costUsd: tokens?.costUsd
+      })
+      .where(eq(presentationGenerations.id, id))
+  } catch (error) {
+    await fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.updateGenerationStatus(id, status, tokens)
+    )
+  }
 }
 
 // ============================================================================
@@ -406,16 +659,26 @@ export async function createExport({
   presentationId: string
   exportType: 'pptx' | 'pdf' | 'images'
 }): Promise<PresentationExport> {
-  const [exportRecord] = await db
-    .insert(presentationExports)
-    .values({
-      presentationId,
-      exportType,
-      status: 'pending'
-    })
-    .returning()
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.createExport({ presentationId, exportType })
+  }
 
-  return exportRecord
+  try {
+    const [exportRecord] = await db
+      .insert(presentationExports)
+      .values({
+        presentationId,
+        exportType,
+        status: 'pending'
+      })
+      .returning()
+
+    return exportRecord
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.createExport({ presentationId, exportType })
+    )
+  }
 }
 
 export async function updateExportStatus(
@@ -423,23 +686,46 @@ export async function updateExportStatus(
   status: 'pending' | 'processing' | 'completed' | 'failed',
   fileUrl?: string
 ): Promise<void> {
-  await db
-    .update(presentationExports)
-    .set({
-      status,
-      fileUrl
-    })
-    .where(eq(presentationExports.id, id))
+  if (shouldUseLocalPresentationStore()) {
+    await localPresentationStore.updateExportStatus(id, status, fileUrl)
+    return
+  }
+
+  try {
+    await db
+      .update(presentationExports)
+      .set({
+        status,
+        fileUrl
+      })
+      .where(eq(presentationExports.id, id))
+  } catch (error) {
+    await fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.updateExportStatus(id, status, fileUrl)
+    )
+  }
 }
 
-export async function getExport(id: string): Promise<PresentationExport | null> {
-  const [exportRecord] = await db
-    .select()
-    .from(presentationExports)
-    .where(eq(presentationExports.id, id))
-    .limit(1)
+export async function getExport(
+  id: string
+): Promise<PresentationExport | null> {
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.getExport(id)
+  }
 
-  return exportRecord || null
+  try {
+    const [exportRecord] = await db
+      .select()
+      .from(presentationExports)
+      .where(eq(presentationExports.id, id))
+      .limit(1)
+
+    return exportRecord || null
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.getExport(id)
+    )
+  }
 }
 
 // ============================================================================
@@ -452,44 +738,64 @@ export async function setPresentationShare(
   isPublic: boolean,
   password?: string
 ): Promise<{ shareId: string; shareUrl: string } | null> {
-  const presentation = await getPresentation(id, userId)
-  if (!presentation) {
-    return null
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.setPresentationShare(id, userId, isPublic)
   }
 
-  // Generate share_id if making public and none exists
-  let shareId = presentation.shareId
-  if (isPublic && !shareId) {
-    // Generate a unique share ID (using cuid2-like pattern)
-    shareId = `shr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-  }
+  try {
+    const presentation = await getPresentation(id, userId)
+    if (!presentation) {
+      return null
+    }
 
-  await db
-    .update(presentations)
-    .set({
-      isPublic,
-      shareId,
-      updatedAt: new Date()
-    })
-    .where(eq(presentations.id, id))
+    // Generate share_id if making public and none exists
+    let shareId = presentation.shareId
+    if (isPublic && !shareId) {
+      // Generate a unique share ID (using cuid2-like pattern)
+      shareId = `shr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+    }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  return {
-    shareId: shareId!,
-    shareUrl: `${baseUrl}/presentations/${id}/present`
+    await db
+      .update(presentations)
+      .set({
+        isPublic,
+        shareId,
+        updatedAt: new Date()
+      })
+      .where(eq(presentations.id, id))
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    return {
+      shareId: shareId!,
+      shareUrl: `${baseUrl}/presentations/${id}/present`
+    }
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.setPresentationShare(id, userId, isPublic)
+    )
   }
 }
 
 export async function getPresentationByShareId(
   shareId: string
 ): Promise<Presentation | null> {
-  const [presentation] = await db
-    .select()
-    .from(presentations)
-    .where(eq(presentations.shareId, shareId))
-    .limit(1)
+  if (shouldUseLocalPresentationStore()) {
+    return localPresentationStore.getPresentationByShareId(shareId)
+  }
 
-  return presentation || null
+  try {
+    const [presentation] = await db
+      .select()
+      .from(presentations)
+      .where(eq(presentations.shareId, shareId))
+      .limit(1)
+
+    return presentation || null
+  } catch (error) {
+    return fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.getPresentationByShareId(shareId)
+    )
+  }
 }
 
 // ============================================================================
@@ -500,11 +806,22 @@ export async function updatePresentationStatus(
   id: string,
   status: Presentation['status']
 ): Promise<void> {
-  await db
-    .update(presentations)
-    .set({
-      status,
-      updatedAt: new Date()
-    })
-    .where(eq(presentations.id, id))
+  if (shouldUseLocalPresentationStore()) {
+    await localPresentationStore.updatePresentationStatus(id, status)
+    return
+  }
+
+  try {
+    await db
+      .update(presentations)
+      .set({
+        status,
+        updatedAt: new Date()
+      })
+      .where(eq(presentations.id, id))
+  } catch (error) {
+    await fallbackToLocalPresentationStore(error, () =>
+      localPresentationStore.updatePresentationStatus(id, status)
+    )
+  }
 }

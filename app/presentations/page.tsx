@@ -1,26 +1,41 @@
 import { Suspense } from 'react'
 
+import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import { getPresentationsByUser } from '@/lib/db/actions/presentations'
+import type { PresentationStyle } from '@/lib/presentations/types'
+
 import { PresentationsDashboard } from '@/components/presentations/dashboard'
 
-// TODO: Replace with actual data fetching from database
-// import { getUserPresentations } from '@/lib/presentations/queries'
+export const dynamic = 'force-dynamic'
 
-async function getPresentations() {
-  // Temporary placeholder - will be replaced with actual DB query
-  // const userId = await getCurrentUserId()
-  // return getUserPresentations(userId)
-  return []
-}
+const PRESENTATION_STYLES = new Set<PresentationStyle>([
+  'startup',
+  'professional',
+  'casual',
+  'academic'
+])
 
 export default async function PresentationsPage() {
-  // Fetch presentations on the server
-  // const presentations = await getPresentations()
+  const userId = await getCurrentUserId()
+  const result = userId
+    ? await getPresentationsByUser(userId, 50, 0)
+    : { presentations: [] }
+  const presentations = result.presentations.map(presentation => ({
+    ...presentation,
+    description: presentation.description ?? undefined,
+    themeId: presentation.themeId ?? undefined,
+    style: PRESENTATION_STYLES.has(presentation.style as PresentationStyle)
+      ? (presentation.style as PresentationStyle)
+      : undefined,
+    shareId: presentation.shareId ?? undefined,
+    workspaceId: presentation.workspaceId ?? undefined
+  }))
 
   return (
     <div className="min-h-screen bg-background">
       <main className="container py-8">
         <Suspense fallback={<div className="animate-pulse">Loading...</div>}>
-          <PresentationsDashboard />
+          <PresentationsDashboard initialPresentations={presentations} />
         </Suspense>
       </main>
     </div>

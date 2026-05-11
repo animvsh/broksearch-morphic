@@ -1,178 +1,290 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
+import { and, desc, eq, gte, ilike, sql } from 'drizzle-orm'
 
-async function fetchFromSupabase(table: string, params: Record<string, string> = {}) {
-  const searchParams = new URLSearchParams(params)
-  const url = `${SUPABASE_URL}/rest/v1/${table}?${searchParams.toString()}`
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-      'apikey': SUPABASE_SERVICE_KEY,
-      'Content-Type': 'application/json'
-    }
-  })
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Supabase error: ${text}`)
-  }
-  return response.json()
+import { requireAdminAccess } from '@/lib/auth/admin'
+import { db } from '@/lib/db'
+import {
+  presentationAssets,
+  presentationExports,
+  presentationGenerations,
+  presentations,
+  presentationSlides
+} from '@/lib/presentations/schema'
+
+function centsToDollars(cents: number | null | undefined): number {
+  return (cents ?? 0) / 100
 }
 
-async function getCount(table: string): Promise<number> {
-  try {
-    const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/${table}?select=id`,
-      {
-        headers: {
-          'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-          'apikey': SUPABASE_SERVICE_KEY,
-          'Range': '0-0'
-        }
-      }
-    )
-    if (!response.ok) return 0
-    const contentRange = response.headers.get('Content-Range')
-    if (!contentRange) return 0
-    return parseInt(contentRange.split('/')[1]) || 0
-  } catch {
-    return 0
-  }
-}
-
-// GET /api/admin/presentations/stats
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const type = searchParams.get('type')
 
   try {
+    const admin = await requireAdminAccess()
+    if (!admin.ok) {
+      return NextResponse.json({ error: admin.error }, { status: admin.status })
+    }
+
     if (type === 'stats') {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
-      const todayStr = today.toISOString()
 
-      const [presentationsToday, slidesGeneratedToday, exportsToday, totalCost] =
-        await Promise.all([
-          getCount(
-            `presentations?created_at=gte.${todayStr}&select=id`
-          ),
-          getCount(
-            `presentation_slides?created_at=gte.${todayStr}&select=id`
-          ),
-          getCount(
-            `presentation_exports?created_at=gte.${todayStr}&select=id`
-          ),
-          fetchFromSupabase(
-            'presentation_generations?select=cost_usd'
-          ).then((rows: { cost_usd: number }[]) =>
-            rows.reduce((sum, r) => sum + r.cost_usd, 0) / 100
-          )
-        ])
+      const [
+        [presentationsToday],
+        [slidesGeneratedToday],
+        [exportsToday],
+        [costRow]
+      ] = await Promise.all([
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(presentations)
+          .where(gte(presentations.createdAt, today))
+          .limit(1),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(presentationSlides)
+          .where(gte(presentationSlides.createdAt, today))
+          .limit(1),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(presentationExports)
+          .where(gte(presentationExports.createdAt, today))
+          .limit(1),
+        db
+          .select({
+            totalCents: sql<number>`coalesce(sum(${presentationGenerations.costUsd}), 0)::int`
+          })
+          .from(presentationGenerations)
+          .where(gte(presentationGenerations.createdAt, today))
+          .limit(1)
+      ])
 
       return NextResponse.json({
-        presentationsToday,
-        slidesGeneratedToday,
-        exportsToday,
-        generationCost: totalCost.toFixed(2)
+        presentationsToday: presentationsToday?.count ?? 0,
+        slidesGeneratedToday: slidesGeneratedToday?.count ?? 0,
+        exportsToday: exportsToday?.count ?? 0,
+        generationCost: centsToDollars(costRow?.totalCents).toFixed(2)
       })
     }
 
     if (type === 'decks') {
-      const page = parseInt(searchParams.get('page') || '1')
-      const limit = parseInt(searchParams.get('limit') || '20')
+      const page = Number.parseInt(searchParams.get('page') || '1', 10)
+      const limit = Number.parseInt(searchParams.get('limit') || '20', 10)
       const offset = (page - 1) * limit
-      const search = searchParams.get('search') || ''
-      const status = searchParams.get('status') || ''
+      const search = searchParams.get('search')
+      const status = searchParams.get('status')
 
-      let query = `presentations?select=*&order=created_at.desc&offset=${offset}&limit=${limit}`
+      const conditions = []
+
       if (search) {
-        query += `&title=ilike.*${search}*`
+        conditions.push(ilike(presentations.title, `%${search}%`))
       }
+
       if (status) {
-        query += `&status=eq.${status}`
+        conditions.push(eq(presentations.status, status as any))
       }
 
-      const [decks, total] = await Promise.all([
-        fetchFromSupabase(query),
-        getCount('presentations')
-      ])
+      const deckQuery = db
+        .select({
+          id: presentations.id,
+          title: presentations.title,
+          user_id: presentations.userId,
+          status: presentations.status,
+          slide_count: presentations.slideCount,
+          theme_id: presentations.themeId,
+          created_at: presentations.createdAt,
+          updated_at: presentations.updatedAt
+        })
+        .from(presentations)
 
-      return NextResponse.json({ decks, total, page, limit })
+      const countQuery = db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(presentations)
+
+      const [decks, [totalRow]] =
+        conditions.length > 0
+          ? await Promise.all([
+              deckQuery
+                .where(and(...conditions))
+                .orderBy(desc(presentations.createdAt))
+                .limit(limit)
+                .offset(offset),
+              countQuery.where(and(...conditions)).limit(1)
+            ])
+          : await Promise.all([
+              deckQuery
+                .orderBy(desc(presentations.createdAt))
+                .limit(limit)
+                .offset(offset),
+              countQuery.limit(1)
+            ])
+
+      return NextResponse.json({
+        decks,
+        total: totalRow?.count ?? 0,
+        page,
+        limit
+      })
     }
 
     if (type === 'generations') {
-      const page = parseInt(searchParams.get('page') || '1')
-      const limit = parseInt(searchParams.get('limit') || '20')
+      const page = Number.parseInt(searchParams.get('page') || '1', 10)
+      const limit = Number.parseInt(searchParams.get('limit') || '20', 10)
       const offset = (page - 1) * limit
 
-      const [generations, total] = await Promise.all([
-        fetchFromSupabase(
-          `presentation_generations?select=*&order=created_at.desc&offset=${offset}&limit=${limit}`
-        ),
-        getCount('presentation_generations')
+      const [generations, [totalRow]] = await Promise.all([
+        db
+          .select({
+            id: presentationGenerations.id,
+            presentation_id: presentationGenerations.presentationId,
+            user_id: presentationGenerations.userId,
+            prompt: presentationGenerations.prompt,
+            generation_type: presentationGenerations.generationType,
+            model: presentationGenerations.model,
+            web_search_enabled: presentationGenerations.webSearchEnabled,
+            input_tokens: presentationGenerations.inputTokens,
+            output_tokens: presentationGenerations.outputTokens,
+            cost_usd: presentationGenerations.costUsd,
+            status: presentationGenerations.status,
+            created_at: presentationGenerations.createdAt
+          })
+          .from(presentationGenerations)
+          .orderBy(desc(presentationGenerations.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(presentationGenerations)
+          .limit(1)
       ])
 
-      return NextResponse.json({ generations, total, page, limit })
+      return NextResponse.json({
+        generations,
+        total: totalRow?.count ?? 0,
+        page,
+        limit
+      })
     }
 
     if (type === 'costs') {
-      const generations = await fetchFromSupabase(
-        'presentation_generations?select=cost_usd,generation_type,created_at'
+      const generationRows = await db
+        .select({
+          generation_type: presentationGenerations.generationType,
+          web_search_enabled: presentationGenerations.webSearchEnabled,
+          cost_usd: presentationGenerations.costUsd
+        })
+        .from(presentationGenerations)
+
+      const assetCountRow = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(presentationAssets)
+        .limit(1)
+
+      const exportCountRow = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(presentationExports)
+        .limit(1)
+
+      const textGeneration = centsToDollars(
+        generationRows
+          .filter(
+            row =>
+              row.generation_type === 'outline' ||
+              row.generation_type === 'edit'
+          )
+          .reduce((sum, row) => sum + row.cost_usd, 0)
       )
 
-      const textGen = generations
-        .filter((g: { generation_type: string }) => g.generation_type === 'outline' || g.generation_type === 'edit')
-        .reduce((sum: number, g: { cost_usd: number }) => sum + g.cost_usd, 0) / 100
+      const imageGeneration = centsToDollars(
+        generationRows
+          .filter(row => row.generation_type === 'slides')
+          .reduce((sum, row) => sum + row.cost_usd, 0)
+      )
 
-      const imageGen = generations
-        .filter((g: { generation_type: string }) => g.generation_type === 'slides')
-        .reduce((sum: number, g: { cost_usd: number }) => sum + g.cost_usd, 0) / 100
+      const webSearch = centsToDollars(
+        generationRows
+          .filter(row => row.web_search_enabled)
+          .reduce((sum, row) => sum + row.cost_usd, 0)
+      )
 
-      const webSearch = generations
-        .filter((g: { web_search_enabled?: boolean }) => g.web_search_enabled)
-        .reduce((sum: number, g: { cost_usd: number }) => sum + g.cost_usd, 0) / 100
-
-      const storage = 0.5
+      const storage =
+        ((assetCountRow[0]?.count ?? 0) + (exportCountRow[0]?.count ?? 0)) *
+        0.01
 
       return NextResponse.json({
-        textGeneration: textGen,
-        imageGeneration: imageGen,
+        textGeneration,
+        imageGeneration,
         webSearch,
         storage
       })
     }
 
     if (type === 'flagged') {
-      const presentations = await fetchFromSupabase(
-        'presentations?select=*&order=created_at.desc&limit=100'
-      )
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
 
-      const flagged: typeof presentations = []
-
-      for (const p of presentations) {
-        const generations = await fetchFromSupabase(
-          `presentation_generations?presentation_id=eq.${p.id}&select=id,created_at`
+      const flaggedByGeneration = await db
+        .select({
+          id: presentations.id,
+          title: presentations.title,
+          user_id: presentations.userId,
+          status: presentations.status,
+          slide_count: presentations.slideCount,
+          created_at: presentations.createdAt,
+          reason: sql<string>`concat('Too many generations (', count(${presentationGenerations.id}), ' today)')`
+        })
+        .from(presentations)
+        .innerJoin(
+          presentationGenerations,
+          eq(presentationGenerations.presentationId, presentations.id)
         )
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        const todayGens = generations.filter(
-          (g: { created_at: string }) => new Date(g.created_at) >= today
+        .where(gte(presentationGenerations.createdAt, today))
+        .groupBy(
+          presentations.id,
+          presentations.title,
+          presentations.userId,
+          presentations.status,
+          presentations.slideCount,
+          presentations.createdAt
         )
+        .having(sql`count(${presentationGenerations.id}) > 50`)
 
-        let reason: string | null = null
-        if (todayGens.length > 50) {
-          reason = `Too many generations (${todayGens.length} today)`
-        } else if ((p.slide_count || 0) > 100) {
-          reason = `Huge deck (${p.slide_count} slides)`
-        }
+      const flaggedBySize = await db
+        .select({
+          id: presentations.id,
+          title: presentations.title,
+          user_id: presentations.userId,
+          status: presentations.status,
+          slide_count: presentations.slideCount,
+          created_at: presentations.createdAt,
+          reason: sql<string>`'Huge deck (' || ${presentations.slideCount} || ' slides)'`
+        })
+        .from(presentations)
+        .where(gte(presentations.slideCount, 101))
 
-        if (reason) {
-          flagged.push({ ...p, reason })
+      const flaggedMap = new Map<
+        string,
+        {
+          id: string
+          title: string
+          user_id: string
+          status: string
+          slide_count: number
+          created_at: Date
+          reason: string
         }
+      >()
+
+      for (const row of [...flaggedByGeneration, ...flaggedBySize]) {
+        flaggedMap.set(row.id, row)
       }
 
-      return NextResponse.json({ flagged })
+      return NextResponse.json({
+        flagged: [...flaggedMap.values()].sort(
+          (a, b) => b.created_at.getTime() - a.created_at.getTime()
+        )
+      })
     }
 
     return NextResponse.json({ error: 'Invalid type' }, { status: 400 })

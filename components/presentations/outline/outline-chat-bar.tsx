@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 
-import { Loader2Icon,SendIcon } from 'lucide-react'
+import { Loader2Icon, SendIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -70,7 +70,7 @@ export function OutlineChatBar({
       <form onSubmit={handleSubmit} className="relative">
         <Input
           value={message}
-          onChange={(e) => setMessage(e.target.value)}
+          onChange={e => setMessage(e.target.value)}
           placeholder="Ask to edit your outline..."
           disabled={isLoading}
           className={cn(
@@ -93,14 +93,12 @@ export function OutlineChatBar({
       </form>
 
       {/* Error message */}
-      {error && (
-        <p className="text-xs text-destructive px-1">{error}</p>
-      )}
+      {error && <p className="text-xs text-destructive px-1">{error}</p>}
 
       {/* Example prompts */}
       <div className="flex flex-wrap gap-2">
         <span className="text-xs text-muted-foreground">Try:</span>
-        {EXAMPLE_PROMPTS.map((example) => (
+        {EXAMPLE_PROMPTS.map(example => (
           <button
             key={example}
             type="button"

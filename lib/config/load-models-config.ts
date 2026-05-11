@@ -1,20 +1,16 @@
 import cloudConfig from '@/config/models/cloud.json'
 
+import { VALID_SEARCH_MODES } from '@/lib/config/search-modes'
 import { Model } from '@/lib/types/models'
 import { SearchMode } from '@/lib/types/search'
 
 export interface ModelsConfig {
   version: number
-  models: {
-    quick: Model
-    adaptive: Model
-  }
+  models: Record<SearchMode, Model>
 }
 
 let cachedConfig: ModelsConfig | null = null
 let cachedForCloudDeployment = false
-
-const VALID_SEARCH_MODES: SearchMode[] = ['quick', 'adaptive']
 
 function validateModelsConfigStructure(
   json: unknown

@@ -6,8 +6,13 @@ import {
   createSlides,
   getOutline,
   getPresentation,
+  updateGenerationStatus,
   updatePresentationStatus
 } from '@/lib/db/actions/presentations'
+import {
+  extractJsonObject,
+  generateBrokPresentationText
+} from '@/lib/presentations/brok-generation'
 import { themes } from '@/lib/presentations/themes'
 
 const textEncoder = new TextEncoder()
@@ -23,8 +28,7 @@ interface SlideContent {
  * POST /api/presentations/:id/generate-slides
  * Start slide generation with SSE streaming
  *
- * Note: MiniMax integration requires @ai-sdk/openai-compatible to be installed.
- * This route currently uses direct API calls until the dependency is added.
+ * Uses Brok's provider router and streams slide progress.
  */
 export async function POST(
   req: Request,
@@ -57,7 +61,7 @@ export async function POST(
       )
     }
 
-    const body = await req.json()
+    const body = await req.json().catch(() => ({}))
     const { theme_id } = body
 
     // Get theme
@@ -67,12 +71,12 @@ export async function POST(
     await updatePresentationStatus(id, 'slides_generating')
 
     // Create generation record
-    await createGeneration({
+    const generation = await createGeneration({
       presentationId: id,
       userId,
       prompt: `Generate slides for presentation: ${presentation.title}`,
       generationType: 'slides',
-      model: 'abab6.5s-chat',
+      model: 'brok-lite',
       webSearchEnabled: false
     })
 
@@ -88,15 +92,6 @@ export async function POST(
         try {
           const slides: SlideContent[] = []
           const outlineSlides = outline.outlineJson
-
-          // Check if MiniMax is configured
-          const apiKey = process.env.OPENAI_COMPATIBLE_API_KEY
-          if (!apiKey) {
-            sendEvent('error', { error: 'MiniMax API key not configured' })
-            await updatePresentationStatus(id, 'error')
-            controller.close()
-            return
-          }
 
           for (let i = 0; i < outlineSlides.length; i++) {
             const outlineSlide = outlineSlides[i]
@@ -132,70 +127,28 @@ Only return valid JSON.`
 
             let slideContent = ''
 
-            const response = await fetch(
-              `${process.env.OPENAI_COMPATIBLE_API_BASE_URL || 'https://api.minimax.io/v1'}/chat/completions`,
-              {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-              },
-              body: JSON.stringify({
-                model: 'abab6.5s-chat',
-                messages: [
-                  { role: 'system', content: 'You are an expert slide content generator. Return only valid JSON.' },
-                  { role: 'user', content: slidePrompt }
-                ],
-                stream: true,
-                temperature: 0.7,
-                max_tokens: 500
-              })
-            })
-
-            if (!response.ok) {
-              throw new Error(`MiniMax API error: ${response.status}`)
-            }
-
-            if (response.body) {
-              const reader = response.body.getReader()
-              const decoder = new TextDecoder()
-
-              while (true) {
-                const { done, value } = await reader.read()
-                if (done) break
-
-                const chunk = decoder.decode(value)
-                const lines = chunk.split('\n')
-
-                for (const line of lines) {
-                  if (line.startsWith('data: ')) {
-                    const data = line.slice(6)
-                    if (data === '[DONE]') continue
-
-                    try {
-                      const parsed = JSON.parse(data)
-                      const content = parsed.choices?.[0]?.delta?.content
-                      if (content) {
-                        slideContent += content
-                      }
-                    } catch {
-                      // Skip invalid JSON lines
-                    }
-                  }
-                }
-              }
-            }
+            slideContent = await runWithGenerationTimeout(
+              () =>
+                generateBrokPresentationText({
+                  model: 'brok-lite',
+                  maxTokens: 700,
+                  temperature: 0.7,
+                  messages: [
+                    {
+                      role: 'system',
+                      content:
+                        'You are an expert Gamma-style slide content generator. Return only valid JSON.'
+                    },
+                    { role: 'user', content: slidePrompt }
+                  ]
+                }),
+              5000,
+              ''
+            )
 
             // Parse slide content
             let slideData: SlideContent | null = null
-            try {
-              const jsonMatch = slideContent.match(/\{[\s\S]*\}/)
-              if (jsonMatch) {
-                slideData = JSON.parse(jsonMatch[0])
-              }
-            } catch (parseError) {
-              console.error('Error parsing slide JSON:', parseError)
-            }
+            slideData = extractJsonObject<SlideContent>(slideContent)
 
             if (!slideData) {
               // Fallback to basic slide
@@ -209,8 +162,10 @@ Only return valid JSON.`
 
             slides.push({
               title: slideData.title || outlineSlide.title,
-              layoutType: slideData.layoutType || (i === 0 ? 'title' : 'bullet'),
-              contentJson: slideData.contentJson || { bullets: outlineSlide.bullets },
+              layoutType: normalizeLayoutType(slideData.layoutType, i === 0),
+              contentJson: slideData.contentJson || {
+                bullets: outlineSlide.bullets
+              },
               speakerNotes: slideData.speakerNotes
             })
 
@@ -238,10 +193,14 @@ Only return valid JSON.`
           sendEvent('deck_complete', {
             slideCount: slides.length
           })
+          await updateGenerationStatus(generation.id, 'completed')
         } catch (error) {
           console.error('Error generating slides:', error)
           await updatePresentationStatus(id, 'error')
-          sendEvent('error', { error: error instanceof Error ? error.message : 'Failed to generate slides' })
+          await updateGenerationStatus(generation.id, 'failed')
+          sendEvent('error', {
+            error: 'Brok could not generate the slides. Please try again.'
+          })
         } finally {
           controller.close()
         }
@@ -252,7 +211,7 @@ Only return valid JSON.`
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
+        Connection: 'keep-alive'
       }
     })
   } catch (error) {
@@ -262,4 +221,47 @@ Only return valid JSON.`
       { status: 500 }
     )
   }
+}
+
+function normalizeLayoutType(layoutType: string | undefined, isFirst: boolean) {
+  if (isFirst) return 'title'
+
+  const normalized = layoutType?.replace('-', '_')
+  if (
+    normalized &&
+    [
+      'title',
+      'section',
+      'two_column',
+      'image_left',
+      'chart',
+      'quote',
+      'text',
+      'bullet'
+    ].includes(normalized)
+  ) {
+    return normalized
+  }
+
+  return 'bullet'
+}
+
+function runWithGenerationTimeout<T>(
+  task: () => Promise<T>,
+  timeoutMs: number,
+  fallback: T
+) {
+  return Promise.race([
+    task().catch(error => {
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn(`[presentations] AI slide fallback used: ${message}`)
+      return fallback
+    }),
+    new Promise<T>(resolve =>
+      setTimeout(() => {
+        console.warn('[presentations] AI slide timed out, using fallback')
+        resolve(fallback)
+      }, timeoutMs)
+    )
+  ])
 }

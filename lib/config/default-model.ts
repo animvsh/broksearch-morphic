@@ -1,8 +1,8 @@
 import { Model } from '@/lib/types/models'
 
 export const DEFAULT_MODEL: Model = {
-  id: 'MiniMax-M2.7',
+  id: 'minimax-m2.7',
   name: 'brok-3',
-  provider: 'MiniMax',
+  provider: 'Brok',
   providerId: 'openai-compatible'
 }

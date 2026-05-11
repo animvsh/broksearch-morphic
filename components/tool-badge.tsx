@@ -1,6 +1,6 @@
 import React from 'react'
 
-import { Link, Search } from 'lucide-react'
+import { Link, PlugZap, Search } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -21,7 +21,8 @@ export const ToolBadge: React.FC<ToolBadgeProps> = ({
 }) => {
   const icon: Record<string, React.ReactNode> = {
     search: <Search size={14} />,
-    fetch: <Link size={14} />
+    fetch: <Link size={14} />,
+    composioIntegrations: <PlugZap size={14} />
   }
 
   return (

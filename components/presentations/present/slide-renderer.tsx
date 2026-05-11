@@ -1,17 +1,19 @@
-"use client";
+'use client'
 
-import { type SlideContent } from "@/lib/presentations/theme-utils";
-import { type Theme } from "@/lib/presentations/themes";
-import { cn } from "@/lib/utils";
+import Image from 'next/image'
+
+import { type SlideContent } from '@/lib/presentations/theme-utils'
+import { type Theme } from '@/lib/presentations/themes'
+import { cn } from '@/lib/utils'
 
 interface SlideRendererProps {
-  slide: SlideContent;
-  theme: Theme;
-  isActive?: boolean;
+  slide: SlideContent
+  theme: Theme
+  isActive?: boolean
 }
 
 function isGradient(background: string): boolean {
-  return background.startsWith("linear-gradient");
+  return background.startsWith('linear-gradient')
 }
 
 function TitleLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
@@ -22,7 +24,7 @@ function TitleLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
           className="text-6xl font-bold leading-tight"
           style={{
             color: theme.colors.text,
-            fontFamily: theme.fonts.heading,
+            fontFamily: theme.fonts.heading
           }}
         >
           {slide.heading}
@@ -35,7 +37,7 @@ function TitleLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
           style={{
             color: theme.colors.text,
             fontFamily: theme.fonts.body,
-            opacity: 0.8,
+            opacity: 0.8
           }}
         >
           {item.content}
@@ -62,10 +64,16 @@ function TitleLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
         </div>
       )}
     </div>
-  );
+  )
 }
 
-function SectionLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
+function SectionLayout({
+  slide,
+  theme
+}: {
+  slide: SlideContent
+  theme: Theme
+}) {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-4 p-16 text-center">
       {slide.heading && (
@@ -91,24 +99,24 @@ function SectionLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) 
           style={{
             color: theme.colors.text,
             fontFamily: theme.fonts.body,
-            opacity: 0.75,
+            opacity: 0.75
           }}
         >
           {item.content}
         </p>
       ))}
     </div>
-  );
+  )
 }
 
 function TwoColumnLayout({
   slide,
-  theme,
+  theme
 }: {
-  slide: SlideContent;
-  theme: Theme;
+  slide: SlideContent
+  theme: Theme
 }) {
-  const bullets = slide.bullets ?? slide.body?.map((b) => b.content) ?? [];
+  const bullets = slide.bullets ?? slide.body?.map(b => b.content) ?? []
 
   return (
     <div className="flex h-full w-full gap-12 p-16">
@@ -117,7 +125,10 @@ function TwoColumnLayout({
         {slide.heading && (
           <h2
             className="text-4xl font-bold leading-tight"
-            style={{ color: theme.colors.text, fontFamily: theme.fonts.heading }}
+            style={{
+              color: theme.colors.text,
+              fontFamily: theme.fonts.heading
+            }}
           >
             {slide.heading}
           </h2>
@@ -129,7 +140,7 @@ function TwoColumnLayout({
               borderColor: theme.colors.accent,
               color: theme.colors.text,
               fontFamily: theme.fonts.body,
-              opacity: 0.8,
+              opacity: 0.8
             }}
           >
             {slide.quote}
@@ -159,7 +170,7 @@ function TwoColumnLayout({
                   className="text-xl"
                   style={{
                     color: theme.colors.text,
-                    fontFamily: theme.fonts.body,
+                    fontFamily: theme.fonts.body
                   }}
                 >
                   {text}
@@ -170,25 +181,28 @@ function TwoColumnLayout({
         )}
       </div>
     </div>
-  );
+  )
 }
 
 function ImageLeftLayout({
   slide,
-  theme,
+  theme
 }: {
-  slide: SlideContent;
-  theme: Theme;
+  slide: SlideContent
+  theme: Theme
 }) {
   return (
     <div className="flex h-full w-full gap-12 p-16">
       {/* Image */}
       {slide.imageUrl && (
-        <div className="flex w-1/2 items-center justify-center">
-          <img
+        <div className="relative flex w-1/2 items-center justify-center">
+          <Image
             src={slide.imageUrl}
             alt=""
-            className="max-h-full max-w-full rounded-lg object-contain"
+            fill
+            sizes="50vw"
+            className="rounded-lg object-contain"
+            unoptimized
           />
         </div>
       )}
@@ -198,7 +212,10 @@ function ImageLeftLayout({
         {slide.heading && (
           <h2
             className="text-4xl font-bold leading-tight"
-            style={{ color: theme.colors.text, fontFamily: theme.fonts.heading }}
+            style={{
+              color: theme.colors.text,
+              fontFamily: theme.fonts.heading
+            }}
           >
             {slide.heading}
           </h2>
@@ -210,7 +227,7 @@ function ImageLeftLayout({
             style={{
               color: theme.colors.text,
               fontFamily: theme.fonts.body,
-              opacity: 0.8,
+              opacity: 0.8
             }}
           >
             {item.content}
@@ -218,7 +235,7 @@ function ImageLeftLayout({
         ))}
       </div>
     </div>
-  );
+  )
 }
 
 function ChartLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
@@ -251,7 +268,7 @@ function ChartLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
                 style={{
                   color: theme.colors.text,
                   fontFamily: theme.fonts.body,
-                  opacity: 0.7,
+                  opacity: 0.7
                 }}
               >
                 {stat.label}
@@ -261,7 +278,7 @@ function ChartLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
         </div>
       )}
     </div>
-  );
+  )
 }
 
 function QuoteLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
@@ -279,7 +296,7 @@ function QuoteLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
             className="text-4xl font-medium italic leading-relaxed"
             style={{
               color: theme.colors.text,
-              fontFamily: theme.fonts.heading,
+              fontFamily: theme.fonts.heading
             }}
           >
             {slide.quote}
@@ -295,7 +312,7 @@ function QuoteLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
         )}
       </div>
     </div>
-  );
+  )
 }
 
 function TextLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
@@ -318,7 +335,7 @@ function TextLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
                 style={{
                   color: theme.colors.text,
                   fontFamily: theme.fonts.body,
-                  opacity: 0.85,
+                  opacity: 0.85
                 }}
               >
                 {text}
@@ -334,38 +351,46 @@ function TextLayout({ slide, theme }: { slide: SlideContent; theme: Theme }) {
           style={{
             color: theme.colors.text,
             fontFamily: theme.fonts.body,
-            opacity: 0.8,
+            opacity: 0.8
           }}
         >
           {item.content}
         </p>
       ))}
     </div>
-  );
+  )
 }
 
-export function SlideRenderer({ slide, theme, isActive = true }: SlideRendererProps) {
+export function SlideRenderer({
+  slide,
+  theme,
+  isActive = true
+}: SlideRendererProps) {
   const bgStyle = isGradient(theme.colors.background)
     ? { background: theme.colors.background }
-    : { backgroundColor: theme.colors.background };
+    : { backgroundColor: theme.colors.background }
 
-  const layout = slide.layout ?? "title";
+  const layout = slide.layout ?? 'title'
 
   return (
     <div
       className={cn(
-        "absolute inset-0 h-full w-full transition-opacity duration-300",
-        isActive ? "opacity-100" : "opacity-0 pointer-events-none"
+        'absolute inset-0 h-full w-full transition-opacity duration-300',
+        isActive ? 'opacity-100' : 'opacity-0 pointer-events-none'
       )}
       style={bgStyle}
     >
-      {layout === "title" && <TitleLayout slide={slide} theme={theme} />}
-      {layout === "section" && <SectionLayout slide={slide} theme={theme} />}
-      {layout === "two_column" && <TwoColumnLayout slide={slide} theme={theme} />}
-      {layout === "image_left" && <ImageLeftLayout slide={slide} theme={theme} />}
-      {layout === "chart" && <ChartLayout slide={slide} theme={theme} />}
-      {layout === "quote" && <QuoteLayout slide={slide} theme={theme} />}
-      {layout === "text" && <TextLayout slide={slide} theme={theme} />}
+      {layout === 'title' && <TitleLayout slide={slide} theme={theme} />}
+      {layout === 'section' && <SectionLayout slide={slide} theme={theme} />}
+      {layout === 'two_column' && (
+        <TwoColumnLayout slide={slide} theme={theme} />
+      )}
+      {layout === 'image_left' && (
+        <ImageLeftLayout slide={slide} theme={theme} />
+      )}
+      {layout === 'chart' && <ChartLayout slide={slide} theme={theme} />}
+      {layout === 'quote' && <QuoteLayout slide={slide} theme={theme} />}
+      {layout === 'text' && <TextLayout slide={slide} theme={theme} />}
     </div>
-  );
+  )
 }

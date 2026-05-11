@@ -44,7 +44,7 @@ async function checkAdaptiveLimit(
 ): Promise<AdaptiveLimitCheckResult> {
   const limit = getAdaptiveDailyLimit()
 
-  if (process.env.MORPHIC_CLOUD_DEPLOYMENT !== 'true') {
+  if (process.env.BROK_CLOUD_DEPLOYMENT !== 'true') {
     return {
       allowed: true,
       used: 0,
@@ -135,11 +135,11 @@ export async function checkAndEnforceAdaptiveLimit(
     return new Response(
       JSON.stringify({
         error:
-          'Daily limit for Adaptive mode reached. Please try again tomorrow, or continue in Quick mode.',
+          'Daily limit for Deep Search mode reached. Please try again tomorrow, or continue in Quick Answer, Search, or Code mode.',
         remaining: 0,
         resetAt: result.resetAt,
         limit: result.limit,
-        mode: 'adaptive'
+        mode: 'deep'
       }),
       {
         status: 429,

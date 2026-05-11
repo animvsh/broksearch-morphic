@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-import { Download, FileSpreadsheet,FileText, Image, X } from 'lucide-react'
+import { Download, FileSpreadsheet, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface ExportModalProps {
@@ -12,7 +12,7 @@ interface ExportModalProps {
   onExportComplete?: (url: string) => void
 }
 
-type ExportFormat = 'pptx' | 'pdf' | 'images'
+type ExportFormat = 'pptx'
 
 export function ExportModal({
   presentationId,
@@ -27,47 +27,41 @@ export function ExportModal({
     setIsExporting(true)
 
     try {
-      const response = await fetch(`/api/presentations/${presentationId}/export`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ format: selectedFormat })
-      })
+      const response = await fetch(
+        `/api/presentations/${presentationId}/export`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ format: selectedFormat })
+        }
+      )
 
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || 'Export failed')
       }
 
-      // For PPTX, the response is a binary buffer that we need to download
-      if (selectedFormat === 'pptx') {
-        const blob = await response.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${presentationTitle.replace(/[^a-z0-9]/gi, '_')}.pptx`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${presentationTitle.replace(/[^a-z0-9]/gi, '_')}.pptx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
 
-        toast.success('Presentation exported successfully')
-        onExportComplete?.(url)
-      } else {
-        // For PDF and images, expect a JSON response with file URL
-        const data = await response.json()
-        if (data.file_url) {
-          window.open(data.file_url, '_blank')
-          toast.success('Export started')
-          onExportComplete?.(data.file_url)
-        }
-      }
+      toast.success('Presentation exported successfully')
+      onExportComplete?.(url)
 
       onClose()
     } catch (error) {
       console.error('Export error:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to export presentation')
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to export presentation'
+      )
     } finally {
       setIsExporting(false)
     }
@@ -80,20 +74,6 @@ export function ExportModal({
       description: 'Best for editing and presentations',
       icon: FileSpreadsheet,
       recommended: true
-    },
-    {
-      id: 'pdf' as const,
-      label: 'PDF',
-      description: 'Best for printing and sharing',
-      icon: FileText,
-      recommended: false
-    },
-    {
-      id: 'images' as const,
-      label: 'Images (.png)',
-      description: 'Individual slide images',
-      icon: Image,
-      recommended: false
     }
   ]
 
@@ -125,7 +105,9 @@ export function ExportModal({
           <div className="px-6 py-4">
             {/* Title */}
             <div className="mb-6">
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Title</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
+                Title
+              </p>
               <p className="font-medium text-gray-900 dark:text-white">
                 {presentationTitle}
               </p>
@@ -133,7 +115,9 @@ export function ExportModal({
 
             {/* Format Selection */}
             <div className="mb-6">
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Format</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                Format
+              </p>
               <div className="space-y-2">
                 {formatOptions.map(option => (
                   <label

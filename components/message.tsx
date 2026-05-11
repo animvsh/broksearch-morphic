@@ -13,13 +13,16 @@ import { mergeStreamdownSpecRenderer } from '@/lib/render/streamdown-spec'
 import type { SearchResultItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { processCitations } from '@/lib/utils/citation'
+import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 import { CitationProvider } from './citation-context'
 import { Citing } from './custom-link'
 
 import 'katex/dist/katex.min.css'
 
-const rehypePlugins = Object.values(defaultRehypePlugins)
+const rehypePlugins = Object.entries(defaultRehypePlugins)
+  .filter(([key]) => key !== 'raw')
+  .map(([, plugin]) => plugin)
 
 const customComponents = {
   a: Citing
@@ -35,7 +38,14 @@ export function MarkdownMessage({
   citationMaps?: Record<string, Record<number, SearchResultItem>>
 }) {
   // Process citations to replace [number](#toolCallId) with [number](actual-url)
-  const processedMessage = processCitations(message || '', citationMaps || {})
+  const processedMessage = processCitations(
+    stripThinkingBlocks(message || ''),
+    citationMaps || {}
+  )
+  const sanitizedMessage = processedMessage.replace(
+    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+    ''
+  )
 
   const streamdownProps = useMemo<Partial<StreamdownProps>>(
     () => ({
@@ -58,7 +68,7 @@ export function MarkdownMessage({
           rehypePlugins={rehypePlugins}
           components={customComponents}
         >
-          {processedMessage}
+          {sanitizedMessage}
         </Streamdown>
       </div>
     </CitationProvider>

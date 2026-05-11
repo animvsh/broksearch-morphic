@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { loadChat } from '@/lib/actions/chat'
 import { calculateConversationTurn, trackChatEvent } from '@/lib/analytics'
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import { normalizeSearchMode } from '@/lib/config/search-modes'
 import { checkAndEnforceAdaptiveLimit } from '@/lib/rate-limit/adaptive-limit'
 import { checkAndEnforceOverallChatLimit } from '@/lib/rate-limit/chat-limits'
 import { checkAndEnforceGuestLimit } from '@/lib/rate-limit/guest-limit'
@@ -88,10 +89,7 @@ export async function POST(req: Request) {
 
     // Get search mode from cookie
     const searchModeCookie = cookieStore.get('searchMode')?.value
-    const searchMode: SearchMode =
-      searchModeCookie && ['quick', 'adaptive'].includes(searchModeCookie)
-        ? (searchModeCookie as SearchMode)
-        : 'quick'
+    const searchMode: SearchMode = normalizeSearchMode(searchModeCookie)
 
     const selectedModel = await selectModel({ searchMode, cookieStore })
 
@@ -103,27 +101,24 @@ export async function POST(req: Request) {
     }
 
     if (!isProviderEnabled(selectedModel.providerId)) {
-      return new Response(
-        `Selected provider is not enabled ${selectedModel.providerId}`,
-        {
-          status: 404,
-          statusText: 'Not Found'
-        }
-      )
+      return new Response('The selected Brok model is not available', {
+        status: 404,
+        statusText: 'Not Found'
+      })
     }
 
-    // Adaptive mode is gated to authenticated users on cloud deployments.
+    // Deep mode is gated to authenticated users on cloud deployments.
     // Guests are nudged to sign in instead of being downgraded silently.
     if (
       isGuest &&
-      searchMode === 'adaptive' &&
-      process.env.MORPHIC_CLOUD_DEPLOYMENT === 'true'
+      searchMode === 'deep' &&
+      process.env.BROK_CLOUD_DEPLOYMENT === 'true'
     ) {
       return new Response(
         JSON.stringify({
           error:
-            'Sign in to use Adaptive mode. Quick mode remains available without an account.',
-          mode: 'adaptive',
+            'Sign in to use Deep Search mode. Quick modes remain available without an account.',
+          mode: 'deep',
           authRequired: true
         }),
         {
@@ -137,7 +132,7 @@ export async function POST(req: Request) {
       const overallLimitResponse = await checkAndEnforceOverallChatLimit(userId)
       if (overallLimitResponse) return overallLimitResponse
 
-      if (searchMode === 'adaptive') {
+      if (searchMode === 'deep') {
         const adaptiveLimitResponse = await checkAndEnforceAdaptiveLimit(userId)
         if (adaptiveLimitResponse) return adaptiveLimitResponse
       }

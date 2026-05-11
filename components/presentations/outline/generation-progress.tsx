@@ -33,13 +33,10 @@ export function GenerationProgress({
 
     const pollStatus = async () => {
       try {
-        const response = await fetch(
-          `/api/presentations/${presentationId}`,
-          {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-          }
-        )
+        const response = await fetch(`/api/presentations/${presentationId}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        })
 
         if (!response.ok) {
           throw new Error('Failed to fetch status')
@@ -49,7 +46,7 @@ export function GenerationProgress({
 
         if (!mounted) return
 
-        if (data.status === 'ready' || data.status === 'draft') {
+        if (data.status === 'ready') {
           setStage('complete')
           clearInterval(intervalId)
           setTimeout(() => {
@@ -61,6 +58,8 @@ export function GenerationProgress({
           clearInterval(intervalId)
         } else if (data.status === 'outline_generating') {
           setStage('outlining')
+        } else {
+          setStage('researching')
         }
       } catch (err) {
         if (mounted) {

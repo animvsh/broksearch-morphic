@@ -3,6 +3,7 @@ import { stepCountIs, tool, ToolLoopAgent } from 'ai'
 import type { ResearcherTools } from '@/lib/types/agent'
 import { type Model } from '@/lib/types/models'
 
+import { createComposioIntegrationTool } from '../tools/composio-integrations'
 import { fetchTool } from '../tools/fetch'
 import { createQuestionTool } from '../tools/question'
 import { createSearchTool } from '../tools/search'
@@ -68,12 +69,14 @@ export function createResearcher({
   model,
   modelConfig,
   parentTraceId,
-  searchMode = 'adaptive'
+  searchMode = 'deep',
+  userId
 }: {
   model: string
   modelConfig?: Model
   parentTraceId?: string
   searchMode?: SearchMode
+  userId?: string
 }) {
   try {
     const currentDate = new Date().toLocaleString()
@@ -81,6 +84,7 @@ export function createResearcher({
     // Create model-specific tools with proper typing
     const originalSearchTool = createSearchTool(model)
     const askQuestionTool = createQuestionTool(model)
+    const composioIntegrationTool = createComposioIntegrationTool(userId)
     const todoTools = createTodoTools()
 
     let systemPrompt: string
@@ -91,21 +95,23 @@ export function createResearcher({
     // Configure based on search mode
     switch (searchMode) {
       case 'quick':
+      case 'search':
+      case 'code':
         console.log(
-          '[Researcher] Quick mode: maxSteps=20, tools=[search, fetch]'
+          `[Researcher] ${searchMode} mode: maxSteps=20, tools=[search, fetch, composioIntegrations]`
         )
         systemPrompt = QUICK_MODE_PROMPT
-        activeToolsList = ['search', 'fetch']
+        activeToolsList = ['search', 'fetch', 'composioIntegrations']
         maxSteps = 20
         searchTool = wrapSearchToolForQuickMode(originalSearchTool)
         break
 
-      case 'adaptive':
+      case 'deep':
       default:
         systemPrompt = getAdaptiveModePrompt()
-        activeToolsList = ['search', 'fetch', 'todoWrite']
+        activeToolsList = ['search', 'fetch', 'todoWrite', 'composioIntegrations']
         console.log(
-          `[Researcher] Adaptive mode: maxSteps=50, tools=[${activeToolsList.join(', ')}]`
+          `[Researcher] Deep mode: maxSteps=50, tools=[${activeToolsList.join(', ')}]`
         )
         maxSteps = 50
         searchTool = originalSearchTool
@@ -117,6 +123,7 @@ export function createResearcher({
       search: searchTool,
       fetch: fetchTool,
       askQuestion: askQuestionTool,
+      composioIntegrations: composioIntegrationTool,
       ...todoTools
     } as ResearcherTools
 

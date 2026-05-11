@@ -9,13 +9,11 @@ import type { Theme } from '../themes'
  * @param presentation - The presentation data including title, slides, and theme
  * @returns Buffer containing the generated PPTX file
  */
-export async function exportToPptx(
-  presentation: {
-    title: string
-    slides: SlideContent[]
-    theme: Theme
-  }
-): Promise<Buffer> {
+export async function exportToPptx(presentation: {
+  title: string
+  slides: SlideContent[]
+  theme: Theme
+}): Promise<Buffer> {
   const pptx = new pptxgen()
 
   // Set presentation properties
@@ -29,7 +27,10 @@ export async function exportToPptx(
   // Helper to convert hex color to valid PPTX color or use fallback
   const toPptxColor = (color: string): string => {
     // If it's a gradient or CSS function, use a solid fallback
-    if (color.startsWith('linear-gradient') || color.startsWith('radial-gradient')) {
+    if (
+      color.startsWith('linear-gradient') ||
+      color.startsWith('radial-gradient')
+    ) {
       return '#FFFFFF'
     }
     // If it's an rgba/hsla, convert to hex approximation
@@ -84,7 +85,13 @@ export async function exportToPptx(
         break
 
       case 'section':
-        renderSectionSlide(pptxSlide, slide, textColor, headingFont, accentColor)
+        renderSectionSlide(
+          pptxSlide,
+          slide,
+          textColor,
+          headingFont,
+          accentColor
+        )
         break
 
       case 'two_column':
@@ -96,7 +103,14 @@ export async function exportToPptx(
         break
 
       case 'chart':
-        renderChartSlide(pptxSlide, slide, textColor, accentColor, headingFont, bodyFont)
+        renderChartSlide(
+          pptxSlide,
+          slide,
+          textColor,
+          accentColor,
+          headingFont,
+          bodyFont
+        )
         break
 
       case 'quote':
@@ -120,7 +134,10 @@ export async function exportToPptx(
     arrayBuffer = new TextEncoder().encode(result).buffer as ArrayBuffer
   } else if (result instanceof Uint8Array) {
     // Slice the underlying ArrayBuffer to get just our portion
-    arrayBuffer = result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength) as ArrayBuffer
+    arrayBuffer = result.buffer.slice(
+      result.byteOffset,
+      result.byteOffset + result.byteLength
+    ) as ArrayBuffer
   } else if (result instanceof Blob) {
     arrayBuffer = await result.arrayBuffer()
   } else {
@@ -168,7 +185,7 @@ function renderTitleSlide(
   }
 
   // Accent line below title
-  slide.addShape(pptxgen.ShapeType.rect, {
+  slide.addShape('rect', {
     x: 4,
     y: 4.5,
     w: 2,
@@ -190,7 +207,7 @@ function renderSectionSlide(
   const heading = content.heading || ''
 
   // Accent rectangle at top
-  slide.addShape(pptxgen.ShapeType.rect, {
+  slide.addShape('rect', {
     x: 0,
     y: 0,
     w: 10,
@@ -315,7 +332,7 @@ function renderImageLeftSlide(
   // Note: pptxgenjs doesn't support remote URLs directly in Node.js
   // For production, you'd want to fetch the image and use base64
   // For now, show a placeholder rectangle
-  slide.addShape(pptxgen.ShapeType.rect, {
+  slide.addShape('rect', {
     x: 0.5,
     y: 1,
     w: 4,
@@ -399,14 +416,15 @@ function renderChartSlide(
   // Render stat cards
   const cardWidth = 2.5
   const cardHeight = 1.8
-  const startX = (10 - (stats.length * cardWidth + (stats.length - 1) * 0.5)) / 2
+  const startX =
+    (10 - (stats.length * cardWidth + (stats.length - 1) * 0.5)) / 2
   const y = 2
 
   stats.forEach((stat, i) => {
     const x = startX + i * (cardWidth + 0.5)
 
     // Card background
-    slide.addShape(pptxgen.ShapeType.rect, {
+    slide.addShape('rect', {
       x,
       y,
       w: cardWidth,
@@ -454,7 +472,7 @@ function renderQuoteSlide(
   const attribution = content.quoteAttribution || ''
 
   // Accent bar on left
-  slide.addShape(pptxgen.ShapeType.rect, {
+  slide.addShape('rect', {
     x: 0.5,
     y: 1.5,
     w: 0.08,

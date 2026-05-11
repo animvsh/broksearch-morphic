@@ -264,7 +264,9 @@ export default function ErrorsPage() {
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">expired_api_key</td>
                 <td className="py-2 px-3">API key has expired</td>
-                <td className="py-2 px-3">Key has passed its expiration date</td>
+                <td className="py-2 px-3">
+                  Key has passed its expiration date
+                </td>
               </tr>
               <tr>
                 <td className="py-2 px-3 font-mono">revoked_api_key</td>
@@ -275,7 +277,11 @@ export default function ErrorsPage() {
           </table>
         </div>
         <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 my-4">
-          <p className="text-yellow-800"><strong>How to handle:</strong> Verify your API key is correct, check if the key is active in the dashboard, or create a new key if necessary.</p>
+          <p className="text-yellow-800">
+            <strong>How to handle:</strong> Verify your API key is correct,
+            check if the key is active in the dashboard, or create a new key if
+            necessary.
+          </p>
         </div>
 
         <h3>Permission Errors (403)</h3>
@@ -292,23 +298,33 @@ export default function ErrorsPage() {
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">model_not_allowed</td>
                 <td className="py-2 px-3">Model not allowed for this key</td>
-                <td className="py-2 px-3">The API key lacks permission for the requested model</td>
+                <td className="py-2 px-3">
+                  The API key lacks permission for the requested model
+                </td>
               </tr>
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">feature_disabled</td>
                 <td className="py-2 px-3">Feature not enabled</td>
-                <td className="py-2 px-3">Your plan doesn&apos;t include this feature</td>
+                <td className="py-2 px-3">
+                  Your plan doesn&apos;t include this feature
+                </td>
               </tr>
               <tr>
                 <td className="py-2 px-3 font-mono">quota_exceeded</td>
                 <td className="py-2 px-3">Monthly quota exceeded</td>
-                <td className="py-2 px-3">You&apos;ve reached your monthly spending limit</td>
+                <td className="py-2 px-3">
+                  You&apos;ve reached your monthly spending limit
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
         <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 my-4">
-          <p className="text-yellow-800"><strong>How to handle:</strong> Check which models are allowed for your key, upgrade your plan for additional features, or set up billing alerts to avoid quota issues.</p>
+          <p className="text-yellow-800">
+            <strong>How to handle:</strong> Check which models are allowed for
+            your key, upgrade your plan for additional features, or set up
+            billing alerts to avoid quota issues.
+          </p>
         </div>
 
         <h3>Validation Errors (400)</h3>
@@ -325,28 +341,40 @@ export default function ErrorsPage() {
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">invalid_parameter</td>
                 <td className="py-2 px-3">Invalid parameter value</td>
-                <td className="py-2 px-3">A request parameter has an invalid value</td>
+                <td className="py-2 px-3">
+                  A request parameter has an invalid value
+                </td>
               </tr>
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">missing_required_param</td>
                 <td className="py-2 px-3">Missing required parameter</td>
-                <td className="py-2 px-3">A required parameter was not provided</td>
+                <td className="py-2 px-3">
+                  A required parameter was not provided
+                </td>
               </tr>
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">invalid_model</td>
                 <td className="py-2 px-3">Model not found</td>
-                <td className="py-2 px-3">The specified model does not exist</td>
+                <td className="py-2 px-3">
+                  The specified model does not exist
+                </td>
               </tr>
               <tr>
                 <td className="py-2 px-3 font-mono">messages_too_long</td>
                 <td className="py-2 px-3">Messages exceed max tokens</td>
-                <td className="py-2 px-3">Input exceeds model&apos;s maximum context</td>
+                <td className="py-2 px-3">
+                  Input exceeds model&apos;s maximum context
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
         <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 my-4">
-          <p className="text-yellow-800"><strong>How to handle:</strong> Check the param field for which parameter is invalid, verify all required parameters are provided, and ensure messages fit within the model&apos;s context window.</p>
+          <p className="text-yellow-800">
+            <strong>How to handle:</strong> Check the param field for which
+            parameter is invalid, verify all required parameters are provided,
+            and ensure messages fit within the model&apos;s context window.
+          </p>
         </div>
 
         <h3>Rate Limit Errors (429)</h3>
@@ -379,7 +407,10 @@ export default function ErrorsPage() {
           </table>
         </div>
         <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 my-4">
-          <p className="text-yellow-800"><strong>How to handle:</strong> Implement exponential backoff, cache responses when possible, or consider upgrading your plan.</p>
+          <p className="text-yellow-800">
+            <strong>How to handle:</strong> Implement exponential backoff, cache
+            responses when possible, or consider upgrading your plan.
+          </p>
         </div>
 
         <h3>Server Errors (500, 503)</h3>
@@ -407,7 +438,11 @@ export default function ErrorsPage() {
           </table>
         </div>
         <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 my-4">
-          <p className="text-yellow-800"><strong>How to handle:</strong> Retry with exponential backoff, check our status page for ongoing issues, or contact support if errors persist.</p>
+          <p className="text-yellow-800">
+            <strong>How to handle:</strong> Retry with exponential backoff,
+            check our status page for ongoing issues, or contact support if
+            errors persist.
+          </p>
         </div>
 
         <h2>Error Handling Example</h2>
@@ -498,9 +533,18 @@ export default function ErrorsPage() {
 
         <h2>Next Steps</h2>
         <ul>
-          <li><Link href="/docs/chat-completions">Chat Completions</Link> - Make successful API calls</li>
-          <li><Link href="/docs/rate-limits">Rate Limits</Link> - Avoid rate limit errors</li>
-          <li><Link href="/docs/security">Security</Link> - Keep your API key secure</li>
+          <li>
+            <Link href="/docs/chat-completions">Chat Completions</Link> - Make
+            successful API calls
+          </li>
+          <li>
+            <Link href="/docs/rate-limits">Rate Limits</Link> - Avoid rate limit
+            errors
+          </li>
+          <li>
+            <Link href="/docs/security">Security</Link> - Keep your API key
+            secure
+          </li>
         </ul>
       </div>
     </div>

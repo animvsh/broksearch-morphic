@@ -10,6 +10,7 @@ import { CopyButton } from '@/components/copy-button'
 const pageContent = `# Chat Completions API
 
 Build chat interfaces with Brok's Chat Completions API.
+Brok Code uses the model ID \`brok-code\` and is OpenAI-compatible for Codex and other coding-agent tools.
 
 ## Endpoint
 
@@ -21,7 +22,7 @@ POST https://api.brok.ai/v1/chat/completions
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| model | string | Yes | The model ID (e.g., \`brok-lite\`, \`brok-reasoning\`) |
+| model | string | Yes | The model ID (use \`brok-code\` for coding-agent tools) |
 | messages | array | Yes | Array of message objects |
 | temperature | number | No | Sampling temperature (0-2). Default: 0.7 |
 | max_tokens | number | No | Maximum tokens to generate |
@@ -52,9 +53,9 @@ curl https://api.brok.ai/v1/chat/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "brok-lite",
+    "model": "brok-code",
     "messages": [
-      {"role": "user", "content": "Explain quantum computing in simple terms"}
+      {"role": "user", "content": "Review this function and suggest a safer implementation."}
     ],
     "temperature": 0.7,
     "max_tokens": 500
@@ -68,13 +69,13 @@ curl https://api.brok.ai/v1/chat/completions \\
   "id": "chatcmpl_abc123",
   "object": "chat.completion",
   "created": 1677652288,
-  "model": "brok-lite",
+  "model": "brok-code",
   "choices": [
     {
       "index": 0,
       "message": {
         "role": "assistant",
-        "content": "Quantum computing uses quantum bits (qubits)..."
+        "content": "Here is the issue and a safer patch..."
       },
       "finish_reason": "stop"
     }
@@ -96,7 +97,7 @@ curl https://api.brok.ai/v1/chat/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "brok-lite",
+    "model": "brok-code",
     "messages": [{"role": "user", "content": "Tell me a story"}],
     "stream": true
   }'
@@ -116,7 +117,12 @@ data: [DONE]
 
 | Model | Description | Input Cost | Output Cost | Max Tokens |
 |-------|-------------|------------|-------------|------------|
-${Object.entries(BROK_MODELS).map(([id, config]) => `| \`${id}\` | ${config.description} | $${config.inputCostPerMillion}/1M | $${config.outputCostPerMillion}/1M | ${config.maxTokens} |`).join('\n')}
+${Object.entries(BROK_MODELS)
+  .map(
+    ([id, config]) =>
+      `| \`${id}\` | ${config.description} | $${config.inputCostPerMillion}/1M | $${config.outputCostPerMillion}/1M | ${config.maxTokens} |`
+  )
+  .join('\n')}
 
 ## Error Codes
 
@@ -136,8 +142,9 @@ ${Object.entries(BROK_MODELS).map(([id, config]) => `| \`${id}\` | ${config.desc
 - [Rate Limits](/docs/rate-limits) - Understand your plan limits`
 
 export default function ChatCompletionsPage() {
-  const models = useMemo(() =>
-    Object.entries(BROK_MODELS).map(([id, config]) => ({ id, ...config })),
+  const models = useMemo(
+    () =>
+      Object.entries(BROK_MODELS).map(([id, config]) => ({ id, ...config })),
     []
   )
 
@@ -150,7 +157,9 @@ export default function ChatCompletionsPage() {
 
       <div className="prose prose-neutral dark:prose-invert">
         <p className="text-xl text-muted-foreground">
-          Build chat interfaces with Brok&apos;s Chat Completions API.
+          Build chat interfaces and coding agents with Brok&apos;s Chat
+          Completions API. Use <code>brok-code</code> for Codex,
+          Claude-code-style adapters, and other agentic coding tools.
         </p>
 
         <h2>Endpoint</h2>
@@ -174,7 +183,9 @@ export default function ChatCompletionsPage() {
                 <td className="py-2 px-3 font-mono">model</td>
                 <td className="py-2 px-3">string</td>
                 <td className="py-2 px-3">Yes</td>
-                <td className="py-2 px-3">The model ID</td>
+                <td className="py-2 px-3">
+                  The model ID. Use <code>brok-code</code> for coding tools.
+                </td>
               </tr>
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">messages</td>
@@ -186,7 +197,9 @@ export default function ChatCompletionsPage() {
                 <td className="py-2 px-3 font-mono">temperature</td>
                 <td className="py-2 px-3">number</td>
                 <td className="py-2 px-3">No</td>
-                <td className="py-2 px-3">Sampling temperature (0-2). Default: 0.7</td>
+                <td className="py-2 px-3">
+                  Sampling temperature (0-2). Default: 0.7
+                </td>
               </tr>
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">max_tokens</td>
@@ -222,9 +235,15 @@ export default function ChatCompletionsPage() {
 
         <h3>Message Roles</h3>
         <ul>
-          <li><code>system</code> - Sets the assistant&apos;s behavior</li>
-          <li><code>user</code> - User&apos;s message</li>
-          <li><code>assistant</code> - Assistant&apos;s previous response</li>
+          <li>
+            <code>system</code> - Sets the assistant&apos;s behavior
+          </li>
+          <li>
+            <code>user</code> - User&apos;s message
+          </li>
+          <li>
+            <code>assistant</code> - Assistant&apos;s previous response
+          </li>
         </ul>
 
         <h2>Request Example</h2>
@@ -233,12 +252,40 @@ export default function ChatCompletionsPage() {
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "brok-lite",
+    "model": "brok-code",
     "messages": [
-      {"role": "user", "content": "Explain quantum computing in simple terms"}
+      {"role": "user", "content": "Review this function and suggest a safer implementation."}
     ],
     "temperature": 0.7,
     "max_tokens": 500
+  }'`}</code>
+        </pre>
+
+        <h2>Agentic Coding Tool Setup</h2>
+        <pre className="bg-muted p-4 rounded-lg">
+          <code>{`# OpenAI-compatible tools such as Codex
+export OPENAI_API_KEY="brok_sk_live_your_key"
+export OPENAI_BASE_URL="https://api.brok.ai/v1"
+export OPENAI_MODEL="brok-code"
+
+# Anthropic-compatible tools
+export ANTHROPIC_API_KEY="brok_sk_live_your_key"
+export ANTHROPIC_BASE_URL="https://api.brok.ai"
+export ANTHROPIC_MODEL="brok-code"`}</code>
+        </pre>
+
+        <h2>Anthropic Messages Compatibility</h2>
+        <pre className="bg-muted p-4 rounded-lg">
+          <code>{`curl https://api.brok.ai/v1/messages \\
+  -H "x-api-key: brok_sk_live_your_key" \\
+  -H "anthropic-version: 2023-06-01" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "brok-code",
+    "max_tokens": 1000,
+    "messages": [
+      {"role": "user", "content": "Find the bug in this diff."}
+    ]
   }'`}</code>
         </pre>
 
@@ -248,13 +295,13 @@ export default function ChatCompletionsPage() {
   "id": "chatcmpl_abc123",
   "object": "chat.completion",
   "created": 1677652288,
-  "model": "brok-lite",
+  "model": "brok-code",
   "choices": [
     {
       "index": 0,
       "message": {
         "role": "assistant",
-        "content": "Quantum computing uses quantum bits (qubits)..."
+        "content": "Here is the issue and a safer patch..."
       },
       "finish_reason": "stop"
     }
@@ -274,8 +321,8 @@ export default function ChatCompletionsPage() {
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "brok-lite",
-    "messages": [{"role": "user", "content": "Tell me a story"}],
+    "model": "brok-code",
+    "messages": [{"role": "user", "content": "Explain this failing test"}],
     "stream": true
   }'`}</code>
         </pre>
@@ -291,19 +338,25 @@ data: [DONE]`}</code>
 
         <h2>Available Models</h2>
         <div className="space-y-4">
-          {models.map((model) => (
+          {models.map(model => (
             <div key={model.id} className="border rounded-lg p-4">
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <h3 className="font-semibold">{model.name}</h3>
-                  <code className="text-sm text-muted-foreground">{model.id}</code>
+                  <code className="text-sm text-muted-foreground">
+                    {model.id}
+                  </code>
                 </div>
                 <div className="text-right text-sm">
                   <div>${model.inputCostPerMillion}/1M in</div>
-                  <div className="text-muted-foreground">${model.outputCostPerMillion}/1M out</div>
+                  <div className="text-muted-foreground">
+                    ${model.outputCostPerMillion}/1M out
+                  </div>
                 </div>
               </div>
-              <p className="text-muted-foreground text-sm">{model.description}</p>
+              <p className="text-muted-foreground text-sm">
+                {model.description}
+              </p>
               <div className="mt-2 text-xs text-muted-foreground">
                 Max tokens: {model.maxTokens}
                 {model.supportsStreaming && ' | Streaming supported'}
@@ -352,9 +405,18 @@ data: [DONE]`}</code>
 
         <h2>Next Steps</h2>
         <ul>
-          <li><Link href="/docs/search-completions">Search Completions</Link> - Add search-powered responses</li>
-          <li><Link href="/docs/models">Models</Link> - Compare all available models</li>
-          <li><Link href="/docs/rate-limits">Rate Limits</Link> - Understand your plan limits</li>
+          <li>
+            <Link href="/docs/search-completions">Search Completions</Link> -
+            Add search-powered responses
+          </li>
+          <li>
+            <Link href="/docs/models">Models</Link> - Compare all available
+            models
+          </li>
+          <li>
+            <Link href="/docs/rate-limits">Rate Limits</Link> - Understand your
+            plan limits
+          </li>
         </ul>
       </div>
     </div>

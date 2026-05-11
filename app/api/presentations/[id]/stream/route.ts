@@ -39,7 +39,8 @@ export async function GET(
     // Return a simple status endpoint since actual streaming
     // happens in generate-outline and generate-slides routes
     return NextResponse.json({
-      message: 'Stream endpoint. Use generate-outline or generate-slides to start generation.',
+      message:
+        'Stream endpoint. Use generate-outline or generate-slides to start generation.',
       presentationId: id
     })
   } catch (error) {

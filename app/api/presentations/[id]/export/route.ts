@@ -104,7 +104,11 @@ export async function POST(
 
       // Return the buffer as a downloadable file
       // Convert Buffer to Uint8Array for proper ReadableStream handling
-      const uint8Array = new Uint8Array(pptxBuffer.buffer, pptxBuffer.byteOffset, pptxBuffer.byteLength)
+      const uint8Array = new Uint8Array(
+        pptxBuffer.buffer,
+        pptxBuffer.byteOffset,
+        pptxBuffer.byteLength
+      )
       const stream = new ReadableStream({
         start(controller) {
           controller.enqueue(uint8Array)
@@ -114,7 +118,8 @@ export async function POST(
       return new Response(stream, {
         status: 200,
         headers: {
-          'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'Content-Type':
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
           'Content-Disposition': `attachment; filename="${presentation.title.replace(/[^a-z0-9]/gi, '_')}.pptx"`
         }
       })
@@ -158,10 +163,7 @@ export async function GET(
     const exportRecord = await getExport(exportId)
 
     if (!exportRecord) {
-      return NextResponse.json(
-        { error: 'Export not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Export not found' }, { status: 404 })
     }
 
     return NextResponse.json({

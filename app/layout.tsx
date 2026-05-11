@@ -25,11 +25,14 @@ const fontSans = FontSans({
 })
 
 const title = 'brok'
-const description =
-  'Fast, intelligent AI search powered by MiniMax.'
+const description = 'Fast, intelligent AI search powered by Brok.'
+const metadataBaseUrl =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  process.env.NEXT_PUBLIC_BASE_URL ||
+  'http://localhost:8080'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('http://localhost:8080'),
+  metadataBase: new URL(metadataBaseUrl),
   title,
   description,
   openGraph: {
@@ -85,7 +88,7 @@ export default async function RootLayout({
         >
           <UserProvider hasUser={!!userId}>
             <SidebarProvider defaultOpen={false}>
-              {userId && <AppSidebar />}
+              <AppSidebar />
               <KeyboardShortcutHandler />
               <div className="flex flex-col flex-1 min-w-0">
                 <Header user={user} />

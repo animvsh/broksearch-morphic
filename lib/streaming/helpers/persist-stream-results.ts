@@ -5,8 +5,21 @@ import { updateChatTitle } from '@/lib/db/actions'
 import { SearchMode } from '@/lib/types/search'
 import { perfTime } from '@/lib/utils/perf-logging'
 import { retryDatabaseOperation } from '@/lib/utils/retry'
+import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 const DEFAULT_CHAT_TITLE = 'Untitled'
+
+function sanitizeMessageTextParts(message: UIMessage): UIMessage {
+  const parts = message.parts?.map(part => {
+    if (part.type === 'text' && typeof part.text === 'string') {
+      return { ...part, text: stripThinkingBlocks(part.text) }
+    }
+
+    return part
+  })
+
+  return parts ? { ...message, parts } : message
+}
 
 export async function persistStreamResults(
   responseMessage: UIMessage,
@@ -21,9 +34,11 @@ export async function persistStreamResults(
   >,
   initialUserMessage?: UIMessage
 ) {
+  const sanitizedResponseMessage = sanitizeMessageTextParts(responseMessage)
+
   // Attach metadata to the response message
-  responseMessage.metadata = {
-    ...(responseMessage.metadata || {}),
+  sanitizedResponseMessage.metadata = {
+    ...(sanitizedResponseMessage.metadata || {}),
     ...(parentTraceId && { traceId: parentTraceId }),
     ...(searchMode && { searchMode }),
     ...(modelId && { modelId })
@@ -81,13 +96,13 @@ export async function persistStreamResults(
   // Save message with retry logic
   const saveStart = performance.now()
   try {
-    await upsertMessage(chatId, responseMessage, userId)
+    await upsertMessage(chatId, sanitizedResponseMessage, userId)
     perfTime('upsertMessage (AI response) completed', saveStart)
   } catch (error) {
     console.error('Error saving message:', error)
     try {
       await retryDatabaseOperation(
-        () => upsertMessage(chatId, responseMessage, userId),
+        () => upsertMessage(chatId, sanitizedResponseMessage, userId),
         'save message'
       )
       perfTime('upsertMessage (AI response) completed after retry', saveStart)

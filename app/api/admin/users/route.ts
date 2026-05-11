@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server'
 
+import { requireAdminAccess } from '@/lib/auth/admin'
+
 export async function POST(request: Request) {
   try {
+    const admin = await requireAdminAccess()
+    if (!admin.ok) {
+      return NextResponse.json({ error: admin.error }, { status: admin.status })
+    }
+
     const { email, password } = await request.json()
 
     if (!email || !password) {
@@ -22,22 +29,19 @@ export async function POST(request: Request) {
     }
 
     // Create user via Supabase Auth Admin API
-    const response = await fetch(
-      `${supabaseUrl}/auth/v1/admin/users`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${supabaseServiceKey}`,
-          'apikey': supabaseServiceKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email,
-          password,
-          email_confirm: true
-        })
-      }
-    )
+    const response = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        apikey: supabaseServiceKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email,
+        password,
+        email_confirm: true
+      })
+    })
 
     const data = await response.json()
 

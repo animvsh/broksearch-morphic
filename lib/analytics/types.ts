@@ -11,7 +11,7 @@
  */
 export interface ChatEventData {
   /** Search mode used for the chat */
-  searchMode: 'quick' | 'planning' | 'adaptive'
+  searchMode: 'quick' | 'search' | 'deep' | 'code'
   /** Conversation turn number (1-indexed, represents follow-up count) */
   conversationTurn: number
   /** Whether this is a new chat session */

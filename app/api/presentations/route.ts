@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
-import { createPresentation } from '@/lib/db/actions/presentations'
+import {
+  createPresentation,
+  updatePresentationStatus
+} from '@/lib/db/actions/presentations'
 
 export const maxDuration = 60
 
@@ -23,10 +26,7 @@ export async function POST(req: Request) {
     const { topic, slide_count, style, language, web_search, theme } = body
 
     if (!topic || typeof topic !== 'string') {
-      return NextResponse.json(
-        { error: 'topic is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'topic is required' }, { status: 400 })
     }
 
     const presentation = await createPresentation({
@@ -38,6 +38,8 @@ export async function POST(req: Request) {
       slideCount: slide_count || 0,
       themeId: theme
     })
+
+    await updatePresentationStatus(presentation.id, 'outline_generating')
 
     return NextResponse.json({
       presentation_id: presentation.id,

@@ -13,13 +13,17 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
 
 import type { LayoutType } from '@/states/presentation-editor-store'
-import { selectActiveSlide, selectSelectedElement,usePresentationEditorStore } from '@/states/presentation-editor-store'
+import {
+  selectActiveSlide,
+  selectSelectedElement,
+  usePresentationEditorStore
+} from '@/states/presentation-editor-store'
 
 // ---------------------------------------------------------------------------
 // Font families available
@@ -30,7 +34,7 @@ const FONT_FAMILIES = [
   { value: 'Georgia', label: 'Georgia (Serif)' },
   { value: 'Arial', label: 'Arial' },
   { value: 'Helvetica', label: 'Helvetica' },
-  { value: 'Times New Roman', label: 'Times New Roman' },
+  { value: 'Times New Roman', label: 'Times New Roman' }
 ]
 
 const LAYOUT_TYPES: { value: LayoutType; label: string }[] = [
@@ -40,7 +44,7 @@ const LAYOUT_TYPES: { value: LayoutType; label: string }[] = [
   { value: 'image_left', label: 'Image Left' },
   { value: 'chart', label: 'Chart' },
   { value: 'quote', label: 'Quote' },
-  { value: 'text', label: 'Text' },
+  { value: 'text', label: 'Text' }
 ]
 
 // ---------------------------------------------------------------------------
@@ -102,13 +106,13 @@ function TextElementInspector() {
       <Field label="Font Family">
         <Select
           value={selectedElement.fontFamily ?? 'Inter'}
-          onValueChange={(value) => handleUpdate({ fontFamily: value })}
+          onValueChange={value => handleUpdate({ fontFamily: value })}
         >
           <SelectTrigger className="h-9">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {FONT_FAMILIES.map((font) => (
+            {FONT_FAMILIES.map(font => (
               <SelectItem key={font.value} value={font.value}>
                 {font.label}
               </SelectItem>
@@ -123,7 +127,7 @@ function TextElementInspector() {
           <Input
             type="number"
             value={selectedElement.fontSize ?? 16}
-            onChange={(e) =>
+            onChange={e =>
               handleUpdate({ fontSize: parseInt(e.target.value) || 16 })
             }
             className="h-9 w-20"
@@ -138,7 +142,7 @@ function TextElementInspector() {
       <Field label="Weight">
         <Select
           value={selectedElement.fontWeight ?? 'normal'}
-          onValueChange={(value) => handleUpdate({ fontWeight: value })}
+          onValueChange={value => handleUpdate({ fontWeight: value })}
         >
           <SelectTrigger className="h-9">
             <SelectValue />
@@ -158,13 +162,13 @@ function TextElementInspector() {
           <Input
             type="color"
             value={selectedElement.color ?? '#000000'}
-            onChange={(e) => handleUpdate({ color: e.target.value })}
+            onChange={e => handleUpdate({ color: e.target.value })}
             className="h-9 w-12 p-1 cursor-pointer"
           />
           <Input
             type="text"
             value={selectedElement.color ?? '#000000'}
-            onChange={(e) => handleUpdate({ color: e.target.value })}
+            onChange={e => handleUpdate({ color: e.target.value })}
             className="h-9 flex-1 font-mono text-xs"
           />
         </div>
@@ -173,7 +177,7 @@ function TextElementInspector() {
       {/* Text alignment */}
       <Field label="Alignment">
         <div className="flex items-center gap-1">
-          {(['left', 'center', 'right'] as const).map((align) => (
+          {(['left', 'center', 'right'] as const).map(align => (
             <button
               key={align}
               onClick={() => handleUpdate({ align })}
@@ -241,7 +245,7 @@ function SlidePropertiesPanel() {
       <Field label="Title">
         <Input
           value={activeSlide.title}
-          onChange={(e) => handleUpdateSlide({ title: e.target.value })}
+          onChange={e => handleUpdateSlide({ title: e.target.value })}
           className="h-9"
           placeholder="Slide title"
         />
@@ -251,7 +255,7 @@ function SlidePropertiesPanel() {
       <Field label="Subtitle">
         <Input
           value={activeSlide.subtitle ?? ''}
-          onChange={(e) => handleUpdateSlide({ subtitle: e.target.value })}
+          onChange={e => handleUpdateSlide({ subtitle: e.target.value })}
           className="h-9"
           placeholder="Subtitle (optional)"
         />
@@ -261,7 +265,7 @@ function SlidePropertiesPanel() {
       <Field label="Layout">
         <Select
           value={activeSlide.layoutType}
-          onValueChange={(value) =>
+          onValueChange={value =>
             handleUpdateSlide({ layoutType: value as LayoutType })
           }
         >
@@ -269,7 +273,7 @@ function SlidePropertiesPanel() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {LAYOUT_TYPES.map((layout) => (
+            {LAYOUT_TYPES.map(layout => (
               <SelectItem key={layout.value} value={layout.value}>
                 {layout.label}
               </SelectItem>
@@ -284,13 +288,13 @@ function SlidePropertiesPanel() {
           <Input
             type="color"
             value={activeSlide.background ?? '#FAFAFA'}
-            onChange={(e) => handleUpdateSlide({ background: e.target.value })}
+            onChange={e => handleUpdateSlide({ background: e.target.value })}
             className="h-9 w-12 p-1 cursor-pointer"
           />
           <Input
             type="text"
             value={activeSlide.background ?? '#FAFAFA'}
-            onChange={(e) => handleUpdateSlide({ background: e.target.value })}
+            onChange={e => handleUpdateSlide({ background: e.target.value })}
             className="h-9 flex-1 font-mono text-xs"
           />
         </div>
@@ -300,7 +304,7 @@ function SlidePropertiesPanel() {
       <Field label="Speaker Notes">
         <Textarea
           value={activeSlide.speakerNotes ?? ''}
-          onChange={(e) => handleUpdateSlide({ speakerNotes: e.target.value })}
+          onChange={e => handleUpdateSlide({ speakerNotes: e.target.value })}
           placeholder="Add speaker notes..."
           className="min-h-[80px] text-sm"
         />

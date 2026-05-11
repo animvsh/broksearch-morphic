@@ -1,15 +1,15 @@
 export interface BrokModelConfig {
-  name: string;
-  description: string;
-  provider: string;
-  providerModel: string;
-  inputCostPerMillion: number;
-  outputCostPerMillion: number;
-  maxTokens: number;
-  supportsSearch: boolean;
-  supportsStreaming: boolean;
-  supportsTools: boolean;
-  supportsCode?: boolean;
+  name: string
+  description: string
+  provider: string
+  providerModel: string
+  inputCostPerMillion: number
+  outputCostPerMillion: number
+  maxTokens: number
+  supportsSearch: boolean
+  supportsStreaming: boolean
+  supportsTools: boolean
+  supportsCode?: boolean
 }
 
 export const BROK_MODELS: Record<string, BrokModelConfig> = {
@@ -18,82 +18,83 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     description: 'Fast, low-cost reasoning for simple tasks',
     provider: 'minimax',
     providerModel: 'minimax-m2.7',
-    inputCostPerMillion: 0.10,
-    outputCostPerMillion: 0.40,
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.4,
     maxTokens: 16000,
     supportsStreaming: true,
     supportsSearch: false,
-    supportsTools: false,
+    supportsTools: false
   },
   'brok-search': {
     name: 'Brok Search',
-    description: 'Search-powered answers with citations using MiniMax native web search',
+    description: 'Search-powered answers with citations',
     provider: 'minimax',
-    providerModel: 'minimax-text',
-    inputCostPerMillion: 0.10,
-    outputCostPerMillion: 0.40,
+    providerModel: 'minimax-m2.7',
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.4,
     maxTokens: 16000,
     supportsStreaming: true,
     supportsSearch: true,
-    supportsTools: true,
+    supportsTools: true
   },
   'brok-search-pro': {
     name: 'Brok Search Pro',
-    description: 'Deep search with 10-20 sources using MiniMax native web search',
+    description: 'Deep search with 10-20 sources',
     provider: 'minimax',
-    providerModel: 'minimax-text',
+    providerModel: 'minimax-m2.7',
     inputCostPerMillion: 0.15,
-    outputCostPerMillion: 0.60,
+    outputCostPerMillion: 0.6,
     maxTokens: 32000,
     supportsStreaming: true,
     supportsSearch: true,
-    supportsTools: true,
+    supportsTools: true
   },
   'brok-code': {
     name: 'Brok Code',
-    description: 'Code understanding and generation',
+    description:
+      'Coding-agent model for Codex, Claude Code, and OpenAI-compatible tools',
     provider: 'minimax',
-    providerModel: 'minimax-code',
-    inputCostPerMillion: 0.10,
-    outputCostPerMillion: 0.40,
+    providerModel: 'minimax-m2.7',
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.4,
     maxTokens: 16000,
     supportsStreaming: true,
     supportsSearch: false,
-    supportsTools: false,
-    supportsCode: true,
+    supportsTools: true,
+    supportsCode: true
   },
   'brok-agent': {
     name: 'Brok Agent',
     description: 'Tool-using agent with browser and search',
     provider: 'minimax',
-    providerModel: 'minimax-agent',
+    providerModel: 'minimax-m2.7',
     inputCostPerMillion: 0.15,
-    outputCostPerMillion: 0.60,
+    outputCostPerMillion: 0.6,
     maxTokens: 32000,
     supportsStreaming: true,
     supportsSearch: true,
-    supportsTools: true,
+    supportsTools: true
   },
   'brok-reasoning': {
     name: 'Brok Reasoning',
     description: 'Advanced reasoning for complex problems',
     provider: 'minimax',
-    providerModel: 'minimax-reasoning',
-    inputCostPerMillion: 0.20,
-    outputCostPerMillion: 0.80,
+    providerModel: 'minimax-m2.7',
+    inputCostPerMillion: 0.2,
+    outputCostPerMillion: 0.8,
     maxTokens: 32000,
     supportsStreaming: true,
     supportsSearch: false,
-    supportsTools: false,
-  },
-};
+    supportsTools: false
+  }
+}
 
-export type BrokModelId = keyof typeof BROK_MODELS;
+export type BrokModelId = keyof typeof BROK_MODELS
 
 export function isValidBrokModel(modelId: string): boolean {
-  return modelId in BROK_MODELS;
+  return modelId in BROK_MODELS
 }
 
 export function getBrokModel(modelId: string): BrokModelConfig | undefined {
-  return BROK_MODELS[modelId];
+  return BROK_MODELS[modelId]
 }

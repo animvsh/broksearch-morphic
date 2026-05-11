@@ -4,16 +4,20 @@ import { getCurrentUserId } from '@/lib/auth/get-current-user'
 import {
   createGeneration,
   getPresentationWithSlides,
+  updateGenerationStatus,
   updatePresentationStatus,
   updateSlides
 } from '@/lib/db/actions/presentations'
+import {
+  extractJsonObject,
+  generateBrokPresentationText
+} from '@/lib/presentations/brok-generation'
 
 /**
  * POST /api/presentations/:id/edit
- * Chat-based edit using MiniMax
+ * Chat-based edit using Brok intelligence.
  *
- * Note: MiniMax integration requires @ai-sdk/openai-compatible to be installed.
- * This route currently uses direct API calls until the dependency is added.
+ * Uses Brok's provider router.
  */
 export async function POST(
   req: Request,
@@ -21,6 +25,7 @@ export async function POST(
 ) {
   const { id: presentationId } = await params
   let userId: string | null = null
+  let generationId: string | null = null
 
   try {
     const currentUserId = await getCurrentUserId()
@@ -55,31 +60,25 @@ export async function POST(
     await updatePresentationStatus(presentationId, 'generating')
 
     // Create generation record
-    await createGeneration({
+    const generation = await createGeneration({
       presentationId,
       userId,
       prompt: message,
       generationType: 'edit',
-      model: 'abab6.5s-chat',
+      model: 'brok-lite',
       webSearchEnabled: false
     })
-
-    // Check if MiniMax is configured
-    const apiKey = process.env.OPENAI_COMPATIBLE_API_KEY
-    if (!apiKey) {
-      await updatePresentationStatus(presentationId, 'ready')
-      return NextResponse.json({
-        updated_slides: [],
-        message: 'MiniMax API key not configured. Cannot process edit request.'
-      })
-    }
+    generationId = generation.id
 
     // Build context about current slides
     const slidesContext = presentation.slides
-      .map((slide, idx) => `Slide ${idx + 1}: ${slide.title}\nContent: ${JSON.stringify(slide.contentJson)}`)
+      .map(
+        (slide, idx) =>
+          `Slide ${idx + 1}: ${slide.title}\nContent: ${JSON.stringify(slide.contentJson)}`
+      )
       .join('\n\n')
 
-    // Generate edit using MiniMax
+    // Generate edit through Brok.
     const editPrompt = `You are editing a presentation. The user wants to make changes.
 
 Current presentation: ${presentation.title}
@@ -108,61 +107,19 @@ If the user wants to add a slide, include it with a new id.
 If the user wants to delete a slide, include it with null values.
 Only return valid JSON.`
 
-    let editResult = ''
-
-    const response = await fetch(
-      `${process.env.OPENAI_COMPATIBLE_API_BASE_URL || 'https://api.minimax.io/v1'}/chat/completions`,
-      {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'abab6.5s-chat',
-        messages: [
-          { role: 'system', content: 'You are an expert presentation editor. Return only valid JSON describing the changes.' },
-          { role: 'user', content: editPrompt }
-        ],
-        stream: true,
-        temperature: 0.7,
-        max_tokens: 2000
-      })
+    const editResult = await generateBrokPresentationText({
+      model: 'brok-lite',
+      maxTokens: 2000,
+      temperature: 0.65,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are an expert Gamma-style presentation editor. Return only valid JSON describing the changes.'
+        },
+        { role: 'user', content: editPrompt }
+      ]
     })
-
-    if (!response.ok) {
-      throw new Error(`MiniMax API error: ${response.status}`)
-    }
-
-    if (response.body) {
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') continue
-
-            try {
-              const parsed = JSON.parse(data)
-              const content = parsed.choices?.[0]?.delta?.content
-              if (content) {
-                editResult += content
-              }
-            } catch {
-              // Skip invalid JSON lines
-            }
-          }
-        }
-      }
-    }
 
     // Parse the edit result
     let parsedResult: {
@@ -175,14 +132,15 @@ Only return valid JSON.`
       message: string
     } | null = null
 
-    try {
-      const jsonMatch = editResult.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        parsedResult = JSON.parse(jsonMatch[0])
-      }
-    } catch (parseError) {
-      console.error('Error parsing edit result:', parseError)
-    }
+    parsedResult = extractJsonObject<{
+      updated_slides: Array<{
+        id: string
+        title?: string
+        contentJson?: Record<string, any>
+        speakerNotes?: string
+      }>
+      message: string
+    }>(editResult)
 
     if (!parsedResult) {
       await updatePresentationStatus(presentationId, 'ready')
@@ -209,14 +167,19 @@ Only return valid JSON.`
 
     // Update presentation status
     await updatePresentationStatus(presentationId, 'ready')
+    await updateGenerationStatus(generation.id, 'completed')
 
     return NextResponse.json({
       updated_slides: updatedSlides,
-      message: parsedResult.message || `Updated ${updatedSlides.length} slide(s).`
+      message:
+        parsedResult.message || `Updated ${updatedSlides.length} slide(s).`
     })
   } catch (error) {
     console.error('Error in edit:', error)
     await updatePresentationStatus(presentationId, 'error')
+    if (generationId) {
+      await updateGenerationStatus(generationId, 'failed')
+    }
     return NextResponse.json(
       { error: 'Failed to edit presentation' },
       { status: 500 }

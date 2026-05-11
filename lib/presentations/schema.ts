@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid
 } from 'drizzle-orm/pg-core'
 
@@ -96,7 +97,7 @@ export const presentationSlides = pgTable(
   },
   table => [
     index('presentation_slides_presentation_id_idx').on(table.presentationId),
-    index('presentation_slides_presentation_id_index_idx').on(
+    uniqueIndex('presentation_slides_presentation_id_index_idx').on(
       table.presentationId,
       table.slideIndex
     )
@@ -122,9 +123,7 @@ export const presentationOutlines = pgTable(
     updatedAt: timestamp('updated_at').notNull().defaultNow()
   },
   table => [
-    index('presentation_outlines_presentation_id_idx').on(
-      table.presentationId
-    )
+    index('presentation_outlines_presentation_id_idx').on(table.presentationId)
   ]
 )
 
@@ -158,13 +157,12 @@ export const presentationAssets = pgTable(
     presentationId: uuid('presentation_id')
       .notNull()
       .references(() => presentations.id, { onDelete: 'cascade' }),
-    slideId: uuid('slide_id').references(
-      () => presentationSlides.id,
-      { onDelete: 'cascade' }
-    ),
+    slideId: uuid('slide_id').references(() => presentationSlides.id, {
+      onDelete: 'cascade'
+    }),
     assetType: text('asset_type').notNull(), // image/chart/icon
     url: text('url'),
-    provider: text('provider').notNull(), // minimax/stock/none
+    provider: text('provider').notNull(), // Brok/stock/none
     prompt: text('prompt'),
     metadataJson: jsonb('metadata_json').$type<Record<string, any>>(),
     createdAt: timestamp('created_at').notNull().defaultNow()
@@ -230,21 +228,24 @@ export type PresentationExport = typeof presentationExports.$inferSelect
 
 // Relations
 
-export const presentationsRelations = relations(presentations, ({ one, many }) => ({
-  user: one(users, {
-    fields: [presentations.userId],
-    references: [users.id]
-  }),
-  workspace: one(workspaces, {
-    fields: [presentations.workspaceId],
-    references: [workspaces.id]
-  }),
-  slides: many(presentationSlides),
-  outline: one(presentationOutlines),
-  assets: many(presentationAssets),
-  generations: many(presentationGenerations),
-  exports: many(presentationExports)
-}))
+export const presentationsRelations = relations(
+  presentations,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [presentations.userId],
+      references: [users.id]
+    }),
+    workspace: one(workspaces, {
+      fields: [presentations.workspaceId],
+      references: [workspaces.id]
+    }),
+    slides: many(presentationSlides),
+    outline: one(presentationOutlines),
+    assets: many(presentationAssets),
+    generations: many(presentationGenerations),
+    exports: many(presentationExports)
+  })
+)
 
 export const presentationSlidesRelations = relations(
   presentationSlides,
@@ -318,12 +319,10 @@ export const presentationExportsRelations = relations(
 // Placeholder references to existing tables (defined in lib/db/schema.ts)
 // These allow Drizzle to understand the foreign key relationships
 
- 
 const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom()
 })
 
- 
 const workspaces = pgTable('workspaces', {
   id: uuid('id').primaryKey().defaultRandom()
 })

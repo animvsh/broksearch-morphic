@@ -1,17 +1,19 @@
-import { getUsageForAdmin } from '@/lib/actions/admin-brok';
+import { getUsageForAdmin } from '@/lib/actions/admin-brok'
 
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@/components/ui/badge'
+
+export const dynamic = 'force-dynamic'
 
 export default async function AdminLogsPage({
-  searchParams,
+  searchParams
 }: {
-  searchParams: Promise<{ model?: string; endpoint?: string }>;
+  searchParams: Promise<{ model?: string; endpoint?: string }>
 }) {
-  const params = await searchParams;
+  const params = await searchParams
   const logs = await getUsageForAdmin({
     model: params.model,
-    endpoint: params.endpoint,
-  });
+    endpoint: params.endpoint
+  })
 
   return (
     <div className="space-y-6">
@@ -40,12 +42,15 @@ export default async function AdminLogsPage({
             <tbody>
               {logs.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="p-4 text-center text-muted-foreground">
+                  <td
+                    colSpan={10}
+                    className="p-4 text-center text-muted-foreground"
+                  >
                     No logs found
                   </td>
                 </tr>
               ) : (
-                logs.map((log) => (
+                logs.map(log => (
                   <tr key={log.id} className="border-b">
                     <td className="p-4 font-mono text-xs">
                       {log.requestId.slice(0, 12)}...
@@ -61,7 +66,9 @@ export default async function AdminLogsPage({
                     <td className="p-4">{log.latencyMs}ms</td>
                     <td className="p-4">
                       <Badge
-                        variant={log.status === 'success' ? 'default' : 'destructive'}
+                        variant={
+                          log.status === 'success' ? 'default' : 'destructive'
+                        }
                       >
                         {log.status}
                       </Badge>
@@ -77,5 +84,5 @@ export default async function AdminLogsPage({
         </div>
       </div>
     </div>
-  );
+  )
 }

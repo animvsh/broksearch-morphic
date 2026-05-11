@@ -1,7 +1,8 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { createGateway } from '@ai-sdk/gateway'
 import { google } from '@ai-sdk/google'
-import { createOpenAI, openai } from '@ai-sdk/openai'
+import { openai } from '@ai-sdk/openai'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createProviderRegistry, LanguageModel } from 'ai'
 import { createOllama } from 'ai-sdk-ollama'
 
@@ -10,9 +11,12 @@ const providers: Record<string, any> = {
   openai,
   anthropic,
   google,
-  'openai-compatible': createOpenAI({
+  'openai-compatible': createOpenAICompatible({
+    name: 'brok',
     apiKey: process.env.OPENAI_COMPATIBLE_API_KEY,
-    baseURL: process.env.OPENAI_COMPATIBLE_API_BASE_URL
+    baseURL:
+      process.env.OPENAI_COMPATIBLE_API_BASE_URL || 'https://api.minimax.io/v1',
+    includeUsage: true
   }),
   gateway: createGateway({
     apiKey: process.env.AI_GATEWAY_API_KEY

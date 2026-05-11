@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 
-import { Column,DataTable } from '@/components/admin/presentations/data-table'
+import { Column, DataTable } from '@/components/admin/presentations/data-table'
 
 interface Deck {
   id: string
@@ -60,11 +60,7 @@ export default function DecksPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
 
-  useEffect(() => {
-    fetchDecks()
-  }, [page, search, statusFilter])
-
-  const fetchDecks = async () => {
+  const fetchDecks = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -85,14 +81,18 @@ export default function DecksPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, search, statusFilter])
+
+  useEffect(() => {
+    fetchDecks()
+  }, [fetchDecks])
 
   const columns: Column<Deck>[] = [
     {
       key: 'title',
       label: 'Presentation',
       sortable: true,
-      render: (row) => (
+      render: row => (
         <Link
           href={`/presentations/${row.id}/editor`}
           className="font-medium text-primary hover:underline"
@@ -105,7 +105,7 @@ export default function DecksPage() {
       key: 'user_id',
       label: 'Owner',
       sortable: true,
-      render: (row) => (
+      render: row => (
         <span className="text-muted-foreground font-mono text-xs">
           {row.user_id.slice(0, 8)}...
         </span>
@@ -115,12 +115,12 @@ export default function DecksPage() {
       key: 'slide_count',
       label: 'Slides',
       sortable: true,
-      render: (row) => <span>{row.slide_count}</span>
+      render: row => <span>{row.slide_count}</span>
     },
     {
       key: 'theme_id',
       label: 'Theme',
-      render: (row) => (
+      render: row => (
         <span className="text-muted-foreground">
           {row.theme_id || 'Default'}
         </span>
@@ -130,13 +130,13 @@ export default function DecksPage() {
       key: 'status',
       label: 'Status',
       sortable: true,
-      render: (row) => <StatusBadge status={row.status} />
+      render: row => <StatusBadge status={row.status} />
     },
     {
       key: 'created_at',
       label: 'Created',
       sortable: true,
-      render: (row) => (
+      render: row => (
         <span className="text-muted-foreground text-xs">
           {formatRelativeTime(row.created_at)}
         </span>
@@ -146,7 +146,7 @@ export default function DecksPage() {
       key: 'updated_at',
       label: 'Last Edited',
       sortable: true,
-      render: (row) => (
+      render: row => (
         <span className="text-muted-foreground text-xs">
           {formatRelativeTime(row.updated_at)}
         </span>
@@ -168,7 +168,9 @@ export default function DecksPage() {
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Presentation Decks</h1>
+          <h1 className="text-3xl font-bold text-foreground">
+            Presentation Decks
+          </h1>
           <p className="text-muted-foreground mt-1">
             Manage and monitor all presentation decks
           </p>
@@ -178,13 +180,15 @@ export default function DecksPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
             <div>
               <h2 className="text-lg font-semibold">All Decks</h2>
-              <p className="text-sm text-muted-foreground">{total} total decks</p>
+              <p className="text-sm text-muted-foreground">
+                {total} total decks
+              </p>
             </div>
             <div className="flex gap-2">
               <select
                 className="border rounded-md px-3 py-2 text-sm bg-background"
                 value={statusFilter}
-                onChange={(e) => {
+                onChange={e => {
                   setStatusFilter(e.target.value)
                   setPage(1)
                 }}
@@ -200,7 +204,10 @@ export default function DecksPage() {
           {loading ? (
             <div className="space-y-3">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-12 bg-muted/50 rounded animate-pulse" />
+                <div
+                  key={i}
+                  className="h-12 bg-muted/50 rounded animate-pulse"
+                />
               ))}
             </div>
           ) : (
@@ -209,7 +216,7 @@ export default function DecksPage() {
               columns={columns}
               pageSize={20}
               searchPlaceholder="Search by title..."
-              onSearch={(q) => {
+              onSearch={q => {
                 setSearch(q)
                 setPage(1)
               }}

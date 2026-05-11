@@ -299,4 +299,4 @@ export const feedback = pgTable(
 
 export type Feedback = InferSelectModel<typeof feedback>
 
-export * from './schema-brok';
+export * from './schema-brok'

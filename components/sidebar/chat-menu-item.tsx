@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 
 import { deleteChat } from '@/lib/actions/chat'
 import { Chat as DBChat } from '@/lib/db/schema'
+import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 import {
   AlertDialog,
@@ -84,6 +85,7 @@ export function ChatMenuItem({ chat }: ChatMenuItemProps) {
   const [isPending, startTransition] = useTransition()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isAlertOpen, setIsAlertOpen] = useState(false)
+  const title = stripThinkingBlocks(chat.title) || 'New Chat'
 
   const handleDeleteChat = useCallback(() => {
     // Close overlays first so focus and pointer locks are released
@@ -120,7 +122,7 @@ export function ChatMenuItem({ chat }: ChatMenuItemProps) {
       >
         <Link href={path}>
           <div className="text-xs font-medium truncate select-none w-full">
-            {chat.title}
+            {title}
           </div>
           <div className="text-xs text-muted-foreground w-full">
             {formatDateWithTime(chat.createdAt)}

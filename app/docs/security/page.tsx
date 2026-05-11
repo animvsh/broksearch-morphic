@@ -171,7 +171,10 @@ export default function SecurityPage() {
         <h2>API Key Best Practices</h2>
 
         <h3>Store Keys Securely</h3>
-        <p>Never hardcode API keys in your source code. Use environment variables:</p>
+        <p>
+          Never hardcode API keys in your source code. Use environment
+          variables:
+        </p>
         <pre className="bg-muted p-4 rounded-lg">
           <code>{`# .env file (never commit this!)
 BROK_API_KEY=brok_sk_live_your_key_here`}</code>
@@ -226,7 +229,9 @@ const apiKey = process.env.BROK_API_KEY`}</code>
         <h2>Application Security</h2>
 
         <h3>Server-Side Only</h3>
-        <p>Always make API calls from your server, never from client-side code:</p>
+        <p>
+          Always make API calls from your server, never from client-side code:
+        </p>
         <pre className="bg-muted p-4 rounded-lg">
           <code>{`// BAD - Exposes your key
 const response = await fetch('https://api.brok.ai/v1/chat/completions', {
@@ -322,9 +327,17 @@ function checkRateLimit(apiKey) {
 
         <h2>Next Steps</h2>
         <ul>
-          <li><Link href="/docs/api-keys">API Keys</Link> - Create and manage keys</li>
-          <li><Link href="/docs/chat-completions">Chat Completions</Link> - Make secure API calls</li>
-          <li><Link href="/docs/rate-limits">Rate Limits</Link> - Understand your limits</li>
+          <li>
+            <Link href="/docs/api-keys">API Keys</Link> - Create and manage keys
+          </li>
+          <li>
+            <Link href="/docs/chat-completions">Chat Completions</Link> - Make
+            secure API calls
+          </li>
+          <li>
+            <Link href="/docs/rate-limits">Rate Limits</Link> - Understand your
+            limits
+          </li>
         </ul>
       </div>
     </div>

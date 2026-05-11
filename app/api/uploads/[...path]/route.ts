@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { existsSync } from 'fs'
 import path from 'path'
 
-import { LOCAL_STORAGE_PATH } from '@/lib/storage/local-file-client'
+import { LOCAL_STORAGE_PATH } from '@/lib/storage/local-storage-config'
 
 export async function GET(
   req: NextRequest,
@@ -11,10 +11,11 @@ export async function GET(
 ) {
   const { path: pathParts } = await params
   const filePath = pathParts.join('/')
-  const fullPath = path.join(LOCAL_STORAGE_PATH, filePath)
+  const storageRoot = path.resolve(/*turbopackIgnore: true*/ LOCAL_STORAGE_PATH)
+  const fullPath = path.resolve(storageRoot, filePath)
 
   // Security: prevent directory traversal
-  if (!fullPath.startsWith(LOCAL_STORAGE_PATH)) {
+  if (!fullPath.startsWith(`${storageRoot}${path.sep}`)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

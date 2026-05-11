@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 
-import { Column,DataTable } from '@/components/admin/presentations/data-table'
+import { Column, DataTable } from '@/components/admin/presentations/data-table'
 
 interface FlaggedPresentation {
   id: string
@@ -53,7 +53,10 @@ export default function AbusePage() {
     }
   }
 
-  const handleAction = async (id: string, action: 'view' | 'suspend' | 'delete') => {
+  const handleAction = async (
+    id: string,
+    action: 'view' | 'suspend' | 'delete'
+  ) => {
     if (action === 'view') {
       window.open(`/presentations/${id}/editor`, '_blank')
     } else if (action === 'delete') {
@@ -70,7 +73,7 @@ export default function AbusePage() {
       key: 'created_at',
       label: 'Time',
       sortable: true,
-      render: (row) => (
+      render: row => (
         <span className="text-muted-foreground text-xs">
           {formatRelativeTime(row.created_at)}
         </span>
@@ -79,7 +82,7 @@ export default function AbusePage() {
     {
       key: 'title',
       label: 'Presentation',
-      render: (row) => (
+      render: row => (
         <div>
           <p className="font-medium">{row.title}</p>
           <p className="text-xs text-muted-foreground font-mono">
@@ -91,7 +94,7 @@ export default function AbusePage() {
     {
       key: 'reason',
       label: 'Reason',
-      render: (row) => (
+      render: row => (
         <span className="text-sm text-red-600 font-medium">{row.reason}</span>
       )
     },
@@ -99,14 +102,14 @@ export default function AbusePage() {
       key: 'user_id',
       label: 'User',
       sortable: true,
-      render: (row) => (
+      render: row => (
         <span className="font-mono text-xs">{row.user_id.slice(0, 8)}...</span>
       )
     },
     {
       key: 'actions',
       label: 'Action',
-      render: (row) => (
+      render: row => (
         <div className="flex gap-2">
           <Button
             size="sm"
@@ -138,7 +141,9 @@ export default function AbusePage() {
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Abuse Monitoring</h1>
+          <h1 className="text-3xl font-bold text-foreground">
+            Abuse Monitoring
+          </h1>
           <p className="text-muted-foreground mt-1">
             Flagged presentations and suspicious activity
           </p>
@@ -151,7 +156,8 @@ export default function AbusePage() {
             <div className="p-4 rounded-lg bg-muted/50">
               <p className="font-medium text-sm">High Generation Count</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Flagged when a user creates more than 50 generations in a single day
+                Flagged when a user creates more than 50 generations in a single
+                day
               </p>
             </div>
             <div className="p-4 rounded-lg bg-muted/50">
@@ -181,7 +187,10 @@ export default function AbusePage() {
           {loading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-12 bg-muted/50 rounded animate-pulse" />
+                <div
+                  key={i}
+                  className="h-12 bg-muted/50 rounded animate-pulse"
+                />
               ))}
             </div>
           ) : error ? (
@@ -189,7 +198,9 @@ export default function AbusePage() {
           ) : flagged.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <p className="text-lg font-medium">No flagged presentations</p>
-              <p className="text-sm mt-1">All presentations are within normal parameters</p>
+              <p className="text-sm mt-1">
+                All presentations are within normal parameters
+              </p>
             </div>
           ) : (
             <DataTable data={flagged} columns={columns} pageSize={20} />

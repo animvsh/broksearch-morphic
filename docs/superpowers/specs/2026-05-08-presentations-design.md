@@ -8,16 +8,16 @@ This doc covers **implementation-specific decisions** and **tech stack alignment
 
 ## Tech Stack Alignment
 
-| Concern | Decision |
-|---------|----------|
-| Framework | Next.js 16 (App Router) — same as Morphic |
-| Language | TypeScript — same as Morphic |
-| Styling | Tailwind CSS + CSS variables for themes |
-| Database | Drizzle ORM + PostgreSQL — same as Morphic |
-| AI Provider | MiniMax API (`sk-cp-6iOan1LRBp-_oM-fWbGFkgX8ustxHpZHlH_Rn0H7jJfRDu6MSSkdrMGCNZ6ifqAfrDippFizUelUAnWDIGxvrlI3OoRiXpJrnx2aWpdHeOPFv3xYzF_Nhk4`) via AI SDK |
-| State | Zustand — same as Morphic |
-| Export | pptxgenjs for PPTX export |
-| Auth | Supabase — same as Morphic |
+| Concern     | Decision                                   |
+| ----------- | ------------------------------------------ |
+| Framework   | Next.js 16 (App Router) — same as Morphic  |
+| Language    | TypeScript — same as Morphic               |
+| Styling     | Tailwind CSS + CSS variables for themes    |
+| Database    | Drizzle ORM + PostgreSQL — same as Morphic |
+| AI Provider | Brok generation gateway via AI SDK         |
+| State       | Zustand — same as Morphic                  |
+| Export      | pptxgenjs for PPTX export                  |
+| Auth        | Supabase — same as Morphic                 |
 
 ## Project Structure
 
@@ -126,8 +126,9 @@ All endpoints under `/api/presentations/`:
 
 ## Key Dependencies
 
-- MiniMax API key configured as `MINIMAX_API_KEY` env var
+- Brok generation gateway credentials configured in the server environment
 - pptxgenjs package for PPTX export
 - Drizzle for ORM (already in project)
 - Zustand for state (already in project)
 - Tailwind for styling (already in project)
+```

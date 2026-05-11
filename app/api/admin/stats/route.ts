@@ -1,105 +1,70 @@
 import { NextResponse } from 'next/server'
 
+import { sql } from 'drizzle-orm'
+
+import { requireAdminAccess } from '@/lib/auth/admin'
+import { db } from '@/lib/db'
+import { chats, feedback, messages } from '@/lib/db/schema'
+
+async function getUsers() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return []
+  }
+
+  const response = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+    headers: {
+      Authorization: `Bearer ${supabaseServiceKey}`,
+      apikey: supabaseServiceKey
+    },
+    cache: 'no-store'
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(errorText)
+  }
+
+  const data = (await response.json()) as {
+    users?: Array<{ id: string; email?: string }>
+  }
+
+  return data.users ?? []
+}
+
 export async function GET() {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return NextResponse.json(
-        { error: 'Supabase configuration missing' },
-        { status: 500 }
-      )
+    const admin = await requireAdminAccess()
+    if (!admin.ok) {
+      return NextResponse.json({ error: admin.error }, { status: admin.status })
     }
 
-    // Fetch users from Supabase Auth Admin API
-    const usersResponse = await fetch(
-      `${supabaseUrl}/auth/v1/admin/users`,
-      {
-        headers: {
-          'Authorization': `Bearer ${supabaseServiceKey}`,
-          'apikey': supabaseServiceKey
-        }
-      }
-    )
-
-    if (!usersResponse.ok) {
-      const errorText = await usersResponse.text()
-      console.error('Error fetching users:', errorText)
-      return NextResponse.json(
-        { error: 'Failed to fetch users' },
-        { status: 500 }
-      )
-    }
-
-    const usersData = await usersResponse.json()
-
-    // Fetch real stats from database using Supabase REST API
-    let totalChats = 0
-    let totalMessages = 0
-    let totalFeedback = 0
-
-    // Get chat count
-    const chatsResponse = await fetch(
-      `${supabaseUrl}/rest/v1/chats?select=id`,
-      {
-        headers: {
-          'Authorization': `Bearer ${supabaseServiceKey}`,
-          'apikey': supabaseServiceKey,
-          'Range': '0-0'
-        }
-      }
-    )
-    if (chatsResponse.ok) {
-      const contentRange = chatsResponse.headers.get('Content-Range')
-      if (contentRange) {
-        totalChats = parseInt(contentRange.split('/')[1]) || 0
-      }
-    }
-
-    // Get message count
-    const messagesResponse = await fetch(
-      `${supabaseUrl}/rest/v1/messages?select=id`,
-      {
-        headers: {
-          'Authorization': `Bearer ${supabaseServiceKey}`,
-          'apikey': supabaseServiceKey,
-          'Range': '0-0'
-        }
-      }
-    )
-    if (messagesResponse.ok) {
-      const contentRange = messagesResponse.headers.get('Content-Range')
-      if (contentRange) {
-        totalMessages = parseInt(contentRange.split('/')[1]) || 0
-      }
-    }
-
-    // Get feedback count
-    const feedbackResponse = await fetch(
-      `${supabaseUrl}/rest/v1/feedback?select=id}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${supabaseServiceKey}`,
-          'apikey': supabaseServiceKey,
-          'Range': '0-0'
-        }
-      }
-    )
-    if (feedbackResponse.ok) {
-      const contentRange = feedbackResponse.headers.get('Content-Range')
-      if (contentRange) {
-        totalFeedback = parseInt(contentRange.split('/')[1]) || 0
-      }
-    }
+    const [users, [chatStats], [messageStats], [feedbackStats]] =
+      await Promise.all([
+        getUsers(),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(chats)
+          .limit(1),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(messages)
+          .limit(1),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(feedback)
+          .limit(1)
+      ])
 
     return NextResponse.json({
-      users: usersData.users || [],
+      users,
       stats: {
-        total_chats: totalChats,
-        total_messages: totalMessages,
-        active_users: usersData.users?.length || 0,
-        total_feedback: totalFeedback
+        total_chats: chatStats?.count ?? 0,
+        total_messages: messageStats?.count ?? 0,
+        active_users: users.length,
+        total_feedback: feedbackStats?.count ?? 0
       }
     })
   } catch (error) {

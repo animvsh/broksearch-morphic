@@ -181,7 +181,10 @@ export default function RateLimitsPage() {
         </p>
 
         <h2>Rate Limit Headers</h2>
-        <p>When you make an API request, rate limit information is included in response headers:</p>
+        <p>
+          When you make an API request, rate limit information is included in
+          response headers:
+        </p>
         <pre className="bg-muted p-4 rounded-lg">
           <code>{`X-RateLimit-Limit: 60
 X-RateLimit-Remaining: 45
@@ -201,19 +204,27 @@ X-RateLimit-Retry-After: 32`}</code>
             <tbody>
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">X-RateLimit-Limit</td>
-                <td className="py-2 px-3">Maximum requests allowed per minute</td>
+                <td className="py-2 px-3">
+                  Maximum requests allowed per minute
+                </td>
               </tr>
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">X-RateLimit-Remaining</td>
-                <td className="py-2 px-3">Requests remaining in current window</td>
+                <td className="py-2 px-3">
+                  Requests remaining in current window
+                </td>
               </tr>
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">X-RateLimit-Reset</td>
-                <td className="py-2 px-3">Unix timestamp when the limit resets</td>
+                <td className="py-2 px-3">
+                  Unix timestamp when the limit resets
+                </td>
               </tr>
               <tr>
                 <td className="py-2 px-3 font-mono">X-RateLimit-Retry-After</td>
-                <td className="py-2 px-3">Seconds until you can retry (only on 429)</td>
+                <td className="py-2 px-3">
+                  Seconds until you can retry (only on 429)
+                </td>
               </tr>
             </tbody>
           </table>
@@ -246,7 +257,9 @@ X-RateLimit-Retry-After: 32`}</code>
         </pre>
 
         <h2>Handling 429 Errors</h2>
-        <p>When you exceed the rate limit, you&apos;ll receive a 429 response:</p>
+        <p>
+          When you exceed the rate limit, you&apos;ll receive a 429 response:
+        </p>
         <pre className="bg-muted p-4 rounded-lg">
           <code>{`{
   "error": {
@@ -279,15 +292,31 @@ X-RateLimit-Retry-After: 32`}</code>
 
         <h2>Best Practices</h2>
         <ol>
-          <li><strong>Implement caching</strong> - Cache responses for identical queries</li>
-          <li><strong>Use streaming</strong> - Reduce request count for long responses</li>
-          <li><strong>Batch requests</strong> - Combine multiple queries when possible</li>
-          <li><strong>Monitor usage</strong> - Track your usage patterns</li>
-          <li><strong>Set up alerts</strong> - Get notified before hitting limits</li>
+          <li>
+            <strong>Implement caching</strong> - Cache responses for identical
+            queries
+          </li>
+          <li>
+            <strong>Use streaming</strong> - Reduce request count for long
+            responses
+          </li>
+          <li>
+            <strong>Batch requests</strong> - Combine multiple queries when
+            possible
+          </li>
+          <li>
+            <strong>Monitor usage</strong> - Track your usage patterns
+          </li>
+          <li>
+            <strong>Set up alerts</strong> - Get notified before hitting limits
+          </li>
         </ol>
 
         <h2>Rate Limit Increase</h2>
-        <p>Contact support to request rate limit increases for your account. Include:</p>
+        <p>
+          Contact support to request rate limit increases for your account.
+          Include:
+        </p>
         <ul>
           <li>Your current usage patterns</li>
           <li>Expected growth</li>
@@ -296,9 +325,16 @@ X-RateLimit-Retry-After: 32`}</code>
 
         <h2>Next Steps</h2>
         <ul>
-          <li><Link href="/docs/chat-completions">Chat Completions</Link> - Make your first API call</li>
-          <li><Link href="/docs/errors">Errors</Link> - Handle errors gracefully</li>
-          <li><Link href="/docs/security">Security</Link> - Secure your API usage</li>
+          <li>
+            <Link href="/docs/chat-completions">Chat Completions</Link> - Make
+            your first API call
+          </li>
+          <li>
+            <Link href="/docs/errors">Errors</Link> - Handle errors gracefully
+          </li>
+          <li>
+            <Link href="/docs/security">Security</Link> - Secure your API usage
+          </li>
         </ul>
       </div>
     </div>

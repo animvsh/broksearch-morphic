@@ -38,6 +38,15 @@ const PROVIDER_LOGO_BY_ID: Record<string, string> = {
   ollama: '/providers/logos/ollama.svg'
 }
 
+const PROVIDER_LABEL_BY_ID: Record<string, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google',
+  gateway: 'Gateway',
+  'openai-compatible': 'Brok',
+  ollama: 'Ollama'
+}
+
 function ProviderLogo({ providerId }: { providerId: string }) {
   const logoSrc = PROVIDER_LOGO_BY_ID[providerId]
   if (!logoSrc) {
@@ -47,7 +56,7 @@ function ProviderLogo({ providerId }: { providerId: string }) {
   return (
     <Image
       src={logoSrc}
-      alt={`${providerId} logo`}
+      alt={`${PROVIDER_LABEL_BY_ID[providerId] ?? 'Provider'} logo`}
       width={16}
       height={16}
       className="size-4 shrink-0 object-contain"

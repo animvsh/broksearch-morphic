@@ -1,15 +1,23 @@
-import Link from 'next/link';
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
-import { listApiKeys } from '@/lib/actions/api-keys';
+import { ensureWorkspaceForUser, listApiKeys } from '@/lib/actions/api-keys'
+import { getRequiredBrokAccountUser } from '@/lib/brokcode/account-guard'
 
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/button'
 
-import { ApiKeyTable } from '@/components/api-key-table';
+import { ApiKeyTable } from '@/components/api-key-table'
+
+export const dynamic = 'force-dynamic'
 
 export default async function ApiKeysPage() {
-  // Get workspace from session (placeholder)
-  const workspaceId = 'demo-workspace';
-  const keys = await listApiKeys(workspaceId);
+  const user = await getRequiredBrokAccountUser()
+  if (!user) {
+    redirect(`/auth/login?redirectTo=${encodeURIComponent('/api-keys')}`)
+  }
+
+  const workspace = await ensureWorkspaceForUser(user.id)
+  const keys = await listApiKeys(workspace.id)
 
   return (
     <div className="container py-8">
@@ -34,10 +42,11 @@ export default async function ApiKeysPage() {
 
       <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p className="text-sm text-yellow-800">
-          <strong>Important:</strong> Your API key is only shown once after creation.
-          Copy it somewhere safe. You will not be able to see it again.
+          <strong>Important:</strong> Your API key is only shown once after
+          creation. Copy it somewhere safe. You will not be able to see it
+          again.
         </p>
       </div>
     </div>
-  );
+  )
 }

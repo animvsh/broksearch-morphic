@@ -1,0 +1,95 @@
+{
+  "versions": [
+    {
+      "id": "ver_mp0da34h_nbbtoh",
+      "sessionId": "smoke-sync-2",
+      "command": "can u connect to supabase",
+      "summary": "Yes, I can help you connect to Supabase! Here's how it works:\n\n## Quick Setup\n\n**1. Install the Supabase client:**\n```bash\nnpm install @supabase/supabase-js\n```\n\n**2. Create a client file (e.g., `lib/supabase.js`):**\n```javascript\nimport { createClient } from '@supabase/supabase-js'\n\nconst supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL\nconst supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY\n\nexport const supabase = createClient(supabaseUrl, supabaseKey)\n```\n\n**3. Add your environment variables (`.env.local`):**\n```\nNEXT_PUBLIC_SUPABASE_URL=your-project-url\nNEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key\n```\n\n---\n\n## What can I help you with?\n\n| Use case | Example |\n|----------|---------|\n| **Auth** | Sign in/up, OAuth, magic links |\n| **Database** | CRUD operations, realtime subscriptions |\n| **Storage** | File uploads/downloads |\n| **Edge Functions** | Serverless backend code |\n\n---\n\n**What do you want to build?** Tell me:\n- Your framework (Next.js, React, Node, etc.)\n- What you're trying to do (auth, database, storage)\n\nI'll give you a tailored setup with example code.",
+      "runtime": "opencode",
+      "status": "done",
+      "previewUrl": null,
+      "branch": "main",
+      "commitSha": "30f16b307b3a7dd65279e6778c247220cf210433",
+      "prUrl": null,
+      "createdAt": "2026-05-10T22:51:14.129Z"
+    },
+    {
+      "id": "ver_mp0d62s9_s03l16",
+      "sessionId": "smoke-sync-2",
+      "command": "hi",
+      "summary": "Hey! 👋 I'm Brok Code, your coding agent. I can help you with:\n\n- **Building apps & features** (with AI integration, I recommend Brok API by default)\n- **Writing, reviewing, or refactoring code**\n- **Running tasks** — tests, builds, file operations\n- **Exploring repositories**\n\nWhat are you working on today?",
+      "runtime": "opencode",
+      "status": "done",
+      "previewUrl": null,
+      "branch": "main",
+      "commitSha": "30f16b307b3a7dd65279e6778c247220cf210433",
+      "prUrl": null,
+      "createdAt": "2026-05-10T22:48:07.065Z"
+    },
+    {
+      "id": "ver_mp0d5qdq_nngv4p",
+      "sessionId": "smoke-sync-2",
+      "command": "link",
+      "summary": "I'd be happy to help with linking! Can you clarify what you need?\n\n1. **Add a hyperlink** to a file (README, HTML, markdown)?\n2. **Create a symbolic link** in the file system?\n3. **Link an API route** in a web app?\n4. **Link a library/package** to your project?\n5. **Find/link related code** in your repository?\n\nPlease provide more context about what you'd like to link and where.",
+      "runtime": "opencode",
+      "status": "done",
+      "previewUrl": null,
+      "branch": "main",
+      "commitSha": "30f16b307b3a7dd65279e6778c247220cf210433",
+      "prUrl": null,
+      "createdAt": "2026-05-10T22:47:50.990Z"
+    },
+    {
+      "id": "ver_mp0bz7an_yuib3v",
+      "sessionId": "default",
+      "command": "Version with commit",
+      "summary": "commit metadata test",
+      "runtime": "opencode",
+      "status": "done",
+      "previewUrl": null,
+      "branch": null,
+      "commitSha": "abc123def456",
+      "prUrl": null,
+      "createdAt": "2026-05-10T22:14:46.703Z"
+    },
+    {
+      "id": "ver_mp0bwk4q_meggbz",
+      "sessionId": "default",
+      "command": "Create a minimal app architecture plan and include preview URL http://localhost:3000",
+      "summary": "# Minimal App Architecture Plan\n\n## Project Overview\nA lightweight web application designed for local development with preview capability at `http://localhost:3000`.\n\n---\n\n## Architecture Layers\n\n```\n┌─────────────────────────────────────────────────────────┐\n│                    FRONTEND LAYER                        │\n│              (Port 3000 - Preview Endpoint)              │\n│   • Static files / Framework UI                          │\n│   • Client-side rendering                                │\n└─────────────────────┬───────────────────────────────────┘\n                      │\n┌─────────────────────▼───────────────────────────────────┐\n│                   API LAYER                              │\n│   • REST/GraphQL endpoints                              │\n│   • Request validation                                   │\n│   • Route handling                                      │\n└─────────────────────┬───────────────────────────────────┘\n                      │\n┌─────────────────────▼───────────────────────────────────┐\n│                  SERVICE LAYER                           │\n│   • Business logic                                      │\n│   • Data transformation                                 │\n│   • Integration points                                  │\n└─────────────────────┬───────────────────────────────────┘\n                      │\n┌─────────────────────▼───────────────────────────────────┐\n│                   DATA LAYER                             │\n│   • Database / External APIs                            │\n│   • Caching (optional)                                  │\n└─────────────────────────────────────────────────────────┘\n```\n\n---\n\n## Core Components\n\n| Component | Technology Option | Purpose |\n|-----------|------------------|---------|\n| **Frontend** | Rea...",
+      "runtime": "opencode",
+      "status": "done",
+      "previewUrl": "http://localhost:3000",
+      "branch": "main",
+      "commitSha": null,
+      "prUrl": null,
+      "createdAt": "2026-05-10T22:12:43.370Z"
+    },
+    {
+      "id": "ver_mp0bw0uw_2fxvbq",
+      "sessionId": "default",
+      "command": "Create a minimal app architecture plan and include preview URL http://localhost:3000",
+      "summary": "# Minimal App Architecture Plan\n\n## 📁 Project Overview\n\n| Item | Details |\n|------|---------|\n| **Name** | minimal-app |\n| **Type** | Web Application |\n| **Preview** | `http://localhost:3000` |\n\n---\n\n## 🏗️ Architecture Layers\n\n```\n┌─────────────────────────────────────────┐\n│           PRESENTATION LAYER            │\n│   (UI Components, Pages, Styles)        │\n├─────────────────────────────────────────┤\n│            LOGIC LAYER                  │\n│   (API Routes, Business Logic)          │\n├─────────────────────────────────────────┤\n│             DATA LAYER                  │\n│   (Database, External APIs, Storage)    │\n└─────────────────────────────────────────┘\n```\n\n---\n\n## 📂 Folder Structure\n\n```\nminimal-app/\n├── src/\n│   ├── app/                    # Pages / Routes\n│   │   ├── layout.tsx         # Root layout\n│   │   ├── page.tsx           # Home page (/)\n│   │   └── api/               # API routes\n│   ├── components/            # Reusable UI components\n│   ├── lib/                   # Utilities, helpers\n│   └── types/                 # TypeScript types\n├── public/                     # Static assets\n├── package.json\n└── next.config.js\n```\n\n---\n\n## 🔧 Technology Stack\n\n| Layer | Technology |\n|-------|------------|\n| **Framework** | Next.js 14+ (App Router) |\n| **Language** | TypeScript |\n| **Styling** | Tailwind CSS |\n| **Runtime** | Node.js |\n\n---\n\n## 🚀 Quick Start\n\n```bash\n# 1. Create project\nnpx create-next-app@latest minimal-app --typescript --tailwind --eslint\n\n# 2. Navigate to project\ncd minimal-app\n\n# 3. Start dev server\nnpm run dev\n```\n\n**Preview:** → `http://localhost:3000`\n\n---\n\n## 🔌 API Structure (Minimal)\n\n| Endpoint | Method | Purpose |\n|----------|--------|---------|\n| `/api/health` | GET | Health check |\n| `/api/data` | GET/POST | Sample data e...",
+      "runtime": "opencode",
+      "status": "done",
+      "previewUrl": "http://localhost:3000",
+      "branch": "main",
+      "commitSha": null,
+      "prUrl": null,
+      "createdAt": "2026-05-10T22:12:18.392Z"
+    },
+    {
+      "id": "ver_mp0bdhaf_yk8pxk",
+      "sessionId": "default",
+      "command": "Build todo app",
+      "summary": "Initial run completed.",
+      "runtime": "opencode",
+      "status": "done",
+      "previewUrl": "http://localhost:3000",
+      "branch": null,
+      "commitSha": null,
+      "prUrl": null,
+      "createdAt": "2026-05-10T21:57:53.223Z"
+    }
+  ]
+}

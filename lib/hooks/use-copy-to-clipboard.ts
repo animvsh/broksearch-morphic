@@ -20,13 +20,18 @@ export function useCopyToClipboard({
       return
     }
 
-    navigator.clipboard.writeText(value).then(() => {
-      setIsCopied(true)
+    navigator.clipboard
+      .writeText(value)
+      .then(() => {
+        setIsCopied(true)
 
-      setTimeout(() => {
+        setTimeout(() => {
+          setIsCopied(false)
+        }, timeout)
+      })
+      .catch(() => {
         setIsCopied(false)
-      }, timeout)
-    })
+      })
   }
 
   return { isCopied, copyToClipboard }

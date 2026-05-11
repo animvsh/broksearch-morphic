@@ -4,9 +4,9 @@
 
 **Goal:** Build a production-ready Perplexity-style Chat + Sonar-style API platform branded as Brok, with full API key management, admin panel, usage tracking, and rate limiting.
 
-**Architecture:** A Next.js app renamed from Morphic to Brok, with a FastAPI backend API gateway handling auth, rate limiting, usage metering, and provider routing to MiniMax. The existing admin panel gets a new "Brok API" section.
+**Architecture:** A Next.js app renamed from Morphic to Brok, with a FastAPI backend API gateway handling auth, rate limiting, usage metering, and provider routing to Brok. The existing admin panel gets a new "Brok API" section.
 
-**Tech Stack:** Next.js 16, React 19, TypeScript, Tailwind, shadcn/ui, Drizzle ORM, PostgreSQL, Redis, FastAPI, MiniMax API, Vercel AI SDK
+**Tech Stack:** Next.js 16, React 19, TypeScript, Tailwind, shadcn/ui, Drizzle ORM, PostgreSQL, Redis, FastAPI, Brok provider gateway, Vercel AI SDK
 
 ---
 
@@ -15,8 +15,9 @@
 ### Task 1: Brand Rename — Package.json, Config, Env
 
 **Files:**
+
 - Modify: `package.json` — name "morphic" → "brok"
-- Modify: `.env.local.example` — rename MORPHIC_ → BROK_ env vars
+- Modify: `.env.local.example` — rename MORPHIC* → BROK* env vars
 - Modify: `next.config.mjs` — rename project references
 - Modify: `proxy.ts` — rename
 - Modify: `docker-compose.yaml` — rename services/images
@@ -51,6 +52,7 @@ Run: Edit the file directly.
 - [ ] **Step 2: Modify .env.local.example**
 
 Replace all `MORPHIC_` with `BROK_`:
+
 ```
 BROK_APP_URL=http://localhost:3000
 BROK_API_URL=http://localhost:8080
@@ -64,11 +66,11 @@ BROK_REDIS_URL=redis://localhost:6379
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   name: 'Brok',
-  reactStrictMode: true,
+  reactStrictMode: true
   // ... existing config
-};
+}
 
-export default nextConfig;
+export default nextConfig
 ```
 
 - [ ] **Step 4: Update docker-compose.yaml**
@@ -96,6 +98,7 @@ git commit -m "feat: rename Morphic to Brok brand"
 ### Task 2: Rename Internal Code References
 
 **Files:**
+
 - Modify: `lib/config/` — rename config files
 - Modify: `public/config/models.json` — rename model provider IDs
 - Modify: `components/header.tsx` — app name
@@ -114,11 +117,12 @@ Rename model provider IDs from "morphic" to "brok" in model configs.
 ```tsx
 export const metadata: Metadata = {
   title: 'Brok - AI Answer Engine',
-  description: 'Brok gives developers a simple API for search-powered AI responses, coding agents, and low-cost intelligence.',
+  description:
+    'Brok gives developers a simple API for search-powered AI responses, coding agents, and low-cost intelligence.',
   icons: {
-    icon: '/favicon.ico',
-  },
-};
+    icon: '/favicon.ico'
+  }
+}
 ```
 
 - [ ] **Step 3: Update app/page.tsx**
@@ -145,6 +149,7 @@ git commit -m "feat: update code references to Brok"
 ### Task 3: Create Brok Directory Structure
 
 **Files:**
+
 - Create: `app/brok/` — Brok Chat UI
 - Create: `app/dashboard/` — Dashboard pages
 - Create: `app/api-keys/` — API key management
@@ -169,6 +174,7 @@ mkdir -p app/admin/brok
 Each directory gets a `page.tsx`:
 
 `app/brok/page.tsx`:
+
 ```tsx
 export default function BrokPage() {
   return (
@@ -176,18 +182,19 @@ export default function BrokPage() {
       <h1 className="text-3xl font-bold">Brok Chat</h1>
       <p className="text-muted-foreground">AI-powered search and chat</p>
     </main>
-  );
+  )
 }
 ```
 
 `app/dashboard/page.tsx`:
+
 ```tsx
 export default function DashboardPage() {
   return (
     <main className="p-6">
       <h1 className="text-2xl font-bold">Brok Dashboard</h1>
     </main>
-  );
+  )
 }
 ```
 
@@ -207,6 +214,7 @@ git commit -m "feat: create Brok directory structure"
 ### Task 4: Add Brok Database Schema
 
 **Files:**
+
 - Create: `lib/db/schema-brok.ts` — Brok API tables
 - Modify: `lib/db/schema.ts` — import brok schema
 
@@ -216,40 +224,40 @@ git commit -m "feat: create Brok directory structure"
 
 ```ts
 // lib/db/__tests__/api-key.test.ts
-import { describe, it, expect } from 'vitest';
-import { hashApiKey, verifyApiKey, generateApiKey } from '../api-key';
+import { describe, it, expect } from 'vitest'
+import { hashApiKey, verifyApiKey, generateApiKey } from '../api-key'
 
 describe('API Key Functions', () => {
   it('generates a key with correct prefix', () => {
-    const key = generateApiKey('live');
-    expect(key.startsWith('brok_sk_live_')).toBe(true);
-  });
+    const key = generateApiKey('live')
+    expect(key.startsWith('brok_sk_live_')).toBe(true)
+  })
 
   it('generates a key with correct prefix for test', () => {
-    const key = generateApiKey('test');
-    expect(key.startsWith('brok_sk_test_')).toBe(true);
-  });
+    const key = generateApiKey('test')
+    expect(key.startsWith('brok_sk_test_')).toBe(true)
+  })
 
   it('hashes a key consistently', () => {
-    const key = 'brok_sk_live_abc123';
-    const hash1 = hashApiKey(key);
-    const hash2 = hashApiKey(key);
-    expect(hash1).toBe(hash2);
-    expect(hash1).not.toBe(key);
-  });
+    const key = 'brok_sk_live_abc123'
+    const hash1 = hashApiKey(key)
+    const hash2 = hashApiKey(key)
+    expect(hash1).toBe(hash2)
+    expect(hash1).not.toBe(key)
+  })
 
   it('verifies a valid key', () => {
-    const key = generateApiKey('live');
-    const hash = hashApiKey(key);
-    expect(verifyApiKey(key, hash)).toBe(true);
-  });
+    const key = generateApiKey('live')
+    const hash = hashApiKey(key)
+    expect(verifyApiKey(key, hash)).toBe(true)
+  })
 
   it('rejects an invalid key', () => {
-    const key = generateApiKey('live');
-    const hash = hashApiKey(key);
-    expect(verifyApiKey('wrong_key', hash)).toBe(false);
-  });
-});
+    const key = generateApiKey('live')
+    const hash = hashApiKey(key)
+    expect(verifyApiKey('wrong_key', hash)).toBe(false)
+  })
+})
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -262,36 +270,37 @@ Expected: FAIL with "api-key not found"
 Create `lib/api-key.ts`:
 
 ```ts
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto'
 
-const SECRET_SALT = process.env.API_KEY_SALT || 'brok-default-salt-change-in-production';
+const SECRET_SALT =
+  process.env.API_KEY_SALT || 'brok-default-salt-change-in-production'
 
 export function generateApiKey(environment: 'live' | 'test' = 'live'): string {
-  const prefix = `brok_sk_${environment}_`;
-  const randomPart = randomBytes(24).toString('base64url');
-  return `${prefix}${randomPart}`;
+  const prefix = `brok_sk_${environment}_`
+  const randomPart = randomBytes(24).toString('base64url')
+  return `${prefix}${randomPart}`
 }
 
 export function hashApiKey(key: string): string {
   return createHash('sha256')
     .update(key + SECRET_SALT)
-    .digest('hex');
+    .digest('hex')
 }
 
 export function verifyApiKey(key: string, hash: string): boolean {
-  return hashApiKey(key) === hash;
+  return hashApiKey(key) === hash
 }
 
 export function maskApiKey(key: string): string {
-  if (key.length < 12) return '••••••••••••';
-  const prefix = key.slice(0, 12);
-  const suffix = key.slice(-4);
-  return `${prefix}••••••••${suffix}`;
+  if (key.length < 12) return '••••••••••••'
+  const prefix = key.slice(0, 12)
+  const suffix = key.slice(-4)
+  return `${prefix}••••••••${suffix}`
 }
 
 export function getKeyPrefix(key: string): string {
-  if (key.length < 8) return key;
-  return key.slice(0, 12);
+  if (key.length < 8) return key
+  return key.slice(0, 12)
 }
 ```
 
@@ -300,14 +309,41 @@ export function getKeyPrefix(key: string): string {
 Create `lib/db/schema-brok.ts`:
 
 ```ts
-import { pgTable, text, timestamp, boolean, integer, pgEnum, jsonb, uuid, decimal, index } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import {
+  pgTable,
+  text,
+  timestamp,
+  boolean,
+  integer,
+  pgEnum,
+  jsonb,
+  uuid,
+  decimal,
+  index
+} from 'drizzle-orm/pg-core'
+import { relations } from 'drizzle-orm'
 
 // Enums
-export const planEnum = pgEnum('plan', ['free', 'starter', 'pro', 'team', 'scale', 'enterprise']);
-export const keyStatusEnum = pgEnum('key_status', ['active', 'paused', 'revoked']);
-export const environmentEnum = pgEnum('environment', ['test', 'live']);
-export const endpointEnum = pgEnum('endpoint', ['chat', 'search', 'code', 'agents']);
+export const planEnum = pgEnum('plan', [
+  'free',
+  'starter',
+  'pro',
+  'team',
+  'scale',
+  'enterprise'
+])
+export const keyStatusEnum = pgEnum('key_status', [
+  'active',
+  'paused',
+  'revoked'
+])
+export const environmentEnum = pgEnum('environment', ['test', 'live'])
+export const endpointEnum = pgEnum('endpoint', [
+  'chat',
+  'search',
+  'code',
+  'agents'
+])
 
 // Workspaces
 export const workspaces = pgTable('workspaces', {
@@ -317,104 +353,135 @@ export const workspaces = pgTable('workspaces', {
   plan: planEnum('plan').default('free').notNull(),
   status: text('status').default('active').notNull(),
   monthlyBudgetCents: integer('monthly_budget_cents').default(0),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+  createdAt: timestamp('created_at').defaultNow().notNull()
+})
 
 // API Keys
-export const apiKeys = pgTable('api_keys', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  workspaceId: uuid('workspace_id').references(() => workspaces.id).notNull(),
-  userId: text('user_id').notNull(),
-  name: text('name').notNull(),
-  keyPrefix: text('key_prefix').notNull(), // brok_sk_live_xxxx
-  keyHash: text('key_hash').notNull(),    // sha256 hash
-  environment: environmentEnum('environment').notNull(),
-  status: keyStatusEnum('status').default('active').notNull(),
-  scopes: jsonb('scopes').default([]).notNull(), // ['chat:write', 'search:write']
-  allowedModels: jsonb('allowed_models').default([]).notNull(),
-  rpmLimit: integer('rpm_limit').default(60),
-  dailyRequestLimit: integer('daily_request_limit').default(5000),
-  monthlyBudgetCents: integer('monthly_budget_cents').default(0),
-  lastUsedAt: timestamp('last_used_at'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  revokedAt: timestamp('revoked_at'),
-}, (table) => ({
-  workspaceIdx: index('api_keys_workspace_idx').on(table.workspaceId),
-  keyHashIdx: index('api_keys_key_hash_idx').on(table.keyHash),
-}));
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    name: text('name').notNull(),
+    keyPrefix: text('key_prefix').notNull(), // brok_sk_live_xxxx
+    keyHash: text('key_hash').notNull(), // sha256 hash
+    environment: environmentEnum('environment').notNull(),
+    status: keyStatusEnum('status').default('active').notNull(),
+    scopes: jsonb('scopes').default([]).notNull(), // ['chat:write', 'search:write']
+    allowedModels: jsonb('allowed_models').default([]).notNull(),
+    rpmLimit: integer('rpm_limit').default(60),
+    dailyRequestLimit: integer('daily_request_limit').default(5000),
+    monthlyBudgetCents: integer('monthly_budget_cents').default(0),
+    lastUsedAt: timestamp('last_used_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    revokedAt: timestamp('revoked_at')
+  },
+  table => ({
+    workspaceIdx: index('api_keys_workspace_idx').on(table.workspaceId),
+    keyHashIdx: index('api_keys_key_hash_idx').on(table.keyHash)
+  })
+)
 
 // Usage Events
-export const usageEvents = pgTable('usage_events', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  requestId: text('request_id').notNull(),
-  workspaceId: uuid('workspace_id').references(() => workspaces.id).notNull(),
-  userId: text('user_id').notNull(),
-  apiKeyId: uuid('api_key_id').references(() => apiKeys.id),
-  endpoint: endpointEnum('endpoint').notNull(),
-  model: text('model').notNull(),
-  provider: text('provider').notNull(),
-  inputTokens: integer('input_tokens').default(0),
-  outputTokens: integer('output_tokens').default(0),
-  cachedTokens: integer('cached_tokens').default(0),
-  searchQueries: integer('search_queries').default(0),
-  pagesFetched: integer('pages_fetched').default(0),
-  toolCalls: integer('tool_calls').default(0),
-  providerCostUsd: decimal('provider_cost_usd', { precision: 10, scale: 6 }).default('0'),
-  billedUsd: decimal('billed_usd', { precision: 10, scale: 6 }).default('0'),
-  latencyMs: integer('latency_ms').default(0),
-  status: text('status').default('success').notNull(),
-  errorCode: text('error_code'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-}, (table) => ({
-  workspaceIdx: index('usage_events_workspace_idx').on(table.workspaceId),
-  apiKeyIdx: index('usage_events_api_key_idx').on(table.apiKeyId),
-  createdAtIdx: index('usage_events_created_at_idx').on(table.createdAt),
-}));
+export const usageEvents = pgTable(
+  'usage_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    requestId: text('request_id').notNull(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    apiKeyId: uuid('api_key_id').references(() => apiKeys.id),
+    endpoint: endpointEnum('endpoint').notNull(),
+    model: text('model').notNull(),
+    provider: text('provider').notNull(),
+    inputTokens: integer('input_tokens').default(0),
+    outputTokens: integer('output_tokens').default(0),
+    cachedTokens: integer('cached_tokens').default(0),
+    searchQueries: integer('search_queries').default(0),
+    pagesFetched: integer('pages_fetched').default(0),
+    toolCalls: integer('tool_calls').default(0),
+    providerCostUsd: decimal('provider_cost_usd', {
+      precision: 10,
+      scale: 6
+    }).default('0'),
+    billedUsd: decimal('billed_usd', { precision: 10, scale: 6 }).default('0'),
+    latencyMs: integer('latency_ms').default(0),
+    status: text('status').default('success').notNull(),
+    errorCode: text('error_code'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => ({
+    workspaceIdx: index('usage_events_workspace_idx').on(table.workspaceId),
+    apiKeyIdx: index('usage_events_api_key_idx').on(table.apiKeyId),
+    createdAtIdx: index('usage_events_created_at_idx').on(table.createdAt)
+  })
+)
 
 // Rate Limit Events
 export const rateLimitEvents = pgTable('rate_limit_events', {
   id: uuid('id').primaryKey().defaultRandom(),
-  workspaceId: uuid('workspace_id').references(() => workspaces.id).notNull(),
+  workspaceId: uuid('workspace_id')
+    .references(() => workspaces.id)
+    .notNull(),
   apiKeyId: uuid('api_key_id').references(() => apiKeys.id),
   limitType: text('limit_type').notNull(), // rpm, daily, monthly, budget
   limitValue: integer('limit_value').notNull(),
   currentValue: integer('current_value').notNull(),
   blocked: boolean('blocked').default(false).notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+  createdAt: timestamp('created_at').defaultNow().notNull()
+})
 
 // Provider Routes
-export const providerRoutes = pgTable('provider_routes', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  brokModel: text('brok_model').notNull(),
-  providerName: text('provider_name').notNull(),
-  providerModel: text('provider_model').notNull(),
-  priority: integer('priority').default(1),
-  isActive: boolean('is_active').default(true).notNull(),
-  inputCostPerMillion: decimal('input_cost_per_million', { precision: 10, scale: 4 }).default('0'),
-  outputCostPerMillion: decimal('output_cost_per_million', { precision: 10, scale: 4 }).default('0'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-}, (table) => ({
-  brokModelIdx: index('provider_routes_brok_model_idx').on(table.brokModel),
-}));
+export const providerRoutes = pgTable(
+  'provider_routes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    brokModel: text('brok_model').notNull(),
+    providerName: text('provider_name').notNull(),
+    providerModel: text('provider_model').notNull(),
+    priority: integer('priority').default(1),
+    isActive: boolean('is_active').default(true).notNull(),
+    inputCostPerMillion: decimal('input_cost_per_million', {
+      precision: 10,
+      scale: 4
+    }).default('0'),
+    outputCostPerMillion: decimal('output_cost_per_million', {
+      precision: 10,
+      scale: 4
+    }).default('0'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => ({
+    brokModelIdx: index('provider_routes_brok_model_idx').on(table.brokModel)
+  })
+)
 
 // Relations
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
   apiKeys: many(apiKeys),
-  usageEvents: many(usageEvents),
-}));
+  usageEvents: many(usageEvents)
+}))
 
 export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
-  workspace: one(workspaces, { fields: [apiKeys.workspaceId], references: [workspaces.id] }),
-  usageEvents: many(usageEvents),
-}));
+  workspace: one(workspaces, {
+    fields: [apiKeys.workspaceId],
+    references: [workspaces.id]
+  }),
+  usageEvents: many(usageEvents)
+}))
 ```
 
 - [ ] **Step 5: Update schema.ts to export brok schema**
 
 Add to existing schema:
+
 ```ts
-export * from './schema-brok';
+export * from './schema-brok'
 ```
 
 - [ ] **Step 6: Run test to verify it passes**
@@ -436,6 +503,7 @@ git commit -m "feat: add Brok API key schema and utilities"
 ### Task 5: Build API Key Auth Middleware
 
 **Files:**
+
 - Create: `lib/brok/auth.ts` — API key authentication
 - Create: `app/api/v1/chat/completions/route.ts` — chat endpoint
 - Create: `lib/brok/rate-limiter.ts` — rate limiting
@@ -449,42 +517,48 @@ git commit -m "feat: add Brok API key schema and utilities"
 
 ```ts
 // lib/brok/__tests__/auth.test.ts
-import { describe, it, expect, beforeAll } from 'vitest';
-import { verifyRequestAuth } from '../auth';
-import { hashApiKey, generateApiKey } from '@/lib/api-key';
+import { describe, it, expect, beforeAll } from 'vitest'
+import { verifyRequestAuth } from '../auth'
+import { hashApiKey, generateApiKey } from '@/lib/api-key'
 
 // Mock the db
 vi.mock('@/lib/db', () => ({
   db: {
     select: vi.fn(),
     insert: vi.fn(),
-    update: vi.fn(),
-  },
-}));
+    update: vi.fn()
+  }
+}))
 
 describe('verifyRequestAuth', () => {
-  const testKey = generateApiKey('live');
-  const testHash = hashApiKey(testKey);
+  const testKey = generateApiKey('live')
+  const testHash = hashApiKey(testKey)
 
   it('returns error for missing authorization header', async () => {
-    const result = await verifyRequestAuth({} as Request);
-    expect(result.error).toBe('missing_authorization');
-  });
+    const result = await verifyRequestAuth({} as Request)
+    expect(result.error).toBe('missing_authorization')
+  })
 
   it('returns error for invalid bearer format', async () => {
     const result = await verifyRequestAuth({
-      headers: { get: (name: string) => name === 'authorization' ? 'InvalidFormat' : null },
-    } as unknown as Request);
-    expect(result.error).toBe('invalid_authorization_format');
-  });
+      headers: {
+        get: (name: string) =>
+          name === 'authorization' ? 'InvalidFormat' : null
+      }
+    } as unknown as Request)
+    expect(result.error).toBe('invalid_authorization_format')
+  })
 
   it('returns error for unknown API key', async () => {
     const result = await verifyRequestAuth({
-      headers: { get: (name: string) => name === 'authorization' ? `Bearer ${testKey}` : null },
-    } as unknown as Request);
-    expect(result.error).toBe('invalid_api_key');
-  });
-});
+      headers: {
+        get: (name: string) =>
+          name === 'authorization' ? `Bearer ${testKey}` : null
+      }
+    } as unknown as Request)
+    expect(result.error).toBe('invalid_api_key')
+  })
+})
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -515,7 +589,7 @@ export interface AuthResult {
 
 export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   const authHeader = request.headers.get('authorization');
-  
+
   if (!authHeader) {
     return { success: false, error: 'missing_authorization', status: 401 };
   }
@@ -591,77 +665,77 @@ export const BROK_MODELS = {
   'brok-lite': {
     name: 'Brok Lite',
     description: 'Fast, low-cost reasoning for simple tasks',
-    provider: 'minimax',
-    providerModel: 'minimax-m2.7',
-    inputCostPerMillion: 0.10,
-    outputCostPerMillion: 0.40,
+    provider: 'Brok',
+    providerModel: 'Brok-m2.7',
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.4,
     maxTokens: 16000,
     supportsStreaming: true,
-    supportsSearch: false,
+    supportsSearch: false
   },
   'brok-search': {
     name: 'Brok Search',
     description: 'Search-powered answers with citations',
-    provider: 'minimax',
-    providerModel: 'minimax-text',
-    inputCostPerMillion: 0.10,
-    outputCostPerMillion: 0.40,
+    provider: 'Brok',
+    providerModel: 'Brok-text',
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.4,
     maxTokens: 16000,
     supportsStreaming: true,
-    supportsSearch: true,
+    supportsSearch: true
   },
   'brok-search-pro': {
     name: 'Brok Search Pro',
     description: 'Deep search with 10-20 sources',
-    provider: 'minimax',
-    providerModel: 'minimax-text',
+    provider: 'Brok',
+    providerModel: 'Brok-text',
     inputCostPerMillion: 0.15,
-    outputCostPerMillion: 0.60,
+    outputCostPerMillion: 0.6,
     maxTokens: 32000,
     supportsStreaming: true,
-    supportsSearch: true,
+    supportsSearch: true
   },
   'brok-code': {
     name: 'Brok Code',
     description: 'Code understanding and generation',
-    provider: 'minimax',
-    providerModel: 'minimax-code',
-    inputCostPerMillion: 0.10,
-    outputCostPerMillion: 0.40,
+    provider: 'Brok',
+    providerModel: 'Brok-code',
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.4,
     maxTokens: 16000,
     supportsStreaming: true,
     supportsSearch: false,
-    supportsCode: true,
+    supportsCode: true
   },
   'brok-agent': {
     name: 'Brok Agent',
     description: 'Tool-using agent with browser and search',
-    provider: 'minimax',
-    providerModel: 'minimax-agent',
+    provider: 'Brok',
+    providerModel: 'Brok-agent',
     inputCostPerMillion: 0.15,
-    outputCostPerMillion: 0.60,
+    outputCostPerMillion: 0.6,
     maxTokens: 32000,
     supportsStreaming: true,
     supportsSearch: true,
-    supportsTools: true,
+    supportsTools: true
   },
   'brok-reasoning': {
     name: 'Brok Reasoning',
     description: 'Advanced reasoning for complex problems',
-    provider: 'minimax',
-    providerModel: 'minimax-reasoning',
-    inputCostPerMillion: 0.20,
-    outputCostPerMillion: 0.80,
+    provider: 'Brok',
+    providerModel: 'Brok-reasoning',
+    inputCostPerMillion: 0.2,
+    outputCostPerMillion: 0.8,
     maxTokens: 32000,
     supportsStreaming: true,
-    supportsSearch: false,
-  },
-} as const;
+    supportsSearch: false
+  }
+} as const
 
-export type BrokModelId = keyof typeof BROK_MODELS;
+export type BrokModelId = keyof typeof BROK_MODELS
 
 export function isValidBrokModel(model: string): model is BrokModelId {
-  return model in BROK_MODELS;
+  return model in BROK_MODELS
 }
 ```
 
@@ -670,76 +744,86 @@ export function isValidBrokModel(model: string): model is BrokModelId {
 Create `lib/brok/provider-router.ts`:
 
 ```ts
-import { BROK_MODELS, BrokModelId } from './models';
+import { BROK_MODELS, BrokModelId } from './models'
 
 export interface ProviderRequest {
-  model: string;
-  messages: Array<{ role: string; content: string }>;
-  stream?: boolean;
-  temperature?: number;
-  maxTokens?: number;
+  model: string
+  messages: Array<{ role: string; content: string }>
+  stream?: boolean
+  temperature?: number
+  maxTokens?: number
 }
 
 export interface ProviderResponse {
-  id: string;
-  model: string;
+  id: string
+  model: string
   choices: Array<{
-    message: { role: string; content: string };
-    finish_reason: string;
-  }>;
+    message: { role: string; content: string }
+    finish_reason: string
+  }>
   usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+  }
 }
 
-export async function routeToProvider(model: BrokModelId, request: ProviderRequest): Promise<ProviderResponse> {
-  const modelConfig = BROK_MODELS[model];
-  
+export async function routeToProvider(
+  model: BrokModelId,
+  request: ProviderRequest
+): Promise<ProviderResponse> {
+  const modelConfig = BROK_MODELS[model]
+
   // Transform request to provider format
-  const providerRequest = transformToProviderRequest(model, request);
-  
+  const providerRequest = transformToProviderRequest(model, request)
+
   // Call appropriate provider
-  const providerApiKey = process.env.MINIMAX_API_KEY;
-  
+  const providerApiKey = process.env.BROK_PROVIDER_API_KEY
+
   if (!providerApiKey) {
-    throw new Error('Provider API key not configured');
+    throw new Error('Provider API key not configured')
   }
 
-  const response = await fetch('https://api.minimax.chat/v1/chat/completions', {
+  const response = await fetch('Brok provider gateway', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${providerApiKey}`,
-      'Content-Type': 'application/json',
+      Authorization: `Bearer ${providerApiKey}`,
+      'Content-Type': 'application/json'
     },
-    body: JSON.stringify(providerRequest),
-  });
+    body: JSON.stringify(providerRequest)
+  })
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Provider error: ${response.status} - ${error}`);
+    const error = await response.text()
+    throw new Error(`Provider error: ${response.status} - ${error}`)
   }
 
-  return response.json();
+  return response.json()
 }
 
-function transformToProviderRequest(model: BrokModelId, request: ProviderRequest) {
-  const modelConfig = BROK_MODELS[model];
+function transformToProviderRequest(
+  model: BrokModelId,
+  request: ProviderRequest
+) {
+  const modelConfig = BROK_MODELS[model]
   return {
     model: modelConfig.providerModel,
     messages: request.messages,
     stream: request.stream,
     temperature: request.temperature,
-    max_tokens: request.maxTokens,
-  };
+    max_tokens: request.maxTokens
+  }
 }
 
-export function calculateCost(model: BrokModelId, inputTokens: number, outputTokens: number): number {
-  const config = BROK_MODELS[model];
-  const inputCost = (inputTokens / 1_000_000) * config.inputCostPerMillion;
-  const outputCost = (outputTokens / 1_000_000) * config.outputCostPerMillion;
-  return inputCost + outputCost;
+export function calculateCost(
+  model: BrokModelId,
+  inputTokens: number,
+  outputTokens: number
+): number {
+  const config = BROK_MODELS[model]
+  const inputCost = (inputTokens / 1_000_000) * config.inputCostPerMillion
+  const outputCost = (outputTokens / 1_000_000) * config.outputCostPerMillion
+  return inputCost + outputCost
 }
 ```
 
@@ -748,15 +832,15 @@ export function calculateCost(model: BrokModelId, inputTokens: number, outputTok
 Create `lib/brok/rate-limiter.ts`:
 
 ```ts
-import { db } from '@/lib/db';
-import { rateLimitEvents } from '@/lib/db/schema-brok';
-import { eq, and, gte } from 'drizzle-orm';
+import { db } from '@/lib/db'
+import { rateLimitEvents } from '@/lib/db/schema-brok'
+import { eq, and, gte } from 'drizzle-orm'
 
 interface RateLimitResult {
-  allowed: boolean;
-  remaining: number;
-  limit: number;
-  resetAt: number;
+  allowed: boolean
+  remaining: number
+  limit: number
+  resetAt: number
 }
 
 export async function checkRateLimit(
@@ -764,8 +848,8 @@ export async function checkRateLimit(
   workspaceId: string,
   rpmLimit: number
 ): Promise<RateLimitResult> {
-  const now = new Date();
-  const oneMinuteAgo = new Date(now.getTime() - 60000);
+  const now = new Date()
+  const oneMinuteAgo = new Date(now.getTime() - 60000)
 
   // Count requests in last minute
   const [countResult] = await db
@@ -777,18 +861,18 @@ export async function checkRateLimit(
         eq(rateLimitEvents.limitType, 'rpm'),
         gte(rateLimitEvents.createdAt, oneMinuteAgo)
       )
-    );
+    )
 
-  const currentCount = countResult?.count || 0;
-  const remaining = Math.max(0, rpmLimit - currentCount);
-  const resetAt = Math.floor(now.getTime() / 1000) + 60;
+  const currentCount = countResult?.count || 0
+  const remaining = Math.max(0, rpmLimit - currentCount)
+  const resetAt = Math.floor(now.getTime() / 1000) + 60
 
   return {
     allowed: currentCount < rpmLimit,
     remaining,
     limit: rpmLimit,
-    resetAt,
-  };
+    resetAt
+  }
 }
 
 export async function recordRateLimitEvent(
@@ -805,8 +889,8 @@ export async function recordRateLimitEvent(
     limitType,
     limitValue,
     currentValue,
-    blocked,
-  });
+    blocked
+  })
 }
 ```
 
@@ -815,29 +899,29 @@ export async function recordRateLimitEvent(
 Create `lib/brok/usage-tracker.ts`:
 
 ```ts
-import { db } from '@/lib/db';
-import { usageEvents } from '@/lib/db/schema-brok';
-import { v4 as uuidv4 } from 'uuid';
+import { db } from '@/lib/db'
+import { usageEvents } from '@/lib/db/schema-brok'
+import { v4 as uuidv4 } from 'uuid'
 
 export interface UsageData {
-  requestId: string;
-  workspaceId: string;
-  userId: string;
-  apiKeyId: string;
-  endpoint: 'chat' | 'search' | 'code' | 'agents';
-  model: string;
-  provider: string;
-  inputTokens: number;
-  outputTokens: number;
-  cachedTokens?: number;
-  searchQueries?: number;
-  pagesFetched?: number;
-  toolCalls?: number;
-  providerCostUsd: number;
-  billedUsd: number;
-  latencyMs: number;
-  status: string;
-  errorCode?: string;
+  requestId: string
+  workspaceId: string
+  userId: string
+  apiKeyId: string
+  endpoint: 'chat' | 'search' | 'code' | 'agents'
+  model: string
+  provider: string
+  inputTokens: number
+  outputTokens: number
+  cachedTokens?: number
+  searchQueries?: number
+  pagesFetched?: number
+  toolCalls?: number
+  providerCostUsd: number
+  billedUsd: number
+  latencyMs: number
+  status: string
+  errorCode?: string
 }
 
 export async function recordUsage(data: UsageData): Promise<void> {
@@ -859,12 +943,12 @@ export async function recordUsage(data: UsageData): Promise<void> {
     billedUsd: data.billedUsd.toString(),
     latencyMs: data.latencyMs,
     status: data.status,
-    errorCode: data.errorCode,
-  });
+    errorCode: data.errorCode
+  })
 }
 
 export function generateRequestId(): string {
-  return `brok_${uuidv4().replace(/-/g, '').slice(0, 16)}`;
+  return `brok_${uuidv4().replace(/-/g, '').slice(0, 16)}`
 }
 ```
 
@@ -873,51 +957,63 @@ export function generateRequestId(): string {
 Create `app/api/v1/chat/completions/route.ts`:
 
 ```ts
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyRequestAuth, unauthorizedResponse } from '@/lib/brok/auth';
-import { isValidBrokModel, BROK_MODELS } from '@/lib/brok/models';
-import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter';
-import { recordUsage, generateRequestId } from '@/lib/brok/usage-tracker';
-import { routeToProvider, calculateCost } from '@/lib/brok/provider-router';
-import { headers } from 'next/headers';
+import { NextRequest, NextResponse } from 'next/server'
+import { verifyRequestAuth, unauthorizedResponse } from '@/lib/brok/auth'
+import { isValidBrokModel, BROK_MODELS } from '@/lib/brok/models'
+import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
+import { recordUsage, generateRequestId } from '@/lib/brok/usage-tracker'
+import { routeToProvider, calculateCost } from '@/lib/brok/provider-router'
+import { headers } from 'next/headers'
 
-export const runtime = 'edge';
+export const runtime = 'edge'
 
 export async function POST(request: NextRequest) {
-  const startTime = Date.now();
-  const requestId = generateRequestId();
+  const startTime = Date.now()
+  const requestId = generateRequestId()
 
   // Auth
-  const auth = await verifyRequestAuth(request);
+  const auth = await verifyRequestAuth(request)
   if (!auth.success) {
-    return unauthorizedResponse(auth);
+    return unauthorizedResponse(auth)
   }
 
   // Parse body
-  const body = await request.json();
-  const { model: modelId, messages, stream = false, temperature, max_tokens } = body;
+  const body = await request.json()
+  const {
+    model: modelId,
+    messages,
+    stream = false,
+    temperature,
+    max_tokens
+  } = body
 
   // Validate model
   if (!modelId || !isValidBrokModel(modelId)) {
-    return NextResponse.json({
-      error: {
-        type: 'invalid_request_error',
-        code: 'invalid_model',
-        message: `Invalid model. Available: ${Object.keys(BROK_MODELS).join(', ')}`,
-      }
-    }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: {
+          type: 'invalid_request_error',
+          code: 'invalid_model',
+          message: `Invalid model. Available: ${Object.keys(BROK_MODELS).join(', ')}`
+        }
+      },
+      { status: 400 }
+    )
   }
 
   // Check model is allowed for this key
-  const allowedModels = auth.apiKey.allowedModels as string[];
+  const allowedModels = auth.apiKey.allowedModels as string[]
   if (allowedModels.length > 0 && !allowedModels.includes(modelId)) {
-    return NextResponse.json({
-      error: {
-        type: 'invalid_request_error',
-        code: 'model_not_allowed',
-        message: `This API key does not have access to ${modelId}.`,
-      }
-    }, { status: 403 });
+    return NextResponse.json(
+      {
+        error: {
+          type: 'invalid_request_error',
+          code: 'model_not_allowed',
+          message: `This API key does not have access to ${modelId}.`
+        }
+      },
+      { status: 403 }
+    )
   }
 
   // Check rate limit
@@ -925,7 +1021,7 @@ export async function POST(request: NextRequest) {
     auth.apiKey.id,
     auth.workspace.id,
     auth.apiKey.rpmLimit
-  );
+  )
 
   if (!rateLimit.allowed) {
     await recordRateLimitEvent(
@@ -935,25 +1031,32 @@ export async function POST(request: NextRequest) {
       rateLimit.limit,
       rateLimit.limit,
       true
-    );
+    )
 
-    return NextResponse.json({
-      error: {
-        type: 'rate_limit_error',
-        code: 'rate_limit_exceeded',
-        message: 'Rate limit exceeded for this API key.',
-        limit: `${rateLimit.limit} requests per minute`,
-        retry_after_seconds: Math.ceil((rateLimit.resetAt * 1000 - Date.now()) / 1000),
+    return NextResponse.json(
+      {
+        error: {
+          type: 'rate_limit_error',
+          code: 'rate_limit_exceeded',
+          message: 'Rate limit exceeded for this API key.',
+          limit: `${rateLimit.limit} requests per minute`,
+          retry_after_seconds: Math.ceil(
+            (rateLimit.resetAt * 1000 - Date.now()) / 1000
+          )
+        }
+      },
+      {
+        status: 429,
+        headers: {
+          'X-Brok-RateLimit-Limit': String(rateLimit.limit),
+          'X-Brok-RateLimit-Remaining': String(rateLimit.remaining),
+          'X-Brok-RateLimit-Reset': String(rateLimit.resetAt),
+          'Retry-After': String(
+            Math.ceil((rateLimit.resetAt * 1000 - Date.now()) / 1000)
+          )
+        }
       }
-    }, {
-      status: 429,
-      headers: {
-        'X-Brok-RateLimit-Limit': String(rateLimit.limit),
-        'X-Brok-RateLimit-Remaining': String(rateLimit.remaining),
-        'X-Brok-RateLimit-Reset': String(rateLimit.resetAt),
-        'Retry-After': String(Math.ceil((rateLimit.resetAt * 1000 - Date.now()) / 1000)),
-      }
-    });
+    )
   }
 
   // Record rate limit check
@@ -964,7 +1067,7 @@ export async function POST(request: NextRequest) {
     rateLimit.limit,
     rateLimit.limit - rateLimit.remaining,
     false
-  );
+  )
 
   try {
     // Route to provider
@@ -973,17 +1076,17 @@ export async function POST(request: NextRequest) {
       messages,
       stream,
       temperature,
-      maxTokens: max_tokens,
-    });
+      maxTokens: max_tokens
+    })
 
-    const latencyMs = Date.now() - startTime;
+    const latencyMs = Date.now() - startTime
 
     // Calculate costs
-    const inputTokens = providerResponse.usage?.prompt_tokens || 0;
-    const outputTokens = providerResponse.usage?.completion_tokens || 0;
-    const providerCost = calculateCost(modelId, inputTokens, outputTokens);
-    const markup = 1.5; // 50% markup
-    const billedAmount = providerCost * markup;
+    const inputTokens = providerResponse.usage?.prompt_tokens || 0
+    const outputTokens = providerResponse.usage?.completion_tokens || 0
+    const providerCost = calculateCost(modelId, inputTokens, outputTokens)
+    const markup = 1.5 // 50% markup
+    const billedAmount = providerCost * markup
 
     // Record usage
     await recordUsage({
@@ -999,8 +1102,8 @@ export async function POST(request: NextRequest) {
       providerCostUsd: providerCost,
       billedUsd: billedAmount,
       latencyMs,
-      status: 'success',
-    });
+      status: 'success'
+    })
 
     // Transform response to Brok format
     const brokResponse = {
@@ -1008,20 +1111,19 @@ export async function POST(request: NextRequest) {
       object: 'chat.completion',
       model: modelId,
       choices: providerResponse.choices,
-      usage: providerResponse.usage,
-    };
+      usage: providerResponse.usage
+    }
 
     return NextResponse.json(brokResponse, {
       headers: {
         'X-Brok-Request-Id': requestId,
         'X-Brok-RateLimit-Limit': String(rateLimit.limit),
         'X-Brok-RateLimit-Remaining': String(rateLimit.remaining - 1),
-        'X-Brok-RateLimit-Reset': String(rateLimit.resetAt),
+        'X-Brok-RateLimit-Reset': String(rateLimit.resetAt)
       }
-    });
-
+    })
   } catch (error) {
-    const latencyMs = Date.now() - startTime;
+    const latencyMs = Date.now() - startTime
 
     await recordUsage({
       requestId,
@@ -1037,16 +1139,19 @@ export async function POST(request: NextRequest) {
       billedUsd: 0,
       latencyMs,
       status: 'error',
-      errorCode: error instanceof Error ? error.message : 'unknown_error',
-    });
+      errorCode: error instanceof Error ? error.message : 'unknown_error'
+    })
 
-    return NextResponse.json({
-      error: {
-        type: 'internal_error',
-        code: 'provider_error',
-        message: error instanceof Error ? error.message : 'An error occurred',
-      }
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: {
+          type: 'internal_error',
+          code: 'provider_error',
+          message: error instanceof Error ? error.message : 'An error occurred'
+        }
+      },
+      { status: 500 }
+    )
   }
 }
 ```
@@ -1065,6 +1170,7 @@ git commit -m "feat: add Brok API gateway with /v1/chat/completions"
 ### Task 6: Build API Key Management Pages
 
 **Files:**
+
 - Create: `app/api-keys/page.tsx` — API key list
 - Create: `app/api-keys/new/page.tsx` — Create key form
 - Create: `components/api-key-table.tsx` — Key table component
@@ -1078,43 +1184,55 @@ git commit -m "feat: add Brok API gateway with /v1/chat/completions"
 Create `lib/actions/api-keys.ts`:
 
 ```ts
-'use server';
+'use server'
 
-import { db } from '@/lib/db';
-import { apiKeys, workspaces } from '@/lib/db/schema';
-import { generateApiKey, hashApiKey, maskApiKey, getKeyPrefix } from '@/lib/api-key';
-import { eq } from 'drizzle-orm';
-import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { db } from '@/lib/db'
+import { apiKeys, workspaces } from '@/lib/db/schema'
+import {
+  generateApiKey,
+  hashApiKey,
+  maskApiKey,
+  getKeyPrefix
+} from '@/lib/api-key'
+import { eq } from 'drizzle-orm'
+import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 
 export interface CreateApiKeyInput {
-  name: string;
-  environment: 'test' | 'live';
-  scopes: string[];
-  allowedModels: string[];
-  rpmLimit: number;
-  dailyRequestLimit: number;
-  monthlyBudgetCents: number;
+  name: string
+  environment: 'test' | 'live'
+  scopes: string[]
+  allowedModels: string[]
+  rpmLimit: number
+  dailyRequestLimit: number
+  monthlyBudgetCents: number
 }
 
-export async function createApiKey(userId: string, workspaceId: string, input: CreateApiKeyInput) {
-  const rawKey = generateApiKey(input.environment);
-  const keyHash = hashApiKey(rawKey);
-  const keyPrefix = getKeyPrefix(rawKey);
+export async function createApiKey(
+  userId: string,
+  workspaceId: string,
+  input: CreateApiKeyInput
+) {
+  const rawKey = generateApiKey(input.environment)
+  const keyHash = hashApiKey(rawKey)
+  const keyPrefix = getKeyPrefix(rawKey)
 
-  const [newKey] = await db.insert(apiKeys).values({
-    workspaceId,
-    userId,
-    name: input.name,
-    keyPrefix,
-    keyHash,
-    environment: input.environment,
-    scopes: input.scopes,
-    allowedModels: input.allowedModels,
-    rpmLimit: input.rpmLimit,
-    dailyRequestLimit: input.dailyRequestLimit,
-    monthlyBudgetCents: input.monthlyBudgetCents,
-  }).returning();
+  const [newKey] = await db
+    .insert(apiKeys)
+    .values({
+      workspaceId,
+      userId,
+      name: input.name,
+      keyPrefix,
+      keyHash,
+      environment: input.environment,
+      scopes: input.scopes,
+      allowedModels: input.allowedModels,
+      rpmLimit: input.rpmLimit,
+      dailyRequestLimit: input.dailyRequestLimit,
+      monthlyBudgetCents: input.monthlyBudgetCents
+    })
+    .returning()
 
   return {
     id: newKey.id,
@@ -1128,15 +1246,15 @@ export async function createApiKey(userId: string, workspaceId: string, input: C
     rpmLimit: newKey.rpmLimit,
     dailyRequestLimit: newKey.dailyRequestLimit,
     monthlyBudgetCents: newKey.monthlyBudgetCents,
-    createdAt: newKey.createdAt,
-  };
+    createdAt: newKey.createdAt
+  }
 }
 
 export async function listApiKeys(workspaceId: string) {
   const keys = await db
     .select()
     .from(apiKeys)
-    .where(eq(apiKeys.workspaceId, workspaceId));
+    .where(eq(apiKeys.workspaceId, workspaceId))
 
   return keys.map(key => ({
     id: key.id,
@@ -1151,35 +1269,35 @@ export async function listApiKeys(workspaceId: string) {
     dailyRequestLimit: key.dailyRequestLimit,
     monthlyBudgetCents: key.monthlyBudgetCents,
     lastUsedAt: key.lastUsedAt,
-    createdAt: key.createdAt,
-  }));
+    createdAt: key.createdAt
+  }))
 }
 
 export async function revokeApiKey(keyId: string) {
   await db
     .update(apiKeys)
     .set({ status: 'revoked', revokedAt: new Date() })
-    .where(eq(apiKeys.id, keyId));
+    .where(eq(apiKeys.id, keyId))
 
-  revalidatePath('/api-keys');
+  revalidatePath('/api-keys')
 }
 
 export async function pauseApiKey(keyId: string) {
   await db
     .update(apiKeys)
     .set({ status: 'paused' })
-    .where(eq(apiKeys.id, keyId));
+    .where(eq(apiKeys.id, keyId))
 
-  revalidatePath('/api-keys');
+  revalidatePath('/api-keys')
 }
 
 export async function resumeApiKey(keyId: string) {
   await db
     .update(apiKeys)
     .set({ status: 'active' })
-    .where(eq(apiKeys.id, keyId));
+    .where(eq(apiKeys.id, keyId))
 
-  revalidatePath('/api-keys');
+  revalidatePath('/api-keys')
 }
 ```
 
@@ -1188,15 +1306,15 @@ export async function resumeApiKey(keyId: string) {
 `app/api-keys/page.tsx`:
 
 ```tsx
-import { listApiKeys } from '@/lib/actions/api-keys';
-import { ApiKeyTable } from '@/components/api-key-table';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
+import { listApiKeys } from '@/lib/actions/api-keys'
+import { ApiKeyTable } from '@/components/api-key-table'
+import { Button } from '@/components/ui/button'
+import Link from 'next/link'
 
 export default async function ApiKeysPage() {
   // Get workspace from session (placeholder)
-  const workspaceId = 'demo-workspace';
-  const keys = await listApiKeys(workspaceId);
+  const workspaceId = 'demo-workspace'
+  const keys = await listApiKeys(workspaceId)
 
   return (
     <div className="container py-8">
@@ -1221,12 +1339,13 @@ export default async function ApiKeysPage() {
 
       <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p className="text-sm text-yellow-800">
-          <strong>Important:</strong> Your API key is only shown once after creation.
-          Copy it somewhere safe. You will not be able to see it again.
+          <strong>Important:</strong> Your API key is only shown once after
+          creation. Copy it somewhere safe. You will not be able to see it
+          again.
         </p>
       </div>
     </div>
-  );
+  )
 }
 ```
 
@@ -1235,24 +1354,31 @@ export default async function ApiKeysPage() {
 `components/api-key-table.tsx`:
 
 ```tsx
-'use client';
+'use client'
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { pauseApiKey, resumeApiKey, revokeApiKey } from '@/lib/actions/api-keys';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { pauseApiKey, resumeApiKey, revokeApiKey } from '@/lib/actions/api-keys'
 
 interface ApiKey {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  maskedKey: string;
-  environment: 'test' | 'live';
-  status: 'active' | 'paused' | 'revoked';
-  scopes: string[];
-  rpmLimit: number;
-  lastUsedAt: Date | null;
-  createdAt: Date;
+  id: string
+  name: string
+  keyPrefix: string
+  maskedKey: string
+  environment: 'test' | 'live'
+  status: 'active' | 'paused' | 'revoked'
+  scopes: string[]
+  rpmLimit: number
+  lastUsedAt: Date | null
+  createdAt: Date
 }
 
 export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
@@ -1261,7 +1387,7 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
       <p className="text-muted-foreground py-4 text-center">
         No API keys yet. Create your first key to get started.
       </p>
-    );
+    )
   }
 
   return (
@@ -1278,22 +1404,25 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {keys.map((key) => (
+        {keys.map(key => (
           <TableRow key={key.id}>
             <TableCell className="font-medium">{key.name}</TableCell>
-            <TableCell className="font-mono text-sm">
-              {key.maskedKey}
-            </TableCell>
+            <TableCell className="font-mono text-sm">{key.maskedKey}</TableCell>
             <TableCell>
-              <Badge variant={key.environment === 'live' ? 'default' : 'secondary'}>
+              <Badge
+                variant={key.environment === 'live' ? 'default' : 'secondary'}
+              >
                 {key.environment}
               </Badge>
             </TableCell>
             <TableCell>
               <Badge
                 variant={
-                  key.status === 'active' ? 'default' :
-                  key.status === 'paused' ? 'secondary' : 'destructive'
+                  key.status === 'active'
+                    ? 'default'
+                    : key.status === 'paused'
+                      ? 'secondary'
+                      : 'destructive'
                 }
               >
                 {key.status}
@@ -1337,7 +1466,7 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
         ))}
       </TableBody>
     </Table>
-  );
+  )
 }
 ```
 
@@ -1346,8 +1475,8 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
 `app/api-keys/new/page.tsx`:
 
 ```tsx
-import { CreateApiKeyForm } from '@/components/create-api-key-form';
-import { createApiKey } from '@/lib/actions/api-keys';
+import { CreateApiKeyForm } from '@/components/create-api-key-form'
+import { createApiKey } from '@/lib/actions/api-keys'
 
 export default function NewApiKeyPage() {
   return (
@@ -1363,12 +1492,12 @@ export default function NewApiKeyPage() {
 
       <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p className="text-sm text-yellow-800">
-          <strong>Warning:</strong> Your API key will only be shown once after creation.
-          Make sure to copy it somewhere safe.
+          <strong>Warning:</strong> Your API key will only be shown once after
+          creation. Make sure to copy it somewhere safe.
         </p>
       </div>
     </div>
-  );
+  )
 }
 ```
 
@@ -1377,17 +1506,27 @@ export default function NewApiKeyPage() {
 `components/create-api-key-form.tsx`:
 
 ```tsx
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { createApiKey, CreateApiKeyInput } from '@/lib/actions/api-keys';
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
+import { createApiKey, CreateApiKeyInput } from '@/lib/actions/api-keys'
 
 interface CreateApiKeyFormProps {
-  action: (userId: string, workspaceId: string, input: CreateApiKeyInput) => Promise<any>;
+  action: (
+    userId: string,
+    workspaceId: string,
+    input: CreateApiKeyInput
+  ) => Promise<any>
 }
 
 const AVAILABLE_MODELS = [
@@ -1396,8 +1535,8 @@ const AVAILABLE_MODELS = [
   { id: 'brok-search-pro', name: 'Brok Search Pro' },
   { id: 'brok-code', name: 'Brok Code' },
   { id: 'brok-agent', name: 'Brok Agent' },
-  { id: 'brok-reasoning', name: 'Brok Reasoning' },
-];
+  { id: 'brok-reasoning', name: 'Brok Reasoning' }
+]
 
 const AVAILABLE_SCOPES = [
   { id: 'chat:write', name: 'Chat Completions' },
@@ -1405,23 +1544,23 @@ const AVAILABLE_SCOPES = [
   { id: 'code:write', name: 'Code Execution' },
   { id: 'agents:write', name: 'Agent Execution' },
   { id: 'usage:read', name: 'Read Usage' },
-  { id: 'logs:read', name: 'Read Logs' },
-];
+  { id: 'logs:read', name: 'Read Logs' }
+]
 
 export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
-  const [name, setName] = useState('');
-  const [environment, setEnvironment] = useState<'test' | 'live'>('test');
-  const [selectedModels, setSelectedModels] = useState<string[]>([]);
-  const [selectedScopes, setSelectedScopes] = useState<string[]>(['chat:write']);
-  const [rpmLimit, setRpmLimit] = useState(60);
-  const [dailyLimit, setDailyLimit] = useState(5000);
-  const [createdKey, setCreatedKey] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState('')
+  const [environment, setEnvironment] = useState<'test' | 'live'>('test')
+  const [selectedModels, setSelectedModels] = useState<string[]>([])
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(['chat:write'])
+  const [rpmLimit, setRpmLimit] = useState(60)
+  const [dailyLimit, setDailyLimit] = useState(5000)
+  const [createdKey, setCreatedKey] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    
+    e.preventDefault()
+    setLoading(true)
+
     try {
       const result = await action('demo-user', 'demo-workspace', {
         name,
@@ -1430,13 +1569,13 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
         allowedModels: selectedModels,
         rpmLimit,
         dailyRequestLimit: dailyLimit,
-        monthlyBudgetCents: 0,
-      });
-      setCreatedKey(result);
+        monthlyBudgetCents: 0
+      })
+      setCreatedKey(result)
     } catch (error) {
-      console.error('Failed to create key:', error);
+      console.error('Failed to create key:', error)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
@@ -1445,7 +1584,7 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
       prev.includes(modelId)
         ? prev.filter(m => m !== modelId)
         : [...prev, modelId]
-    );
+    )
   }
 
   function toggleScope(scopeId: string) {
@@ -1453,13 +1592,15 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
       prev.includes(scopeId)
         ? prev.filter(s => s !== scopeId)
         : [...prev, scopeId]
-    );
+    )
   }
 
   if (createdKey) {
     return (
       <div className="rounded-lg border bg-card p-6">
-        <h2 className="text-lg font-semibold mb-4 text-green-600">API Key Created!</h2>
+        <h2 className="text-lg font-semibold mb-4 text-green-600">
+          API Key Created!
+        </h2>
         <div className="space-y-4">
           <div>
             <Label>Your API Key</Label>
@@ -1472,18 +1613,21 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
           </p>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="text-muted-foreground">Name:</span> {createdKey.name}
+              <span className="text-muted-foreground">Name:</span>{' '}
+              {createdKey.name}
             </div>
             <div>
-              <span className="text-muted-foreground">Environment:</span> {createdKey.environment}
+              <span className="text-muted-foreground">Environment:</span>{' '}
+              {createdKey.environment}
             </div>
             <div>
-              <span className="text-muted-foreground">Rate Limit:</span> {createdKey.rpmLimit} RPM
+              <span className="text-muted-foreground">Rate Limit:</span>{' '}
+              {createdKey.rpmLimit} RPM
             </div>
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -1493,7 +1637,7 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
         <Input
           id="name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={e => setName(e.target.value)}
           placeholder="Production App"
           required
         />
@@ -1501,7 +1645,10 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
 
       <div>
         <Label htmlFor="environment">Environment</Label>
-        <Select value={environment} onValueChange={(v) => setEnvironment(v as 'test' | 'live')}>
+        <Select
+          value={environment}
+          onValueChange={v => setEnvironment(v as 'test' | 'live')}
+        >
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -1515,8 +1662,11 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
       <div>
         <Label>Allowed Models</Label>
         <div className="grid grid-cols-2 gap-2 mt-2">
-          {AVAILABLE_MODELS.map((model) => (
-            <label key={model.id} className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-muted">
+          {AVAILABLE_MODELS.map(model => (
+            <label
+              key={model.id}
+              className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-muted"
+            >
               <input
                 type="checkbox"
                 checked={selectedModels.includes(model.id)}
@@ -1534,8 +1684,11 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
       <div>
         <Label>Scopes</Label>
         <div className="grid grid-cols-2 gap-2 mt-2">
-          {AVAILABLE_SCOPES.map((scope) => (
-            <label key={scope.id} className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-muted">
+          {AVAILABLE_SCOPES.map(scope => (
+            <label
+              key={scope.id}
+              className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-muted"
+            >
               <input
                 type="checkbox"
                 checked={selectedScopes.includes(scope.id)}
@@ -1554,7 +1707,7 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
             id="rpm"
             type="number"
             value={rpmLimit}
-            onChange={(e) => setRpmLimit(Number(e.target.value))}
+            onChange={e => setRpmLimit(Number(e.target.value))}
             min={1}
             max={1000}
           />
@@ -1565,7 +1718,7 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
             id="daily"
             type="number"
             value={dailyLimit}
-            onChange={(e) => setDailyLimit(Number(e.target.value))}
+            onChange={e => setDailyLimit(Number(e.target.value))}
             min={1}
             max={100000}
           />
@@ -1576,7 +1729,7 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
         {loading ? 'Creating...' : 'Create API Key'}
       </Button>
     </form>
-  );
+  )
 }
 ```
 
@@ -1594,6 +1747,7 @@ git commit -m "feat: add API key management UI"
 ### Task 7: Add Brok API Admin Section
 
 **Files:**
+
 - Create: `app/admin/brok/page.tsx` — Brok overview
 - Create: `app/admin/brok/api-keys/page.tsx` — Admin key management
 - Create: `app/admin/brok/usage/page.tsx` — Admin usage
@@ -1610,11 +1764,11 @@ git commit -m "feat: add API key management UI"
 `app/admin/brok/page.tsx`:
 
 ```tsx
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getBrokStats } from '@/lib/actions/admin-brok';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { getBrokStats } from '@/lib/actions/admin-brok'
 
 export default async function BrokAdminPage() {
-  const stats = await getBrokStats();
+  const stats = await getBrokStats()
 
   return (
     <div className="space-y-6">
@@ -1631,7 +1785,9 @@ export default async function BrokAdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.requestsToday.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              {stats.requestsToday.toLocaleString()}
+            </div>
           </CardContent>
         </Card>
 
@@ -1642,7 +1798,9 @@ export default async function BrokAdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.tokensToday.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              {stats.tokensToday.toLocaleString()}
+            </div>
           </CardContent>
         </Card>
 
@@ -1653,7 +1811,9 @@ export default async function BrokAdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats.revenueToday.toFixed(2)}</div>
+            <div className="text-2xl font-bold">
+              ${stats.revenueToday.toFixed(2)}
+            </div>
           </CardContent>
         </Card>
 
@@ -1664,7 +1824,9 @@ export default async function BrokAdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats.providerCostToday.toFixed(2)}</div>
+            <div className="text-2xl font-bold">
+              ${stats.providerCostToday.toFixed(2)}
+            </div>
           </CardContent>
         </Card>
 
@@ -1677,8 +1839,12 @@ export default async function BrokAdminPage() {
           <CardContent>
             <div className="text-2xl font-bold">
               {stats.revenueToday > 0
-                ? ((1 - stats.providerCostToday / stats.revenueToday) * 100).toFixed(1)
-                : 0}%
+                ? (
+                    (1 - stats.providerCostToday / stats.revenueToday) *
+                    100
+                  ).toFixed(1)
+                : 0}
+              %
             </div>
           </CardContent>
         </Card>
@@ -1725,14 +1891,23 @@ export default async function BrokAdminPage() {
           <CardContent>
             <div className="space-y-4">
               {stats.topUsersByUsage.map((user, i) => (
-                <div key={user.id} className="flex items-center justify-between">
+                <div
+                  key={user.id}
+                  className="flex items-center justify-between"
+                >
                   <div>
                     <p className="font-medium">{user.email}</p>
-                    <p className="text-sm text-muted-foreground">{user.workspace}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {user.workspace}
+                    </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-medium">{user.requestsToday.toLocaleString()} req</p>
-                    <p className="text-sm text-muted-foreground">${user.costToday.toFixed(2)}</p>
+                    <p className="font-medium">
+                      {user.requestsToday.toLocaleString()} req
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      ${user.costToday.toFixed(2)}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -1746,7 +1921,7 @@ export default async function BrokAdminPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {stats.modelUsage.map((model) => (
+              {stats.modelUsage.map(model => (
                 <div key={model.id}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium">{model.id}</span>
@@ -1767,7 +1942,7 @@ export default async function BrokAdminPage() {
         </Card>
       </div>
     </div>
-  );
+  )
 }
 ```
 
@@ -1776,15 +1951,20 @@ export default async function BrokAdminPage() {
 Create `lib/actions/admin-brok.ts`:
 
 ```ts
-'use server';
+'use server'
 
-import { db } from '@/lib/db';
-import { usageEvents, apiKeys, workspaces, providerRoutes } from '@/lib/db/schema-brok';
-import { eq, sql, and, gte } from 'drizzle-orm';
+import { db } from '@/lib/db'
+import {
+  usageEvents,
+  apiKeys,
+  workspaces,
+  providerRoutes
+} from '@/lib/db/schema-brok'
+import { eq, sql, and, gte } from 'drizzle-orm'
 
 export async function getBrokStats() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
 
   // Get usage stats for today
   const [usageStats] = await db
@@ -1795,16 +1975,16 @@ export async function getBrokStats() {
       totalProviderCost: sql<number>`sum(${usageEvents.providerCostUsd})`,
       totalBilled: sql<number>`sum(${usageEvents.billedUsd})`,
       avgLatency: sql<number>`avg(${usageEvents.latencyMs})`,
-      failedCount: sql<number>`count(*) filter (where ${usageEvents.status} = 'error')`,
+      failedCount: sql<number>`count(*) filter (where ${usageEvents.status} = 'error')`
     })
     .from(usageEvents)
-    .where(gte(usageEvents.createdAt, today));
+    .where(gte(usageEvents.createdAt, today))
 
   // Get active API keys count
   const [activeKeysResult] = await db
     .select({ count: sql<number>`count(*)` })
     .from(apiKeys)
-    .where(eq(apiKeys.status, 'active'));
+    .where(eq(apiKeys.status, 'active'))
 
   // Get top users by usage
   const topUsers = await db
@@ -1813,51 +1993,53 @@ export async function getBrokStats() {
       email: workspaces.name,
       workspace: workspaces.name,
       requestsToday: sql<number>`count(${usageEvents.id})`,
-      costToday: sql<number>`sum(${usageEvents.billedUsd})`,
+      costToday: sql<number>`sum(${usageEvents.billedUsd})`
     })
     .from(usageEvents)
     .innerJoin(workspaces, eq(workspaces.id, usageEvents.workspaceId))
     .where(gte(usageEvents.createdAt, today))
     .groupBy(workspaces.id)
     .orderBy(sql`count(${usageEvents.id}) desc`)
-    .limit(10);
+    .limit(10)
 
   // Get model usage split
   const modelUsage = await db
     .select({
       id: usageEvents.model,
-      count: sql<number>`count(*)`,
+      count: sql<number>`count(*)`
     })
     .from(usageEvents)
     .where(gte(usageEvents.createdAt, today))
     .groupBy(usageEvents.model)
-    .orderBy(sql`count(*) desc`);
+    .orderBy(sql`count(*) desc`)
 
-  const totalRequests = Number(usageStats?.totalRequests) || 0;
-  const modelUsageWithPercentage = modelUsage.map((m) => ({
+  const totalRequests = Number(usageStats?.totalRequests) || 0
+  const modelUsageWithPercentage = modelUsage.map(m => ({
     ...m,
-    percentage: totalRequests > 0 ? (Number(m.count) / totalRequests) * 100 : 0,
-  }));
+    percentage: totalRequests > 0 ? (Number(m.count) / totalRequests) * 100 : 0
+  }))
 
   return {
     requestsToday: totalRequests,
-    tokensToday: Number(usageStats?.totalInputTokens || 0) + Number(usageStats?.totalOutputTokens || 0),
+    tokensToday:
+      Number(usageStats?.totalInputTokens || 0) +
+      Number(usageStats?.totalOutputTokens || 0),
     revenueToday: Number(usageStats?.totalBilled) || 0,
     providerCostToday: Number(usageStats?.totalProviderCost) || 0,
     avgLatencyMs: Math.round(Number(usageStats?.avgLatency) || 0),
     failedRequests: Number(usageStats?.failedCount) || 0,
     activeApiKeys: Number(activeKeysResult?.count) || 0,
-    topUsersByUsage: topUsers.map((u) => ({
+    topUsersByUsage: topUsers.map(u => ({
       ...u,
       requestsToday: Number(u.requestsToday),
-      costToday: Number(u.costToday),
+      costToday: Number(u.costToday)
     })),
-    modelUsage: modelUsageWithPercentage.map((m) => ({
+    modelUsage: modelUsageWithPercentage.map(m => ({
       ...m,
       count: Number(m.count),
-      percentage: Number(m.percentage),
-    })),
-  };
+      percentage: Number(m.percentage)
+    }))
+  }
 }
 
 export async function getAllApiKeysForAdmin() {
@@ -1873,20 +2055,20 @@ export async function getAllApiKeysForAdmin() {
       scopes: apiKeys.scopes,
       rpmLimit: apiKeys.rpmLimit,
       lastUsedAt: apiKeys.lastUsedAt,
-      createdAt: apiKeys.createdAt,
+      createdAt: apiKeys.createdAt
     })
     .from(apiKeys)
-    .innerJoin(workspaces, eq(workspaces.id, apiKeys.workspaceId));
+    .innerJoin(workspaces, eq(workspaces.id, apiKeys.workspaceId))
 
-  return keys;
+  return keys
 }
 
 export async function getUsageForAdmin(filters: {
-  dateFrom?: Date;
-  dateTo?: Date;
-  workspaceId?: string;
-  model?: string;
-  endpoint?: string;
+  dateFrom?: Date
+  dateTo?: Date
+  workspaceId?: string
+  model?: string
+  endpoint?: string
 }) {
   let query = db
     .select({
@@ -1903,43 +2085,46 @@ export async function getUsageForAdmin(filters: {
       billedUsd: usageEvents.billedUsd,
       latencyMs: usageEvents.latencyMs,
       status: usageEvents.status,
-      createdAt: usageEvents.createdAt,
+      createdAt: usageEvents.createdAt
     })
     .from(usageEvents)
-    .innerJoin(workspaces, eq(workspaces.id, usageEvents.workspaceId));
+    .innerJoin(workspaces, eq(workspaces.id, usageEvents.workspaceId))
 
-  const conditions = [];
+  const conditions = []
   if (filters.dateFrom) {
-    conditions.push(gte(usageEvents.createdAt, filters.dateFrom));
+    conditions.push(gte(usageEvents.createdAt, filters.dateFrom))
   }
   if (filters.workspaceId) {
-    conditions.push(eq(usageEvents.workspaceId, filters.workspaceId));
+    conditions.push(eq(usageEvents.workspaceId, filters.workspaceId))
   }
   if (filters.model) {
-    conditions.push(eq(usageEvents.model, filters.model));
+    conditions.push(eq(usageEvents.model, filters.model))
   }
   if (filters.endpoint) {
-    conditions.push(eq(usageEvents.endpoint, filters.endpoint));
+    conditions.push(eq(usageEvents.endpoint, filters.endpoint))
   }
 
   if (conditions.length > 0) {
-    query = query.where(and(...conditions)) as any;
+    query = query.where(and(...conditions)) as any
   }
 
-  return query.orderBy(usageEvents.createdAt.desc()).limit(1000);
+  return query.orderBy(usageEvents.createdAt.desc()).limit(1000)
 }
 
 export async function getProviderRoutes() {
-  return db.select().from(providerRoutes);
+  return db.select().from(providerRoutes)
 }
 
-export async function updateProviderRoute(id: string, updates: {
-  isActive?: boolean;
-  priority?: number;
-  inputCostPerMillion?: string;
-  outputCostPerMillion?: string;
-}) {
-  await db.update(providerRoutes).set(updates).where(eq(providerRoutes.id, id));
+export async function updateProviderRoute(
+  id: string,
+  updates: {
+    isActive?: boolean
+    priority?: number
+    inputCostPerMillion?: string
+    outputCostPerMillion?: string
+  }
+) {
+  await db.update(providerRoutes).set(updates).where(eq(providerRoutes.id, id))
 }
 ```
 
@@ -1948,14 +2133,21 @@ export async function updateProviderRoute(id: string, updates: {
 `app/admin/brok/api-keys/page.tsx`:
 
 ```tsx
-import { getAllApiKeysForAdmin } from '@/lib/actions/admin-brok';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { pauseApiKey, resumeApiKey, revokeApiKey } from '@/lib/actions/api-keys';
+import { getAllApiKeysForAdmin } from '@/lib/actions/admin-brok'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { pauseApiKey, resumeApiKey, revokeApiKey } from '@/lib/actions/api-keys'
 
 export default async function AdminApiKeysPage() {
-  const keys = await getAllApiKeysForAdmin();
+  const keys = await getAllApiKeysForAdmin()
 
   return (
     <div className="space-y-6">
@@ -1979,7 +2171,7 @@ export default async function AdminApiKeysPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {keys.map((key) => (
+            {keys.map(key => (
               <TableRow key={key.id}>
                 <TableCell className="font-medium">{key.name}</TableCell>
                 <TableCell>{key.workspaceName}</TableCell>
@@ -1987,15 +2179,22 @@ export default async function AdminApiKeysPage() {
                   {key.keyPrefix}••••••••
                 </TableCell>
                 <TableCell>
-                  <Badge variant={key.environment === 'live' ? 'default' : 'secondary'}>
+                  <Badge
+                    variant={
+                      key.environment === 'live' ? 'default' : 'secondary'
+                    }
+                  >
                     {key.environment}
                   </Badge>
                 </TableCell>
                 <TableCell>
                   <Badge
                     variant={
-                      key.status === 'active' ? 'default' :
-                      key.status === 'paused' ? 'secondary' : 'destructive'
+                      key.status === 'active'
+                        ? 'default'
+                        : key.status === 'paused'
+                          ? 'secondary'
+                          : 'destructive'
                     }
                   >
                     {key.status}
@@ -2012,8 +2211,8 @@ export default async function AdminApiKeysPage() {
                         variant="outline"
                         size="sm"
                         onClick={async () => {
-                          'use server';
-                          await pauseApiKey(key.id);
+                          'use server'
+                          await pauseApiKey(key.id)
                         }}
                       >
                         Pause
@@ -2023,8 +2222,8 @@ export default async function AdminApiKeysPage() {
                         variant="outline"
                         size="sm"
                         onClick={async () => {
-                          'use server';
-                          await resumeApiKey(key.id);
+                          'use server'
+                          await resumeApiKey(key.id)
                         }}
                       >
                         Resume
@@ -2034,8 +2233,8 @@ export default async function AdminApiKeysPage() {
                       variant="destructive"
                       size="sm"
                       onClick={async () => {
-                        'use server';
-                        await revokeApiKey(key.id);
+                        'use server'
+                        await revokeApiKey(key.id)
                       }}
                     >
                       Revoke
@@ -2048,7 +2247,7 @@ export default async function AdminApiKeysPage() {
         </Table>
       </div>
     </div>
-  );
+  )
 }
 ```
 
@@ -2057,20 +2256,27 @@ export default async function AdminApiKeysPage() {
 `app/admin/brok/logs/page.tsx`:
 
 ```tsx
-import { getUsageForAdmin } from '@/lib/actions/admin-brok';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { getUsageForAdmin } from '@/lib/actions/admin-brok'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
 
 export default async function AdminLogsPage({
-  searchParams,
+  searchParams
 }: {
-  searchParams: Promise<{ model?: string; endpoint?: string }>;
+  searchParams: Promise<{ model?: string; endpoint?: string }>
 }) {
-  const params = await searchParams;
+  const params = await searchParams
   const logs = await getUsageForAdmin({
     model: params.model,
-    endpoint: params.endpoint,
-  });
+    endpoint: params.endpoint
+  })
 
   return (
     <div className="space-y-6">
@@ -2096,7 +2302,7 @@ export default async function AdminLogsPage({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {logs.map((log) => (
+            {logs.map(log => (
               <TableRow key={log.id}>
                 <TableCell className="font-mono text-xs">
                   {log.requestId.slice(0, 12)}...
@@ -2112,7 +2318,9 @@ export default async function AdminLogsPage({
                 <TableCell>{log.latencyMs}ms</TableCell>
                 <TableCell>
                   <Badge
-                    variant={log.status === 'success' ? 'default' : 'destructive'}
+                    variant={
+                      log.status === 'success' ? 'default' : 'destructive'
+                    }
                   >
                     {log.status}
                   </Badge>
@@ -2126,7 +2334,7 @@ export default async function AdminLogsPage({
         </Table>
       </div>
     </div>
-  );
+  )
 }
 ```
 
@@ -2135,13 +2343,20 @@ export default async function AdminLogsPage({
 `app/admin/brok/providers/page.tsx`:
 
 ```tsx
-import { getProviderRoutes } from '@/lib/actions/admin-brok';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { getProviderRoutes } from '@/lib/actions/admin-brok'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 export default async function AdminProvidersPage() {
-  const routes = await getProviderRoutes();
+  const routes = await getProviderRoutes()
 
   return (
     <div className="space-y-6">
@@ -2167,11 +2382,13 @@ export default async function AdminProvidersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {routes.map((route) => (
+            {routes.map(route => (
               <TableRow key={route.id}>
                 <TableCell className="font-medium">{route.brokModel}</TableCell>
                 <TableCell>{route.providerName}</TableCell>
-                <TableCell className="font-mono text-sm">{route.providerModel}</TableCell>
+                <TableCell className="font-mono text-sm">
+                  {route.providerModel}
+                </TableCell>
                 <TableCell>{route.priority}</TableCell>
                 <TableCell>${route.inputCostPerMillion}</TableCell>
                 <TableCell>${route.outputCostPerMillion}</TableCell>
@@ -2191,7 +2408,7 @@ export default async function AdminProvidersPage() {
         </Table>
       </div>
     </div>
-  );
+  )
 }
 ```
 
@@ -2209,6 +2426,7 @@ git commit -m "feat: add Brok API admin section"
 ### Task 8: Build Playground UI
 
 **Files:**
+
 - Create: `app/playground/page.tsx` — Main playground
 - Create: `components/playground/chat-playground.tsx`
 - Create: `components/playground/model-selector.tsx`
@@ -2222,7 +2440,7 @@ git commit -m "feat: add Brok API admin section"
 `app/playground/page.tsx`:
 
 ```tsx
-import { ChatPlayground } from '@/components/playground/chat-playground';
+import { ChatPlayground } from '@/components/playground/chat-playground'
 
 export default function PlaygroundPage() {
   return (
@@ -2235,7 +2453,7 @@ export default function PlaygroundPage() {
       </div>
       <ChatPlayground />
     </div>
-  );
+  )
 }
 ```
 
@@ -2244,114 +2462,122 @@ export default function PlaygroundPage() {
 `components/playground/chat-playground.tsx`:
 
 ```tsx
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ResponseViewer } from './response-viewer';
-import { CodeSnippet } from './code-snippet';
-import { BROK_MODELS } from '@/lib/brok/models';
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ResponseViewer } from './response-viewer'
+import { CodeSnippet } from './code-snippet'
+import { BROK_MODELS } from '@/lib/brok/models'
 
 const MODELS = Object.entries(BROK_MODELS).map(([id, config]) => ({
   id,
   name: config.name,
-  description: config.description,
-}));
+  description: config.description
+}))
 
 export function ChatPlayground() {
-  const [selectedModel, setSelectedModel] = useState('brok-lite');
-  const [systemMessage, setSystemMessage] = useState('You are a helpful assistant.');
-  const [userMessage, setUserMessage] = useState('');
-  const [temperature, setTemperature] = useState(0.7);
-  const [maxTokens, setMaxTokens] = useState(1000);
-  const [stream, setStream] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState('brok-lite')
+  const [systemMessage, setSystemMessage] = useState(
+    'You are a helpful assistant.'
+  )
+  const [userMessage, setUserMessage] = useState('')
+  const [temperature, setTemperature] = useState(0.7)
+  const [maxTokens, setMaxTokens] = useState(1000)
+  const [stream, setStream] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [response, setResponse] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit() {
-    if (!userMessage.trim()) return;
+    if (!userMessage.trim()) return
 
-    setLoading(true);
-    setError(null);
-    setResponse(null);
+    setLoading(true)
+    setError(null)
+    setResponse(null)
 
     try {
       // Get API key from localStorage (demo)
-      const apiKey = localStorage.getItem('brok_demo_key') || 'demo';
+      const apiKey = localStorage.getItem('brok_demo_key') || 'demo'
 
       const res = await fetch('/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey}`
         },
         body: JSON.stringify({
           model: selectedModel,
           messages: [
             { role: 'system', content: systemMessage },
-            { role: 'user', content: userMessage },
+            { role: 'user', content: userMessage }
           ],
           stream,
           temperature,
-          max_tokens: maxTokens,
-        }),
-      });
+          max_tokens: maxTokens
+        })
+      })
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.message || 'Request failed');
+        const err = await res.json()
+        throw new Error(err.error?.message || 'Request failed')
       }
 
       if (stream) {
         // Handle streaming
-        const reader = res.body?.getReader();
-        const decoder = new TextDecoder();
-        let fullContent = '';
+        const reader = res.body?.getReader()
+        const decoder = new TextDecoder()
+        let fullContent = ''
 
         while (reader) {
-          const { done, value } = await reader.read();
-          if (done) break;
+          const { done, value } = await reader.read()
+          if (done) break
 
-          const chunk = decoder.decode(value);
+          const chunk = decoder.decode(value)
           // Parse SSE lines
-          const lines = chunk.split('\n');
+          const lines = chunk.split('\n')
           for (const line of lines) {
             if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
+              const data = line.slice(6)
+              if (data === '[DONE]') continue
               try {
-                const parsed = JSON.parse(data);
+                const parsed = JSON.parse(data)
                 if (parsed.choices?.[0]?.delta?.content) {
-                  fullContent += parsed.choices[0].delta.content;
+                  fullContent += parsed.choices[0].delta.content
                   setResponse({
                     content: fullContent,
-                    done: false,
-                  });
+                    done: false
+                  })
                 }
               } catch {}
             }
           }
         }
 
-        setResponse({ content: fullContent, done: true });
+        setResponse({ content: fullContent, done: true })
       } else {
-        const data = await res.json();
+        const data = await res.json()
         setResponse({
           content: data.choices?.[0]?.message?.content || '',
           usage: data.usage,
-          done: true,
-        });
+          done: true
+        })
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
@@ -2366,7 +2592,7 @@ export function ChatPlayground() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {MODELS.map((model) => (
+              {MODELS.map(model => (
                 <SelectItem key={model.id} value={model.id}>
                   {model.name}
                 </SelectItem>
@@ -2374,7 +2600,7 @@ export function ChatPlayground() {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground mt-1">
-            {MODELS.find((m) => m.id === selectedModel)?.description}
+            {MODELS.find(m => m.id === selectedModel)?.description}
           </p>
         </div>
 
@@ -2383,7 +2609,7 @@ export function ChatPlayground() {
           <Textarea
             id="system"
             value={systemMessage}
-            onChange={(e) => setSystemMessage(e.target.value)}
+            onChange={e => setSystemMessage(e.target.value)}
             rows={3}
           />
         </div>
@@ -2393,7 +2619,7 @@ export function ChatPlayground() {
           <Textarea
             id="user"
             value={userMessage}
-            onChange={(e) => setUserMessage(e.target.value)}
+            onChange={e => setUserMessage(e.target.value)}
             rows={5}
             placeholder="What would you like to ask Brok?"
           />
@@ -2409,7 +2635,7 @@ export function ChatPlayground() {
               max={1}
               step={0.1}
               value={temperature}
-              onChange={(e) => setTemperature(Number(e.target.value))}
+              onChange={e => setTemperature(Number(e.target.value))}
               className="w-full"
             />
             <span className="text-sm">{temperature}</span>
@@ -2420,22 +2646,21 @@ export function ChatPlayground() {
               id="maxTokens"
               type="number"
               value={maxTokens}
-              onChange={(e) => setMaxTokens(Number(e.target.value))}
+              onChange={e => setMaxTokens(Number(e.target.value))}
               className="w-full"
             />
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <Switch
-            id="stream"
-            checked={stream}
-            onCheckedChange={setStream}
-          />
+          <Switch id="stream" checked={stream} onCheckedChange={setStream} />
           <Label htmlFor="stream">Stream Response</Label>
         </div>
 
-        <Button onClick={handleSubmit} disabled={loading || !userMessage.trim()}>
+        <Button
+          onClick={handleSubmit}
+          disabled={loading || !userMessage.trim()}
+        >
           {loading ? 'Running...' : 'Run'}
         </Button>
       </div>
@@ -2461,7 +2686,7 @@ export function ChatPlayground() {
                 model={selectedModel}
                 messages={[
                   { role: 'system', content: systemMessage },
-                  { role: 'user', content: userMessage },
+                  { role: 'user', content: userMessage }
                 ]}
                 stream={stream}
               />
@@ -2470,7 +2695,7 @@ export function ChatPlayground() {
         )}
       </div>
     </div>
-  );
+  )
 }
 ```
 
@@ -2479,18 +2704,18 @@ export function ChatPlayground() {
 `components/playground/response-viewer.tsx`:
 
 ```tsx
-'use client';
+'use client'
 
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export function ResponseViewer({
   response,
-  error,
+  error
 }: {
-  response: { content: string; usage?: any; done: boolean } | null;
-  error: string | null;
+  response: { content: string; usage?: any; done: boolean } | null
+  error: string | null
 }) {
   if (error) {
     return (
@@ -2498,7 +2723,7 @@ export function ResponseViewer({
         <p className="font-semibold">Error</p>
         <p className="text-sm">{error}</p>
       </div>
-    );
+    )
   }
 
   if (!response) {
@@ -2506,7 +2731,7 @@ export function ResponseViewer({
       <div className="text-muted-foreground text-center py-8">
         <p>Run a request to see the response here</p>
       </div>
-    );
+    )
   }
 
   return (
@@ -2541,7 +2766,7 @@ export function ResponseViewer({
         </div>
       )}
     </div>
-  );
+  )
 }
 ```
 
@@ -2550,21 +2775,21 @@ export function ResponseViewer({
 `components/playground/code-snippet.tsx`:
 
 ```tsx
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { Copy, Check } from 'lucide-react';
+import { useState } from 'react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Copy, Check } from 'lucide-react'
 
 interface CodeSnippetProps {
-  model: string;
-  messages: Array<{ role: string; content: string }>;
-  stream: boolean;
+  model: string
+  messages: Array<{ role: string; content: string }>
+  stream: boolean
 }
 
 export function CodeSnippet({ model, messages, stream }: CodeSnippetProps) {
-  const [copied, setCopied] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null)
 
   const curl = `curl https://api.brok.ai/v1/chat/completions \\
   -H "Authorization: Bearer $BROK_API_KEY" \\
@@ -2573,7 +2798,7 @@ export function CodeSnippet({ model, messages, stream }: CodeSnippetProps) {
     "model": "${model}",
     "messages": ${JSON.stringify(messages, null, 2)},
     "stream": ${stream}
-  }'`;
+  }'`
 
   const javascript = `const response = await fetch("https://api.brok.ai/v1/chat/completions", {
   method: "POST",
@@ -2589,7 +2814,7 @@ export function CodeSnippet({ model, messages, stream }: CodeSnippetProps) {
 });
 
 const data = await response.json();
-console.log(data);`;
+console.log(data);`
 
   const python = `import os
 import requests
@@ -2607,12 +2832,12 @@ response = requests.post(
     }
 )
 
-print(response.json())`;
+print(response.json())`
 
   async function copyToClipboard(text: string, id: string) {
-    await navigator.clipboard.writeText(text);
-    setCopied(id);
-    setTimeout(() => setCopied(null), 2000);
+    await navigator.clipboard.writeText(text)
+    setCopied(id)
+    setTimeout(() => setCopied(null), 2000)
   }
 
   return (
@@ -2633,7 +2858,11 @@ print(response.json())`;
           className="absolute top-2 right-2"
           onClick={() => copyToClipboard(curl, 'curl')}
         >
-          {copied === 'curl' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          {copied === 'curl' ? (
+            <Check className="h-4 w-4" />
+          ) : (
+            <Copy className="h-4 w-4" />
+          )}
         </Button>
       </TabsContent>
 
@@ -2647,7 +2876,11 @@ print(response.json())`;
           className="absolute top-2 right-2"
           onClick={() => copyToClipboard(javascript, 'js')}
         >
-          {copied === 'js' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          {copied === 'js' ? (
+            <Check className="h-4 w-4" />
+          ) : (
+            <Copy className="h-4 w-4" />
+          )}
         </Button>
       </TabsContent>
 
@@ -2661,11 +2894,15 @@ print(response.json())`;
           className="absolute top-2 right-2"
           onClick={() => copyToClipboard(python, 'py')}
         >
-          {copied === 'py' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          {copied === 'py' ? (
+            <Check className="h-4 w-4" />
+          ) : (
+            <Copy className="h-4 w-4" />
+          )}
         </Button>
       </TabsContent>
     </Tabs>
-  );
+  )
 }
 ```
 
@@ -2683,6 +2920,7 @@ git commit -m "feat: add Brok Playground UI"
 ### Task 9: Build Search Completions Endpoint
 
 **Files:**
+
 - Create: `app/api/v1/search/completions/route.ts` — Search endpoint
 - Create: `lib/brok/search-pipeline.ts` — Search pipeline
 - Create: `lib/tools/search.ts` — Search tool abstraction
@@ -2694,60 +2932,73 @@ git commit -m "feat: add Brok Playground UI"
 `lib/brok/search-pipeline.ts`:
 
 ```ts
-import { BROK_MODELS } from './models';
+import { BROK_MODELS } from './models'
 
 export interface SearchResult {
-  id: string;
-  title: string;
-  url: string;
-  publisher?: string;
-  snippet: string;
-  retrievedAt: string;
+  id: string
+  title: string
+  url: string
+  publisher?: string
+  snippet: string
+  retrievedAt: string
 }
 
 export interface SearchResponse {
-  answer: string;
-  citations: SearchResult[];
-  searchQueries: number;
-  tokensUsed: number;
+  answer: string
+  citations: SearchResult[]
+  searchQueries: number
+  tokensUsed: number
 }
 
 export interface SearchRequest {
-  query: string;
-  depth: 'lite' | 'standard' | 'deep';
-  recencyDays?: number;
-  domains?: string[];
+  query: string
+  depth: 'lite' | 'standard' | 'deep'
+  recencyDays?: number
+  domains?: string[]
 }
 
 const SEARCH_CONFIG = {
   lite: { sources: 3, maxTokens: 8000 },
   standard: { sources: 8, maxTokens: 16000 },
-  deep: { sources: 20, maxTokens: 32000 },
-};
+  deep: { sources: 20, maxTokens: 32000 }
+}
 
-export async function runSearchPipeline(request: SearchRequest): Promise<SearchResponse> {
-  const config = SEARCH_CONFIG[request.depth];
-  const startTime = Date.now();
+export async function runSearchPipeline(
+  request: SearchRequest
+): Promise<SearchResponse> {
+  const config = SEARCH_CONFIG[request.depth]
+  const startTime = Date.now()
 
   // Step 1: Rewrite query for search (could use a separate model)
-  const searchQuery = await rewriteQuery(request.query);
+  const searchQuery = await rewriteQuery(request.query)
 
   // Step 2: Run web searches
-  const searchResults = await runWebSearch(searchQuery, config.sources, request.recencyDays, request.domains);
+  const searchResults = await runWebSearch(
+    searchQuery,
+    config.sources,
+    request.recencyDays,
+    request.domains
+  )
 
   // Step 3: Fetch and extract content from top sources
-  const enrichedResults = await enrichSearchResults(searchResults.slice(0, config.sources));
+  const enrichedResults = await enrichSearchResults(
+    searchResults.slice(0, config.sources)
+  )
 
   // Step 4: Deduplicate and rank
-  const deduplicated = deduplicateResults(enrichedResults);
+  const deduplicated = deduplicateResults(enrichedResults)
 
   // Step 5: Build context for synthesis
-  const context = buildContext(deduplicated);
+  const context = buildContext(deduplicated)
 
-  // Step 6: Generate answer with MiniMax
-  const answer = await synthesizeAnswer(request.query, context, config.maxTokens);
+  // Step 6: Generate answer with Brok
+  const answer = await synthesizeAnswer(
+    request.query,
+    context,
+    config.maxTokens
+  )
 
-  const latencyMs = Date.now() - startTime;
+  const latencyMs = Date.now() - startTime
 
   return {
     answer,
@@ -2757,16 +3008,16 @@ export async function runSearchPipeline(request: SearchRequest): Promise<SearchR
       url: r.url,
       publisher: r.publisher,
       snippet: r.snippet,
-      retrievedAt: new Date().toISOString(),
+      retrievedAt: new Date().toISOString()
     })),
     searchQueries: searchResults.length,
-    tokensUsed: Math.round(context.length / 4), // Rough estimate
-  };
+    tokensUsed: Math.round(context.length / 4) // Rough estimate
+  }
 }
 
 async function rewriteQuery(query: string): Promise<string> {
   // Use a simple approach - could be enhanced with a model
-  return query;
+  return query
 }
 
 async function runWebSearch(
@@ -2776,20 +3027,20 @@ async function runWebSearch(
   domains?: string[]
 ): Promise<SearchResult[]> {
   // Get search API keys
-  const tavilyKey = process.env.TAVILY_API_KEY;
-  const results: SearchResult[] = [];
+  const tavilyKey = process.env.TAVILY_API_KEY
+  const results: SearchResult[] = []
 
   if (tavilyKey) {
     const params = new URLSearchParams({
       api_key: tavilyKey,
       query,
-      max_results: String(numResults),
-    });
-    if (recencyDays) params.set('recency_days', String(recencyDays));
-    if (domains?.length) params.set('domains', domains.join(','));
+      max_results: String(numResults)
+    })
+    if (recencyDays) params.set('recency_days', String(recencyDays))
+    if (domains?.length) params.set('domains', domains.join(','))
 
-    const response = await fetch(`https://api.tavily.com/search?${params}`);
-    const data = await response.json();
+    const response = await fetch(`https://api.tavily.com/search?${params}`)
+    const data = await response.json()
 
     results.push(
       ...(data.results || []).map((r: any, i: number) => ({
@@ -2798,66 +3049,68 @@ async function runWebSearch(
         url: r.url,
         publisher: r.source,
         snippet: r.content,
-        retrievedAt: new Date().toISOString(),
+        retrievedAt: new Date().toISOString()
       }))
-    );
+    )
   }
 
-  return results.slice(0, numResults);
+  return results.slice(0, numResults)
 }
 
-async function enrichSearchResults(results: SearchResult[]): Promise<SearchResult[]> {
+async function enrichSearchResults(
+  results: SearchResult[]
+): Promise<SearchResult[]> {
   // Extract clean content from pages using Firecrawl or similar
-  const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+  const firecrawlKey = process.env.FIRECRAWL_API_KEY
 
   if (!firecrawlKey) {
-    return results;
+    return results
   }
 
   const enriched = await Promise.all(
-    results.map(async (result) => {
+    results.map(async result => {
       try {
         const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${firecrawlKey}`,
-            'Content-Type': 'application/json',
+            Authorization: `Bearer ${firecrawlKey}`,
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             url: result.url,
-            pageOptions: { onlyMainContent: true },
-          }),
-        });
+            pageOptions: { onlyMainContent: true }
+          })
+        })
 
         if (response.ok) {
-          const data = await response.json();
+          const data = await response.json()
           return {
             ...result,
-            snippet: data.data?.content?.slice(0, 500) || result.snippet,
-          };
+            snippet: data.data?.content?.slice(0, 500) || result.snippet
+          }
         }
       } catch {}
-      return result;
+      return result
     })
-  );
+  )
 
-  return enriched;
+  return enriched
 }
 
 function deduplicateResults(results: SearchResult[]): SearchResult[] {
-  const seen = new Set<string>();
-  return results.filter((r) => {
-    const key = r.url.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const seen = new Set<string>()
+  return results.filter(r => {
+    const key = r.url.toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function buildContext(results: SearchResult[]): string {
   return results
     .map((r, i) => `[Source ${i + 1}] ${r.title}\nURL: ${r.url}\n${r.snippet}`)
-    .join('\n\n');
+    .join('\n\n')
 }
 
 async function synthesizeAnswer(
@@ -2865,36 +3118,36 @@ async function synthesizeAnswer(
   context: string,
   maxTokens: number
 ): Promise<string> {
-  const minimaxKey = process.env.MINIMAX_API_KEY;
+  const BrokKey = process.env.BROK_PROVIDER_API_KEY
 
-  if (!minimaxKey) {
-    throw new Error('MiniMax API key not configured');
+  if (!BrokKey) {
+    throw new Error('Brok provider gateway key not configured')
   }
 
-  const response = await fetch('https://api.minimax.chat/v1/chat/completions', {
+  const response = await fetch('Brok provider gateway', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${minimaxKey}`,
-      'Content-Type': 'application/json',
+      Authorization: `Bearer ${BrokKey}`,
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: 'minimax-text',
+      model: 'Brok-text',
       messages: [
         {
           role: 'system',
-          content: `You are a helpful assistant. Answer the user's question based on the provided search results. Cite your sources using the format [Source N].`,
+          content: `You are a helpful assistant. Answer the user's question based on the provided search results. Cite your sources using the format [Source N].`
         },
         {
           role: 'user',
-          content: `Search Results:\n${context}\n\nQuestion: ${query}`,
-        },
+          content: `Search Results:\n${context}\n\nQuestion: ${query}`
+        }
       ],
-      max_tokens: maxTokens,
-    }),
-  });
+      max_tokens: maxTokens
+    })
+  })
 
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || 'No answer generated.';
+  const data = await response.json()
+  return data.choices?.[0]?.message?.content || 'No answer generated.'
 }
 ```
 
@@ -2903,48 +3156,62 @@ async function synthesizeAnswer(
 `app/api/v1/search/completions/route.ts`:
 
 ```ts
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyRequestAuth, unauthorizedResponse } from '@/lib/brok/auth';
-import { isValidBrokModel, BROK_MODELS } from '@/lib/brok/models';
-import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter';
-import { recordUsage, generateRequestId } from '@/lib/brok/usage-tracker';
-import { runSearchPipeline } from '@/lib/brok/search-pipeline';
+import { NextRequest, NextResponse } from 'next/server'
+import { verifyRequestAuth, unauthorizedResponse } from '@/lib/brok/auth'
+import { isValidBrokModel, BROK_MODELS } from '@/lib/brok/models'
+import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
+import { recordUsage, generateRequestId } from '@/lib/brok/usage-tracker'
+import { runSearchPipeline } from '@/lib/brok/search-pipeline'
 
-export const runtime = 'edge';
+export const runtime = 'edge'
 
 export async function POST(request: NextRequest) {
-  const startTime = Date.now();
-  const requestId = generateRequestId();
+  const startTime = Date.now()
+  const requestId = generateRequestId()
 
   // Auth
-  const auth = await verifyRequestAuth(request);
+  const auth = await verifyRequestAuth(request)
   if (!auth.success) {
-    return unauthorizedResponse(auth);
+    return unauthorizedResponse(auth)
   }
 
   // Parse body
-  const body = await request.json();
-  const { query, model = 'brok-search', depth = 'standard', stream = true, recency_days, domains } = body;
+  const body = await request.json()
+  const {
+    query,
+    model = 'brok-search',
+    depth = 'standard',
+    stream = true,
+    recency_days,
+    domains
+  } = body
 
   if (!query) {
-    return NextResponse.json({
-      error: {
-        type: 'invalid_request_error',
-        code: 'missing_query',
-        message: 'Query is required',
-      }
-    }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: {
+          type: 'invalid_request_error',
+          code: 'missing_query',
+          message: 'Query is required'
+        }
+      },
+      { status: 400 }
+    )
   }
 
   // Validate model supports search
   if (!isValidBrokModel(model) || !BROK_MODELS[model].supportsSearch) {
-    return NextResponse.json({
-      error: {
-        type: 'invalid_request_error',
-        code: 'invalid_model',
-        message: 'Model does not support search. Use brok-search or brok-search-pro.',
-      }
-    }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: {
+          type: 'invalid_request_error',
+          code: 'invalid_model',
+          message:
+            'Model does not support search. Use brok-search or brok-search-pro.'
+        }
+      },
+      { status: 400 }
+    )
   }
 
   // Check rate limit
@@ -2952,17 +3219,22 @@ export async function POST(request: NextRequest) {
     auth.apiKey.id,
     auth.workspace.id,
     auth.apiKey.rpmLimit
-  );
+  )
 
   if (!rateLimit.allowed) {
-    return NextResponse.json({
-      error: {
-        type: 'rate_limit_error',
-        code: 'rate_limit_exceeded',
-        message: 'Rate limit exceeded.',
-        retry_after_seconds: Math.ceil((rateLimit.resetAt * 1000 - Date.now()) / 1000),
-      }
-    }, { status: 429 });
+    return NextResponse.json(
+      {
+        error: {
+          type: 'rate_limit_error',
+          code: 'rate_limit_exceeded',
+          message: 'Rate limit exceeded.',
+          retry_after_seconds: Math.ceil(
+            (rateLimit.resetAt * 1000 - Date.now()) / 1000
+          )
+        }
+      },
+      { status: 429 }
+    )
   }
 
   try {
@@ -2970,16 +3242,16 @@ export async function POST(request: NextRequest) {
       query,
       depth,
       recencyDays: recency_days,
-      domains,
-    });
+      domains
+    })
 
-    const latencyMs = Date.now() - startTime;
+    const latencyMs = Date.now() - startTime
 
     // Calculate costs
-    const searchCost = 0.001 * searchResult.searchQueries; // $0.001 per search
-    const tokenCost = (searchResult.tokensUsed / 1_000_000) * 0.10;
-    const providerCost = searchCost + tokenCost;
-    const billedAmount = providerCost * 1.5;
+    const searchCost = 0.001 * searchResult.searchQueries // $0.001 per search
+    const tokenCost = (searchResult.tokensUsed / 1_000_000) * 0.1
+    const providerCost = searchCost + tokenCost
+    const billedAmount = providerCost * 1.5
 
     // Record usage
     await recordUsage({
@@ -2989,43 +3261,46 @@ export async function POST(request: NextRequest) {
       apiKeyId: auth.apiKey.id,
       endpoint: 'search',
       model,
-      provider: 'minimax',
+      provider: 'Brok',
       inputTokens: searchResult.tokensUsed,
       outputTokens: Math.round(searchResult.answer.length / 4),
       searchQueries: searchResult.searchQueries,
       providerCostUsd: providerCost,
       billedUsd: billedAmount,
       latencyMs,
-      status: 'success',
-    });
+      status: 'success'
+    })
 
-    return NextResponse.json({
-      id: requestId,
-      object: 'search.completion',
-      model,
-      choices: [
-        {
-          message: {
-            role: 'assistant',
-            content: searchResult.answer,
-          },
-        },
-      ],
-      citations: searchResult.citations,
-      usage: {
-        search_queries: searchResult.searchQueries,
-        prompt_tokens: searchResult.tokensUsed,
-        completion_tokens: Math.round(searchResult.answer.length / 4),
-        total_tokens: searchResult.tokensUsed + Math.round(searchResult.answer.length / 4),
+    return NextResponse.json(
+      {
+        id: requestId,
+        object: 'search.completion',
+        model,
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: searchResult.answer
+            }
+          }
+        ],
+        citations: searchResult.citations,
+        usage: {
+          search_queries: searchResult.searchQueries,
+          prompt_tokens: searchResult.tokensUsed,
+          completion_tokens: Math.round(searchResult.answer.length / 4),
+          total_tokens:
+            searchResult.tokensUsed + Math.round(searchResult.answer.length / 4)
+        }
       },
-    }, {
-      headers: {
-        'X-Brok-Request-Id': requestId,
+      {
+        headers: {
+          'X-Brok-Request-Id': requestId
+        }
       }
-    });
-
+    )
   } catch (error) {
-    const latencyMs = Date.now() - startTime;
+    const latencyMs = Date.now() - startTime
 
     await recordUsage({
       requestId,
@@ -3034,7 +3309,7 @@ export async function POST(request: NextRequest) {
       apiKeyId: auth.apiKey.id,
       endpoint: 'search',
       model,
-      provider: 'minimax',
+      provider: 'Brok',
       inputTokens: 0,
       outputTokens: 0,
       searchQueries: 0,
@@ -3042,16 +3317,19 @@ export async function POST(request: NextRequest) {
       billedUsd: 0,
       latencyMs,
       status: 'error',
-      errorCode: error instanceof Error ? error.message : 'unknown_error',
-    });
+      errorCode: error instanceof Error ? error.message : 'unknown_error'
+    })
 
-    return NextResponse.json({
-      error: {
-        type: 'internal_error',
-        code: 'search_error',
-        message: error instanceof Error ? error.message : 'An error occurred',
-      }
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: {
+          type: 'internal_error',
+          code: 'search_error',
+          message: error instanceof Error ? error.message : 'An error occurred'
+        }
+      },
+      { status: 500 }
+    )
   }
 }
 ```
@@ -3070,6 +3348,7 @@ git commit -m "feat: add Brok Search API endpoint"
 ### Task 10: Add Remaining API Endpoints
 
 **Files:**
+
 - Create: `app/api/v1/models/route.ts` — List models
 - Create: `app/api/v1/usage/route.ts` — Get usage
 - Create: `app/api/v1/keys/route.ts` — API key CRUD
@@ -3081,8 +3360,8 @@ git commit -m "feat: add Brok Search API endpoint"
 `app/api/v1/models/route.ts`:
 
 ```tsx
-import { NextResponse } from 'next/server';
-import { BROK_MODELS } from '@/lib/brok/models';
+import { NextResponse } from 'next/server'
+import { BROK_MODELS } from '@/lib/brok/models'
 
 export async function GET() {
   const models = Object.entries(BROK_MODELS).map(([id, config]) => ({
@@ -3095,13 +3374,13 @@ export async function GET() {
     max_tokens: config.maxTokens,
     supports_search: config.supportsSearch,
     supports_streaming: config.supportsStreaming,
-    supports_tools: config.supportsTools,
-  }));
+    supports_tools: config.supportsTools
+  }))
 
   return NextResponse.json({
     object: 'list',
-    data: models,
-  });
+    data: models
+  })
 }
 ```
 
@@ -3110,28 +3389,28 @@ export async function GET() {
 `app/api/v1/usage/route.ts`:
 
 ```tsx
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyRequestAuth, unauthorizedResponse } from '@/lib/brok/auth';
-import { db } from '@/lib/db';
-import { usageEvents } from '@/lib/db/schema-brok';
-import { eq, and, gte } from 'drizzle-orm';
+import { NextRequest, NextResponse } from 'next/server'
+import { verifyRequestAuth, unauthorizedResponse } from '@/lib/brok/auth'
+import { db } from '@/lib/db'
+import { usageEvents } from '@/lib/db/schema-brok'
+import { eq, and, gte } from 'drizzle-orm'
 
 export async function GET(request: NextRequest) {
-  const auth = await verifyRequestAuth(request);
+  const auth = await verifyRequestAuth(request)
   if (!auth.success) {
-    return unauthorizedResponse(auth);
+    return unauthorizedResponse(auth)
   }
 
-  const searchParams = request.nextUrl.searchParams;
-  const period = searchParams.get('period') || 'month';
+  const searchParams = request.nextUrl.searchParams
+  const period = searchParams.get('period') || 'month'
 
-  let dateFrom = new Date();
+  let dateFrom = new Date()
   if (period === 'day') {
-    dateFrom.setHours(0, 0, 0, 0);
+    dateFrom.setHours(0, 0, 0, 0)
   } else if (period === 'week') {
-    dateFrom.setDate(dateFrom.getDate() - 7);
+    dateFrom.setDate(dateFrom.getDate() - 7)
   } else if (period === 'month') {
-    dateFrom.setMonth(dateFrom.getMonth() - 1);
+    dateFrom.setMonth(dateFrom.getMonth() - 1)
   }
 
   const usage = await db
@@ -3141,7 +3420,7 @@ export async function GET(request: NextRequest) {
       totalOutputTokens: sql<number>`sum(${usageEvents.outputTokens})`,
       totalCachedTokens: sql<number>`sum(${usageEvents.cachedTokens})`,
       totalSearchQueries: sql<number>`sum(${usageEvents.searchQueries})`,
-      totalBilled: sql<number>`sum(${usageEvents.billedUsd})`,
+      totalBilled: sql<number>`sum(${usageEvents.billedUsd})`
     })
     .from(usageEvents)
     .where(
@@ -3149,9 +3428,9 @@ export async function GET(request: NextRequest) {
         eq(usageEvents.workspaceId, auth.workspace.id),
         gte(usageEvents.createdAt, dateFrom)
       )
-    );
+    )
 
-  const [stats] = usage;
+  const [stats] = usage
 
   return NextResponse.json({
     period,
@@ -3161,9 +3440,9 @@ export async function GET(request: NextRequest) {
       output_tokens: Number(stats?.totalOutputTokens) || 0,
       cached_tokens: Number(stats?.totalCachedTokens) || 0,
       search_queries: Number(stats?.totalSearchQueries) || 0,
-      billed_usd: Number(stats?.totalBilled) || 0,
-    },
-  });
+      billed_usd: Number(stats?.totalBilled) || 0
+    }
+  })
 }
 ```
 
@@ -3179,6 +3458,7 @@ git commit -m "feat: add models and usage endpoints"
 ### Task 11: Database Migrations
 
 **Files:**
+
 - Create: `drizzle/0014_brok_api.sql` — Initial Brok schema
 
 **Steps:**
@@ -3250,6 +3530,7 @@ Expected: Server starts without errors
 ### Task 13: Add Brok Documentation Pages
 
 **Files:**
+
 - Create: `app/docs/page.tsx` — Docs home
 - Create: `app/docs/quickstart/page.tsx` — Quickstart
 - Create: `app/docs/api-keys/page.tsx` — API key docs
@@ -3305,10 +3586,18 @@ export default function DocsPage() {
         />
       </div>
     </div>
-  );
+  )
 }
 
-function DocCard({ title, description, href }: { title: string; description: string; href: string }) {
+function DocCard({
+  title,
+  description,
+  href
+}: {
+  title: string
+  description: string
+  href: string
+}) {
   return (
     <a
       href={href}
@@ -3317,7 +3606,7 @@ function DocCard({ title, description, href }: { title: string; description: str
       <h2 className="text-lg font-semibold mb-2">{title}</h2>
       <p className="text-sm text-muted-foreground">{description}</p>
     </a>
-  );
+  )
 }
 ```
 
@@ -3336,7 +3625,10 @@ export default function QuickstartPage() {
         <p>Sign up for Brok at brok.ai and create your workspace.</p>
 
         <h2>2. Create an API key</h2>
-        <p>Go to your dashboard and create a new API key. Choose your environment (test or live) and set rate limits.</p>
+        <p>
+          Go to your dashboard and create a new API key. Choose your environment
+          (test or live) and set rate limits.
+        </p>
 
         <h2>3. Make your first request</h2>
 
@@ -3353,17 +3645,26 @@ export default function QuickstartPage() {
         </pre>
 
         <h2>4. View your usage</h2>
-        <p>Track your API usage in the dashboard and set budgets to control costs.</p>
+        <p>
+          Track your API usage in the dashboard and set budgets to control
+          costs.
+        </p>
 
         <h2>Next steps</h2>
         <ul>
-          <li><a href="/docs/chat-completions">Chat Completions API</a></li>
-          <li><a href="/docs/search-completions">Search Completions API</a></li>
-          <li><a href="/docs/models">Available Models</a></li>
+          <li>
+            <a href="/docs/chat-completions">Chat Completions API</a>
+          </li>
+          <li>
+            <a href="/docs/search-completions">Search Completions API</a>
+          </li>
+          <li>
+            <a href="/docs/models">Available Models</a>
+          </li>
         </ul>
       </div>
     </div>
-  );
+  )
 }
 ```
 
@@ -3378,16 +3679,26 @@ export default function ApiKeysPage() {
       <h1 className="text-4xl font-bold mb-6">API Keys</h1>
 
       <div className="prose prose-neutral dark:prose-invert">
-        <p>Brok uses API keys to authenticate requests. Each key has specific permissions and rate limits.</p>
+        <p>
+          Brok uses API keys to authenticate requests. Each key has specific
+          permissions and rate limits.
+        </p>
 
         <h2>Key Format</h2>
         <ul>
-          <li><code>brok_sk_live_...</code> - Live environment keys</li>
-          <li><code>brok_sk_test_...</code> - Test environment keys</li>
+          <li>
+            <code>brok_sk_live_...</code> - Live environment keys
+          </li>
+          <li>
+            <code>brok_sk_test_...</code> - Test environment keys
+          </li>
         </ul>
 
         <h2>Creating Keys</h2>
-        <p>Create API keys from the Brok dashboard. Each key can be configured with:</p>
+        <p>
+          Create API keys from the Brok dashboard. Each key can be configured
+          with:
+        </p>
         <ul>
           <li>Name and environment</li>
           <li>Allowed models</li>
@@ -3397,11 +3708,14 @@ export default function ApiKeysPage() {
 
         <h2>Key Security</h2>
         <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 my-4">
-          <p className="text-yellow-800"><strong>Important:</strong> Your API key is only shown once after creation. Store it securely.</p>
+          <p className="text-yellow-800">
+            <strong>Important:</strong> Your API key is only shown once after
+            creation. Store it securely.
+          </p>
         </div>
       </div>
     </div>
-  );
+  )
 }
 ```
 
@@ -3410,13 +3724,13 @@ export default function ApiKeysPage() {
 `app/docs/models/page.tsx`:
 
 ```tsx
-import { BROK_MODELS } from '@/lib/brok/models';
+import { BROK_MODELS } from '@/lib/brok/models'
 
 export default function ModelsPage() {
   const models = Object.entries(BROK_MODELS).map(([id, config]) => ({
     id,
-    ...config,
-  }));
+    ...config
+  }))
 
   return (
     <div className="container py-8 max-w-3xl">
@@ -3427,16 +3741,22 @@ export default function ModelsPage() {
       </div>
 
       <div className="space-y-6">
-        {models.map((model) => (
+        {models.map(model => (
           <div key={model.id} className="border rounded-lg p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h2 className="text-xl font-semibold">{model.name}</h2>
-                <code className="text-sm text-muted-foreground">{model.id}</code>
+                <code className="text-sm text-muted-foreground">
+                  {model.id}
+                </code>
               </div>
               <div className="text-right">
-                <div className="text-sm">${model.inputCostPerMillion}/1M in</div>
-                <div className="text-sm text-muted-foreground">${model.outputCostPerMillion}/1M out</div>
+                <div className="text-sm">
+                  ${model.inputCostPerMillion}/1M in
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  ${model.outputCostPerMillion}/1M out
+                </div>
               </div>
             </div>
             <p className="text-muted-foreground mb-4">{model.description}</p>
@@ -3461,7 +3781,7 @@ export default function ModelsPage() {
         ))}
       </div>
     </div>
-  );
+  )
 }
 ```
 

@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect,useState } from 'react'
+import { useEffect, useState } from 'react'
 
-import { Check, Copy, Globe, Lock, Users,X } from 'lucide-react'
+import { Check, Copy, Globe, Lock, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface ShareModalProps {
@@ -51,13 +51,16 @@ export function ShareModal({
     try {
       const isPublic = mode !== 'private'
 
-      const response = await fetch(`/api/presentations/${presentationId}/share`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ is_public: isPublic })
-      })
+      const response = await fetch(
+        `/api/presentations/${presentationId}/share`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ is_public: isPublic })
+        }
+      )
 
       if (!response.ok) {
         const error = await response.json()
@@ -74,16 +77,16 @@ export function ShareModal({
 
       setShareUrl(data.share_url)
       toast.success(
-        mode === 'private'
-          ? 'Link sharing disabled'
-          : 'Link sharing enabled'
+        mode === 'private' ? 'Link sharing disabled' : 'Link sharing enabled'
       )
 
       onShareComplete?.(data.share_id, data.share_url)
     } catch (error) {
       console.error('Share error:', error)
       toast.error(
-        error instanceof Error ? error.message : 'Failed to update share settings'
+        error instanceof Error
+          ? error.message
+          : 'Failed to update share settings'
       )
       // Revert mode on error
       setShareMode(initialIsPublic ? 'view' : 'private')

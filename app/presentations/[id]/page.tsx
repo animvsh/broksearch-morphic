@@ -6,7 +6,10 @@ import { useRouter } from 'next/navigation'
 
 import { ArrowLeftIcon, Loader2Icon, SettingsIcon } from 'lucide-react'
 
-import type { Presentation, PresentationStatus } from '@/lib/presentations/types'
+import type {
+  Presentation,
+  PresentationStatus
+} from '@/lib/presentations/types'
 import { cn } from '@/lib/utils'
 
 import { Button } from '@/components/ui/button'
@@ -22,54 +25,6 @@ interface PresentationWithOutline extends Presentation {
   outline?: { slides: OutlineSlide[] }
 }
 
-// Mock data for development
-function getMockPresentation(id: string): PresentationWithOutline {
-  return {
-    id,
-    userId: 'mock-user-id',
-    title: 'Investor Pitch Deck',
-    description: 'A compelling pitch for our startup',
-    status: 'draft',
-    slideCount: 0,
-    language: 'en',
-    style: 'startup',
-    isPublic: false,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    outline: {
-      slides: [
-        {
-          title: 'The Problem',
-          layout_type: 'title' as const,
-          bullets: [
-            'Traditional fundraising takes 6+ months',
-            'Investors are overwhelmed with bad pitches',
-            'Founders lack tools to tell their story'
-          ]
-        },
-        {
-          title: 'Our Solution',
-          layout_type: 'section' as const,
-          bullets: [
-            'AI-powered presentation builder',
-            'Focus on storytelling, not design',
-            'Built by founders, for founders'
-          ]
-        },
-        {
-          title: 'Market Opportunity',
-          layout_type: 'two_column' as const,
-          bullets: [
-            '$2B+ market for presentation tools',
-            '300K new startups per year in US alone',
-            'Growing demand for AI-assisted creation'
-          ]
-        }
-      ]
-    }
-  }
-}
-
 interface PresentationsOutlinePageProps {
   params: Promise<{ id: string }>
 }
@@ -78,10 +33,63 @@ export default function PresentationsOutlinePage({
   params
 }: PresentationsOutlinePageProps) {
   const router = useRouter()
-  const [presentation, setPresentation] = useState<PresentationWithOutline | null>(null)
+  const [presentation, setPresentation] =
+    useState<PresentationWithOutline | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isGeneratingSlides, setIsGeneratingSlides] = useState(false)
   const [outlineId, setOutlineId] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const autoGenerationStarted = React.useRef(false)
+
+  const consumeSseResponse = useCallback(
+    async (
+      response: Response,
+      handlers?: {
+        onComplete?: () => void
+        onDeckComplete?: () => void
+      }
+    ) => {
+      if (!response.ok || !response.body) {
+        const data = await response.json().catch(() => null)
+        throw new Error(data?.error || 'Generation request failed')
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const events = buffer.split('\n\n')
+        buffer = events.pop() || ''
+
+        for (const event of events) {
+          const line = event
+            .split('\n')
+            .find(candidate => candidate.startsWith('data: '))
+
+          if (!line) {
+            continue
+          }
+
+          const payload = JSON.parse(line.slice(6))
+          if (payload.type === 'outline_complete') {
+            handlers?.onComplete?.()
+          }
+          if (payload.type === 'deck_complete') {
+            handlers?.onDeckComplete?.()
+          }
+          if (payload.type === 'error') {
+            throw new Error(payload.data?.error || 'Generation failed')
+          }
+        }
+      }
+    },
+    []
+  )
 
   // Load presentation on mount
   React.useEffect(() => {
@@ -90,22 +98,20 @@ export default function PresentationsOutlinePage({
         const resolvedParams = await params
         setOutlineId(resolvedParams.id)
 
-        // Try to fetch from API first
-        try {
-          const response = await fetch(`/api/presentations/${resolvedParams.id}`)
-          if (response.ok) {
-            const data = await response.json()
-            setPresentation(data)
-          } else {
-            // Use mock data for development
-            setPresentation(getMockPresentation(resolvedParams.id))
-          }
-        } catch {
-          // Use mock data for development
-          setPresentation(getMockPresentation(resolvedParams.id))
+        const response = await fetch(`/api/presentations/${resolvedParams.id}`)
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => null)
+          throw new Error(data?.error || 'Failed to load presentation')
         }
+
+        const data = await response.json()
+        setPresentation(data)
       } catch (error) {
         console.error('Error loading presentation:', error)
+        setLoadError(
+          error instanceof Error ? error.message : 'Failed to load presentation'
+        )
       } finally {
         setIsLoading(false)
       }
@@ -122,13 +128,46 @@ export default function PresentationsOutlinePage({
     // Refresh the presentation data
     if (outlineId) {
       fetch(`/api/presentations/${outlineId}`)
-        .then((res) => res.ok && res.json())
-        .then((data) => {
+        .then(res => res.ok && res.json())
+        .then(data => {
           if (data) setPresentation(data)
         })
         .catch(() => {})
     }
   }, [outlineId])
+
+  React.useEffect(() => {
+    if (
+      !presentation ||
+      autoGenerationStarted.current ||
+      (presentation.outline?.slides?.length ?? 0) > 0
+    ) {
+      return
+    }
+
+    if (
+      presentation.status !== 'draft' &&
+      presentation.status !== 'outline_generating'
+    ) {
+      return
+    }
+
+    autoGenerationStarted.current = true
+
+    fetch(`/api/presentations/${presentation.id}/generate-outline`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    })
+      .then(response =>
+        consumeSseResponse(response, {
+          onComplete: handleOutlineUpdated
+        })
+      )
+      .catch(error => {
+        console.error('Error auto-generating outline:', error)
+      })
+  }, [consumeSseResponse, handleOutlineUpdated, presentation])
 
   const handleGenerateSlides = async () => {
     if (!presentation || isGeneratingSlides) return
@@ -144,13 +183,10 @@ export default function PresentationsOutlinePage({
         }
       )
 
-      if (response.ok) {
-        // Redirect to editor on success
-        router.push(`/presentations/${presentation.id}/editor`)
-      } else {
-        const data = await response.json()
-        console.error('Failed to generate slides:', data.error)
-      }
+      await consumeSseResponse(response, {
+        onDeckComplete: () =>
+          router.push(`/presentations/${presentation.id}/editor`)
+      })
     } catch (error) {
       console.error('Error generating slides:', error)
     } finally {
@@ -172,10 +208,9 @@ export default function PresentationsOutlinePage({
         }
       )
 
-      if (!response.ok) {
-        const data = await response.json()
-        console.error('Failed to regenerate outline:', data.error)
-      }
+      await consumeSseResponse(response, {
+        onComplete: handleOutlineUpdated
+      })
     } catch (error) {
       console.error('Error regenerating outline:', error)
     } finally {
@@ -196,6 +231,9 @@ export default function PresentationsOutlinePage({
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
           <h1 className="text-2xl font-semibold">Presentation not found</h1>
+          {loadError ? (
+            <p className="text-sm text-muted-foreground">{loadError}</p>
+          ) : null}
           <Button asChild>
             <Link href="/presentations">Back to Presentations</Link>
           </Button>
@@ -209,7 +247,9 @@ export default function PresentationsOutlinePage({
 
   const isGenerating =
     presentation.status === 'outline_generating' ||
-    presentation.status === 'slides_generating'
+    presentation.status === 'slides_generating' ||
+    ((presentation.outline?.slides?.length ?? 0) === 0 &&
+      presentation.status === 'draft')
 
   return (
     <div className="min-h-screen bg-background">

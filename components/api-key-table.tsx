@@ -1,25 +1,32 @@
-'use client';
+'use client'
 
-import { pauseApiKey, resumeApiKey, revokeApiKey } from '@/lib/actions/api-keys';
+import { pauseApiKey, resumeApiKey, revokeApiKey } from '@/lib/actions/api-keys'
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table'
 
 interface ApiKey {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  maskedKey: string;
-  environment: 'test' | 'live';
-  status: 'active' | 'paused' | 'revoked';
-  scopes: string[];
-  allowedModels: string[];
-  rpmLimit: number | null;
-  dailyRequestLimit: number | null;
-  monthlyBudgetCents: number | null;
-  lastUsedAt: Date | null;
-  createdAt: Date;
+  id: string
+  name: string
+  keyPrefix: string
+  maskedKey: string
+  environment: 'test' | 'live'
+  status: 'active' | 'paused' | 'revoked'
+  scopes: string[]
+  allowedModels: string[]
+  rpmLimit: number | null
+  dailyRequestLimit: number | null
+  monthlyBudgetCents: number | null
+  lastUsedAt: Date | null
+  createdAt: Date
 }
 
 export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
@@ -28,7 +35,7 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
       <p className="text-muted-foreground py-4 text-center">
         No API keys yet. Create your first key to get started.
       </p>
-    );
+    )
   }
 
   return (
@@ -45,22 +52,25 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {keys.map((key) => (
+        {keys.map(key => (
           <TableRow key={key.id}>
             <TableCell className="font-medium">{key.name}</TableCell>
-            <TableCell className="font-mono text-sm">
-              {key.maskedKey}
-            </TableCell>
+            <TableCell className="font-mono text-sm">{key.maskedKey}</TableCell>
             <TableCell>
-              <Badge variant={key.environment === 'live' ? 'default' : 'secondary'}>
+              <Badge
+                variant={key.environment === 'live' ? 'default' : 'secondary'}
+              >
                 {key.environment}
               </Badge>
             </TableCell>
             <TableCell>
               <Badge
                 variant={
-                  key.status === 'active' ? 'default' :
-                  key.status === 'paused' ? 'secondary' : 'destructive'
+                  key.status === 'active'
+                    ? 'default'
+                    : key.status === 'paused'
+                      ? 'secondary'
+                      : 'destructive'
                 }
               >
                 {key.status}
@@ -104,5 +114,5 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
         ))}
       </TableBody>
     </Table>
-  );
+  )
 }

@@ -1,12 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 
 import {
   Link2,
   LogIn,
   Palette,
+  Settings,
   Settings2 // Or EllipsisVertical, etc.
 } from 'lucide-react'
 
@@ -27,12 +28,10 @@ import { ThemeMenuItems } from './theme-menu-items'
 
 export default function GuestMenu() {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const currentPath = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
   const loginHref =
-    currentPath === '/'
+    pathname === '/'
       ? '/auth/login'
-      : `/auth/login?redirectTo=${encodeURIComponent(currentPath)}`
+      : `/auth/login?redirectTo=${encodeURIComponent(pathname)}`
 
   return (
     <DropdownMenu>
@@ -47,6 +46,12 @@ export default function GuestMenu() {
           <Link href={loginHref}>
             <LogIn className="mr-2 h-4 w-4" />
             <span>Sign In</span>
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/settings">
+            <Settings className="mr-2 h-4 w-4" />
+            <span>Settings</span>
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />

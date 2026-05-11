@@ -2,7 +2,7 @@
 
 import React, { useCallback, useRef, useState } from 'react'
 
-import { ChevronDown,Send, Sparkles } from 'lucide-react'
+import { ChevronDown, Send, Sparkles } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -11,7 +11,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
@@ -30,7 +30,7 @@ const EXAMPLE_PROMPTS = [
   'Add an accent bar on the left side',
   'Convert this to a two-column layout',
   'Make the quote larger and add attribution',
-  'Add a call-to-action at the bottom',
+  'Add a call-to-action at the bottom'
 ]
 
 // ---------------------------------------------------------------------------
@@ -58,12 +58,11 @@ export function AIEditBar() {
         {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            prompt,
-            slides,
-          }),
+            message: prompt
+          })
         }
       )
 
@@ -73,8 +72,32 @@ export function AIEditBar() {
 
       const data = await response.json()
 
-      if (data.slides) {
-        setSlides(data.slides)
+      if (
+        Array.isArray(data.updated_slides) &&
+        data.updated_slides.length > 0
+      ) {
+        setSlides(
+          slides.map(slide => {
+            const update = data.updated_slides.find(
+              (updated: { id: string }) => updated.id === slide.id
+            )
+
+            if (!update) {
+              return slide
+            }
+
+            const content = update.contentJson ?? {}
+
+            return {
+              ...slide,
+              title: update.title ?? slide.title,
+              bullets: Array.isArray(content.bullets)
+                ? content.bullets
+                : slide.bullets,
+              speakerNotes: update.speakerNotes ?? slide.speakerNotes
+            }
+          })
+        )
       }
     } catch (error) {
       console.error('Error editing presentation:', error)
@@ -83,7 +106,14 @@ export function AIEditBar() {
     } finally {
       setIsGenerating(false)
     }
-  }, [inputValue, isGenerating, presentationId, slides, setIsGenerating, setSlides])
+  }, [
+    inputValue,
+    isGenerating,
+    presentationId,
+    slides,
+    setIsGenerating,
+    setSlides
+  ])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -106,7 +136,11 @@ export function AIEditBar() {
       {/* Examples dropdown */}
       <DropdownMenu open={showExamples} onOpenChange={setShowExamples}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-muted-foreground"
+          >
             <Sparkles className="size-4" />
             <ChevronDown className="size-3" />
           </Button>
@@ -132,7 +166,7 @@ export function AIEditBar() {
         <Textarea
           ref={textareaRef}
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          onChange={e => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ask Brok to edit this deck... (Ctrl+Enter to submit)"
           className={cn(

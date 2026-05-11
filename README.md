@@ -14,13 +14,15 @@ An AI answer engine and developer API platform — Perplexity-style chat with So
 ## Features
 
 ### Brok Chat
+
 - Perplexity-style AI search with citations and streaming responses
-- Model selector with MiniMax and other providers
+- Model selector with Brok models and provider routing
 - Multiple search providers (Tavily, SearXNG, Brave, Exa)
 - Chat history stored in PostgreSQL
 - Share search results with unique URLs
 
 ### Brok API
+
 - OpenAI-compatible API endpoints
 - API key management with scopes and rate limits
 - Usage metering and tracking
@@ -28,6 +30,7 @@ An AI answer engine and developer API platform — Perplexity-style chat with So
 - Usage dashboard and logs
 
 ### Admin Panel
+
 - Brok API management section
 - User and workspace management
 - Provider routing configuration
@@ -68,14 +71,14 @@ curl https://api.brok.ai/v1/chat/completions \
 
 ## Available Models
 
-| Model | Description |
-|-------|-------------|
-| brok-lite | Fast, low-cost reasoning |
-| brok-search | Search-powered answers with citations |
-| brok-search-pro | Deep search with 10-20 sources |
-| brok-code | Code understanding and generation |
-| brok-agent | Tool-using agent |
-| brok-reasoning | Advanced reasoning |
+| Model           | Description                           |
+| --------------- | ------------------------------------- |
+| brok-lite       | Fast, low-cost reasoning              |
+| brok-search     | Search-powered answers with citations |
+| brok-search-pro | Deep search with 10-20 sources        |
+| brok-code       | Code understanding and generation     |
+| brok-agent      | Tool-using agent                      |
+| brok-reasoning  | Advanced reasoning                    |
 
 ## Documentation
 

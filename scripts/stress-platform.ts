@@ -1,0 +1,370 @@
+import { eq } from 'drizzle-orm'
+import { chromium } from 'playwright'
+
+import { createApiKey, ensureWorkspaceForUser } from '../lib/actions/api-keys'
+import { db } from '../lib/db'
+import {
+  createOrUpdateOutline,
+  createPresentation,
+  createSlides,
+  setPresentationShare
+} from '../lib/db/actions/presentations'
+import { apiKeys } from '../lib/db/schema'
+import { exportToPptx } from '../lib/presentations/export/pptx'
+import type { SlideContent } from '../lib/presentations/theme-utils'
+import { getThemeById } from '../lib/presentations/theme-utils'
+
+const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3001'
+const stressUserId =
+  process.env.ANONYMOUS_USER_ID || '00000000-0000-0000-0000-000000000000'
+
+async function expectJson(
+  response: Response,
+  expectedStatus: number
+): Promise<any> {
+  const body = await response.json().catch(() => null)
+
+  if (response.status !== expectedStatus) {
+    throw new Error(
+      `expected ${expectedStatus}, got ${response.status}: ${JSON.stringify(body)}`
+    )
+  }
+
+  return body
+}
+
+async function createStressKeys() {
+  const workspace = await ensureWorkspaceForUser(stressUserId)
+
+  const mainKey = await createApiKey(stressUserId, workspace.id, {
+    name: 'Stress Main Key',
+    environment: 'test',
+    scopes: ['chat:write', 'search:write', 'usage:read'],
+    allowedModels: [],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0
+  })
+
+  const lowRpmKey = await createApiKey(stressUserId, workspace.id, {
+    name: 'Stress Low RPM Key',
+    environment: 'test',
+    scopes: ['chat:write', 'usage:read'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 1,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0
+  })
+
+  const pausedKey = await createApiKey(stressUserId, workspace.id, {
+    name: 'Stress Paused Key',
+    environment: 'test',
+    scopes: ['chat:write'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0
+  })
+  await db
+    .update(apiKeys)
+    .set({ status: 'paused' })
+    .where(eq(apiKeys.id, pausedKey.id))
+
+  const revokedKey = await createApiKey(stressUserId, workspace.id, {
+    name: 'Stress Revoked Key',
+    environment: 'test',
+    scopes: ['chat:write'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0
+  })
+  await db
+    .update(apiKeys)
+    .set({ status: 'revoked', revokedAt: new Date() })
+    .where(eq(apiKeys.id, revokedKey.id))
+
+  return {
+    workspaceId: workspace.id,
+    mainKey: mainKey.key,
+    lowRpmKey: lowRpmKey.key,
+    pausedKey: pausedKey.key,
+    revokedKey: revokedKey.key
+  }
+}
+
+async function runChat(baseKey: string, label: string) {
+  const response = await fetch(`${baseUrl}/api/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${baseKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'brok-lite',
+      stream: false,
+      max_tokens: 64,
+      messages: [{ role: 'user', content: `Reply with one sentence: ${label}` }]
+    })
+  })
+
+  const body = await expectJson(response, 200)
+
+  if (!Array.isArray(body.choices) || body.choices.length === 0) {
+    throw new Error('chat response missing choices')
+  }
+}
+
+async function runSearch(baseKey: string) {
+  const response = await fetch(`${baseUrl}/api/v1/search/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${baseKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'brok-search',
+      depth: 'lite',
+      query: 'What is Brok? Answer briefly.'
+    })
+  })
+
+  const body = await expectJson(response, 200)
+
+  if (!Array.isArray(body.citations)) {
+    throw new Error('search response missing citations array')
+  }
+}
+
+async function runApiStress(
+  keys: Awaited<ReturnType<typeof createStressKeys>>
+) {
+  await runChat(keys.mainKey, 'stress-main')
+  console.log('stress api ok chat success')
+
+  await runSearch(keys.mainKey)
+  console.log('stress api ok search success')
+
+  const usageResponse = await fetch(`${baseUrl}/api/v1/usage`, {
+    headers: {
+      Authorization: `Bearer ${keys.mainKey}`
+    }
+  })
+  const usageBody = await expectJson(usageResponse, 200)
+  if ((usageBody?.usage?.requests ?? 0) < 2) {
+    throw new Error('usage endpoint did not reflect successful API activity')
+  }
+  console.log('stress api ok usage aggregation')
+
+  const pausedResponse = await fetch(`${baseUrl}/api/v1/usage`, {
+    headers: {
+      Authorization: `Bearer ${keys.pausedKey}`
+    }
+  })
+  const pausedBody = await expectJson(pausedResponse, 403)
+  if (pausedBody?.error?.code !== 'inactive_key') {
+    throw new Error('paused key did not return inactive_key')
+  }
+  console.log('stress api ok paused key rejection')
+
+  const revokedResponse = await fetch(`${baseUrl}/api/v1/usage`, {
+    headers: {
+      Authorization: `Bearer ${keys.revokedKey}`
+    }
+  })
+  const revokedBody = await expectJson(revokedResponse, 403)
+  if (revokedBody?.error?.code !== 'inactive_key') {
+    throw new Error('revoked key did not return inactive_key')
+  }
+  console.log('stress api ok revoked key rejection')
+
+  await runChat(keys.lowRpmKey, 'rate-limit-first')
+
+  const rateLimitedResponse = await fetch(
+    `${baseUrl}/api/v1/chat/completions`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${keys.lowRpmKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'brok-lite',
+        stream: false,
+        max_tokens: 32,
+        messages: [{ role: 'user', content: 'rate-limit-second' }]
+      })
+    }
+  )
+  const rateLimitedBody = await expectJson(rateLimitedResponse, 429)
+  if (rateLimitedBody?.error?.code !== 'rate_limit_exceeded') {
+    throw new Error('low-rpm key did not hit rate_limit_exceeded')
+  }
+  console.log('stress api ok rate limit enforcement')
+}
+
+async function runPresentationFlow() {
+  const presentation = await createPresentation({
+    title: 'Stress Test Deck',
+    userId: stressUserId,
+    description: 'Stress verification deck',
+    language: 'en',
+    style: 'professional',
+    slideCount: 2,
+    themeId: 'minimal_light'
+  })
+
+  await createOrUpdateOutline({
+    presentationId: presentation.id,
+    outlineJson: [
+      {
+        title: 'Intro',
+        bullets: ['Point A', 'Point B']
+      },
+      {
+        title: 'Next Steps',
+        bullets: ['Point C', 'Point D']
+      }
+    ],
+    status: 'ready'
+  })
+
+  const persistedSlides = await createSlides({
+    presentationId: presentation.id,
+    slides: [
+      {
+        slideIndex: 0,
+        title: 'Intro',
+        layoutType: 'title',
+        contentJson: {
+          bullets: ['Point A', 'Point B'],
+          subtitle: 'Smoke verification'
+        }
+      },
+      {
+        slideIndex: 1,
+        title: 'Next Steps',
+        layoutType: 'text',
+        contentJson: {
+          bullets: ['Point C', 'Point D']
+        }
+      }
+    ]
+  })
+
+  if (persistedSlides.length !== 2) {
+    throw new Error('presentation did not persist manual slides')
+  }
+  console.log('stress presentation ok CRUD + slide persistence')
+
+  const share = await setPresentationShare(presentation.id, stressUserId, true)
+  if (!share?.shareUrl) {
+    throw new Error('share action did not return a public URL')
+  }
+
+  const presentResponse = await fetch(
+    `${baseUrl}/api/presentations/${presentation.id}/present`
+  )
+  const presentBody = await expectJson(presentResponse, 200)
+  if (!Array.isArray(presentBody.slides) || presentBody.slides.length !== 2) {
+    throw new Error('present route did not return slides')
+  }
+  console.log('stress presentation ok share + present')
+
+  const theme = getThemeById('minimal_light')
+  if (!theme) {
+    throw new Error('missing minimal_light theme')
+  }
+
+  const exportBuffer = await exportToPptx({
+    title: 'Stress Test Deck',
+    theme,
+    slides: [
+      {
+        id: persistedSlides[0].id,
+        layout: 'title',
+        heading: 'Intro',
+        bullets: ['Point A', 'Point B']
+      },
+      {
+        id: persistedSlides[1].id,
+        layout: 'text',
+        heading: 'Next Steps',
+        bullets: ['Point C', 'Point D']
+      }
+    ] satisfies SlideContent[]
+  })
+
+  if (exportBuffer.byteLength < 1000) {
+    throw new Error('pptx export looked too small to be valid')
+  }
+  console.log('stress presentation ok export')
+
+  return presentation.id
+}
+
+async function runBrowserChecks(presentationId: string) {
+  const browser = await chromium.launch({ headless: true })
+  const page = await browser.newPage()
+  const pageErrors: string[] = []
+
+  page.on('pageerror', error => {
+    pageErrors.push(error.message)
+  })
+
+  try {
+    const checks = [
+      { path: '/admin/brok', text: 'Brok API' },
+      { path: '/admin/brok/logs', text: 'Brok API Logs' },
+      { path: '/admin/brok/providers', text: 'Provider Routing' },
+      { path: `/presentations/${presentationId}/present`, text: 'Intro' }
+    ]
+
+    for (const check of checks) {
+      pageErrors.length = 0
+      const response = await page.goto(`${baseUrl}${check.path}`, {
+        waitUntil: 'networkidle'
+      })
+
+      if (!response || !response.ok()) {
+        throw new Error(
+          `${check.path} expected 200, got ${response?.status() ?? 'no response'}`
+        )
+      }
+
+      const bodyText = (await page.locator('body').innerText()).replace(
+        /\s+/g,
+        ' '
+      )
+
+      if (!bodyText.includes(check.text)) {
+        throw new Error(`${check.path} missing text "${check.text}"`)
+      }
+
+      if (pageErrors.length > 0) {
+        throw new Error(`${check.path} page errors: ${pageErrors.join('; ')}`)
+      }
+
+      console.log(`stress ui ok ${check.path}`)
+    }
+  } finally {
+    await browser.close()
+  }
+}
+
+async function main() {
+  console.log(`stress base ${baseUrl}`)
+  const keys = await createStressKeys()
+  console.log(`stress workspace ${keys.workspaceId}`)
+
+  await runApiStress(keys)
+  const presentationId = await runPresentationFlow()
+  await runBrowserChecks(presentationId)
+
+  console.log('stress ok')
+}
+
+main().catch(error => {
+  console.error(error)
+  process.exit(1)
+})

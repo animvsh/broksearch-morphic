@@ -1,19 +1,19 @@
-import { and, eq, gte } from 'drizzle-orm';
+import { and, eq, gte } from 'drizzle-orm'
 
-import { db } from '@/lib/db';
-import { rateLimitEvents } from '@/lib/db/schema-brok';
+import { db } from '@/lib/db'
+import { rateLimitEvents } from '@/lib/db/schema-brok'
 
 export interface RateLimitResult {
-  allowed: boolean;
-  current: number;
-  limit: number;
-  resetAt: number; // Unix timestamp
+  allowed: boolean
+  current: number
+  limit: number
+  resetAt: number // Unix timestamp
 }
 
 export interface RateLimitConfig {
-  rpm: number;
-  rph?: number; // requests per hour
-  rpd?: number; // requests per day
+  rpm: number
+  rph?: number // requests per hour
+  rpd?: number // requests per day
 }
 
 /**
@@ -25,9 +25,9 @@ export async function checkRateLimit(
   workspaceId: string,
   rpmLimit: number
 ): Promise<RateLimitResult> {
-  const now = Date.now();
-  const windowMs = 60 * 1000; // 1 minute window
-  const windowStart = new Date(now - windowMs);
+  const now = Date.now()
+  const windowMs = 60 * 1000 // 1 minute window
+  const windowStart = new Date(now - windowMs)
 
   try {
     // Count requests in the current window
@@ -39,11 +39,11 @@ export async function checkRateLimit(
           eq(rateLimitEvents.apiKeyId, apiKeyId),
           gte(rateLimitEvents.createdAt, windowStart)
         )
-      );
+      )
 
-    const currentCount = result.length;
-    const allowed = currentCount < rpmLimit;
-    const resetAt = Math.floor((now + windowMs) / 1000); // Unix timestamp
+    const currentCount = result.length
+    const allowed = currentCount < rpmLimit
+    const resetAt = Math.floor((now + windowMs) / 1000) // Unix timestamp
 
     if (!allowed) {
       // Record a blocked event
@@ -53,25 +53,25 @@ export async function checkRateLimit(
         limitType: 'rpm',
         limitValue: rpmLimit,
         currentValue: currentCount,
-        blocked: true,
-      });
+        blocked: true
+      })
     }
 
     return {
       allowed,
       current: currentCount,
       limit: rpmLimit,
-      resetAt,
-    };
+      resetAt
+    }
   } catch (error) {
-    console.error('Rate limit check error:', error);
+    console.error('Rate limit check error:', error)
     // Fail open - allow the request if we can't check
     return {
       allowed: true,
       current: 0,
       limit: rpmLimit,
-      resetAt: Math.floor((now + 60000) / 1000),
-    };
+      resetAt: Math.floor((now + 60000) / 1000)
+    }
   }
 }
 
@@ -93,9 +93,9 @@ export async function recordRateLimitEvent(
       limitType,
       limitValue,
       currentValue,
-      blocked,
-    });
+      blocked
+    })
   } catch (error) {
-    console.error('Failed to record rate limit event:', error);
+    console.error('Failed to record rate limit event:', error)
   }
 }

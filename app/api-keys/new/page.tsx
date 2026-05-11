@@ -1,8 +1,20 @@
-import { createApiKey } from '@/lib/actions/api-keys';
+import { redirect } from 'next/navigation'
 
-import { CreateApiKeyForm } from '@/components/create-api-key-form';
+import { createApiKey, ensureWorkspaceForUser } from '@/lib/actions/api-keys'
+import { getRequiredBrokAccountUser } from '@/lib/brokcode/account-guard'
 
-export default function NewApiKeyPage() {
+import { CreateApiKeyForm } from '@/components/create-api-key-form'
+
+export const dynamic = 'force-dynamic'
+
+export default async function NewApiKeyPage() {
+  const user = await getRequiredBrokAccountUser()
+  if (!user) {
+    redirect(`/auth/login?redirectTo=${encodeURIComponent('/api-keys/new')}`)
+  }
+
+  const workspace = await ensureWorkspaceForUser(user.id)
+
   return (
     <div className="container py-8 max-w-2xl">
       <div className="mb-8">
@@ -12,14 +24,18 @@ export default function NewApiKeyPage() {
         </p>
       </div>
 
-      <CreateApiKeyForm action={createApiKey} />
+      <CreateApiKeyForm
+        action={createApiKey}
+        userId={user.id}
+        workspaceId={workspace.id}
+      />
 
       <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p className="text-sm text-yellow-800">
-          <strong>Warning:</strong> Your API key will only be shown once after creation.
-          Make sure to copy it somewhere safe.
+          <strong>Warning:</strong> Your API key will only be shown once after
+          creation. Make sure to copy it somewhere safe.
         </p>
       </div>
     </div>
-  );
+  )
 }

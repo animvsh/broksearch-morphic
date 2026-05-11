@@ -43,13 +43,14 @@ if (isDevelopment) {
   )
 }
 
-// SSL configuration: Use environment variable to control SSL
-// DATABASE_SSL_DISABLED=true disables SSL completely (for local/Docker PostgreSQL)
-// Default is to enable SSL with certificate verification (for cloud databases like Neon, Supabase)
-const sslConfig =
-  process.env.DATABASE_SSL_DISABLED === 'true'
-    ? false // Disable SSL entirely for local PostgreSQL
-    : { rejectUnauthorized: true } // Enable SSL with verification for cloud DBs
+// Keep runtime SSL behavior aligned with migrate.ts so Railway and similar hosted
+// Postgres services work with their managed certificate chain.
+const sslDisabled = process.env.DATABASE_SSL_DISABLED === 'true'
+const sslConfig = sslDisabled
+  ? false
+  : isDevelopment || isTest
+    ? false
+    : { rejectUnauthorized: false }
 
 const client = postgres(connectionString, {
   ssl: sslConfig,

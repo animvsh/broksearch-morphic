@@ -6,7 +6,11 @@ export type PresentationStatus =
   | 'ready'
   | 'error'
 
-export type PresentationStyle = 'startup' | 'professional' | 'casual' | 'academic'
+export type PresentationStyle =
+  | 'startup'
+  | 'professional'
+  | 'casual'
+  | 'academic'
 
 export interface Presentation {
   id: string

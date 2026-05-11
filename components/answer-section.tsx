@@ -14,6 +14,7 @@ import type {
 import { CollapsibleMessage } from './collapsible-message'
 import { MarkdownMessage } from './message'
 import { MessageActions } from './message-actions'
+import { SourceStrip } from './source-strip'
 
 export type AnswerSectionProps = {
   content: string
@@ -66,6 +67,7 @@ export function AnswerSection({
     >
       {content && (
         <div className="flex flex-col gap-1">
+          <SourceStrip citationMaps={citationMaps} />
           <MarkdownMessage message={content} citationMaps={citationMaps} />
           <MessageActions
             message={content} // Provide original message; copy path remaps citations

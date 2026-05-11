@@ -1,11 +1,18 @@
 'use client'
 
 import React, { useCallback, useState } from 'react'
+import Image from 'next/image'
 
 import { cn } from '@/lib/utils'
 
-import type { LayoutType, SlideElement } from '@/states/presentation-editor-store'
-import { selectActiveSlide,usePresentationEditorStore } from '@/states/presentation-editor-store'
+import type {
+  LayoutType,
+  SlideElement
+} from '@/states/presentation-editor-store'
+import {
+  selectActiveSlide,
+  usePresentationEditorStore
+} from '@/states/presentation-editor-store'
 
 // ---------------------------------------------------------------------------
 // Layout renderers
@@ -18,10 +25,15 @@ interface LayoutRendererProps {
   onUpdateElement: (id: string, updates: Partial<SlideElement>) => void
 }
 
-function TitleLayout({ slide, selectedElementId, onSelectElement, onUpdateElement }: LayoutRendererProps) {
+function TitleLayout({
+  slide,
+  selectedElementId,
+  onSelectElement,
+  onUpdateElement
+}: LayoutRendererProps) {
   if (!slide) return null
 
-  const headingEl = slide.elements?.find((el) => el.type === 'heading')
+  const headingEl = slide.elements?.find(el => el.type === 'heading')
 
   return (
     <div className="h-full flex flex-col items-center justify-center px-16 py-12">
@@ -29,7 +41,9 @@ function TitleLayout({ slide, selectedElementId, onSelectElement, onUpdateElemen
         element={headingEl}
         isSelected={selectedElementId === headingEl?.id}
         onSelect={() => onSelectElement(headingEl?.id ?? null)}
-        onUpdate={(updates) => headingEl && onUpdateElement(headingEl.id, updates)}
+        onUpdate={updates =>
+          headingEl && onUpdateElement(headingEl.id, updates)
+        }
         className="text-6xl font-bold text-center leading-tight"
         style={{ color: slide.background ? '#1A1A1A' : 'var(--foreground)' }}
       />
@@ -42,10 +56,15 @@ function TitleLayout({ slide, selectedElementId, onSelectElement, onUpdateElemen
   )
 }
 
-function SectionLayout({ slide, selectedElementId, onSelectElement, onUpdateElement }: LayoutRendererProps) {
+function SectionLayout({
+  slide,
+  selectedElementId,
+  onSelectElement,
+  onUpdateElement
+}: LayoutRendererProps) {
   if (!slide) return null
 
-  const headingEl = slide.elements?.find((el) => el.type === 'heading')
+  const headingEl = slide.elements?.find(el => el.type === 'heading')
 
   return (
     <div className="h-full flex flex-col px-16 py-12">
@@ -58,7 +77,9 @@ function SectionLayout({ slide, selectedElementId, onSelectElement, onUpdateElem
         element={headingEl}
         isSelected={selectedElementId === headingEl?.id}
         onSelect={() => onSelectElement(headingEl?.id ?? null)}
-        onUpdate={(updates) => headingEl && onUpdateElement(headingEl.id, updates)}
+        onUpdate={updates =>
+          headingEl && onUpdateElement(headingEl.id, updates)
+        }
         className="text-5xl font-bold leading-tight"
         style={{ color: slide.background ? '#1A1A1A' : 'var(--foreground)' }}
       />
@@ -66,7 +87,7 @@ function SectionLayout({ slide, selectedElementId, onSelectElement, onUpdateElem
         <ul className="mt-8 space-y-4">
           {slide.bullets.map((bullet, i) => {
             const bulletEl = slide.elements?.find(
-              (el) => el.type === 'bullet' && el.content === bullet
+              el => el.type === 'bullet' && el.content === bullet
             )
             return (
               <li key={i} className="flex items-start gap-3">
@@ -78,7 +99,9 @@ function SectionLayout({ slide, selectedElementId, onSelectElement, onUpdateElem
                   element={bulletEl}
                   isSelected={selectedElementId === bulletEl?.id}
                   onSelect={() => onSelectElement(bulletEl?.id ?? null)}
-                  onUpdate={(updates) => bulletEl && onUpdateElement(bulletEl.id, updates)}
+                  onUpdate={updates =>
+                    bulletEl && onUpdateElement(bulletEl.id, updates)
+                  }
                   className="text-xl leading-relaxed"
                 />
               </li>
@@ -90,11 +113,18 @@ function SectionLayout({ slide, selectedElementId, onSelectElement, onUpdateElem
   )
 }
 
-function TwoColumnLayout({ slide, selectedElementId, onSelectElement, onUpdateElement }: LayoutRendererProps) {
+function TwoColumnLayout({
+  slide,
+  selectedElementId,
+  onSelectElement,
+  onUpdateElement
+}: LayoutRendererProps) {
   if (!slide) return null
 
-  const leftBullets = slide.bullets?.slice(0, Math.ceil((slide.bullets?.length ?? 0) / 2)) ?? []
-  const rightBullets = slide.bullets?.slice(Math.ceil((slide.bullets?.length ?? 0) / 2)) ?? []
+  const leftBullets =
+    slide.bullets?.slice(0, Math.ceil((slide.bullets?.length ?? 0) / 2)) ?? []
+  const rightBullets =
+    slide.bullets?.slice(Math.ceil((slide.bullets?.length ?? 0) / 2)) ?? []
 
   return (
     <div className="h-full grid grid-cols-2 gap-12 px-16 py-12">
@@ -102,7 +132,7 @@ function TwoColumnLayout({ slide, selectedElementId, onSelectElement, onUpdateEl
       <div className="flex flex-col justify-center">
         {leftBullets.map((bullet, i) => {
           const bulletEl = slide.elements?.find(
-            (el) => el.type === 'bullet' && el.content === bullet
+            el => el.type === 'bullet' && el.content === bullet
           )
           return (
             <div key={i} className="flex items-start gap-3 mb-4">
@@ -114,7 +144,9 @@ function TwoColumnLayout({ slide, selectedElementId, onSelectElement, onUpdateEl
                 element={bulletEl}
                 isSelected={selectedElementId === bulletEl?.id}
                 onSelect={() => onSelectElement(bulletEl?.id ?? null)}
-                onUpdate={(updates) => bulletEl && onUpdateElement(bulletEl.id, updates)}
+                onUpdate={updates =>
+                  bulletEl && onUpdateElement(bulletEl.id, updates)
+                }
                 className="text-lg leading-relaxed"
               />
             </div>
@@ -126,7 +158,7 @@ function TwoColumnLayout({ slide, selectedElementId, onSelectElement, onUpdateEl
       <div className="flex flex-col justify-center">
         {rightBullets.map((bullet, i) => {
           const bulletEl = slide.elements?.find(
-            (el) => el.type === 'bullet' && el.content === bullet
+            el => el.type === 'bullet' && el.content === bullet
           )
           return (
             <div key={i} className="flex items-start gap-3 mb-4">
@@ -138,7 +170,9 @@ function TwoColumnLayout({ slide, selectedElementId, onSelectElement, onUpdateEl
                 element={bulletEl}
                 isSelected={selectedElementId === bulletEl?.id}
                 onSelect={() => onSelectElement(bulletEl?.id ?? null)}
-                onUpdate={(updates) => bulletEl && onUpdateElement(bulletEl.id, updates)}
+                onUpdate={updates =>
+                  bulletEl && onUpdateElement(bulletEl.id, updates)
+                }
                 className="text-lg leading-relaxed"
               />
             </div>
@@ -149,20 +183,28 @@ function TwoColumnLayout({ slide, selectedElementId, onSelectElement, onUpdateEl
   )
 }
 
-function ImageLeftLayout({ slide, selectedElementId, onSelectElement, onUpdateElement }: LayoutRendererProps) {
+function ImageLeftLayout({
+  slide,
+  selectedElementId,
+  onSelectElement,
+  onUpdateElement
+}: LayoutRendererProps) {
   if (!slide) return null
 
-  const headingEl = slide.elements?.find((el) => el.type === 'heading')
+  const headingEl = slide.elements?.find(el => el.type === 'heading')
 
   return (
     <div className="h-full grid grid-cols-2 gap-12 px-16 py-12">
       {/* Image */}
-      <div className="flex items-center justify-center bg-muted rounded-lg overflow-hidden">
+      <div className="relative flex items-center justify-center bg-muted rounded-lg overflow-hidden">
         {slide.imageUrl ? (
-          <img
+          <Image
             src={slide.imageUrl}
             alt={slide.imagePrompt ?? 'Slide image'}
-            className="w-full h-full object-cover"
+            fill
+            sizes="50vw"
+            className="object-cover"
+            unoptimized
           />
         ) : (
           <div className="text-center text-muted-foreground p-8">
@@ -190,7 +232,9 @@ function ImageLeftLayout({ slide, selectedElementId, onSelectElement, onUpdateEl
           element={headingEl}
           isSelected={selectedElementId === headingEl?.id}
           onSelect={() => onSelectElement(headingEl?.id ?? null)}
-          onUpdate={(updates) => headingEl && onUpdateElement(headingEl.id, updates)}
+          onUpdate={updates =>
+            headingEl && onUpdateElement(headingEl.id, updates)
+          }
           className="text-4xl font-bold leading-tight mb-4"
           style={{ color: slide.background ? '#1A1A1A' : 'var(--foreground)' }}
         />
@@ -198,7 +242,7 @@ function ImageLeftLayout({ slide, selectedElementId, onSelectElement, onUpdateEl
           <ul className="space-y-3">
             {slide.bullets.map((bullet, i) => {
               const bulletEl = slide.elements?.find(
-                (el) => el.type === 'bullet' && el.content === bullet
+                el => el.type === 'bullet' && el.content === bullet
               )
               return (
                 <li key={i} className="flex items-start gap-3">
@@ -210,7 +254,9 @@ function ImageLeftLayout({ slide, selectedElementId, onSelectElement, onUpdateEl
                     element={bulletEl}
                     isSelected={selectedElementId === bulletEl?.id}
                     onSelect={() => onSelectElement(bulletEl?.id ?? null)}
-                    onUpdate={(updates) => bulletEl && onUpdateElement(bulletEl.id, updates)}
+                    onUpdate={updates =>
+                      bulletEl && onUpdateElement(bulletEl.id, updates)
+                    }
                     className="text-lg leading-relaxed"
                   />
                 </li>
@@ -223,10 +269,15 @@ function ImageLeftLayout({ slide, selectedElementId, onSelectElement, onUpdateEl
   )
 }
 
-function ChartLayout({ slide, selectedElementId, onSelectElement, onUpdateElement }: LayoutRendererProps) {
+function ChartLayout({
+  slide,
+  selectedElementId,
+  onSelectElement,
+  onUpdateElement
+}: LayoutRendererProps) {
   if (!slide) return null
 
-  const headingEl = slide.elements?.find((el) => el.type === 'heading')
+  const headingEl = slide.elements?.find(el => el.type === 'heading')
 
   return (
     <div className="h-full flex flex-col items-center justify-center px-16 py-12">
@@ -234,14 +285,14 @@ function ChartLayout({ slide, selectedElementId, onSelectElement, onUpdateElemen
         element={headingEl}
         isSelected={selectedElementId === headingEl?.id}
         onSelect={() => onSelectElement(headingEl?.id ?? null)}
-        onUpdate={(updates) => headingEl && onUpdateElement(headingEl.id, updates)}
+        onUpdate={updates =>
+          headingEl && onUpdateElement(headingEl.id, updates)
+        }
         className="text-4xl font-bold text-center mb-8"
         style={{ color: slide.background ? '#1A1A1A' : 'var(--foreground)' }}
       />
       {/* Chart placeholder */}
-      <div
-        className="w-full max-w-2xl aspect-video bg-muted rounded-lg flex items-center justify-center"
-      >
+      <div className="w-full max-w-2xl aspect-video bg-muted rounded-lg flex items-center justify-center">
         {slide.chartData ? (
           <div className="text-center text-muted-foreground">
             <svg
@@ -282,10 +333,15 @@ function ChartLayout({ slide, selectedElementId, onSelectElement, onUpdateElemen
   )
 }
 
-function QuoteLayout({ slide, selectedElementId, onSelectElement, onUpdateElement }: LayoutRendererProps) {
+function QuoteLayout({
+  slide,
+  selectedElementId,
+  onSelectElement,
+  onUpdateElement
+}: LayoutRendererProps) {
   if (!slide) return null
 
-  const quoteEl = slide.elements?.find((el) => el.type === 'quote')
+  const quoteEl = slide.elements?.find(el => el.type === 'quote')
 
   return (
     <div className="h-full flex flex-col items-center justify-center px-16 py-12">
@@ -302,7 +358,7 @@ function QuoteLayout({ slide, selectedElementId, onSelectElement, onUpdateElemen
         element={quoteEl}
         isSelected={selectedElementId === quoteEl?.id}
         onSelect={() => onSelectElement(quoteEl?.id ?? null)}
-        onUpdate={(updates) => quoteEl && onUpdateElement(quoteEl.id, updates)}
+        onUpdate={updates => quoteEl && onUpdateElement(quoteEl.id, updates)}
         className="text-3xl font-serif italic text-center leading-relaxed max-w-3xl"
         style={{ color: slide.background ? '#1A1A1A' : 'var(--foreground)' }}
       />
@@ -316,10 +372,15 @@ function QuoteLayout({ slide, selectedElementId, onSelectElement, onUpdateElemen
   )
 }
 
-function TextLayout({ slide, selectedElementId, onSelectElement, onUpdateElement }: LayoutRendererProps) {
+function TextLayout({
+  slide,
+  selectedElementId,
+  onSelectElement,
+  onUpdateElement
+}: LayoutRendererProps) {
   if (!slide) return null
 
-  const bodyEl = slide.elements?.find((el) => el.type === 'body')
+  const bodyEl = slide.elements?.find(el => el.type === 'body')
 
   return (
     <div className="h-full flex flex-col items-center justify-center px-16 py-12">
@@ -327,7 +388,7 @@ function TextLayout({ slide, selectedElementId, onSelectElement, onUpdateElement
         element={bodyEl}
         isSelected={selectedElementId === bodyEl?.id}
         onSelect={() => onSelectElement(bodyEl?.id ?? null)}
-        onUpdate={(updates) => bodyEl && onUpdateElement(bodyEl.id, updates)}
+        onUpdate={updates => bodyEl && onUpdateElement(bodyEl.id, updates)}
         className="text-xl leading-relaxed text-center max-w-3xl"
         style={{ color: slide.background ? '#1A1A1A' : 'var(--foreground)' }}
       />
@@ -354,16 +415,19 @@ function EditableText({
   onSelect,
   onUpdate,
   className,
-  style,
+  style
 }: EditableTextProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(element?.content ?? '')
 
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setIsEditing(true)
-    setEditValue(element?.content ?? '')
-  }, [element?.content])
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      setIsEditing(true)
+      setEditValue(element?.content ?? '')
+    },
+    [element?.content]
+  )
 
   const handleBlur = useCallback(() => {
     setIsEditing(false)
@@ -404,7 +468,7 @@ function EditableText({
       <input
         type="text"
         value={editValue}
-        onChange={(e) => setEditValue(e.target.value)}
+        onChange={e => setEditValue(e.target.value)}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         autoFocus
@@ -424,14 +488,16 @@ function EditableText({
         isSelected && 'ring-2 ring-accent ring-offset-2 bg-accent/10',
         !isSelected && 'hover:bg-muted/50'
       )}
-      onClick={(e) => {
+      onClick={e => {
         e.stopPropagation()
         onSelect()
       }}
       onDoubleClick={handleDoubleClick}
       style={style}
     >
-      {element.content || <span className="text-muted-foreground italic">Click to edit</span>}
+      {element.content || (
+        <span className="text-muted-foreground italic">Click to edit</span>
+      )}
     </div>
   )
 }
@@ -440,14 +506,17 @@ function EditableText({
 // Layout renderer map
 // ---------------------------------------------------------------------------
 
-const LAYOUT_RENDERERS: Record<LayoutType, React.ComponentType<LayoutRendererProps>> = {
+const LAYOUT_RENDERERS: Record<
+  LayoutType,
+  React.ComponentType<LayoutRendererProps>
+> = {
   title: TitleLayout,
   section: SectionLayout,
   two_column: TwoColumnLayout,
   image_left: ImageLeftLayout,
   chart: ChartLayout,
   quote: QuoteLayout,
-  text: TextLayout,
+  text: TextLayout
 }
 
 // ---------------------------------------------------------------------------
@@ -460,7 +529,7 @@ export function SlideCanvas() {
     activeSlideIndex,
     selectedElementId,
     selectElement,
-    updateElement,
+    updateElement
   } = usePresentationEditorStore()
 
   const slide = slides[activeSlideIndex]

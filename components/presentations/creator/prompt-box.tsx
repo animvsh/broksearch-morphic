@@ -82,7 +82,7 @@ export function PromptBox({
         <textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={e => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="What presentation do you want to create?"
           disabled={isLoading}
@@ -113,7 +113,7 @@ export function PromptBox({
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">Try an example:</p>
         <div className="flex flex-wrap gap-2">
-          {EXAMPLE_PROMPTS.map((example) => (
+          {EXAMPLE_PROMPTS.map(example => (
             <button
               key={example.label}
               onClick={() => handleExampleClick(example)}
@@ -135,8 +135,15 @@ export function PromptBox({
 
       {/* Submit hint */}
       <p className="text-xs text-muted-foreground">
-        Press <kbd className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">Ctrl</kbd> +{' '}
-        <kbd className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">Enter</kbd> to generate
+        Press{' '}
+        <kbd className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">
+          Ctrl
+        </kbd>{' '}
+        +{' '}
+        <kbd className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">
+          Enter
+        </kbd>{' '}
+        to generate
       </p>
     </div>
   )

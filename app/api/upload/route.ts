@@ -3,7 +3,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
-import { LOCAL_PUBLIC_URL, LOCAL_STORAGE_PATH,uploadFileLocal } from '@/lib/storage/local-file-client'
+import {
+  LOCAL_PUBLIC_URL,
+  LOCAL_STORAGE_PATH,
+  uploadFileLocal
+} from '@/lib/storage/local-file-client'
 import {
   getR2Client,
   R2_BUCKET_NAME,
@@ -102,10 +106,7 @@ async function uploadFileToR2(file: File, userId: string, chatId: string) {
 async function handleLocalUpload(req: NextRequest, userId: string) {
   const contentType = req.headers.get('content-type') || ''
   if (!contentType.includes('multipart/form-data')) {
-    return NextResponse.json(
-      { error: 'Invalid content type' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: 'Invalid content type' }, { status: 400 })
   }
 
   const formData = await req.formData()

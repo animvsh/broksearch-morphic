@@ -1,8 +1,7 @@
 import {
   consumeStream,
   convertToModelMessages,
-  pruneMessages,
-  smoothStream
+  pruneMessages
 } from 'ai'
 import { randomUUID } from 'crypto'
 import { Langfuse } from 'langfuse'
@@ -29,6 +28,8 @@ import { BaseStreamConfig } from './types'
 
 // Constants
 const DEFAULT_CHAT_TITLE = 'Untitled'
+const GENERIC_CHAT_ERROR =
+  'Brok could not complete the request. Please try again.'
 
 export async function createChatStreamResponse(
   config: BaseStreamConfig
@@ -44,6 +45,8 @@ export async function createChatStreamResponse(
     isNewChat,
     searchMode
   } = config
+  const internalModelId = `${model.providerId}:${model.id}`
+  const publicModelId = model.name
 
   // Verify that chatId is provided
   if (!chatId) {
@@ -87,7 +90,7 @@ export async function createChatStreamResponse(
       metadata: {
         chatId,
         userId,
-        modelId: `${model.providerId}:${model.id}`,
+        modelId: publicModelId,
         trigger
       }
     })
@@ -97,7 +100,7 @@ export async function createChatStreamResponse(
   const context: StreamContext = {
     chatId,
     userId,
-    modelId: `${model.providerId}:${model.id}`,
+    modelId: internalModelId,
     messageId,
     trigger,
     initialChat,
@@ -123,7 +126,8 @@ export async function createChatStreamResponse(
       model: context.modelId,
       modelConfig: model,
       parentTraceId,
-      searchMode
+      searchMode,
+      userId
     })
 
     // For OpenAI models, strip reasoning parts from UIMessages before conversion
@@ -178,8 +182,7 @@ export async function createChatStreamResponse(
     )
     const result = await researchAgent.stream({
       messages: modelMessages,
-      abortSignal,
-      experimental_transform: smoothStream({ chunking: 'word' })
+      abortSignal
     })
     result.consumeStream()
 
@@ -189,7 +192,7 @@ export async function createChatStreamResponse(
           return {
             traceId: parentTraceId,
             searchMode,
-            modelId: context.modelId
+            modelId: publicModelId
           }
         }
       },
@@ -216,9 +219,7 @@ export async function createChatStreamResponse(
           }
         }
       },
-      onError: (error: unknown) => {
-        return error instanceof Error ? error.message : String(error)
-      },
+      onError: () => GENERIC_CHAT_ERROR,
       consumeSseStream: consumeStream
     })
   } catch (error) {
@@ -226,8 +227,7 @@ export async function createChatStreamResponse(
       await langfuse.flushAsync()
     }
     console.error('Stream execution error:', error)
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    return new Response(errorMessage, {
+    return new Response(GENERIC_CHAT_ERROR, {
       status: 500,
       statusText: 'Internal Server Error'
     })

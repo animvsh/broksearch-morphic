@@ -23,7 +23,7 @@ export class TavilySearchProvider extends BaseSearchProvider {
     const filledQuery =
       query.length < 5 ? query + ' '.repeat(5 - query.length) : query
 
-    const isCloudDeployment = process.env.MORPHIC_CLOUD_DEPLOYMENT === 'true'
+    const isCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT === 'true'
     const effectiveExcludeDomains = isCloudDeployment
       ? Array.from(new Set([...excludeDomains, ...CLOUD_EXCLUDED_DOMAINS]))
       : excludeDomains

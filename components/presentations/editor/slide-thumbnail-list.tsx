@@ -2,7 +2,7 @@
 
 import React, { useCallback } from 'react'
 
-import { ChevronDown,ChevronUp, Copy, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Copy, Plus, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -12,7 +12,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 
 import type { SlideContent } from '@/states/presentation-editor-store'
@@ -28,7 +28,7 @@ function SlideThumbnail({
   onMoveUp,
   onMoveDown,
   canMoveUp,
-  canMoveDown,
+  canMoveDown
 }: {
   slide: SlideContent
   index: number
@@ -64,9 +64,7 @@ function SlideThumbnail({
           'bg-white dark:bg-zinc-900'
         )}
         style={
-          slide.background
-            ? { backgroundColor: slide.background }
-            : undefined
+          slide.background ? { backgroundColor: slide.background } : undefined
         }
       >
         <div className="h-full flex flex-col">
@@ -74,9 +72,7 @@ function SlideThumbnail({
           <div
             className="text-xs font-medium truncate px-1"
             style={{
-              color: slide.background
-                ? '#1A1A1A'
-                : 'var(--foreground)',
+              color: slide.background ? '#1A1A1A' : 'var(--foreground)'
             }}
           >
             {slide.title || `Slide ${index + 1}`}
@@ -124,7 +120,7 @@ function SlideThumbnail({
               size="icon"
               variant="ghost"
               className="h-6 w-6 rounded-full bg-muted hover:bg-accent hover:text-accent-foreground"
-              onClick={(e) => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
             >
               <span className="sr-only">Open menu</span>
               <svg
@@ -177,7 +173,7 @@ export function SlideThumbnailList() {
     addSlide,
     duplicateSlide,
     deleteSlide,
-    reorderSlides,
+    reorderSlides
   } = usePresentationEditorStore()
 
   const handleAddSlide = useCallback(() => {
@@ -219,9 +215,7 @@ export function SlideThumbnailList() {
         <h3 className="text-sm font-semibold text-sidebar-foreground">
           Slides
         </h3>
-        <span className="text-xs text-muted-foreground">
-          {slides.length}
-        </span>
+        <span className="text-xs text-muted-foreground">{slides.length}</span>
       </div>
 
       {/* Slide list */}

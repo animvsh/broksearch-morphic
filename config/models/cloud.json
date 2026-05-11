@@ -2,30 +2,28 @@
   "version": 2,
   "models": {
     "quick": {
-      "id": "gemini-3.1-flash-lite-preview",
-      "name": "Gemini 3.1 Flash Lite Preview",
-      "provider": "Google",
-      "providerId": "google",
-      "providerOptions": {
-        "google": {
-          "thinkingConfig": {
-            "includeThoughts": true
-          }
-        }
-      }
+      "id": "minimax-m2.7",
+      "name": "brok-3",
+      "provider": "Brok",
+      "providerId": "openai-compatible"
     },
-    "adaptive": {
-      "id": "gemini-3-flash-preview",
-      "name": "Gemini 3 Flash Preview",
-      "provider": "Google",
-      "providerId": "google",
-      "providerOptions": {
-        "google": {
-          "thinkingConfig": {
-            "includeThoughts": true
-          }
-        }
-      }
+    "search": {
+      "id": "minimax-m2.7",
+      "name": "brok-3 search",
+      "provider": "Brok",
+      "providerId": "openai-compatible"
+    },
+    "deep": {
+      "id": "minimax-m2.7",
+      "name": "brok-3 deep",
+      "provider": "Brok",
+      "providerId": "openai-compatible"
+    },
+    "code": {
+      "id": "brok-code",
+      "name": "brok-code",
+      "provider": "Brok",
+      "providerId": "openai-compatible"
     }
   }
 }

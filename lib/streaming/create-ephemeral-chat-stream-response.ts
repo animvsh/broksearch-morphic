@@ -2,8 +2,7 @@ import type { UIMessage } from 'ai'
 import {
   consumeStream,
   convertToModelMessages,
-  pruneMessages,
-  smoothStream
+  pruneMessages
 } from 'ai'
 import { randomUUID } from 'crypto'
 import { Langfuse } from 'langfuse'
@@ -28,6 +27,9 @@ type EphemeralStreamConfig = Pick<
   messages: UIMessage[]
   chatId?: string
 }
+
+const GENERIC_CHAT_ERROR =
+  'Brok could not complete the request. Please try again.'
 
 export async function createEphemeralChatStreamResponse(
   config: EphemeralStreamConfig
@@ -91,8 +93,7 @@ export async function createEphemeralChatStreamResponse(
 
     const result = await researchAgent.stream({
       messages: modelMessages,
-      abortSignal,
-      experimental_transform: smoothStream({ chunking: 'word' })
+      abortSignal
     })
     result.consumeStream()
 
@@ -102,7 +103,7 @@ export async function createEphemeralChatStreamResponse(
           return {
             traceId: parentTraceId,
             searchMode,
-            modelId: `${model.providerId}:${model.id}`
+            modelId: model.name
           }
         }
       },
@@ -111,17 +112,14 @@ export async function createEphemeralChatStreamResponse(
           await langfuse.flushAsync()
         }
       },
-      onError: (error: unknown) => {
-        return error instanceof Error ? error.message : String(error)
-      },
+      onError: () => GENERIC_CHAT_ERROR,
       consumeSseStream: consumeStream
     })
   } catch (error) {
     if (langfuse) {
       await langfuse.flushAsync()
     }
-    const message = error instanceof Error ? error.message : String(error)
-    return new Response(message, {
+    return new Response(GENERIC_CHAT_ERROR, {
       status: 500,
       statusText: 'Internal Server Error'
     })

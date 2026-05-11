@@ -1,0 +1,426 @@
+{
+  "presentations": [
+    {
+      "id": "45897dfa-12c8-4104-b7d3-25f05c09994a",
+      "userId": "06f1cf62-115d-4792-aa41-3fee86c722ba",
+      "workspaceId": null,
+      "title": "A 4-slide launch plan for BrokCode Cloud with live preview and one-click deploy",
+      "description": "",
+      "status": "ready",
+      "themeId": "minimal_light",
+      "language": "en",
+      "style": "professional",
+      "slideCount": 4,
+      "shareId": null,
+      "isPublic": false,
+      "createdAt": "2026-05-10T10:18:28.271Z",
+      "updatedAt": "2026-05-10T10:25:37.896Z"
+    },
+    {
+      "id": "5bb1a373-27c6-4239-9c8d-3670f7190d81",
+      "userId": "06f1cf62-115d-4792-aa41-3fee86c722ba",
+      "workspaceId": null,
+      "title": "A 5-slide product strategy deck for BrokMail as Cursor for email",
+      "description": "",
+      "status": "error",
+      "themeId": null,
+      "language": "en",
+      "style": "professional",
+      "slideCount": 8,
+      "shareId": null,
+      "isPublic": false,
+      "createdAt": "2026-05-10T10:16:37.154Z",
+      "updatedAt": "2026-05-10T10:16:57.132Z"
+    }
+  ],
+  "outlines": [
+    {
+      "id": "d4894fca-ae51-42cf-87a3-845034da0525",
+      "presentationId": "45897dfa-12c8-4104-b7d3-25f05c09994a",
+      "outlineJson": [
+        {
+          "title": "Executive Summary",
+          "layout_type": "title",
+          "bullets": [
+            "What A 4-slide launch plan for BrokCode Cloud with live preview and one-click deploy is about",
+            "Why it matters now",
+            "The main outcome for the audience"
+          ]
+        },
+        {
+          "title": "Current State",
+          "layout_type": "bullet",
+          "bullets": [
+            "What has been verified",
+            "What changed",
+            "What is working"
+          ]
+        },
+        {
+          "title": "Launch Risks",
+          "layout_type": "bullet",
+          "bullets": [
+            "Open gaps",
+            "Operational checks",
+            "Recommended next steps"
+          ]
+        },
+        {
+          "title": "Key Point 3",
+          "layout_type": "bullet",
+          "bullets": [
+            "Context",
+            "Evidence",
+            "Recommendation"
+          ]
+        }
+      ],
+      "status": "ready",
+      "createdAt": "2026-05-10T10:18:43.075Z",
+      "updatedAt": "2026-05-10T10:18:44.497Z"
+    }
+  ],
+  "slides": [
+    {
+      "id": "e653cca3-2153-4ff5-ad2a-c3cecf49d266",
+      "presentationId": "45897dfa-12c8-4104-b7d3-25f05c09994a",
+      "slideIndex": 0,
+      "title": "Executive Summary",
+      "layoutType": "title",
+      "contentJson": {
+        "bullets": [
+          "What A 4-slide launch plan for BrokCode Cloud with live preview and one-click deploy is about",
+          "Why it matters now",
+          "The main outcome for the audience"
+        ],
+        "subtitle": null,
+        "background": null,
+        "imageUrl": null,
+        "imagePrompt": null,
+        "chartData": null,
+        "quoteText": null,
+        "quoteAttribution": null,
+        "elements": [
+          {
+            "id": "e653cca3-2153-4ff5-ad2a-c3cecf49d266-heading",
+            "type": "heading",
+            "content": "Executive Summary",
+            "fontFamily": "Inter",
+            "fontSize": 54,
+            "fontWeight": "bold",
+            "color": "#1A1A1A",
+            "align": "center",
+            "lineHeight": 1.1
+          },
+          {
+            "id": "e653cca3-2153-4ff5-ad2a-c3cecf49d266-bullet-0",
+            "type": "bullet",
+            "content": "What A 4-slide launch plan for BrokCode Cloud with live preview and one-click deploy is about",
+            "fontFamily": "Inter",
+            "fontSize": 20,
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.45
+          },
+          {
+            "id": "e653cca3-2153-4ff5-ad2a-c3cecf49d266-bullet-1",
+            "type": "bullet",
+            "content": "Why it matters now",
+            "fontFamily": "Inter",
+            "fontSize": 20,
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.45
+          },
+          {
+            "id": "e653cca3-2153-4ff5-ad2a-c3cecf49d266-bullet-2",
+            "type": "bullet",
+            "content": "The main outcome for the audience",
+            "fontFamily": "Inter",
+            "fontSize": 20,
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.45
+          }
+        ]
+      },
+      "speakerNotes": "Present: Executive Summary",
+      "createdAt": "2026-05-10T10:22:09.075Z",
+      "updatedAt": "2026-05-10T10:25:37.896Z"
+    },
+    {
+      "id": "e28f5709-56ec-4538-8f2b-d9f26491ecf2",
+      "presentationId": "45897dfa-12c8-4104-b7d3-25f05c09994a",
+      "slideIndex": 1,
+      "title": "Current State",
+      "layoutType": "text",
+      "contentJson": {
+        "bullets": [
+          "What has been verified",
+          "What changed",
+          "What is working"
+        ],
+        "subtitle": null,
+        "background": null,
+        "imageUrl": null,
+        "imagePrompt": null,
+        "chartData": null,
+        "quoteText": null,
+        "quoteAttribution": null,
+        "elements": [
+          {
+            "id": "e28f5709-56ec-4538-8f2b-d9f26491ecf2-heading",
+            "type": "heading",
+            "content": "Current State",
+            "fontFamily": "Inter",
+            "fontSize": 38,
+            "fontWeight": "bold",
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.1
+          },
+          {
+            "id": "e28f5709-56ec-4538-8f2b-d9f26491ecf2-bullet-0",
+            "type": "bullet",
+            "content": "What has been verified",
+            "fontFamily": "Inter",
+            "fontSize": 20,
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.45
+          },
+          {
+            "id": "e28f5709-56ec-4538-8f2b-d9f26491ecf2-bullet-1",
+            "type": "bullet",
+            "content": "What changed",
+            "fontFamily": "Inter",
+            "fontSize": 20,
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.45
+          },
+          {
+            "id": "e28f5709-56ec-4538-8f2b-d9f26491ecf2-bullet-2",
+            "type": "bullet",
+            "content": "What is working",
+            "fontFamily": "Inter",
+            "fontSize": 20,
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.45
+          }
+        ]
+      },
+      "speakerNotes": "Present: Current State",
+      "createdAt": "2026-05-10T10:22:09.075Z",
+      "updatedAt": "2026-05-10T10:25:37.896Z"
+    },
+    {
+      "id": "f24e0857-5a51-49c6-a5ca-a9f67b3665f9",
+      "presentationId": "45897dfa-12c8-4104-b7d3-25f05c09994a",
+      "slideIndex": 2,
+      "title": "Launch Risks",
+      "layoutType": "text",
+      "contentJson": {
+        "bullets": [
+          "Open gaps",
+          "Operational checks",
+          "Recommended next steps"
+        ],
+        "subtitle": null,
+        "background": null,
+        "imageUrl": null,
+        "imagePrompt": null,
+        "chartData": null,
+        "quoteText": null,
+        "quoteAttribution": null,
+        "elements": [
+          {
+            "id": "f24e0857-5a51-49c6-a5ca-a9f67b3665f9-heading",
+            "type": "heading",
+            "content": "Launch Risks",
+            "fontFamily": "Inter",
+            "fontSize": 38,
+            "fontWeight": "bold",
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.1
+          },
+          {
+            "id": "f24e0857-5a51-49c6-a5ca-a9f67b3665f9-bullet-0",
+            "type": "bullet",
+            "content": "Open gaps",
+            "fontFamily": "Inter",
+            "fontSize": 20,
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.45
+          },
+          {
+            "id": "f24e0857-5a51-49c6-a5ca-a9f67b3665f9-bullet-1",
+            "type": "bullet",
+            "content": "Operational checks",
+            "fontFamily": "Inter",
+            "fontSize": 20,
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.45
+          },
+          {
+            "id": "f24e0857-5a51-49c6-a5ca-a9f67b3665f9-bullet-2",
+            "type": "bullet",
+            "content": "Recommended next steps",
+            "fontFamily": "Inter",
+            "fontSize": 20,
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.45
+          }
+        ]
+      },
+      "speakerNotes": "Present: Launch Risks",
+      "createdAt": "2026-05-10T10:22:09.075Z",
+      "updatedAt": "2026-05-10T10:25:37.896Z"
+    },
+    {
+      "id": "05aa15a6-8bc7-43c6-af0b-7fc1175b1a4a",
+      "presentationId": "45897dfa-12c8-4104-b7d3-25f05c09994a",
+      "slideIndex": 3,
+      "title": "Key Point 3",
+      "layoutType": "text",
+      "contentJson": {
+        "bullets": [
+          "Context",
+          "Evidence",
+          "Recommendation"
+        ],
+        "subtitle": null,
+        "background": null,
+        "imageUrl": null,
+        "imagePrompt": null,
+        "chartData": null,
+        "quoteText": null,
+        "quoteAttribution": null,
+        "elements": [
+          {
+            "id": "05aa15a6-8bc7-43c6-af0b-7fc1175b1a4a-heading",
+            "type": "heading",
+            "content": "Key Point 3",
+            "fontFamily": "Inter",
+            "fontSize": 38,
+            "fontWeight": "bold",
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.1
+          },
+          {
+            "id": "05aa15a6-8bc7-43c6-af0b-7fc1175b1a4a-bullet-0",
+            "type": "bullet",
+            "content": "Context",
+            "fontFamily": "Inter",
+            "fontSize": 20,
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.45
+          },
+          {
+            "id": "05aa15a6-8bc7-43c6-af0b-7fc1175b1a4a-bullet-1",
+            "type": "bullet",
+            "content": "Evidence",
+            "fontFamily": "Inter",
+            "fontSize": 20,
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.45
+          },
+          {
+            "id": "05aa15a6-8bc7-43c6-af0b-7fc1175b1a4a-bullet-2",
+            "type": "bullet",
+            "content": "Recommendation",
+            "fontFamily": "Inter",
+            "fontSize": 20,
+            "color": "#1A1A1A",
+            "align": "left",
+            "lineHeight": 1.45
+          }
+        ]
+      },
+      "speakerNotes": "Present: Key Point 3",
+      "createdAt": "2026-05-10T10:22:09.075Z",
+      "updatedAt": "2026-05-10T10:25:37.896Z"
+    }
+  ],
+  "generations": [
+    {
+      "id": "309f212f-8084-4855-be78-a848542a045e",
+      "presentationId": "5bb1a373-27c6-4239-9c8d-3670f7190d81",
+      "userId": "06f1cf62-115d-4792-aa41-3fee86c722ba",
+      "prompt": "A 5-slide product strategy deck for BrokMail as Cursor for email",
+      "generationType": "outline",
+      "model": "brok-lite",
+      "webSearchEnabled": false,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0,
+      "status": "failed",
+      "createdAt": "2026-05-10T10:16:39.215Z"
+    },
+    {
+      "id": "178cd8fd-03d7-437c-b38f-f010252c4cd9",
+      "presentationId": "5bb1a373-27c6-4239-9c8d-3670f7190d81",
+      "userId": "06f1cf62-115d-4792-aa41-3fee86c722ba",
+      "prompt": "A 5-slide product strategy deck for BrokMail as Cursor for email",
+      "generationType": "outline",
+      "model": "brok-lite",
+      "webSearchEnabled": false,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0,
+      "status": "failed",
+      "createdAt": "2026-05-10T10:16:40.373Z"
+    },
+    {
+      "id": "e8cebf8f-1acd-4069-bf36-c87ef20f8424",
+      "presentationId": "45897dfa-12c8-4104-b7d3-25f05c09994a",
+      "userId": "06f1cf62-115d-4792-aa41-3fee86c722ba",
+      "prompt": "A 4-slide launch plan for BrokCode Cloud with live preview and one-click deploy",
+      "generationType": "outline",
+      "model": "brok-lite",
+      "webSearchEnabled": false,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0,
+      "status": "completed",
+      "createdAt": "2026-05-10T10:18:29.106Z"
+    },
+    {
+      "id": "2439f6fe-8a7c-4bdd-bd19-a79d2bbab2e9",
+      "presentationId": "45897dfa-12c8-4104-b7d3-25f05c09994a",
+      "userId": "06f1cf62-115d-4792-aa41-3fee86c722ba",
+      "prompt": "A 4-slide launch plan for BrokCode Cloud with live preview and one-click deploy",
+      "generationType": "outline",
+      "model": "brok-lite",
+      "webSearchEnabled": false,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0,
+      "status": "completed",
+      "createdAt": "2026-05-10T10:18:29.314Z"
+    },
+    {
+      "id": "a7de7876-0de7-434d-a255-507f1dcf79d1",
+      "presentationId": "45897dfa-12c8-4104-b7d3-25f05c09994a",
+      "userId": "06f1cf62-115d-4792-aa41-3fee86c722ba",
+      "prompt": "Generate slides for presentation: A 4-slide launch plan for BrokCode Cloud with live preview and one-click deploy",
+      "generationType": "slides",
+      "model": "brok-lite",
+      "webSearchEnabled": false,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costUsd": 0,
+      "status": "completed",
+      "createdAt": "2026-05-10T10:21:48.655Z"
+    }
+  ],
+  "exports": []
+}

@@ -1,16 +1,28 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
+import { useState } from 'react'
 
-import { createApiKey, CreateApiKeyInput } from '@/lib/actions/api-keys';
+import { CreateApiKeyInput } from '@/lib/actions/api-keys'
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 
 interface CreateApiKeyFormProps {
-  action: (userId: string, workspaceId: string, input: CreateApiKeyInput) => Promise<any>;
+  action: (
+    userId: string,
+    workspaceId: string,
+    input: CreateApiKeyInput
+  ) => Promise<any>
+  userId: string
+  workspaceId: string
 }
 
 const AVAILABLE_MODELS = [
@@ -19,8 +31,8 @@ const AVAILABLE_MODELS = [
   { id: 'brok-search-pro', name: 'Brok Search Pro' },
   { id: 'brok-code', name: 'Brok Code' },
   { id: 'brok-agent', name: 'Brok Agent' },
-  { id: 'brok-reasoning', name: 'Brok Reasoning' },
-];
+  { id: 'brok-reasoning', name: 'Brok Reasoning' }
+]
 
 const AVAILABLE_SCOPES = [
   { id: 'chat:write', name: 'Chat Completions' },
@@ -28,38 +40,42 @@ const AVAILABLE_SCOPES = [
   { id: 'code:write', name: 'Code Execution' },
   { id: 'agents:write', name: 'Agent Execution' },
   { id: 'usage:read', name: 'Read Usage' },
-  { id: 'logs:read', name: 'Read Logs' },
-];
+  { id: 'logs:read', name: 'Read Logs' }
+]
 
-export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
-  const [name, setName] = useState('');
-  const [environment, setEnvironment] = useState<'test' | 'live'>('test');
-  const [selectedModels, setSelectedModels] = useState<string[]>([]);
-  const [selectedScopes, setSelectedScopes] = useState<string[]>(['chat:write']);
-  const [rpmLimit, setRpmLimit] = useState(60);
-  const [dailyLimit, setDailyLimit] = useState(5000);
-  const [createdKey, setCreatedKey] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+export function CreateApiKeyForm({
+  action,
+  userId,
+  workspaceId
+}: CreateApiKeyFormProps) {
+  const [name, setName] = useState('')
+  const [environment, setEnvironment] = useState<'test' | 'live'>('test')
+  const [selectedModels, setSelectedModels] = useState<string[]>([])
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(['chat:write'])
+  const [rpmLimit, setRpmLimit] = useState(60)
+  const [dailyLimit, setDailyLimit] = useState(5000)
+  const [createdKey, setCreatedKey] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
+    e.preventDefault()
+    setLoading(true)
 
     try {
-      const result = await action('demo-user', 'demo-workspace', {
+      const result = await action(userId, workspaceId, {
         name,
         environment,
         scopes: selectedScopes,
         allowedModels: selectedModels,
         rpmLimit,
         dailyRequestLimit: dailyLimit,
-        monthlyBudgetCents: 0,
-      });
-      setCreatedKey(result);
+        monthlyBudgetCents: 0
+      })
+      setCreatedKey(result)
     } catch (error) {
-      console.error('Failed to create key:', error);
+      console.error('Failed to create key:', error)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
@@ -68,7 +84,7 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
       prev.includes(modelId)
         ? prev.filter(m => m !== modelId)
         : [...prev, modelId]
-    );
+    )
   }
 
   function toggleScope(scopeId: string) {
@@ -76,13 +92,15 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
       prev.includes(scopeId)
         ? prev.filter(s => s !== scopeId)
         : [...prev, scopeId]
-    );
+    )
   }
 
   if (createdKey) {
     return (
       <div className="rounded-lg border bg-card p-6">
-        <h2 className="text-lg font-semibold mb-4 text-green-600">API Key Created!</h2>
+        <h2 className="text-lg font-semibold mb-4 text-green-600">
+          API Key Created!
+        </h2>
         <div className="space-y-4">
           <div>
             <Label>Your API Key</Label>
@@ -95,18 +113,21 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
           </p>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="text-muted-foreground">Name:</span> {createdKey.name}
+              <span className="text-muted-foreground">Name:</span>{' '}
+              {createdKey.name}
             </div>
             <div>
-              <span className="text-muted-foreground">Environment:</span> {createdKey.environment}
+              <span className="text-muted-foreground">Environment:</span>{' '}
+              {createdKey.environment}
             </div>
             <div>
-              <span className="text-muted-foreground">Rate Limit:</span> {createdKey.rpmLimit} RPM
+              <span className="text-muted-foreground">Rate Limit:</span>{' '}
+              {createdKey.rpmLimit} RPM
             </div>
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -116,7 +137,7 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
         <Input
           id="name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={e => setName(e.target.value)}
           placeholder="Production App"
           required
         />
@@ -124,7 +145,10 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
 
       <div>
         <Label htmlFor="environment">Environment</Label>
-        <Select value={environment} onValueChange={(v) => setEnvironment(v as 'test' | 'live')}>
+        <Select
+          value={environment}
+          onValueChange={v => setEnvironment(v as 'test' | 'live')}
+        >
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -138,8 +162,11 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
       <div>
         <Label>Allowed Models</Label>
         <div className="grid grid-cols-2 gap-2 mt-2">
-          {AVAILABLE_MODELS.map((model) => (
-            <label key={model.id} className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-muted">
+          {AVAILABLE_MODELS.map(model => (
+            <label
+              key={model.id}
+              className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-muted"
+            >
               <input
                 type="checkbox"
                 checked={selectedModels.includes(model.id)}
@@ -157,8 +184,11 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
       <div>
         <Label>Scopes</Label>
         <div className="grid grid-cols-2 gap-2 mt-2">
-          {AVAILABLE_SCOPES.map((scope) => (
-            <label key={scope.id} className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-muted">
+          {AVAILABLE_SCOPES.map(scope => (
+            <label
+              key={scope.id}
+              className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-muted"
+            >
               <input
                 type="checkbox"
                 checked={selectedScopes.includes(scope.id)}
@@ -177,7 +207,7 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
             id="rpm"
             type="number"
             value={rpmLimit}
-            onChange={(e) => setRpmLimit(Number(e.target.value))}
+            onChange={e => setRpmLimit(Number(e.target.value))}
             min={1}
             max={1000}
           />
@@ -188,7 +218,7 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
             id="daily"
             type="number"
             value={dailyLimit}
-            onChange={(e) => setDailyLimit(Number(e.target.value))}
+            onChange={e => setDailyLimit(Number(e.target.value))}
             min={1}
             max={100000}
           />
@@ -199,5 +229,5 @@ export function CreateApiKeyForm({ action }: CreateApiKeyFormProps) {
         {loading ? 'Creating...' : 'Create API Key'}
       </Button>
     </form>
-  );
+  )
 }

@@ -1,5 +1,7 @@
 import { generateText } from 'ai'
 
+import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
+
 import { getModel } from '../utils/registry'
 import { isTracingEnabled } from '../utils/telemetry'
 
@@ -48,7 +50,7 @@ export async function generateChatTitle({
       }
     })
 
-    const cleanedTitle = generatedTitle.trim()
+    const cleanedTitle = stripThinkingBlocks(generatedTitle).trim()
 
     // If the model returns an empty string, use the fallback.
     if (!cleanedTitle) {

@@ -26,9 +26,16 @@ import { UploadedFileList } from './uploaded-file-list'
 
 // Constants for timing delays
 const INPUT_UPDATE_DELAY_MS = 10 // Delay to ensure input value is updated before form submission
+const SUGGESTED_PROMPTS = [
+  'What changed in AI this week?',
+  'Summarize the latest updates in Next.js 16',
+  'Compare Cursor vs Codex for production coding workflows',
+  'Find benchmarks for brok-3',
+  'Draft a customer follow-up sequence for B2B outbound',
+  'Create a launch checklist for a new SaaS feature'
+]
 
 interface ChatPanelProps {
-  chatId: string
   input: string
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void
@@ -44,10 +51,9 @@ interface ChatPanelProps {
   scrollContainerRef: React.RefObject<HTMLDivElement>
   uploadedFiles: UploadedFile[]
   setUploadedFiles: React.Dispatch<React.SetStateAction<UploadedFile[]>>
+  onFilesSelected: (files: File[]) => Promise<void> | void
   /** Callback to reset chatId when starting a new chat */
   onNewChat?: () => void
-  /** Whether the current session is guest */
-  isGuest?: boolean
   /** Whether the deployment is cloud mode */
   isCloudDeployment?: boolean
   modelSelectorData?: ModelSelectorData
@@ -56,7 +62,6 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({
-  chatId,
   input,
   handleInputChange,
   handleSubmit,
@@ -69,9 +74,9 @@ export function ChatPanel({
   showScrollToBottomButton,
   uploadedFiles,
   setUploadedFiles,
+  onFilesSelected,
   scrollContainerRef,
   onNewChat,
-  isGuest = false,
   isCloudDeployment = false,
   modelSelectorData,
   sections = []
@@ -84,6 +89,10 @@ export function ChatPanel({
   const [isInputFocused, setIsInputFocused] = useState(false) // Track input focus
   const { close: closeArtifact } = useArtifact()
   const isLoading = status === 'submitted' || status === 'streaming'
+  const hasUploadedFiles = uploadedFiles.some(file => file.status === 'uploaded')
+  const hasUploadingFiles = uploadedFiles.some(
+    file => file.status === 'uploading'
+  )
   const hasAvailableModels =
     isCloudDeployment || modelSelectorData?.hasAvailableModels !== false
 
@@ -141,23 +150,30 @@ export function ChatPanel({
     return (
       (lastPart?.type === 'tool-search' ||
         lastPart?.type === 'tool-fetch' ||
-        lastPart?.type === 'tool-askQuestion') &&
+        lastPart?.type === 'tool-askQuestion' ||
+        lastPart?.type === 'tool-composioIntegrations') &&
       ((lastPart as any)?.state === 'input-streaming' ||
         (lastPart as any)?.state === 'input-available')
     )
   }
 
+  const sendProgrammaticPrompt = useCallback(
+    (text: string) => {
+      append({
+        role: 'user',
+        parts: [{ type: 'text', text }]
+      })
+    },
+    [append]
+  )
+
   // if query is not empty, submit the query
   useEffect(() => {
     if (isFirstRender.current && query && query.trim().length > 0) {
-      append({
-        role: 'user',
-        content: query
-      })
+      sendProgrammaticPrompt(query)
       isFirstRender.current = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query])
+  }, [query, sendProgrammaticPrompt])
 
   const handleFileRemove = useCallback(
     (index: number) => {
@@ -176,6 +192,10 @@ export function ChatPanel({
     }
   }
 
+  const handleSuggestedPrompt = (prompt: string) => {
+    sendProgrammaticPrompt(prompt)
+  }
+
   return (
     <div
       className={cn(
@@ -184,11 +204,31 @@ export function ChatPanel({
       )}
     >
       {messages.length === 0 && (
-        <div className="mb-6 md:mb-10 flex flex-col items-center gap-2 md:gap-4">
-          <div className="text-2xl font-bold text-foreground">b</div>
-          <h1 className="text-xl md:text-2xl font-medium text-foreground">
+        <div className="mb-6 flex flex-col items-center gap-4 md:mb-8 md:gap-5">
+          <div className="flex items-center gap-2">
+            <IconBlinkingLogo className="size-6" />
+            <p className="text-2xl font-semibold tracking-tight text-foreground">
+              brok
+            </p>
+          </div>
+          <h1 className="text-xl font-medium text-foreground md:text-2xl">
             Ask anything
           </h1>
+          <p className="max-w-2xl text-center text-sm text-muted-foreground">
+            Search, deep research, and code-native answers in one flow.
+          </p>
+          <div className="grid w-full max-w-3xl gap-2 sm:grid-cols-2">
+            {SUGGESTED_PROMPTS.map(prompt => (
+              <button
+                key={prompt}
+                type="button"
+                onClick={() => handleSuggestedPrompt(prompt)}
+                className="rounded-md border bg-background px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {uploadedFiles.length > 0 && (
@@ -243,6 +283,16 @@ export function ChatPanel({
             <MessageNavigationDots sections={sections} />
           </div>
         )}
+        {messages.length > 0 && isLoading && (
+          <div className="mx-auto mb-2 flex max-w-3xl items-center gap-2 px-1 text-xs text-muted-foreground">
+            <IconBlinkingLogo className="size-3.5" />
+            <span>
+              {isToolInvocationInProgress()
+                ? 'Working through tools and streaming the answer...'
+                : 'Thinking and streaming the answer...'}
+            </span>
+          </div>
+        )}
 
         <div
           className={cn(
@@ -274,8 +324,13 @@ export function ChatPanel({
                 !isComposing &&
                 !enterDisabled
               ) {
-                if (input.trim().length === 0) {
+                if (input.trim().length === 0 && !hasUploadedFiles) {
                   e.preventDefault()
+                  return
+                }
+                if (hasUploadingFiles) {
+                  e.preventDefault()
+                  toast.info('Please wait for file processing to finish.')
                   return
                 }
                 e.preventDefault()
@@ -291,56 +346,11 @@ export function ChatPanel({
           {/* Bottom menu area */}
           <div className="flex items-center justify-between p-2 md:p-3">
             <div className="flex items-center gap-2">
-              {!isGuest && (
-                <FileUploadButton
-                  onFileSelect={async files => {
-                    const newFiles: UploadedFile[] = files.map(file => ({
-                      file,
-                      status: 'uploading'
-                    }))
-                    setUploadedFiles(prev => [...prev, ...newFiles])
-                    await Promise.all(
-                      newFiles.map(async uf => {
-                        const formData = new FormData()
-                        formData.append('file', uf.file)
-                        formData.append('chatId', chatId)
-                        try {
-                          const res = await fetch('/api/upload', {
-                            method: 'POST',
-                            body: formData
-                          })
-
-                          if (!res.ok) {
-                            throw new Error('Upload failed')
-                          }
-
-                          const { file: uploaded } = await res.json()
-                          setUploadedFiles(prev =>
-                            prev.map(f =>
-                              f.file === uf.file
-                                ? {
-                                    ...f,
-                                    status: 'uploaded',
-                                    url: uploaded.url,
-                                    name: uploaded.filename,
-                                    key: uploaded.key
-                                  }
-                                : f
-                            )
-                          )
-                        } catch (e) {
-                          toast.error(`Failed to upload ${uf.file.name}`)
-                          setUploadedFiles(prev =>
-                            prev.map(f =>
-                              f.file === uf.file ? { ...f, status: 'error' } : f
-                            )
-                          )
-                        }
-                      })
-                    )
-                  }}
-                />
-              )}
+              <FileUploadButton
+                onFileSelect={files => {
+                  void onFilesSelected(files)
+                }}
+              />
               <SearchModeSelector />
             </div>
             <div className="flex items-center gap-2">
@@ -367,7 +377,9 @@ export function ChatPanel({
                   'size-8 md:size-10 rounded-full'
                 )}
                 disabled={
-                  (input.length === 0 && !isLoading) || !hasAvailableModels
+                  ((!isLoading && input.trim().length === 0 && !hasUploadedFiles) ||
+                    hasUploadingFiles ||
+                    !hasAvailableModels)
                 }
                 onClick={isLoading ? stop : undefined}
                 title={

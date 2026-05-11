@@ -7,6 +7,7 @@ import type { ToolPart, UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
 import FetchSection from './fetch-section'
 import { QuestionConfirmation } from './question-confirmation'
 import { SearchSection } from './search-section'
+import { ToolComposioDisplay } from './tool-composio-display'
 import { ToolTodoDisplay } from './tool-todo-display'
 
 interface ToolSectionProps {
@@ -107,6 +108,12 @@ export function ToolSection({
           borderless={borderless}
           isFirst={isFirst}
           isLast={isLast}
+        />
+      )
+    case 'tool-composioIntegrations':
+      return (
+        <ToolComposioDisplay
+          tool={tool as ToolPart<'composioIntegrations'>}
         />
       )
     default:

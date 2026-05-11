@@ -68,16 +68,19 @@ export function DataTable<T extends { id: string }>({
     onFilter?.(newFilters)
   }
 
-  const filteredData = data.filter((row) => {
+  const filteredData = data.filter(row => {
     if (search) {
       const searchLower = search.toLowerCase()
-      const matchesSearch = Object.values(row).some((val) =>
+      const matchesSearch = Object.values(row).some(val =>
         String(val).toLowerCase().includes(searchLower)
       )
       if (!matchesSearch) return false
     }
     for (const [key, value] of Object.entries(filters)) {
-      if (value && String(row[key as keyof T]).toLowerCase() !== value.toLowerCase()) {
+      if (
+        value &&
+        String(row[key as keyof T]).toLowerCase() !== value.toLowerCase()
+      ) {
         return false
       }
     }
@@ -107,14 +110,14 @@ export function DataTable<T extends { id: string }>({
           <Input
             placeholder={searchPlaceholder}
             value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
+            onChange={e => handleSearchChange(e.target.value)}
             className="max-w-sm"
           />
-          {filterOptions.map((filter) => (
+          {filterOptions.map(filter => (
             <Select
               key={filter.key}
               value={filters[filter.key] || 'all'}
-              onValueChange={(value) =>
+              onValueChange={value =>
                 handleFilterChange(filter.key, value === 'all' ? '' : value)
               }
             >
@@ -123,7 +126,7 @@ export function DataTable<T extends { id: string }>({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All {filter.label}</SelectItem>
-                {filter.values.map((val) => (
+                {filter.values.map(val => (
                   <SelectItem key={val} value={val.toLowerCase()}>
                     {val}
                   </SelectItem>
@@ -139,7 +142,7 @@ export function DataTable<T extends { id: string }>({
         <table className="w-full">
           <thead>
             <tr className="border-b bg-muted/50">
-              {columns.map((col) => (
+              {columns.map(col => (
                 <th
                   key={col.key}
                   className={cn(
@@ -179,7 +182,7 @@ export function DataTable<T extends { id: string }>({
                     idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'
                   )}
                 >
-                  {columns.map((col) => (
+                  {columns.map(col => (
                     <td key={col.key} className="p-4 text-sm">
                       {col.render
                         ? col.render(row)
@@ -205,7 +208,7 @@ export function DataTable<T extends { id: string }>({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
             >
               Previous
@@ -216,7 +219,7 @@ export function DataTable<T extends { id: string }>({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
             >
               Next

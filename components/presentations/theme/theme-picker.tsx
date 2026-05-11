@@ -1,22 +1,22 @@
-"use client";
+'use client'
 
-import { Check } from "lucide-react";
+import { Check } from 'lucide-react'
 
-import { type Theme, type ThemeId,themes } from "@/lib/presentations/themes";
-import { cn } from "@/lib/utils";
+import { type Theme, type ThemeId, themes } from '@/lib/presentations/themes'
+import { cn } from '@/lib/utils'
 
 interface ThemePickerProps {
-  selectedThemeId: ThemeId | "auto" | null;
-  onSelect: (themeId: ThemeId | "auto") => void;
+  selectedThemeId: ThemeId | 'auto' | null
+  onSelect: (themeId: ThemeId | 'auto') => void
 }
 
 function isGradient(background: string): boolean {
-  return background.startsWith("linear-gradient");
+  return background.startsWith('linear-gradient')
 }
 
 function ThemeSwatch({ theme }: { theme: Theme }) {
-  const { colors } = theme;
-  const isGrad = isGradient(colors.background);
+  const { colors } = theme
+  const isGrad = isGradient(colors.background)
 
   return (
     <div className="flex flex-col gap-1">
@@ -52,24 +52,24 @@ function ThemeSwatch({ theme }: { theme: Theme }) {
         />
       </div>
     </div>
-  );
+  )
 }
 
 function AutoOption({
   selected,
-  onSelect,
+  onSelect
 }: {
-  selected: boolean;
-  onSelect: () => void;
+  selected: boolean
+  onSelect: () => void
 }) {
   return (
     <button
       onClick={onSelect}
       className={cn(
-        "flex flex-col gap-2 rounded-lg border p-3 text-left transition-all hover:border-accent",
+        'flex flex-col gap-2 rounded-lg border p-3 text-left transition-all hover:border-accent',
         selected
-          ? "border-accent bg-accent/5 ring-1 ring-accent"
-          : "border-border hover:border-accent/50"
+          ? 'border-accent bg-accent/5 ring-1 ring-accent'
+          : 'border-border hover:border-accent/50'
       )}
     >
       {/* Magic wand / AI icon swatch */}
@@ -92,11 +92,9 @@ function AutoOption({
         <span className="text-sm font-medium">Auto</span>
         {selected && <Check className="size-4 text-accent" />}
       </div>
-      <span className="text-xs text-muted-foreground">
-        AI-selected theme
-      </span>
+      <span className="text-xs text-muted-foreground">AI-selected theme</span>
     </button>
-  );
+  )
 }
 
 export function ThemePicker({ selectedThemeId, onSelect }: ThemePickerProps) {
@@ -105,22 +103,22 @@ export function ThemePicker({ selectedThemeId, onSelect }: ThemePickerProps) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
         {/* Auto option */}
         <AutoOption
-          selected={selectedThemeId === "auto"}
-          onSelect={() => onSelect("auto")}
+          selected={selectedThemeId === 'auto'}
+          onSelect={() => onSelect('auto')}
         />
 
         {/* Theme cards */}
-        {themes.map((theme) => {
-          const isSelected = selectedThemeId === theme.id;
+        {themes.map(theme => {
+          const isSelected = selectedThemeId === theme.id
           return (
             <button
               key={theme.id}
               onClick={() => onSelect(theme.id as ThemeId)}
               className={cn(
-                "flex flex-col gap-2 rounded-lg border p-3 text-left transition-all hover:border-accent",
+                'flex flex-col gap-2 rounded-lg border p-3 text-left transition-all hover:border-accent',
                 isSelected
-                  ? "border-accent bg-accent/5 ring-1 ring-accent"
-                  : "border-border hover:border-accent/50"
+                  ? 'border-accent bg-accent/5 ring-1 ring-accent'
+                  : 'border-border hover:border-accent/50'
               )}
             >
               <ThemeSwatch theme={theme} />
@@ -133,11 +131,11 @@ export function ThemePicker({ selectedThemeId, onSelect }: ThemePickerProps) {
                 )}
               </div>
             </button>
-          );
+          )
         })}
       </div>
     </div>
-  );
+  )
 }
 
-export type { Theme, ThemeId };
+export type { Theme, ThemeId }

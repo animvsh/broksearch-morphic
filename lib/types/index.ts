@@ -100,4 +100,6 @@ export type UploadedFile = {
   url?: string
   name?: string
   key?: string
+  extractedText?: string
+  source?: 'upload' | 'inline-text'
 }

@@ -1,11 +1,11 @@
-import { type Theme,themes } from "./themes";
+import { type Theme, themes } from './themes'
 
 /**
  * Get a theme by its ID.
  * Returns undefined if not found.
  */
 export function getThemeById(id: string): Theme | undefined {
-  return themes.find((t) => t.id === id);
+  return themes.find(t => t.id === id)
 }
 
 // ---------------------------------------------------------------------------
@@ -13,63 +13,63 @@ export function getThemeById(id: string): Theme | undefined {
 // ---------------------------------------------------------------------------
 
 export interface SlideText {
-  type: "heading" | "body" | "bullet" | "caption";
-  content: string;
+  type: 'heading' | 'body' | 'bullet' | 'caption'
+  content: string
 }
 
 export interface SlideContent {
-  id: string;
-  layout: string;
-  heading?: string;
-  body?: SlideText[];
-  bullets?: string[];
-  imageUrl?: string;
-  quote?: string;
-  quoteAttribution?: string;
-  stats?: Array<{ label: string; value: string }>;
-  speakerNotes?: string;
+  id: string
+  layout: string
+  heading?: string
+  body?: SlideText[]
+  bullets?: string[]
+  imageUrl?: string
+  quote?: string
+  quoteAttribution?: string
+  stats?: Array<{ label: string; value: string }>
+  speakerNotes?: string
 }
 
 export interface StyledSlide {
-  id: string;
-  layout: string;
+  id: string
+  layout: string
   styledContent: {
     heading?: {
-      text: string;
-      color: string;
-      fontFamily: string;
-      fontSize?: string;
-    };
+      text: string
+      color: string
+      fontFamily: string
+      fontSize?: string
+    }
     body?: Array<{
-      type: SlideText["type"];
-      text: string;
-      color: string;
-      fontFamily: string;
-    }>;
+      type: SlideText['type']
+      text: string
+      color: string
+      fontFamily: string
+    }>
     bullets?: Array<{
-      text: string;
-      color: string;
-      fontFamily: string;
-    }>;
-    imageUrl?: string;
+      text: string
+      color: string
+      fontFamily: string
+    }>
+    imageUrl?: string
     quote?: {
-      text: string;
-      attribution?: string;
-      color: string;
-      accentColor: string;
-      fontFamily: string;
-    };
+      text: string
+      attribution?: string
+      color: string
+      accentColor: string
+      fontFamily: string
+    }
     stats?: Array<{
-      label: string;
-      value: string;
-      valueColor: string;
-      labelColor: string;
-      fontFamily: string;
-    }>;
-  };
-  background: string;
-  cardBackground: string;
-  secondaryColor: string;
+      label: string
+      value: string
+      valueColor: string
+      labelColor: string
+      fontFamily: string
+    }>
+  }
+  background: string
+  cardBackground: string
+  secondaryColor: string
 }
 
 /**
@@ -80,37 +80,37 @@ export function applyThemeToSlide(
   theme: Theme,
   slide: SlideContent
 ): StyledSlide {
-  const { colors, fonts } = theme;
+  const { colors, fonts } = theme
 
-  const styledContent: StyledSlide["styledContent"] = {};
+  const styledContent: StyledSlide['styledContent'] = {}
 
   if (slide.heading) {
     styledContent.heading = {
       text: slide.heading,
       color: colors.text,
-      fontFamily: fonts.heading,
-    };
+      fontFamily: fonts.heading
+    }
   }
 
   if (slide.body) {
-    styledContent.body = slide.body.map((item) => ({
+    styledContent.body = slide.body.map(item => ({
       type: item.type,
       text: item.content,
       color: colors.text,
-      fontFamily: fonts.body,
-    }));
+      fontFamily: fonts.body
+    }))
   }
 
   if (slide.bullets) {
-    styledContent.bullets = slide.bullets.map((text) => ({
+    styledContent.bullets = slide.bullets.map(text => ({
       text,
       color: colors.text,
-      fontFamily: fonts.body,
-    }));
+      fontFamily: fonts.body
+    }))
   }
 
   if (slide.imageUrl) {
-    styledContent.imageUrl = slide.imageUrl;
+    styledContent.imageUrl = slide.imageUrl
   }
 
   if (slide.quote) {
@@ -119,18 +119,18 @@ export function applyThemeToSlide(
       attribution: slide.quoteAttribution,
       color: colors.text,
       accentColor: colors.accent,
-      fontFamily: fonts.body,
-    };
+      fontFamily: fonts.body
+    }
   }
 
   if (slide.stats) {
-    styledContent.stats = slide.stats.map((stat) => ({
+    styledContent.stats = slide.stats.map(stat => ({
       label: stat.label,
       value: stat.value,
       valueColor: colors.accent,
       labelColor: colors.secondary,
-      fontFamily: fonts.body,
-    }));
+      fontFamily: fonts.body
+    }))
   }
 
   return {
@@ -139,8 +139,8 @@ export function applyThemeToSlide(
     styledContent,
     background: colors.background,
     cardBackground: colors.card,
-    secondaryColor: colors.secondary,
-  };
+    secondaryColor: colors.secondary
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -159,15 +159,14 @@ export function injectThemeVariables(
   theme: Theme,
   root: HTMLElement | Document = document
 ): void {
-  const el =
-    root instanceof Document ? root.documentElement : root;
-  const { colors } = theme;
+  const el = root instanceof Document ? root.documentElement : root
+  const { colors } = theme
 
-  el.style.setProperty("--slide-bg", colors.background);
-  el.style.setProperty("--slide-text", colors.text);
-  el.style.setProperty("--slide-accent", colors.accent);
-  el.style.setProperty("--slide-secondary", colors.secondary);
-  el.style.setProperty("--slide-card", colors.card);
+  el.style.setProperty('--slide-bg', colors.background)
+  el.style.setProperty('--slide-text', colors.text)
+  el.style.setProperty('--slide-accent', colors.accent)
+  el.style.setProperty('--slide-secondary', colors.secondary)
+  el.style.setProperty('--slide-card', colors.card)
 }
 
 /**
@@ -176,11 +175,10 @@ export function injectThemeVariables(
 export function removeThemeVariables(
   root: HTMLElement | Document = document
 ): void {
-  const el =
-    root instanceof Document ? root.documentElement : root;
-  el.style.removeProperty("--slide-bg");
-  el.style.removeProperty("--slide-text");
-  el.style.removeProperty("--slide-accent");
-  el.style.removeProperty("--slide-secondary");
-  el.style.removeProperty("--slide-card");
+  const el = root instanceof Document ? root.documentElement : root
+  el.style.removeProperty('--slide-bg')
+  el.style.removeProperty('--slide-text')
+  el.style.removeProperty('--slide-accent')
+  el.style.removeProperty('--slide-secondary')
+  el.style.removeProperty('--slide-card')
 }

@@ -8,6 +8,7 @@ import * as dbActions from '@/lib/db/actions'
 import type { Chat, Message } from '@/lib/db/schema'
 import { generateId } from '@/lib/db/schema'
 import type { UIMessage } from '@/lib/types/ai'
+import type { PersistableUIMessage } from '@/lib/types/message-persistence'
 import { getTextFromParts } from '@/lib/utils/message-utils'
 
 // Constants
@@ -266,6 +267,72 @@ export async function shareChat(chatId: string) {
   const userId = await getCurrentUserId()
   if (!userId) {
     return null
+  }
+
+  const updatedChat = await dbActions.updateChatVisibility(
+    chatId,
+    userId,
+    'public'
+  )
+
+  if (updatedChat) {
+    revalidateTag(`chat-${chatId}`, 'max')
+  }
+
+  return updatedChat
+}
+
+/**
+ * Create a new shareable chat from an in-memory transcript (e.g. Brok Code UI)
+ */
+export async function createShareableChatFromTranscript(
+  transcript: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
+  title: string = 'Brok Code Chat'
+) {
+  const userId = await getCurrentUserId()
+  if (!userId) {
+    return null
+  }
+
+  const chatId = generateId()
+  await dbActions.createChat({
+    id: chatId,
+    title: title.substring(0, 255),
+    userId,
+    visibility: 'private'
+  })
+
+  let savedCount = 0
+  for (const entry of transcript) {
+    const content = entry.content.trim()
+    if (!content) continue
+
+    const role = entry.role === 'system' ? 'assistant' : entry.role
+    const message: PersistableUIMessage & { chatId: string } = {
+      id: generateId(),
+      chatId,
+      role,
+      parts: [{ type: 'text', text: content }]
+    }
+
+    await dbActions.upsertMessage(
+      message,
+      userId
+    )
+    savedCount += 1
+  }
+
+  if (savedCount === 0) {
+    const fallbackMessage: PersistableUIMessage & { chatId: string } = {
+      id: generateId(),
+      chatId,
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'Shared from Brok Code.' }]
+    }
+    await dbActions.upsertMessage(
+      fallbackMessage,
+      userId
+    )
   }
 
   const updatedChat = await dbActions.updateChatVisibility(

@@ -5,15 +5,14 @@ import { useRef, useState } from 'react'
 import { Paperclip } from 'lucide-react'
 import { toast } from 'sonner'
 
+import {
+  CHAT_FILE_INPUT_ACCEPT,
+  CHAT_MAX_FILES,
+  isAcceptedChatFile
+} from '@/lib/files/chat-file-utils'
 import { cn } from '@/lib/utils'
 
 import { Button } from './ui/button'
-
-const allowedImageTypes = ['image/png', 'image/jpeg']
-const allowedOtherTypes = ['application/pdf']
-
-const isAllowedFileType = (file: File) =>
-  allowedImageTypes.includes(file.type) || allowedOtherTypes.includes(file.type)
 
 export function FileUploadButton({
   onFileSelect
@@ -26,14 +25,15 @@ export function FileUploadButton({
   const handleFiles = (files: FileList | null) => {
     if (!files) return
 
-    const fileArray = Array.from(files).slice(0, 3)
+    const fileArray = Array.from(files).slice(0, CHAT_MAX_FILES)
 
-    const validFiles = fileArray.filter(isAllowedFileType)
-    const rejected = fileArray.filter(f => !isAllowedFileType(f))
+    const validFiles = fileArray.filter(isAcceptedChatFile)
+    const rejected = fileArray.filter(file => !isAcceptedChatFile(file))
 
     if (rejected.length > 0) {
       toast.error(
-        'Some files were not accepted: ' + rejected.map(f => f.name).join(', ')
+        'Some files were not accepted: ' +
+          rejected.map(file => file.name).join(', ')
       )
     }
 
@@ -66,7 +66,7 @@ export function FileUploadButton({
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,application/pdf"
+        accept={CHAT_FILE_INPUT_ACCEPT}
         hidden
         multiple
         onChange={e => {

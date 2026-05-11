@@ -1,10 +1,17 @@
-import { getAllApiKeysForAdmin } from '@/lib/actions/admin-brok';
+import {
+  getAllApiKeysForAdmin,
+  pauseAdminApiKey,
+  resumeAdminApiKey,
+  revokeAdminApiKey
+} from '@/lib/actions/admin-brok'
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+
+export const dynamic = 'force-dynamic'
 
 export default async function AdminApiKeysPage() {
-  const keys = await getAllApiKeysForAdmin();
+  const keys = await getAllApiKeysForAdmin()
 
   return (
     <div className="space-y-6">
@@ -31,12 +38,15 @@ export default async function AdminApiKeysPage() {
             <tbody>
               {keys.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-4 text-center text-muted-foreground">
+                  <td
+                    colSpan={8}
+                    className="p-4 text-center text-muted-foreground"
+                  >
                     No API keys found
                   </td>
                 </tr>
               ) : (
-                keys.map((key) => (
+                keys.map(key => (
                   <tr key={key.id} className="border-b">
                     <td className="p-4 font-medium">{key.name}</td>
                     <td className="p-4">{key.workspaceName}</td>
@@ -44,15 +54,22 @@ export default async function AdminApiKeysPage() {
                       {key.keyPrefix}••••••••
                     </td>
                     <td className="p-4">
-                      <Badge variant={key.environment === 'live' ? 'default' : 'secondary'}>
+                      <Badge
+                        variant={
+                          key.environment === 'live' ? 'default' : 'secondary'
+                        }
+                      >
                         {key.environment}
                       </Badge>
                     </td>
                     <td className="p-4">
                       <Badge
                         variant={
-                          key.status === 'active' ? 'default' :
-                          key.status === 'paused' ? 'secondary' : 'destructive'
+                          key.status === 'active'
+                            ? 'default'
+                            : key.status === 'paused'
+                              ? 'secondary'
+                              : 'destructive'
                         }
                       >
                         {key.status}
@@ -65,17 +82,23 @@ export default async function AdminApiKeysPage() {
                     <td className="p-4">
                       <div className="flex gap-2">
                         {key.status === 'active' ? (
-                          <Button variant="outline" size="sm">
-                            Pause
-                          </Button>
+                          <form action={pauseAdminApiKey.bind(null, key.id)}>
+                            <Button variant="outline" size="sm" type="submit">
+                              Pause
+                            </Button>
+                          </form>
                         ) : key.status === 'paused' ? (
-                          <Button variant="outline" size="sm">
-                            Resume
-                          </Button>
+                          <form action={resumeAdminApiKey.bind(null, key.id)}>
+                            <Button variant="outline" size="sm" type="submit">
+                              Resume
+                            </Button>
+                          </form>
                         ) : null}
-                        <Button variant="destructive" size="sm">
-                          Revoke
-                        </Button>
+                        <form action={revokeAdminApiKey.bind(null, key.id)}>
+                          <Button variant="destructive" size="sm" type="submit">
+                            Revoke
+                          </Button>
+                        </form>
                       </div>
                     </td>
                   </tr>
@@ -86,5 +109,5 @@ export default async function AdminApiKeysPage() {
         </div>
       </div>
     </div>
-  );
+  )
 }

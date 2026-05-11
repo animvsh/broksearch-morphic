@@ -1,10 +1,26 @@
-import { getProviderRoutes } from '@/lib/actions/admin-brok';
+import { getProviderRoutes, saveProviderRoute } from '@/lib/actions/admin-brok'
+import { BROK_MODELS } from '@/lib/brok/models'
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+
+export const dynamic = 'force-dynamic'
 
 export default async function AdminProvidersPage() {
-  const routes = await getProviderRoutes();
+  let routes = await getProviderRoutes()
+  if (!routes.length) {
+    routes = Object.entries(BROK_MODELS).map(([brokModel, config], index) => ({
+      id: `fallback-${brokModel}`,
+      brokModel,
+      providerName: config.provider,
+      providerModel: config.providerModel,
+      priority: index + 1,
+      inputCostPerMillion: config.inputCostPerMillion.toFixed(4),
+      outputCostPerMillion: config.outputCostPerMillion.toFixed(4),
+      isActive: true
+    }))
+  }
+  const isDegraded = routes.some(route => route.id.startsWith('fallback-'))
 
   return (
     <div className="space-y-6">
@@ -13,6 +29,11 @@ export default async function AdminProvidersPage() {
         <p className="text-muted-foreground">
           Configure how Brok models route to backend providers
         </p>
+        {isDegraded ? (
+          <p className="text-xs text-amber-600 mt-2">
+            Running in fallback mode while database connectivity recovers.
+          </p>
+        ) : null}
       </div>
 
       <div className="rounded-lg border bg-card">
@@ -33,28 +54,66 @@ export default async function AdminProvidersPage() {
             <tbody>
               {routes.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-4 text-center text-muted-foreground">
+                  <td
+                    colSpan={8}
+                    className="p-4 text-center text-muted-foreground"
+                  >
                     No provider routes configured
                   </td>
                 </tr>
               ) : (
-                routes.map((route) => (
+                routes.map(route => (
                   <tr key={route.id} className="border-b">
                     <td className="p-4 font-medium">{route.brokModel}</td>
                     <td className="p-4">{route.providerName}</td>
-                    <td className="p-4 font-mono text-sm">{route.providerModel}</td>
-                    <td className="p-4">{route.priority}</td>
-                    <td className="p-4">${route.inputCostPerMillion}</td>
-                    <td className="p-4">${route.outputCostPerMillion}</td>
-                    <td className="p-4">
-                      <Badge variant={route.isActive ? 'default' : 'secondary'}>
-                        {route.isActive ? 'Active' : 'Disabled'}
-                      </Badge>
+                    <td className="p-4 font-mono text-sm">
+                      {route.providerModel}
                     </td>
-                    <td className="p-4">
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
+                    <td className="p-4" colSpan={5}>
+                      <form
+                        action={saveProviderRoute}
+                        className="grid gap-3 md:grid-cols-[100px_150px_150px_120px_auto] md:items-center"
+                      >
+                        <input type="hidden" name="id" value={route.id} />
+                        <input
+                          type="number"
+                          min={1}
+                          name="priority"
+                          defaultValue={route.priority ?? 1}
+                          className="h-9 rounded-md border bg-background px-3 text-sm"
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.0001"
+                          name="inputCostPerMillion"
+                          defaultValue={route.inputCostPerMillion}
+                          className="h-9 rounded-md border bg-background px-3 text-sm"
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.0001"
+                          name="outputCostPerMillion"
+                          defaultValue={route.outputCostPerMillion}
+                          className="h-9 rounded-md border bg-background px-3 text-sm"
+                        />
+                        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            name="isActive"
+                            defaultChecked={route.isActive}
+                          />
+                          <Badge
+                            variant={route.isActive ? 'default' : 'secondary'}
+                          >
+                            {route.isActive ? 'Active' : 'Disabled'}
+                          </Badge>
+                        </label>
+                        <Button variant="outline" size="sm" type="submit">
+                          Save
+                        </Button>
+                      </form>
                     </td>
                   </tr>
                 ))
@@ -64,5 +123,5 @@ export default async function AdminProvidersPage() {
         </div>
       </div>
     </div>
-  );
+  )
 }

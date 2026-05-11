@@ -110,9 +110,9 @@ function createDefaultSlide(index: number): SlideContent {
         fontSize: 48,
         fontWeight: 'bold',
         color: '#1A1A1A',
-        align: 'center',
-      },
-    ],
+        align: 'center'
+      }
+    ]
   }
 }
 
@@ -120,8 +120,8 @@ function createDefaultSlide(index: number): SlideContent {
 // Store
 // ---------------------------------------------------------------------------
 
-export const usePresentationEditorStore =
-  create<PresentationEditorState>((set, get) => ({
+export const usePresentationEditorStore = create<PresentationEditorState>(
+  (set, get) => ({
     // Initial state
     presentationId: null,
     title: 'Untitled Presentation',
@@ -136,13 +136,21 @@ export const usePresentationEditorStore =
         text: '#1A1A1A',
         accent: '#6366F1',
         secondary: '#E5E7EB',
-        card: '#FFFFFF',
+        card: '#FFFFFF'
       },
       fonts: {
         heading: 'Inter',
-        body: 'Inter',
+        body: 'Inter'
       },
-      slideLayouts: ['title', 'section', 'two_column', 'image_left', 'chart', 'quote', 'text'],
+      slideLayouts: [
+        'title',
+        'section',
+        'two_column',
+        'image_left',
+        'chart',
+        'quote',
+        'text'
+      ]
     },
     isSaving: false,
     isGenerating: false,
@@ -157,17 +165,17 @@ export const usePresentationEditorStore =
       const { slides, activeSlideIndex, selectedElementId } = get()
       const slide = slides[activeSlideIndex]
       if (!slide || !selectedElementId || !slide.elements) return null
-      return slide.elements.find((el) => el.id === selectedElementId) ?? null
+      return slide.elements.find(el => el.id === selectedElementId) ?? null
     },
 
     // Actions
-    setPresentationId: (id) => set({ presentationId: id }),
+    setPresentationId: id => set({ presentationId: id }),
 
-    setTitle: (title) => set({ title }),
+    setTitle: title => set({ title }),
 
-    setSlides: (slides) => set({ slides }),
+    setSlides: slides => set({ slides }),
 
-    selectSlide: (index) => {
+    selectSlide: index => {
       const { slides } = get()
       if (index >= 0 && index < slides.length) {
         set({ activeSlideIndex: index, selectedElementId: null })
@@ -216,16 +224,20 @@ export const usePresentationEditorStore =
       set({ slides: newSlides, activeSlideIndex: newActiveIndex })
     },
 
-    addSlide: (afterIndex) => {
+    addSlide: afterIndex => {
       const { slides } = get()
       const insertAt = afterIndex !== undefined ? afterIndex + 1 : slides.length
       const newSlide = createDefaultSlide(insertAt)
       const newSlides = [...slides]
       newSlides.splice(insertAt, 0, newSlide)
-      set({ slides: newSlides, activeSlideIndex: insertAt, selectedElementId: null })
+      set({
+        slides: newSlides,
+        activeSlideIndex: insertAt,
+        selectedElementId: null
+      })
     },
 
-    duplicateSlide: (index) => {
+    duplicateSlide: index => {
       const { slides } = get()
       if (index < 0 || index >= slides.length) return
 
@@ -234,10 +246,10 @@ export const usePresentationEditorStore =
         ...JSON.parse(JSON.stringify(original)),
         id: generateUUID(),
         title: `${original.title} (copy)`,
-        elements: original.elements?.map((el) => ({
+        elements: original.elements?.map(el => ({
           ...el,
-          id: generateUUID(),
-        })),
+          id: generateUUID()
+        }))
       }
 
       const newSlides = [...slides]
@@ -245,7 +257,7 @@ export const usePresentationEditorStore =
       set({ slides: newSlides, activeSlideIndex: index + 1 })
     },
 
-    deleteSlide: (index) => {
+    deleteSlide: index => {
       const { slides, activeSlideIndex } = get()
       if (slides.length <= 1) return // Prevent deleting last slide
 
@@ -257,17 +269,21 @@ export const usePresentationEditorStore =
         newActiveIndex = Math.min(activeSlideIndex, newSlides.length - 1)
       }
 
-      set({ slides: newSlides, activeSlideIndex: newActiveIndex, selectedElementId: null })
+      set({
+        slides: newSlides,
+        activeSlideIndex: newActiveIndex,
+        selectedElementId: null
+      })
     },
 
-    selectElement: (elementId) => set({ selectedElementId: elementId }),
+    selectElement: elementId => set({ selectedElementId: elementId }),
 
     updateElement: (elementId, updates) => {
       const { slides, activeSlideIndex } = get()
       const slide = slides[activeSlideIndex]
       if (!slide || !slide.elements) return
 
-      const newElements = slide.elements.map((el) =>
+      const newElements = slide.elements.map(el =>
         el.id === elementId ? { ...el, ...updates } : el
       )
 
@@ -283,7 +299,7 @@ export const usePresentationEditorStore =
 
       const newElement: SlideElement = {
         ...element,
-        id: generateUUID(),
+        id: generateUUID()
       }
 
       const newElements = [...(slide.elements || []), newElement]
@@ -297,24 +313,24 @@ export const usePresentationEditorStore =
       const slide = slides[slideIndex]
       if (!slide || !slide.elements) return
 
-      const newElements = slide.elements.filter((el) => el.id !== elementId)
+      const newElements = slide.elements.filter(el => el.id !== elementId)
       const newSlides = [...slides]
       newSlides[slideIndex] = { ...slide, elements: newElements }
 
       set({
         slides: newSlides,
         selectedElementId:
-          selectedElementId === elementId ? null : selectedElementId,
+          selectedElementId === elementId ? null : selectedElementId
       })
     },
 
-    setTheme: (theme) => set({ theme }),
+    setTheme: theme => set({ theme }),
 
-    setIsSaving: (isSaving) => set({ isSaving }),
+    setIsSaving: isSaving => set({ isSaving }),
 
-    setIsGenerating: (isGenerating) => set({ isGenerating }),
+    setIsGenerating: isGenerating => set({ isGenerating }),
 
-    loadPresentation: (data) => {
+    loadPresentation: data => {
       set({
         presentationId: data.id,
         title: data.title,
@@ -323,10 +339,11 @@ export const usePresentationEditorStore =
         selectedElementId: null,
         theme: data.theme,
         isSaving: false,
-        isGenerating: false,
+        isGenerating: false
       })
-    },
-  }))
+    }
+  })
+)
 
 // Computed selectors
 export const selectActiveSlide = (state: PresentationEditorState) =>
@@ -335,5 +352,5 @@ export const selectActiveSlide = (state: PresentationEditorState) =>
 export const selectSelectedElement = (state: PresentationEditorState) => {
   const slide = state.slides[state.activeSlideIndex]
   if (!slide || !state.selectedElementId || !slide.elements) return null
-  return slide.elements.find((el) => el.id === state.selectedElementId) ?? null
+  return slide.elements.find(el => el.id === state.selectedElementId) ?? null
 }

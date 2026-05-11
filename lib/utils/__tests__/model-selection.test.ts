@@ -26,9 +26,9 @@ const quickModel: Model = {
   providerId: 'provider-a'
 }
 
-const adaptiveModel: Model = {
-  id: 'adaptive',
-  name: 'Adaptive',
+const deepModel: Model = {
+  id: 'deep',
+  name: 'Deep',
   provider: 'Provider B',
   providerId: 'provider-b'
 }
@@ -57,7 +57,7 @@ describe('selectModel', () => {
     mockIsCloudDeployment.mockReturnValue(true)
     matrix = {
       quick: quickModel,
-      adaptive: adaptiveModel
+      deep: deepModel
     }
     setMatrixImplementation()
     mockIsProviderEnabled.mockReturnValue(true)
@@ -81,7 +81,7 @@ describe('selectModel', () => {
       cookieStore: createCookieStore()
     })
 
-    expect(result).toEqual(adaptiveModel)
+    expect(result).toEqual(deepModel)
   })
 
   it('falls back to quick mode when search mode is omitted', async () => {

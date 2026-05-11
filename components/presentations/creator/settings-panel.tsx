@@ -72,7 +72,11 @@ export function SettingsPanel({
   const [isOpen, setIsOpen] = useState(false)
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className={cn('space-y-2', className)}>
+    <Collapsible
+      open={isOpen}
+      onOpenChange={setIsOpen}
+      className={cn('space-y-2', className)}
+    >
       {/* Header */}
       <CollapsibleTrigger asChild>
         <Button
@@ -95,7 +99,7 @@ export function SettingsPanel({
         <div className="space-y-3">
           <label className="text-sm font-medium">Slides</label>
           <div className="flex flex-wrap gap-2">
-            {SLIDE_COUNTS.map((count) => (
+            {SLIDE_COUNTS.map(count => (
               <button
                 key={count}
                 onClick={() => onSlideCountChange(count)}
@@ -117,7 +121,7 @@ export function SettingsPanel({
         <div className="space-y-3">
           <label className="text-sm font-medium">Style</label>
           <div className="flex flex-wrap gap-2">
-            {STYLES.map((s) => (
+            {STYLES.map(s => (
               <button
                 key={s.value}
                 onClick={() => onStyleChange(s.value)}
@@ -143,7 +147,7 @@ export function SettingsPanel({
               <SelectValue placeholder="Select language" />
             </SelectTrigger>
             <SelectContent>
-              {LANGUAGES.map((lang) => (
+              {LANGUAGES.map(lang => (
                 <SelectItem key={lang.value} value={lang.value}>
                   {lang.label}
                 </SelectItem>

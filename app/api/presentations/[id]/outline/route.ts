@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
-import { createOrUpdateOutline, getOutline } from '@/lib/db/actions/presentations'
+import {
+  createOrUpdateOutline,
+  getOutline,
+  getPresentation
+} from '@/lib/db/actions/presentations'
 
 /**
  * PATCH /api/presentations/:id/outline
@@ -23,7 +27,15 @@ export async function PATCH(
     }
 
     const body = await req.json()
-    const { outline_json } = body
+    const outline_json = body.outline_json ?? body.outline
+
+    const presentation = await getPresentation(id, userId)
+    if (!presentation) {
+      return NextResponse.json(
+        { error: 'Presentation not found' },
+        { status: 404 }
+      )
+    }
 
     if (!outline_json || !Array.isArray(outline_json)) {
       return NextResponse.json(
@@ -74,14 +86,27 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    const userId = await getCurrentUserId()
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const presentation = await getPresentation(id, userId)
+    if (!presentation) {
+      return NextResponse.json(
+        { error: 'Presentation not found' },
+        { status: 404 }
+      )
+    }
 
     const outline = await getOutline(id)
 
     if (!outline) {
-      return NextResponse.json(
-        { error: 'Outline not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Outline not found' }, { status: 404 })
     }
 
     return NextResponse.json({ outline })

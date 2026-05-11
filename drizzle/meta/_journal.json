@@ -78,6 +78,76 @@
       "when": 1757242257993,
       "tag": "0010_lonely_kang",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1778297509242,
+      "tag": "0011_bitter_celestials",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1778303600000,
+      "tag": "0012_layout_type_compat",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1778305521232,
+      "tag": "0013_idle_event_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1778306123456,
+      "tag": "0014_usage_events_rebuild",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1778361900000,
+      "tag": "0015_presentation_generations_compat",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1778362050000,
+      "tag": "0016_presentation_generation_statuses",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1778362150000,
+      "tag": "0017_presentation_generations_user_fk_compat",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1778362950000,
+      "tag": "0018_presentation_slides_unique_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1778364300000,
+      "tag": "0019_presentation_exports_status_compat",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1778365200000,
+      "tag": "0020_provider_routes_token_plan_models",
+      "breakpoints": true
     }
   ]
 }

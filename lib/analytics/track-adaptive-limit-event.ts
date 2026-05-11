@@ -25,7 +25,7 @@ export interface AdaptiveLimitEventData {
 export async function trackAdaptiveLimitEvent(
   data: AdaptiveLimitEventData
 ): Promise<void> {
-  if (process.env.MORPHIC_CLOUD_DEPLOYMENT !== 'true') {
+  if (process.env.BROK_CLOUD_DEPLOYMENT !== 'true') {
     return
   }
 

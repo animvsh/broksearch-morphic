@@ -2,22 +2,29 @@ import { useCallback, useState } from 'react'
 
 import { toast } from 'sonner'
 
+import {
+  CHAT_MAX_FILE_SIZE_BYTES,
+  CHAT_MAX_FILES,
+  extractTextForChat,
+  isAcceptedChatFile,
+  isUploadableBinaryFile
+} from '@/lib/files/chat-file-utils'
 import { UploadedFile } from '@/lib/types'
 
 type UseFileDropzoneProps = {
   uploadedFiles: UploadedFile[]
   setUploadedFiles: React.Dispatch<React.SetStateAction<UploadedFile[]>>
   maxFiles?: number
-  allowedTypes?: string[]
+  isGuest?: boolean
   chatId: string
 }
 
 export function useFileDropzone({
   uploadedFiles,
   setUploadedFiles,
+  isGuest = false,
   chatId,
-  maxFiles = 3,
-  allowedTypes = ['image/png', 'image/jpeg', 'application/pdf']
+  maxFiles = CHAT_MAX_FILES
 }: UseFileDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false)
 
@@ -32,30 +39,25 @@ export function useFileDropzone({
     }
   }, [])
 
-  const handleDrop = useCallback(
-    async (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault()
-      setIsDragging(false)
-
-      const rawFiles = Array.from(e.dataTransfer.files)
-
-      const allowed = rawFiles.filter(file => allowedTypes.includes(file.type))
-      const rejected = rawFiles.filter(file => !allowed.includes(file))
+  const processFiles = useCallback(
+    async (rawFiles: File[]) => {
+      const accepted = rawFiles.filter(isAcceptedChatFile)
+      const rejected = rawFiles.filter(file => !isAcceptedChatFile(file))
 
       if (rejected.length > 0) {
         toast.error(
           'Some files were not accepted: ' +
-            rejected.map(f => f.name).join(', ')
+            rejected.map(file => file.name).join(', ')
         )
       }
 
-      const total = uploadedFiles.length + allowed.length
+      const total = uploadedFiles.length + accepted.length
       if (total > maxFiles) {
         toast.error(`You can upload a maximum of ${maxFiles} files.`)
         return
       }
 
-      const initialFiles: UploadedFile[] = allowed.map(file => ({
+      const initialFiles: UploadedFile[] = accepted.map(file => ({
         file,
         status: 'uploading'
       }))
@@ -63,52 +65,122 @@ export function useFileDropzone({
       setUploadedFiles(prev => [...prev, ...initialFiles].slice(0, maxFiles))
 
       await Promise.all(
-        initialFiles.map(async uf => {
-          const formData = new FormData()
-          formData.append('file', uf.file)
-          formData.append('chatId', chatId)
+        initialFiles.map(async uploadedFile => {
+          if (uploadedFile.file.size > CHAT_MAX_FILE_SIZE_BYTES) {
+            toast.error(
+              `${uploadedFile.file.name} is too large (max 5MB per file).`
+            )
+            setUploadedFiles(prev =>
+              prev.map(file =>
+                file.file === uploadedFile.file
+                  ? { ...file, status: 'error' }
+                  : file
+              )
+            )
+            return
+          }
 
           try {
-            const res = await fetch('/api/upload', {
+            const extractedText = await extractTextForChat(uploadedFile.file)
+            if (extractedText) {
+              setUploadedFiles(prev =>
+                prev.map(file =>
+                  file.file === uploadedFile.file
+                    ? {
+                        ...file,
+                        status: 'uploaded',
+                        name: uploadedFile.file.name,
+                        extractedText,
+                        source: 'inline-text'
+                      }
+                    : file
+                )
+              )
+              return
+            }
+
+            if (!isUploadableBinaryFile(uploadedFile.file)) {
+              toast.error(`Unsupported file type: ${uploadedFile.file.name}`)
+              setUploadedFiles(prev =>
+                prev.map(file =>
+                  file.file === uploadedFile.file
+                    ? { ...file, status: 'error' }
+                    : file
+                )
+              )
+              return
+            }
+
+            if (isGuest) {
+              toast.error(
+                `Sign in to upload ${uploadedFile.file.name}. Text files work in guest mode.`
+              )
+              setUploadedFiles(prev =>
+                prev.map(file =>
+                  file.file === uploadedFile.file
+                    ? { ...file, status: 'error' }
+                    : file
+                )
+              )
+              return
+            }
+
+            const formData = new FormData()
+            formData.append('file', uploadedFile.file)
+            formData.append('chatId', chatId)
+
+            const response = await fetch('/api/upload', {
               method: 'POST',
               body: formData
             })
 
-            if (!res.ok) throw new Error('Upload failed')
+            if (!response.ok) throw new Error('Upload failed')
 
-            const { file: uploaded } = await res.json()
-
+            const { file } = await response.json()
             setUploadedFiles(prev =>
-              prev.map(f =>
-                f.file === uf.file
+              prev.map(existing =>
+                existing.file === uploadedFile.file
                   ? {
-                      ...f,
+                      ...existing,
                       status: 'uploaded',
-                      url: uploaded.url,
-                      name: uploaded.name,
-                      key: uploaded.key
+                      url: file.url,
+                      name: file.filename,
+                      key: file.key,
+                      source: 'upload'
                     }
-                  : f
+                  : existing
               )
             )
-          } catch (err) {
-            toast.error(`Failed to upload ${uf.file.name}`)
+          } catch {
+            toast.error(`Failed to process ${uploadedFile.file.name}`)
             setUploadedFiles(prev =>
-              prev.map(f =>
-                f.file === uf.file ? { ...f, status: 'error' } : f
+              prev.map(file =>
+                file.file === uploadedFile.file
+                  ? { ...file, status: 'error' }
+                  : file
               )
             )
           }
         })
       )
     },
-    [allowedTypes, maxFiles, uploadedFiles, setUploadedFiles, chatId]
+    [chatId, isGuest, maxFiles, setUploadedFiles, uploadedFiles]
+  )
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      setIsDragging(false)
+      await processFiles(Array.from(e.dataTransfer.files))
+    },
+    [processFiles]
   )
 
   return {
     isDragging,
     handleDragOver,
     handleDragLeave,
-    handleDrop
+    handleDrop,
+    processFiles
   }
 }

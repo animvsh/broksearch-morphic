@@ -25,7 +25,7 @@ export function FilterTabs({ activeFilter, onFilterChange }: FilterTabsProps) {
   return (
     <div className="relative">
       <div className="flex overflow-x-auto scrollbar-hide gap-1 pb-2 -mb-2">
-        {tabs.map((tab) => (
+        {tabs.map(tab => (
           <button
             key={tab}
             onClick={() => onFilterChange(tab)}

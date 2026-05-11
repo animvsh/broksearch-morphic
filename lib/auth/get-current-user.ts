@@ -18,11 +18,18 @@ export async function getCurrentUser() {
 export async function getCurrentUserId() {
   const count = incrementAuthCallCount()
   perfLog(`getCurrentUserId called - count: ${count}`)
+  const supabaseConfigured =
+    !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const authExplicitlyEnabled = process.env.ENABLE_AUTH === 'true'
+  const cloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT === 'true'
+  const anonymousUserId =
+    process.env.ANONYMOUS_USER_ID || '00000000-0000-0000-0000-000000000000'
 
   // Skip authentication mode (for personal Docker deployments)
   if (process.env.ENABLE_AUTH === 'false') {
     // Guard: Prevent disabling auth in Brok Cloud deployments
-    if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') {
+    if (cloudDeployment) {
       throw new Error(
         'ENABLE_AUTH=false is not allowed in BROK_CLOUD_DEPLOYMENT'
       )
@@ -36,7 +43,25 @@ export async function getCurrentUserId() {
       )
     }
 
-    return process.env.ANONYMOUS_USER_ID || 'anonymous-user'
+    return anonymousUserId
+  }
+
+  if (!authExplicitlyEnabled && !cloudDeployment) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn(
+        supabaseConfigured
+          ? '⚠️  Auth is not explicitly enabled. Falling back to anonymous mode.'
+          : '⚠️  Supabase auth is not configured. Falling back to anonymous mode.'
+      )
+    }
+
+    return anonymousUserId
+  }
+
+  if (!supabaseConfigured && cloudDeployment) {
+    throw new Error(
+      'Supabase auth must be configured in BROK_CLOUD_DEPLOYMENT mode.'
+    )
   }
 
   const user = await getCurrentUser()

@@ -19,7 +19,12 @@ interface ChatStats {
 
 export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([])
-  const [stats, setStats] = useState<ChatStats>({ total_chats: 0, total_messages: 0, active_users: 0, total_feedback: 0 })
+  const [stats, setStats] = useState<ChatStats>({
+    total_chats: 0,
+    total_messages: 0,
+    active_users: 0,
+    total_feedback: 0
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -35,7 +40,9 @@ export default function AdminPage() {
       }
       const data = await response.json()
       setUsers(data.users || [])
-      setStats(data.stats || { total_chats: 0, total_messages: 0, active_users: 0 })
+      setStats(
+        data.stats || { total_chats: 0, total_messages: 0, active_users: 0 }
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -64,25 +71,35 @@ export default function AdminPage() {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground">brok Admin</h1>
-          <p className="text-muted-foreground mt-2">User management and analytics</p>
+          <p className="text-muted-foreground mt-2">
+            User management and analytics
+          </p>
         </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-card rounded-lg border p-6">
-            <h3 className="text-sm font-medium text-muted-foreground">Total Users</h3>
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Total Users
+            </h3>
             <p className="text-3xl font-bold mt-2">{users.length}</p>
           </div>
           <div className="bg-card rounded-lg border p-6">
-            <h3 className="text-sm font-medium text-muted-foreground">Active Users</h3>
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Active Users
+            </h3>
             <p className="text-3xl font-bold mt-2">{stats.active_users}</p>
           </div>
           <div className="bg-card rounded-lg border p-6">
-            <h3 className="text-sm font-medium text-muted-foreground">Total Chats</h3>
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Total Chats
+            </h3>
             <p className="text-3xl font-bold mt-2">{stats.total_chats}</p>
           </div>
           <div className="bg-card rounded-lg border p-6">
-            <h3 className="text-sm font-medium text-muted-foreground">Total Messages</h3>
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Total Messages
+            </h3>
             <p className="text-3xl font-bold mt-2">{stats.total_messages}</p>
           </div>
         </div>
@@ -90,12 +107,18 @@ export default function AdminPage() {
         {/* Additional Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-card rounded-lg border p-6">
-            <h3 className="text-sm font-medium text-muted-foreground">User Feedback</h3>
-            <p className="text-3xl font-bold mt-2">{stats.total_feedback || 0}</p>
+            <h3 className="text-sm font-medium text-muted-foreground">
+              User Feedback
+            </h3>
+            <p className="text-3xl font-bold mt-2">
+              {stats.total_feedback || 0}
+            </p>
           </div>
           <div className="bg-card rounded-lg border p-6">
-            <h3 className="text-sm font-medium text-muted-foreground">Search Mode</h3>
-            <p className="text-lg font-bold mt-2">MiniMax AI</p>
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Search Mode
+            </h3>
+            <p className="text-lg font-bold mt-2">Brok AI</p>
           </div>
         </div>
 
@@ -117,15 +140,20 @@ export default function AdminPage() {
               <tbody>
                 {users.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="p-4 text-center text-muted-foreground">
+                    <td
+                      colSpan={4}
+                      className="p-4 text-center text-muted-foreground"
+                    >
                       No users found
                     </td>
                   </tr>
                 ) : (
-                  users.map((user) => (
+                  users.map(user => (
                     <tr key={user.id} className="border-b">
                       <td className="p-4">{user.email}</td>
-                      <td className="p-4">{new Date(user.created_at).toLocaleDateString()}</td>
+                      <td className="p-4">
+                        {new Date(user.created_at).toLocaleDateString()}
+                      </td>
                       <td className="p-4">
                         {user.last_sign_in_at
                           ? new Date(user.last_sign_in_at).toLocaleDateString()

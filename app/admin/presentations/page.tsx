@@ -57,13 +57,29 @@ export default function PresentationsOverviewPage() {
     }
   }
 
-  const maxCount = Math.max(...recentActivity.map((a) => a.count), 1)
+  const maxCount = Math.max(...recentActivity.map(a => a.count), 1)
 
   const navItems = [
-    { label: 'Decks', href: '/admin/presentations/decks', desc: 'Manage presentations' },
-    { label: 'Generations', href: '/admin/presentations/generations', desc: 'Generation logs' },
-    { label: 'Costs', href: '/admin/presentations/costs', desc: 'Cost tracking' },
-    { label: 'Abuse', href: '/admin/presentations/abuse', desc: 'Flagged content' }
+    {
+      label: 'Decks',
+      href: '/admin/presentations/decks',
+      desc: 'Manage presentations'
+    },
+    {
+      label: 'Generations',
+      href: '/admin/presentations/generations',
+      desc: 'Generation logs'
+    },
+    {
+      label: 'Costs',
+      href: '/admin/presentations/costs',
+      desc: 'Cost tracking'
+    },
+    {
+      label: 'Abuse',
+      href: '/admin/presentations/abuse',
+      desc: 'Flagged content'
+    }
   ]
 
   return (
@@ -71,7 +87,9 @@ export default function PresentationsOverviewPage() {
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Presentations Admin</h1>
+          <h1 className="text-3xl font-bold text-foreground">
+            Presentations Admin
+          </h1>
           <p className="text-muted-foreground mt-1">
             Overview, management, and monitoring for Brok Presentations
           </p>
@@ -79,11 +97,13 @@ export default function PresentationsOverviewPage() {
 
         {/* Navigation */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {navItems.map((item) => (
+          {navItems.map(item => (
             <Link key={item.href} href={item.href}>
               <div className="rounded-lg border bg-card p-4 hover:bg-muted/50 transition-colors cursor-pointer">
                 <p className="font-medium text-foreground">{item.label}</p>
-                <p className="text-sm text-muted-foreground mt-1">{item.desc}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {item.desc}
+                </p>
               </div>
             </Link>
           ))}
@@ -110,8 +130,14 @@ export default function PresentationsOverviewPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <StatsCard label="Presentations Today" value={stats.presentationsToday} />
-              <StatsCard label="Slides Generated Today" value={stats.slidesGeneratedToday} />
+              <StatsCard
+                label="Presentations Today"
+                value={stats.presentationsToday}
+              />
+              <StatsCard
+                label="Slides Generated Today"
+                value={stats.slidesGeneratedToday}
+              />
               <StatsCard label="Exports Today" value={stats.exportsToday} />
               <StatsCard
                 label="Generation Cost"
@@ -124,12 +150,17 @@ export default function PresentationsOverviewPage() {
 
         {/* 7-Day Activity Chart */}
         <div className="rounded-lg border bg-card p-6">
-          <h2 className="text-lg font-semibold mb-6">Presentations Created (Last 7 Days)</h2>
+          <h2 className="text-lg font-semibold mb-6">
+            Presentations Created (Last 7 Days)
+          </h2>
           <div className="flex items-end justify-between gap-2 h-40">
-            {recentActivity.map((day) => {
+            {recentActivity.map(day => {
               const heightPct = (day.count / maxCount) * 100
               return (
-                <div key={day.date} className="flex-1 flex flex-col items-center gap-2">
+                <div
+                  key={day.date}
+                  className="flex-1 flex flex-col items-center gap-2"
+                >
                   <div className="w-full flex flex-col items-center justify-end h-32">
                     <div
                       className="w-full max-w-12 rounded-t bg-primary/80 transition-all"

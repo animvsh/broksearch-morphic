@@ -3,7 +3,10 @@
 import React from 'react'
 import Link from 'next/link'
 
-import type { Presentation, PresentationStatus } from '@/lib/presentations/types'
+import type {
+  Presentation,
+  PresentationStatus
+} from '@/lib/presentations/types'
 import { STATUS_LABELS } from '@/lib/presentations/types'
 import { cn } from '@/lib/utils'
 
@@ -36,14 +39,19 @@ function formatTimeAgo(date: Date): string {
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
 
   if (diffInSeconds < 60) return 'Just now'
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`
+  if (diffInSeconds < 3600)
+    return `${Math.floor(diffInSeconds / 60)} minutes ago`
+  if (diffInSeconds < 86400)
+    return `${Math.floor(diffInSeconds / 3600)} hours ago`
+  if (diffInSeconds < 604800)
+    return `${Math.floor(diffInSeconds / 86400)} days ago`
 
   return date.toLocaleDateString()
 }
 
-function getStatusVariant(status: PresentationStatus): 'default' | 'secondary' | 'destructive' | 'outline' {
+function getStatusVariant(
+  status: PresentationStatus
+): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {
     case 'ready':
       return 'default'
@@ -60,7 +68,10 @@ function getStatusVariant(status: PresentationStatus): 'default' | 'secondary' |
   }
 }
 
-export function PresentationCard({ presentation, className }: PresentationCardProps) {
+export function PresentationCard({
+  presentation,
+  className
+}: PresentationCardProps) {
   const gradient = getGradientFromId(presentation.id)
 
   return (

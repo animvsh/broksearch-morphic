@@ -1,9 +1,13 @@
 import { existsSync } from 'fs'
-import { mkdir, stat,unlink, writeFile } from 'fs/promises'
+import { mkdir, stat, unlink, writeFile } from 'fs/promises'
 import path from 'path'
 
-export const LOCAL_STORAGE_PATH = process.env.LOCAL_STORAGE_PATH || '/var/data/uploads'
-export const LOCAL_PUBLIC_URL = process.env.LOCAL_PUBLIC_URL || 'http://localhost:8080/api/uploads'
+import {
+  LOCAL_PUBLIC_URL,
+  LOCAL_STORAGE_PATH
+} from '@/lib/storage/local-storage-config'
+
+export { LOCAL_PUBLIC_URL, LOCAL_STORAGE_PATH }
 
 export interface UploadedFile {
   filename: string
@@ -12,8 +16,16 @@ export interface UploadedFile {
   type: string
 }
 
-export async function ensureStorageDir(userId: string, chatId: string): Promise<string> {
-  const dirPath = path.join(LOCAL_STORAGE_PATH, userId, 'chats', chatId)
+export async function ensureStorageDir(
+  userId: string,
+  chatId: string
+): Promise<string> {
+  const dirPath = path.join(
+    /*turbopackIgnore: true*/ LOCAL_STORAGE_PATH,
+    userId,
+    'chats',
+    chatId
+  )
   await mkdir(dirPath, { recursive: true })
   return dirPath
 }
@@ -26,8 +38,16 @@ export async function uploadFileLocal(
   const sanitizedFileName = sanitizeFilename(file.name)
   const timestamp = Date.now()
   const filePath = `${userId}/chats/${chatId}/${timestamp}-${sanitizedFileName}`
-  const fullDirPath = path.join(LOCAL_STORAGE_PATH, userId, 'chats', chatId)
-  const fullFilePath = path.join(fullDirPath, `${timestamp}-${sanitizedFileName}`)
+  const fullDirPath = path.join(
+    /*turbopackIgnore: true*/ LOCAL_STORAGE_PATH,
+    userId,
+    'chats',
+    chatId
+  )
+  const fullFilePath = path.join(
+    fullDirPath,
+    `${timestamp}-${sanitizedFileName}`
+  )
 
   await mkdir(fullDirPath, { recursive: true })
 
@@ -45,14 +65,22 @@ export async function uploadFileLocal(
 }
 
 export async function deleteFileLocal(filePath: string): Promise<void> {
-  const fullPath = path.join(LOCAL_STORAGE_PATH, filePath)
+  const fullPath = path.join(
+    /*turbopackIgnore: true*/ LOCAL_STORAGE_PATH,
+    filePath
+  )
   if (existsSync(fullPath)) {
     await unlink(fullPath)
   }
 }
 
-export async function getFileStatsLocal(filePath: string): Promise<{ size: number } | null> {
-  const fullPath = path.join(LOCAL_STORAGE_PATH, filePath)
+export async function getFileStatsLocal(
+  filePath: string
+): Promise<{ size: number } | null> {
+  const fullPath = path.join(
+    /*turbopackIgnore: true*/ LOCAL_STORAGE_PATH,
+    filePath
+  )
   if (!existsSync(fullPath)) {
     return null
   }

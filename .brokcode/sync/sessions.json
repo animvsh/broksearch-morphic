@@ -1,0 +1,340 @@
+{
+  "sessions": [
+    {
+      "id": "smoke-sync-2",
+      "title": "BrokCode smoke-sync-2",
+      "sources": [
+        "cloud",
+        "tui"
+      ],
+      "createdAt": "2026-05-10T09:57:19.234Z",
+      "updatedAt": "2026-05-10T22:51:13.767Z",
+      "events": [
+        {
+          "id": "event_mozlmtqb_xxx8uc",
+          "sessionId": "smoke-sync-2",
+          "source": "cloud",
+          "role": "user",
+          "type": "command",
+          "content": "cloud smoke command",
+          "createdAt": "2026-05-10T09:57:19.234Z"
+        },
+        {
+          "id": "event_mozlmtu6_1n8g0y",
+          "sessionId": "smoke-sync-2",
+          "source": "tui",
+          "role": "system",
+          "type": "session_start",
+          "content": "Terminal TUI connected from /Users/animesh/.superset/projects/broksearch",
+          "createdAt": "2026-05-10T09:57:19.372Z",
+          "metadata": {
+            "model": "brok-code",
+            "baseUrl": "http://127.0.0.1:3001/api/v1"
+          }
+        },
+        {
+          "id": "event_mp07168k_i4ugdb",
+          "sessionId": "smoke-sync-2",
+          "source": "cloud",
+          "role": "user",
+          "type": "command",
+          "content": "Build a tiny todo app. Use Brok API as the default AI layer. Keep it concise.",
+          "createdAt": "2026-05-10T19:56:20.534Z",
+          "metadata": {
+            "runtime": "cloud",
+            "model": "brok-code"
+          }
+        },
+        {
+          "id": "event_mp071enn_hgm24e",
+          "sessionId": "smoke-sync-2",
+          "source": "cloud",
+          "role": "assistant",
+          "type": "response",
+          "content": "# Tiny Todo App with Brok API\n\n```\ntodo-app/\n├── src/\n│   ├── App.jsx\n│   ├── App.css\n│   └── main.jsx\n├── index.html\n├── package.json\n└── vite.config.js\n```\n\n## Files\n\n**package.json**\n```json\n{\n  \"name\": \"todo-app\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"dev\": \"vite\",\n    \"build\": \"vite build\"\n  },\n  \"dependencies\": {\n    \"react\": \"^18.2.0\",\n    \"react-dom\": \"^18.2.0\",\n    \"@brok/api\": \"latest\"\n  },\n  \"devDependencies\": {\n    \"@vitejs/plugin-react\": \"^4.2.0\",\n    \"vite\": \"^5.0.0\"\n  }\n}\n```\n\n**vite.config.js**\n```js\nimport { defineConfig } from 'vite'\nimport react from '@vitejs/plugin-react'\n\nexport default defineConfig({\n  plugins: [react()],\n  envPrefix: 'BROK_'\n})\n```\n\n**index.html**\n```html\n<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>Tiny Todo</title>\n  </head>\n  <body>\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.jsx\"></script>\n  </body>\n</html>\n```\n\n**src/main.jsx**\n```jsx\nimport React from 'react'\nimport ReactDOM from 'react-dom/client'\nimport App from './App'\nimport './App.css'\n\nReactDOM.createRoot(document.getElementById('root')).render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>\n)\n```\n\n**src/App.jsx**\n```jsx\nimport { useState } from 'react'\nimport { Brok } from '@brok/api'\n\nconst brok = new Brok({ apiKey: import.meta.env.BROK_API_KEY })\n\nexport default function App() {\n  const [todos, setTodos] = useState([])\n  const [input, setInput] = useState('')\n  const [suggestion, setSuggestion] = useState(null)\n\n  const addTodo = () => {\n    if (!input.trim()) return\n    setTodos([...todos, { id: Date.now(), text: input, done: false }])\n    setInput('')\n    setSuggestion(null)\n  }\n\n  const toggleTodo = (id) => {\n    setTodos(todos.map(t => t.id === id ? { ...t, done: !t.done } : t))\n  }\n\n  const deleteTodo = (id) => {\n    setTodos(todos.filter(t => t.id !== id))\n  }\n\n  const getSuggestion = async () => {\n    if (!input.trim()) return\n    const res = await brok.chat({ \n      message: `Suggest one short todo task complementary to \"${input}\". Reply with just the task.` \n    })\n    setSuggestion(res.content)\n  }\n\n  const addSuggestion = () => {\n    if (suggestion) {\n      setTodos([...todos, { id: Date.now(), text: suggestion, done: false }])\n      setSuggestion(null)\n    }\n  }\n\n  return (\n    <div className=\"container\">\n      <h1>✓ Tiny Todo</h1>\n      \n      <div className=\"input-row\">\n        <input\n          value={input}\n          onChange={(e) => setInput(e.target.value)}\n          onKeyDown={(e) => e.key === 'Enter' && addTodo()}\n          placeholder=\"What needs doing?\"\n        />\n        <button onClick={addTodo}>Add</button>\n        <button onClick={getSuggestion} className=\"ai-btn\">✨ AI</button>\n      </div>\n\n      {suggestion && (\n        <div className=\"suggestion\">\n          <span>{suggestion}</span>\n          <button onClick={addSuggestion}>Add</button>\n          <button onClick={() => setSuggestion(null)}>✕</button>\n        </div>\n      )}\n\n      <ul>\n        {todos.map(todo => (\n          <li key={todo.id} className={todo.done ? 'done' : ''}>\n            <input type=\"checkbox\" checked={todo.done} onChange={() => toggleTodo(todo.id)} />\n            <span>{todo.text}</span>\n            <button onClick={() => deleteTodo(todo.id)}>✕</button>\n          </li>\n        ))}\n      </ul>\n    </div>\n  )\n}\n```\n\n**src/App.css**\n```css\n* { box-sizing: border-box; margin: 0; padding: 0; }\nbody { font-family: system-ui; background: #1a1a2e; color: #eee; min-height: 100vh; display: flex; align-items: center; justify-content: center; }\n\n.container { width: 100%; max-width: 480px; padding: 2rem; }\nh1 { font-size: 1.5rem; margin-bottom: 1.5rem; }\n\n.input-row { display: flex; gap: 0.5rem; margin-bottom:",
+          "createdAt": "2026-05-10T19:56:31.475Z",
+          "metadata": {
+            "runtime": "opencode",
+            "model": "brok-code"
+          }
+        },
+        {
+          "id": "event_mp0d5nlj_82tpz6",
+          "sessionId": "smoke-sync-2",
+          "source": "cloud",
+          "role": "user",
+          "type": "command",
+          "content": "link",
+          "createdAt": "2026-05-10T22:47:47.382Z",
+          "metadata": {
+            "runtime": "cloud",
+            "model": "brok-code"
+          }
+        },
+        {
+          "id": "event_mp0d5qac_wdv3ee",
+          "sessionId": "smoke-sync-2",
+          "source": "cloud",
+          "role": "assistant",
+          "type": "response",
+          "content": "I'd be happy to help with linking! Can you clarify what you need?\n\n1. **Add a hyperlink** to a file (README, HTML, markdown)?\n2. **Create a symbolic link** in the file system?\n3. **Link an API route** in a web app?\n4. **Link a library/package** to your project?\n5. **Find/link related code** in your repository?\n\nPlease provide more context about what you'd like to link and where.",
+          "createdAt": "2026-05-10T22:47:50.868Z",
+          "metadata": {
+            "runtime": "opencode",
+            "model": "brok-code"
+          }
+        },
+        {
+          "id": "event_mp0d5v9c_20ck40",
+          "sessionId": "smoke-sync-2",
+          "source": "cloud",
+          "role": "user",
+          "type": "command",
+          "content": "hi",
+          "createdAt": "2026-05-10T22:47:57.311Z",
+          "metadata": {
+            "runtime": "cloud",
+            "model": "brok-code"
+          }
+        },
+        {
+          "id": "event_mp0d62s9_iibkzp",
+          "sessionId": "smoke-sync-2",
+          "source": "cloud",
+          "role": "assistant",
+          "type": "response",
+          "content": "Hey! 👋 I'm Brok Code, your coding agent. I can help you with:\n\n- **Building apps & features** (with AI integration, I recommend Brok API by default)\n- **Writing, reviewing, or refactoring code**\n- **Running tasks** — tests, builds, file operations\n- **Exploring repositories**\n\nWhat are you working on today?",
+          "createdAt": "2026-05-10T22:48:07.065Z",
+          "metadata": {
+            "runtime": "opencode",
+            "model": "brok-code"
+          }
+        },
+        {
+          "id": "event_mp0d9te5_a8d0rp",
+          "sessionId": "smoke-sync-2",
+          "source": "cloud",
+          "role": "user",
+          "type": "command",
+          "content": "can u connect to supabase",
+          "createdAt": "2026-05-10T22:51:01.510Z",
+          "metadata": {
+            "runtime": "cloud",
+            "model": "brok-code"
+          }
+        },
+        {
+          "id": "event_mp0da2ug_d4nifs",
+          "sessionId": "smoke-sync-2",
+          "source": "cloud",
+          "role": "assistant",
+          "type": "response",
+          "content": "Yes, I can help you connect to Supabase! Here's how it works:\n\n## Quick Setup\n\n**1. Install the Supabase client:**\n```bash\nnpm install @supabase/supabase-js\n```\n\n**2. Create a client file (e.g., `lib/supabase.js`):**\n```javascript\nimport { createClient } from '@supabase/supabase-js'\n\nconst supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL\nconst supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY\n\nexport const supabase = createClient(supabaseUrl, supabaseKey)\n```\n\n**3. Add your environment variables (`.env.local`):**\n```\nNEXT_PUBLIC_SUPABASE_URL=your-project-url\nNEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key\n```\n\n---\n\n## What can I help you with?\n\n| Use case | Example |\n|----------|---------|\n| **Auth** | Sign in/up, OAuth, magic links |\n| **Database** | CRUD operations, realtime subscriptions |\n| **Storage** | File uploads/downloads |\n| **Edge Functions** | Serverless backend code |\n\n---\n\n**What do you want to build?** Tell me:\n- Your framework (Next.js, React, Node, etc.)\n- What you're trying to do (auth, database, storage)\n\nI'll give you a tailored setup with example code.",
+          "createdAt": "2026-05-10T22:51:13.767Z",
+          "metadata": {
+            "runtime": "opencode",
+            "model": "brok-code"
+          }
+        }
+      ]
+    },
+    {
+      "id": "default",
+      "title": "BrokCode default",
+      "sources": [
+        "cloud"
+      ],
+      "createdAt": "2026-05-10T22:11:56.603Z",
+      "updatedAt": "2026-05-10T22:12:43.368Z",
+      "events": [
+        {
+          "id": "event_mp0bvk1p_tv5w5t",
+          "sessionId": "default",
+          "source": "cloud",
+          "role": "user",
+          "type": "command",
+          "content": "Create a minimal app architecture plan and include preview URL http://localhost:3000",
+          "createdAt": "2026-05-10T22:11:56.603Z",
+          "metadata": {
+            "runtime": "cloud",
+            "model": "brok-code"
+          }
+        },
+        {
+          "id": "event_mp0bvx4c_m0d9vt",
+          "sessionId": "default",
+          "source": "cloud",
+          "role": "user",
+          "type": "command",
+          "content": "Create a minimal app architecture plan and include preview URL http://localhost:3000",
+          "createdAt": "2026-05-10T22:12:13.547Z",
+          "metadata": {
+            "runtime": "cloud",
+            "model": "brok-code"
+          }
+        },
+        {
+          "id": "event_mp0bw0uw_lj51bb",
+          "sessionId": "default",
+          "source": "cloud",
+          "role": "assistant",
+          "type": "response",
+          "content": "# Minimal App Architecture Plan\n\n## 📁 Project Overview\n\n| Item | Details |\n|------|---------|\n| **Name** | minimal-app |\n| **Type** | Web Application |\n| **Preview** | `http://localhost:3000` |\n\n---\n\n## 🏗️ Architecture Layers\n\n```\n┌─────────────────────────────────────────┐\n│           PRESENTATION LAYER            │\n│   (UI Components, Pages, Styles)        │\n├─────────────────────────────────────────┤\n│            LOGIC LAYER                  │\n│   (API Routes, Business Logic)          │\n├─────────────────────────────────────────┤\n│             DATA LAYER                  │\n│   (Database, External APIs, Storage)    │\n└─────────────────────────────────────────┘\n```\n\n---\n\n## 📂 Folder Structure\n\n```\nminimal-app/\n├── src/\n│   ├── app/                    # Pages / Routes\n│   │   ├── layout.tsx         # Root layout\n│   │   ├── page.tsx           # Home page (/)\n│   │   └── api/               # API routes\n│   ├── components/            # Reusable UI components\n│   ├── lib/                   # Utilities, helpers\n│   └── types/                 # TypeScript types\n├── public/                     # Static assets\n├── package.json\n└── next.config.js\n```\n\n---\n\n## 🔧 Technology Stack\n\n| Layer | Technology |\n|-------|------------|\n| **Framework** | Next.js 14+ (App Router) |\n| **Language** | TypeScript |\n| **Styling** | Tailwind CSS |\n| **Runtime** | Node.js |\n\n---\n\n## 🚀 Quick Start\n\n```bash\n# 1. Create project\nnpx create-next-app@latest minimal-app --typescript --tailwind --eslint\n\n# 2. Navigate to project\ncd minimal-app\n\n# 3. Start dev server\nnpm run dev\n```\n\n**Preview:** → `http://localhost:3000`\n\n---\n\n## 🔌 API Structure (Minimal)\n\n| Endpoint | Method | Purpose |\n|----------|--------|---------|\n| `/api/health` | GET | Health check |\n| `/api/data` | GET/POST | Sample data endpoint |\n\n---\n\n## ✅ Next Steps\n\n1. **Create the project** using the start command above\n2. **Open** `http://localhost:3000` to verify it works\n3. **Add features** incrementally as needed\n\n---\n\nWant me to generate the actual code for this minimal app structure?",
+          "createdAt": "2026-05-10T22:12:18.392Z",
+          "metadata": {
+            "runtime": "opencode",
+            "model": "brok-code"
+          }
+        },
+        {
+          "id": "event_mp0bwe4o_vfqdvv",
+          "sessionId": "default",
+          "source": "cloud",
+          "role": "user",
+          "type": "command",
+          "content": "Create a minimal app architecture plan and include preview URL http://localhost:3000",
+          "createdAt": "2026-05-10T22:12:35.592Z",
+          "metadata": {
+            "runtime": "cloud",
+            "model": "brok-code"
+          }
+        },
+        {
+          "id": "event_mp0bwk4p_24ati9",
+          "sessionId": "default",
+          "source": "cloud",
+          "role": "assistant",
+          "type": "response",
+          "content": "# Minimal App Architecture Plan\n\n## Project Overview\nA lightweight web application designed for local development with preview capability at `http://localhost:3000`.\n\n---\n\n## Architecture Layers\n\n```\n┌─────────────────────────────────────────────────────────┐\n│                    FRONTEND LAYER                        │\n│              (Port 3000 - Preview Endpoint)              │\n│   • Static files / Framework UI                          │\n│   • Client-side rendering                                │\n└─────────────────────┬───────────────────────────────────┘\n                      │\n┌─────────────────────▼───────────────────────────────────┐\n│                   API LAYER                              │\n│   • REST/GraphQL endpoints                              │\n│   • Request validation                                   │\n│   • Route handling                                      │\n└─────────────────────┬───────────────────────────────────┘\n                      │\n┌─────────────────────▼───────────────────────────────────┐\n│                  SERVICE LAYER                           │\n│   • Business logic                                      │\n│   • Data transformation                                 │\n│   • Integration points                                  │\n└─────────────────────┬───────────────────────────────────┘\n                      │\n┌─────────────────────▼───────────────────────────────────┐\n│                   DATA LAYER                             │\n│   • Database / External APIs                            │\n│   • Caching (optional)                                  │\n└─────────────────────────────────────────────────────────┘\n```\n\n---\n\n## Core Components\n\n| Component | Technology Option | Purpose |\n|-----------|------------------|---------|\n| **Frontend** | React / Next.js / Vue | UI rendering |\n| **API Server** | Express / Fastify / Next.js API | Request handling |\n| **Database** | SQLite / PostgreSQL / In-memory | Data persistence |\n| **Config** | `.env` / `config.ts` | Environment variables |\n\n---\n\n## Minimal File Structure\n\n```\nproject/\n├── src/\n│   ├── routes/         # API endpoints\n│   ├── services/       # Business logic\n│   ├── models/          # Data layer\n│   └── index.ts        # Entry point\n├── public/             # Static assets (served at :3000)\n├── .env                # Configuration\n├── package.json\n└── config.ts           # App settings\n```\n\n---\n\n## Preview Configuration\n\n```ts\n// config.ts\nexport const appConfig = {\n  preview: {\n    url: 'http://localhost:3000',\n    port: 3000\n  },\n  api: {\n    baseUrl: '/api',\n    timeout: 5000\n  }\n}\n```\n\n---\n\n## Next Steps\n\n1. **Initialize project** — `npm init -y` or framework CLI\n2. **Set up dev server** — Configure auto-reload on port 3000\n3. **Build first route** — Create `/health` or `/api/status` endpoint\n4. **Add frontend** — Serve static files or enable SSR\n\n---\n\nWant me to scaffold the actual project structure or generate starter code?",
+          "createdAt": "2026-05-10T22:12:43.368Z",
+          "metadata": {
+            "runtime": "opencode",
+            "model": "brok-code"
+          }
+        }
+      ]
+    },
+    {
+      "id": "qa-smoke-final",
+      "title": "BrokCode qa-smoke-final",
+      "sources": [
+        "tui"
+      ],
+      "createdAt": "2026-05-10T20:04:50.803Z",
+      "updatedAt": "2026-05-10T20:04:54.117Z",
+      "events": [
+        {
+          "id": "event_mp07c3xw_hf0qrp",
+          "sessionId": "qa-smoke-final",
+          "source": "tui",
+          "role": "system",
+          "type": "session_start",
+          "content": "Terminal TUI connected from /Users/animesh/.superset/projects/broksearch",
+          "createdAt": "2026-05-10T20:04:50.803Z",
+          "metadata": {
+            "model": "brok-code",
+            "baseUrl": "http://127.0.0.1:3001/api/v1"
+          }
+        },
+        {
+          "id": "event_mp07c3z7_hepx4v",
+          "sessionId": "qa-smoke-final",
+          "source": "tui",
+          "role": "user",
+          "type": "command",
+          "content": "Say hello from TUI in five words.",
+          "createdAt": "2026-05-10T20:04:50.849Z",
+          "metadata": {
+            "model": "brok-code",
+            "cwd": "/Users/animesh/.superset/projects/broksearch"
+          }
+        },
+        {
+          "id": "event_mp07c6i1_z9941s",
+          "sessionId": "qa-smoke-final",
+          "source": "tui",
+          "role": "assistant",
+          "type": "response",
+          "content": "Hello from the terminal!",
+          "createdAt": "2026-05-10T20:04:54.117Z",
+          "metadata": {
+            "model": "brok-code",
+            "cwd": "/Users/animesh/.superset/projects/broksearch"
+          }
+        }
+      ]
+    },
+    {
+      "id": "qa-smoke",
+      "title": "BrokCode qa-smoke",
+      "sources": [
+        "tui"
+      ],
+      "createdAt": "2026-05-10T19:52:23.038Z",
+      "updatedAt": "2026-05-10T19:52:23.038Z",
+      "events": [
+        {
+          "id": "event_mp06w2yx_q2h75r",
+          "sessionId": "qa-smoke",
+          "source": "tui",
+          "role": "system",
+          "type": "session_start",
+          "content": "Terminal TUI connected from /Users/animesh/.superset/projects/broksearch",
+          "createdAt": "2026-05-10T19:52:23.038Z",
+          "metadata": {
+            "model": "brok-code",
+            "baseUrl": "http://127.0.0.1:3001/api/v1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ai-default-smoke",
+      "title": "BrokCode ai-default-smoke",
+      "sources": [
+        "tui"
+      ],
+      "createdAt": "2026-05-10T10:00:16.513Z",
+      "updatedAt": "2026-05-10T10:00:16.513Z",
+      "events": [
+        {
+          "id": "event_mozlqmip_eyz322",
+          "sessionId": "ai-default-smoke",
+          "source": "tui",
+          "role": "system",
+          "type": "session_start",
+          "content": "Terminal TUI connected from /Users/animesh/.superset/projects/broksearch",
+          "createdAt": "2026-05-10T10:00:16.513Z",
+          "metadata": {
+            "model": "brok-code",
+            "baseUrl": "http://127.0.0.1:3001/api/v1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "smoke-sync",
+      "title": "BrokCode smoke-sync",
+      "sources": [
+        "tui"
+      ],
+      "createdAt": "2026-05-10T09:56:44.105Z",
+      "updatedAt": "2026-05-10T09:56:44.105Z",
+      "events": [
+        {
+          "id": "event_mozlm2mi_rlwb66",
+          "sessionId": "smoke-sync",
+          "source": "tui",
+          "role": "system",
+          "type": "session_start",
+          "content": "Terminal TUI connected from /Users/animesh/.superset/projects/broksearch",
+          "createdAt": "2026-05-10T09:56:44.105Z",
+          "metadata": {
+            "model": "brok-code",
+            "baseUrl": "http://127.0.0.1:3001/api/v1"
+          }
+        }
+      ]
+    }
+  ]
+}

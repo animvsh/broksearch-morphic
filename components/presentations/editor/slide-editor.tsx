@@ -3,22 +3,20 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 
-import { ArrowLeft, Download, Loader2,Play, Save, Share2 } from 'lucide-react'
+import { ArrowLeft, Download, Loader2, Play, Share2 } from 'lucide-react'
+import { toast } from 'sonner'
 
-import { type Theme,themes } from '@/lib/presentations/themes'
+import { type Theme, themes } from '@/lib/presentations/themes'
 import { cn } from '@/lib/utils'
+import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 
-import { type ThemeId,ThemePicker } from '@/components/presentations/theme/theme-picker'
+import {
+  type ThemeId,
+  ThemePicker
+} from '@/components/presentations/theme/theme-picker'
 
 import { AIEditBar } from './ai-edit-bar'
 import { SlideCanvas } from './slide-canvas'
@@ -31,7 +29,7 @@ import { usePresentationEditorStore } from '@/states/presentation-editor-store'
 // Export formats
 // ---------------------------------------------------------------------------
 
-type ExportFormat = 'pptx' | 'pdf' | 'images'
+type ExportFormat = 'pptx'
 
 // ---------------------------------------------------------------------------
 // Main SlideEditor component
@@ -47,7 +45,7 @@ export function SlideEditor() {
     slides,
     isSaving,
     setIsSaving,
-    loadPresentation,
+    loadPresentation
   } = usePresentationEditorStore()
 
   const [showThemePicker, setShowThemePicker] = useState(false)
@@ -64,7 +62,7 @@ export function SlideEditor() {
         await fetch(`/api/presentations/${presentationId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, slides, themeId: theme.id }),
+          body: JSON.stringify({ title, slides, themeId: theme.id })
         })
       } catch (error) {
         console.error('Error saving presentation:', error)
@@ -78,7 +76,7 @@ export function SlideEditor() {
 
   const handleThemeSelect = useCallback(
     (themeId: ThemeId | 'auto') => {
-      const selectedTheme = themes.find((t) => t.id === themeId)
+      const selectedTheme = themes.find(t => t.id === themeId)
       if (selectedTheme) {
         setTheme(selectedTheme)
       }
@@ -119,43 +117,58 @@ export function SlideEditor() {
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ format }),
+            body: JSON.stringify({ format })
           }
         )
 
         if (!response.ok) throw new Error('Export failed')
 
-        const data = await response.json()
-
-        if (data.url) {
-          window.open(data.url, '_blank')
-        }
+        const blob = await response.blob()
+        const downloadUrl = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = downloadUrl
+        link.download = `${title || 'presentation'}.${format}`
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(downloadUrl)
+        toast.success('PowerPoint export downloaded.')
       } catch (error) {
         console.error('Export error:', error)
+        toast.error('Could not export this presentation.')
       }
     },
-    [presentationId]
+    [presentationId, title]
   )
 
   const handleShare = useCallback(async () => {
     if (!presentationId) return
 
     try {
-      const response = await fetch(`/api/presentations/${presentationId}/share`, {
-        method: 'POST',
-      })
+      const response = await fetch(
+        `/api/presentations/${presentationId}/share`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ is_public: true })
+        }
+      )
 
       if (!response.ok) throw new Error('Share failed')
 
       const data = await response.json()
 
-      if (data.shareUrl) {
-        await navigator.clipboard.writeText(data.shareUrl)
-        // In a real app, show a toast notification
-        alert('Share link copied to clipboard!')
+      if (data.share_url) {
+        const copied = await safeCopyTextToClipboard(data.share_url)
+        toast.success(
+          copied ? 'Share link copied.' : 'Share link created for this deck.'
+        )
       }
     } catch (error) {
       console.error('Share error:', error)
+      toast.error('Could not create a share link.')
     }
   }, [presentationId])
 
@@ -177,7 +190,7 @@ export function SlideEditor() {
             {editingTitle ? (
               <Input
                 value={localTitle}
-                onChange={(e) => setLocalTitle(e.target.value)}
+                onChange={e => setLocalTitle(e.target.value)}
                 onBlur={handleTitleBlur}
                 onKeyDown={handleTitleKeyDown}
                 autoFocus
@@ -247,31 +260,25 @@ export function SlideEditor() {
           </Button>
 
           {/* Share button */}
-          <Button variant="outline" size="sm" onClick={handleShare} className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleShare}
+            className="gap-2"
+          >
             <Share2 className="size-4" />
             Share
           </Button>
 
-          {/* Export dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Download className="size-4" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleExport('pptx')}>
-                PowerPoint (.pptx)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('pdf')}>
-                PDF Document (.pdf)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('images')}>
-                Images (.png/.jpg)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExport('pptx')}
+            className="gap-2"
+          >
+            <Download className="size-4" />
+            Export PPTX
+          </Button>
         </div>
       </header>
 

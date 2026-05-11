@@ -1,39 +1,39 @@
-"use client";
+'use client'
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef } from 'react'
 
-import { X } from "lucide-react";
+import { X } from 'lucide-react'
 
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils'
 
 interface SpeakerNotesProps {
-  notes: string;
-  isOpen: boolean;
-  onClose: () => void;
+  notes: string
+  isOpen: boolean
+  onClose: () => void
 }
 
 export function SpeakerNotes({ notes, isOpen, onClose }: SpeakerNotesProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null)
 
   // Focus trap and escape handler
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
+      if (e.key === 'Escape') {
+        onClose()
       }
-    };
+    }
 
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
 
   return (
     <div
       className={cn(
-        "fixed bottom-0 left-0 right-0 z-50 transition-transform duration-300 ease-in-out",
-        isOpen ? "translate-y-0" : "translate-y-full"
+        'fixed bottom-0 left-0 right-0 z-50 transition-transform duration-300 ease-in-out',
+        isOpen ? 'translate-y-0' : 'translate-y-full'
       )}
     >
       {/* Overlay backdrop */}
@@ -72,17 +72,23 @@ export function SpeakerNotes({ notes, isOpen, onClose }: SpeakerNotesProps) {
               {notes}
             </p>
           ) : (
-            <p className="text-neutral-500 italic">No speaker notes for this slide.</p>
+            <p className="text-neutral-500 italic">
+              No speaker notes for this slide.
+            </p>
           )}
         </div>
 
         {/* Hint */}
         <div className="mt-4 text-center">
           <span className="text-xs text-neutral-600">
-            Press <kbd className="rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-400">N</kbd> to close
+            Press{' '}
+            <kbd className="rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-400">
+              N
+            </kbd>{' '}
+            to close
           </span>
         </div>
       </div>
     </div>
-  );
+  )
 }

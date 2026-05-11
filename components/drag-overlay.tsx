@@ -13,7 +13,7 @@ export function DragOverlay({ visible }: { visible: boolean }) {
     >
       <div className="text-center text-muted-foreground">
         <UploadCloud className="mx-auto mb-4 size-10" />
-        <p className="text-lg font-semibold">Drop files here</p>
+        <p className="text-lg font-semibold">Drop files to chat</p>
       </div>
     </div>
   )

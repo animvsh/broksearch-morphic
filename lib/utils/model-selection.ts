@@ -12,14 +12,14 @@ import { Model } from '@/lib/types/models'
 import { SearchMode } from '@/lib/types/search'
 import { isProviderEnabled } from '@/lib/utils/registry'
 
-const MODE_FALLBACK_ORDER: SearchMode[] = ['quick', 'adaptive']
+const MODE_FALLBACK_ORDER: SearchMode[] = ['quick', 'search', 'deep', 'code']
 const PROVIDER_LABELS: Record<string, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
   google: 'Google',
   ollama: 'Ollama',
   gateway: 'Gateway',
-  'openai-compatible': 'MiniMax'
+  'openai-compatible': 'Brok'
 }
 
 function buildProviderOptions(

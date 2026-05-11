@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
 import { OutlineSlideRow } from './outline-slide-row'
-import type { LayoutType,OutlineSlide } from './types'
+import type { LayoutType, OutlineSlide } from './types'
 
 interface OutlineEditorProps {
   initialOutline: OutlineSlide[]
@@ -17,7 +17,6 @@ interface OutlineEditorProps {
   onOutlineChange?: (outline: OutlineSlide[]) => void
 }
 
- 
 function debounce<T extends (...args: any[]) => void>(
   fn: T,
   delay: number
@@ -82,7 +81,7 @@ export function OutlineEditor({
 
   // Title change
   const handleTitleChange = (slideIndex: number, title: string) => {
-    setSlides((prev) => {
+    setSlides(prev => {
       const updated = [...prev]
       updated[slideIndex] = { ...updated[slideIndex], title }
       debouncedSave(updated)
@@ -92,7 +91,7 @@ export function OutlineEditor({
 
   // Layout change
   const handleLayoutChange = (slideIndex: number, layout: LayoutType) => {
-    setSlides((prev) => {
+    setSlides(prev => {
       const updated = [...prev]
       updated[slideIndex] = { ...updated[slideIndex], layout_type: layout }
       debouncedSave(updated)
@@ -106,7 +105,7 @@ export function OutlineEditor({
     bulletIndex: number,
     text: string
   ) => {
-    setSlides((prev) => {
+    setSlides(prev => {
       const updated = [...prev]
       const newBullets = [...updated[slideIndex].bullets]
       newBullets[bulletIndex] = text
@@ -118,7 +117,7 @@ export function OutlineEditor({
 
   // Add bullet
   const handleAddBullet = (slideIndex: number) => {
-    setSlides((prev) => {
+    setSlides(prev => {
       const updated = [...prev]
       const newBullets = [...updated[slideIndex].bullets, '']
       updated[slideIndex] = { ...updated[slideIndex], bullets: newBullets }
@@ -129,7 +128,7 @@ export function OutlineEditor({
 
   // Delete bullet
   const handleDeleteBullet = (slideIndex: number, bulletIndex: number) => {
-    setSlides((prev) => {
+    setSlides(prev => {
       const updated = [...prev]
       const newBullets = updated[slideIndex].bullets.filter(
         (_, i) => i !== bulletIndex
@@ -142,7 +141,7 @@ export function OutlineEditor({
 
   // Delete slide
   const handleDeleteSlide = (slideIndex: number) => {
-    setSlides((prev) => {
+    setSlides(prev => {
       const updated = prev.filter((_, i) => i !== slideIndex)
       debouncedSave(updated)
       return updated
@@ -152,7 +151,7 @@ export function OutlineEditor({
   // Move slide up
   const handleMoveUp = (slideIndex: number) => {
     if (slideIndex === 0) return
-    setSlides((prev) => {
+    setSlides(prev => {
       const updated = [...prev]
       ;[updated[slideIndex - 1], updated[slideIndex]] = [
         updated[slideIndex],
@@ -165,7 +164,7 @@ export function OutlineEditor({
 
   // Move slide down
   const handleMoveDown = (slideIndex: number) => {
-    setSlides((prev) => {
+    setSlides(prev => {
       if (slideIndex === prev.length - 1) return prev
       const updated = [...prev]
       ;[updated[slideIndex], updated[slideIndex + 1]] = [
@@ -184,7 +183,7 @@ export function OutlineEditor({
       layout_type: 'title',
       bullets: ['']
     }
-    setSlides((prev) => {
+    setSlides(prev => {
       const updated = [...prev, newSlide]
       debouncedSave(updated)
       return updated
@@ -223,13 +222,13 @@ export function OutlineEditor({
             slide={slide}
             index={index}
             totalSlides={slides.length}
-            onTitleChange={(title) => handleTitleChange(index, title)}
-            onLayoutChange={(layout) => handleLayoutChange(index, layout)}
+            onTitleChange={title => handleTitleChange(index, title)}
+            onLayoutChange={layout => handleLayoutChange(index, layout)}
             onBulletChange={(bulletIndex, text) =>
               handleBulletChange(index, bulletIndex, text)
             }
             onAddBullet={() => handleAddBullet(index)}
-            onDeleteBullet={(bulletIndex) =>
+            onDeleteBullet={bulletIndex =>
               handleDeleteBullet(index, bulletIndex)
             }
             onDeleteSlide={() => handleDeleteSlide(index)}

@@ -1,9 +1,11 @@
-import { getBrokStats } from '@/lib/actions/admin-brok';
+import { getBrokStats } from '@/lib/actions/admin-brok'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+
+export const dynamic = 'force-dynamic'
 
 export default async function BrokAdminPage() {
-  const stats = await getBrokStats();
+  const stats = await getBrokStats()
 
   return (
     <div className="space-y-6">
@@ -20,7 +22,9 @@ export default async function BrokAdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.requestsToday.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              {stats.requestsToday.toLocaleString()}
+            </div>
           </CardContent>
         </Card>
 
@@ -31,7 +35,9 @@ export default async function BrokAdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.tokensToday.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              {stats.tokensToday.toLocaleString()}
+            </div>
           </CardContent>
         </Card>
 
@@ -42,7 +48,9 @@ export default async function BrokAdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats.revenueToday.toFixed(2)}</div>
+            <div className="text-2xl font-bold">
+              ${stats.revenueToday.toFixed(2)}
+            </div>
           </CardContent>
         </Card>
 
@@ -53,7 +61,9 @@ export default async function BrokAdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats.providerCostToday.toFixed(2)}</div>
+            <div className="text-2xl font-bold">
+              ${stats.providerCostToday.toFixed(2)}
+            </div>
           </CardContent>
         </Card>
 
@@ -66,8 +76,12 @@ export default async function BrokAdminPage() {
           <CardContent>
             <div className="text-2xl font-bold">
               {stats.revenueToday > 0
-                ? ((1 - stats.providerCostToday / stats.revenueToday) * 100).toFixed(1)
-                : 0}%
+                ? (
+                    (1 - stats.providerCostToday / stats.revenueToday) *
+                    100
+                  ).toFixed(1)
+                : 0}
+              %
             </div>
           </CardContent>
         </Card>
@@ -114,17 +128,28 @@ export default async function BrokAdminPage() {
           <CardContent>
             <div className="space-y-4">
               {stats.topUsersByUsage.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No usage data yet</p>
+                <p className="text-muted-foreground text-sm">
+                  No usage data yet
+                </p>
               ) : (
-                stats.topUsersByUsage.map((user) => (
-                  <div key={user.id} className="flex items-center justify-between">
+                stats.topUsersByUsage.map(user => (
+                  <div
+                    key={user.id}
+                    className="flex items-center justify-between"
+                  >
                     <div>
                       <p className="font-medium">{user.email}</p>
-                      <p className="text-sm text-muted-foreground">{user.workspace}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {user.workspace}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">{user.requestsToday.toLocaleString()} req</p>
-                      <p className="text-sm text-muted-foreground">${user.costToday.toFixed(2)}</p>
+                      <p className="font-medium">
+                        {user.requestsToday.toLocaleString()} req
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        ${user.costToday.toFixed(2)}
+                      </p>
                     </div>
                   </div>
                 ))
@@ -140,9 +165,11 @@ export default async function BrokAdminPage() {
           <CardContent>
             <div className="space-y-4">
               {stats.modelUsage.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No usage data yet</p>
+                <p className="text-muted-foreground text-sm">
+                  No usage data yet
+                </p>
               ) : (
-                stats.modelUsage.map((model) => (
+                stats.modelUsage.map(model => (
                   <div key={model.id}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-medium">{model.id}</span>
@@ -164,5 +191,5 @@ export default async function BrokAdminPage() {
         </Card>
       </div>
     </div>
-  );
+  )
 }

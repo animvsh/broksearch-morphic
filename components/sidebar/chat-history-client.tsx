@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 
-import { toast } from 'sonner'
-
 import { Chat as DBChat } from '@/lib/db/schema'
 
 import {
@@ -33,7 +31,13 @@ export function ChatHistoryClient() {
     try {
       const response = await fetch(`/api/chats?offset=0&limit=20`)
       if (!response.ok) {
-        throw new Error('Failed to fetch initial chat history')
+        console.warn(
+          '[chat-history] initial load failed with status',
+          response.status
+        )
+        setChats([])
+        setNextOffset(null)
+        return
       }
       const { chats: dbChats, nextOffset: newNextOffset } =
         (await response.json()) as ChatPageResponse
@@ -42,7 +46,7 @@ export function ChatHistoryClient() {
       setNextOffset(newNextOffset)
     } catch (error) {
       console.error('Failed to load initial chats:', error)
-      toast.error('Failed to load chat history.')
+      setChats([])
       setNextOffset(null)
     } finally {
       setIsLoading(false)
@@ -72,7 +76,12 @@ export function ChatHistoryClient() {
     try {
       const response = await fetch(`/api/chats?offset=${nextOffset}&limit=20`)
       if (!response.ok) {
-        throw new Error('Failed to fetch more chat history')
+        console.warn(
+          '[chat-history] pagination failed with status',
+          response.status
+        )
+        setNextOffset(null)
+        return
       }
       const { chats: dbChats, nextOffset: newNextOffset } =
         (await response.json()) as ChatPageResponse
@@ -81,7 +90,6 @@ export function ChatHistoryClient() {
       setNextOffset(newNextOffset)
     } catch (error) {
       console.error('Failed to load more chats:', error)
-      toast.error('Failed to load more chat history.')
       setNextOffset(null)
     } finally {
       setIsLoading(false)

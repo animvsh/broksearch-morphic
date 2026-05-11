@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
+import { Code2, Github } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { ChatProvider } from '@/lib/contexts/chat-context'
@@ -20,9 +21,20 @@ import {
 } from '@/lib/types/dynamic-tools'
 import type { ModelSelectorData } from '@/lib/types/model-selector'
 import { cn } from '@/lib/utils'
+import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
+import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 import { useFileDropzone } from '@/hooks/use-file-dropzone'
 
+import { Button } from './ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from './ui/dialog'
 import { ChatMessages } from './chat-messages'
 import { ChatPanel } from './chat-panel'
 import { DragOverlay } from './drag-overlay'
@@ -33,6 +45,29 @@ interface ChatSection {
   id: string // User message ID
   userMessage: UIMessage
   assistantMessages: UIMessage[]
+}
+
+function hasCodingIntent(value: string) {
+  const text = value.toLowerCase()
+  return [
+    /\bbuild\b/,
+    /\bcode\b/,
+    /\bdo\s*code\b/,
+    /\bdocode\b/,
+    /\bbrok\s*code\b/,
+    /\bimplement\b/,
+    /\bship\b/,
+    /\bdeploy\b/,
+    /\bdebug\b/,
+    /\bsecurity\s+scan\b/,
+    /\bvulnerability\s+scan\b/,
+    /\bdeepsec\b/,
+    /\/securityscan\b/,
+    /\brefactor\b/,
+    /\bfix (the|this|a)?\s*(bug|error|issue|ui|api|route|page|component|app|site|website)?/,
+    /\b(add|make|create)\b.*\b(component|route|endpoint|api|app|site|website|page|feature|button|sidebar|modal|dashboard|landing page)\b/,
+    /\b(github|pull request|pr|repo|repository|worktree)\b/
+  ].some(pattern => pattern.test(text))
 }
 
 export function Chat({
@@ -75,6 +110,9 @@ export function Chat({
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [input, setInput] = useState('')
+  const [pendingCodingPrompt, setPendingCodingPrompt] = useState<string | null>(
+    null
+  )
   const [errorModal, setErrorModal] = useState<{
     open: boolean
     type: 'rate-limit' | 'auth' | 'forbidden' | 'general'
@@ -172,8 +210,8 @@ export function Chat({
           'You have reached your daily chat limit. Please try again tomorrow.'
 
         const details =
-          parsedError.mode === 'adaptive'
-            ? 'The limit resets at midnight UTC. You can continue using Quick mode without restrictions.'
+          parsedError.mode === 'deep'
+            ? 'The limit resets at midnight UTC. You can continue in Quick Answer, Search, or Code mode.'
             : 'The limit resets at midnight UTC.'
 
         setErrorModal({
@@ -209,10 +247,10 @@ export function Chat({
         })
       } else {
         // For general errors, still use toast for less intrusive notification
-        toast.error(`Error in chat: ${error.message}`)
+        toast.error('Brok could not complete the request. Please try again.')
       }
     },
-    experimental_throttle: 100,
+    experimental_throttle: 32,
     generateId
   })
 
@@ -284,9 +322,14 @@ export function Chat({
           .join('\n') ?? ''
 
       if (text) {
-        navigator.clipboard.writeText(stripSpecBlocks(text)).then(
-          () => toast.success('Message copied to clipboard'),
-          () => toast.error('Failed to copy message')
+        void safeCopyTextToClipboard(stripSpecBlocks(stripThinkingBlocks(text))).then(
+          copied => {
+            if (copied) {
+              toast.success('Message copied to clipboard')
+              return
+            }
+            toast.error('Failed to copy message')
+          }
         )
       }
     }
@@ -418,24 +461,42 @@ export function Chat({
     }
   }
 
-  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const submitToSearch = (promptOverride?: string) => {
+    if (uploadedFiles.some(file => file.status === 'uploading')) {
+      toast.info('Please wait for file processing to finish.')
+      return
+    }
 
     const uploaded = uploadedFiles.filter(f => f.status === 'uploaded')
+    const promptText = promptOverride ?? input
 
-    if (input.trim() || uploaded.length > 0) {
+    if (promptText.trim() || uploaded.length > 0) {
       const parts: any[] = []
 
-      if (input.trim()) {
-        parts.push({ type: 'text', text: input })
+      if (promptText.trim()) {
+        parts.push({ type: 'text', text: promptText })
       }
 
-      uploaded.forEach(f => {
+      uploaded.forEach(file => {
+        if (file.extractedText) {
+          parts.push({
+            type: 'text',
+            text: [
+              `File: ${file.name || file.file.name}`,
+              'Use this file context when answering:',
+              file.extractedText
+            ].join('\n')
+          })
+        }
+      })
+
+      uploaded.forEach(file => {
+        if (!file.url) return
         parts.push({
           type: 'file',
-          url: f.url!,
-          filename: f.name!,
-          mediaType: f.file.type
+          url: file.url,
+          filename: file.name || file.file.name,
+          mediaType: file.file.type
         })
       })
 
@@ -451,27 +512,41 @@ export function Chat({
     }
   }
 
-  const { isDragging, handleDragOver, handleDragLeave, handleDrop } =
-    useFileDropzone({
-      uploadedFiles,
-      setUploadedFiles,
-      chatId: chatId
-    })
-  const guestDragHandlers = {
-    isDragging: false,
-    handleDragOver: (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault()
-    },
-    handleDragLeave: (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault()
-    },
-    handleDrop: (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault()
-    }
+  const openBrokCodeCloud = (prompt: string) => {
+    const url = new URL('/brokcode', window.location.origin)
+    url.searchParams.set('prompt', prompt)
+    url.searchParams.set('connect', 'github')
+    url.searchParams.set('autostart', '1')
+    setInput('')
+    setUploadedFiles([])
+    setPendingCodingPrompt(null)
+    router.push(`${url.pathname}${url.search}`)
   }
-  const dragHandlers = isGuest
-    ? guestDragHandlers
-    : { isDragging, handleDragOver, handleDragLeave, handleDrop }
+
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+
+    const promptText = input.trim()
+    if (promptText && hasCodingIntent(promptText)) {
+      setPendingCodingPrompt(promptText)
+      return
+    }
+
+    submitToSearch()
+  }
+
+  const {
+    isDragging,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    processFiles
+  } = useFileDropzone({
+    uploadedFiles,
+    setUploadedFiles,
+    isGuest,
+    chatId: chatId
+  })
 
   return (
     <ChatProvider sendMessage={sendMessage}>
@@ -481,9 +556,9 @@ export function Chat({
           messages.length === 0 ? 'items-center justify-center' : ''
         )}
         data-testid="full-chat"
-        onDragOver={dragHandlers.handleDragOver}
-        onDragLeave={dragHandlers.handleDragLeave}
-        onDrop={dragHandlers.handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         <ChatMessages
           sections={sections}
@@ -532,7 +607,6 @@ export function Chat({
           error={error}
         />
         <ChatPanel
-          chatId={chatId}
           input={input}
           handleInputChange={handleInputChange}
           handleSubmit={onSubmit}
@@ -547,14 +621,14 @@ export function Chat({
           showScrollToBottomButton={!isAtBottom}
           uploadedFiles={uploadedFiles}
           setUploadedFiles={setUploadedFiles}
+          onFilesSelected={processFiles}
           scrollContainerRef={scrollContainerRef}
           onNewChat={handleNewChat}
-          isGuest={isGuest}
           isCloudDeployment={isCloudDeployment}
           modelSelectorData={modelSelectorData}
           sections={sections}
         />
-        <DragOverlay visible={dragHandlers.isDragging} />
+        <DragOverlay visible={isDragging} />
         <ErrorModal
           open={errorModal.open}
           onOpenChange={open => setErrorModal(prev => ({ ...prev, open }))}
@@ -580,6 +654,57 @@ export function Chat({
             router.push('/')
           }}
         />
+        <Dialog
+          open={Boolean(pendingCodingPrompt)}
+          onOpenChange={open => {
+            if (!open) setPendingCodingPrompt(null)
+          }}
+        >
+          <DialogContent className="rounded-md sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Code2 className="size-4" />
+                Start Brok Code?
+              </DialogTitle>
+              <DialogDescription>
+                This looks like a coding request. I will connect GitHub first,
+                then hand it to the Brok Code coding agent in brokcode-cloud.
+              </DialogDescription>
+            </DialogHeader>
+
+            {pendingCodingPrompt && (
+              <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                <p className="line-clamp-4 whitespace-pre-wrap">
+                  {pendingCodingPrompt}
+                </p>
+              </div>
+            )}
+
+            <DialogFooter className="gap-2 sm:gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const prompt = pendingCodingPrompt
+                  setPendingCodingPrompt(null)
+                  if (prompt) submitToSearch(prompt)
+                }}
+              >
+                Keep In Chat
+              </Button>
+              <Button
+                type="button"
+                className="gap-2"
+                onClick={() => {
+                  if (pendingCodingPrompt) openBrokCodeCloud(pendingCodingPrompt)
+                }}
+              >
+                <Github className="size-4" />
+                Connect GitHub + Start Brok Code
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </ChatProvider>
   )

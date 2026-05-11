@@ -2,7 +2,12 @@
 
 import React, { useState } from 'react'
 
-import { ChevronDownIcon, ChevronUpIcon, GripVerticalIcon,TrashIcon } from 'lucide-react'
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  GripVerticalIcon,
+  TrashIcon
+} from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -15,8 +20,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 
-import type { LayoutType,OutlineSlide } from './types'
-import { LAYOUT_LABELS,LAYOUT_OPTIONS } from './types'
+import type { LayoutType, OutlineSlide } from './types'
+import { LAYOUT_LABELS, LAYOUT_OPTIONS } from './types'
 
 interface OutlineSlideRowProps {
   slide: OutlineSlide
@@ -98,7 +103,7 @@ export function OutlineSlideRow({
           {/* Title Input */}
           <Input
             value={slide.title}
-            onChange={(e) => onTitleChange(e.target.value)}
+            onChange={e => onTitleChange(e.target.value)}
             placeholder={`Slide ${index + 1} title`}
             className="text-base font-medium border-transparent hover:border-border focus-visible:border-primary px-2 py-1 h-auto"
           />
@@ -130,7 +135,7 @@ export function OutlineSlideRow({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
-                {LAYOUT_OPTIONS.map((option) => (
+                {LAYOUT_OPTIONS.map(option => (
                   <DropdownMenuItem
                     key={option.value}
                     onClick={() => onLayoutChange(option.value)}
@@ -157,9 +162,7 @@ export function OutlineSlideRow({
                 <span className="text-muted-foreground text-xs">•</span>
                 <Input
                   value={bullet}
-                  onChange={(e) =>
-                    onBulletChange(bulletIndex, e.target.value)
-                  }
+                  onChange={e => onBulletChange(bulletIndex, e.target.value)}
                   placeholder="Add a bullet point..."
                   className="flex-1 h-8 text-sm border-transparent hover:border-border focus-visible:border-primary px-2 py-1"
                 />

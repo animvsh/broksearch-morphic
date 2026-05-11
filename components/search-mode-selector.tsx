@@ -4,7 +4,11 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 
 import { Check, ChevronDown } from 'lucide-react'
 
-import { SEARCH_MODE_CONFIGS } from '@/lib/config/search-modes'
+import {
+  DEFAULT_SEARCH_MODE,
+  normalizeSearchMode,
+  SEARCH_MODE_CONFIGS
+} from '@/lib/config/search-modes'
 import { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
 import {
@@ -25,11 +29,8 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card'
 export function SearchModeSelector() {
   const value = useSyncExternalStore(
     subscribeToCookieChange,
-    () => {
-      const savedMode = getCookie('searchMode')
-      return savedMode === 'adaptive' ? 'adaptive' : 'quick'
-    },
-    () => 'quick'
+    () => normalizeSearchMode(getCookie('searchMode')),
+    () => DEFAULT_SEARCH_MODE
   )
   const [openHoverCard, setOpenHoverCard] = useState<string | null>(null)
   const [justSelected, setJustSelected] = useState(false)
@@ -37,9 +38,9 @@ export function SearchModeSelector() {
 
   useEffect(() => {
     const savedMode = getCookie('searchMode')
-    if (savedMode && !['quick', 'adaptive'].includes(savedMode)) {
-      // Clean up invalid cookie value (e.g., old 'planning' mode)
-      setCookie('searchMode', 'quick')
+    const normalizedMode = normalizeSearchMode(savedMode)
+    if (savedMode !== normalizedMode) {
+      setCookie('searchMode', normalizedMode)
     }
   }, [])
 

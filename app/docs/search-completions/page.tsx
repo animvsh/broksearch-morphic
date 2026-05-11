@@ -118,7 +118,13 @@ curl https://api.brok.ai/v1/search/completions \\
 
 | Model | Description | Input Cost | Output Cost | Search Depth |
 |-------|-------------|------------|-------------|---------------|
-${Object.entries(BROK_MODELS).filter(([_, m]) => m.supportsSearch).map(([id, config]) => `| \`${id}\` | ${config.description} | $${config.inputCostPerMillion}/1M | $${config.outputCostPerMillion}/1M | Basic: 3-5 sources${id === 'brok-search-pro' ? ', Deep: 10-20 sources' : ''} |`).join('\n')}
+${Object.entries(BROK_MODELS)
+  .filter(([_, m]) => m.supportsSearch)
+  .map(
+    ([id, config]) =>
+      `| \`${id}\` | ${config.description} | $${config.inputCostPerMillion}/1M | $${config.outputCostPerMillion}/1M | Basic: 3-5 sources${id === 'brok-search-pro' ? ', Deep: 10-20 sources' : ''} |`
+  )
+  .join('\n')}
 
 ## Use Cases
 
@@ -153,10 +159,11 @@ ${Object.entries(BROK_MODELS).filter(([_, m]) => m.supportsSearch).map(([id, con
 - [Rate Limits](/docs/rate-limits) - Understanding limits`
 
 export default function SearchCompletionsPage() {
-  const searchModels = useMemo(() =>
-    Object.entries(BROK_MODELS)
-      .filter(([_, config]) => config.supportsSearch)
-      .map(([id, config]) => ({ id, ...config })),
+  const searchModels = useMemo(
+    () =>
+      Object.entries(BROK_MODELS)
+        .filter(([_, config]) => config.supportsSearch)
+        .map(([id, config]) => ({ id, ...config })),
     []
   )
 
@@ -193,7 +200,9 @@ export default function SearchCompletionsPage() {
                 <td className="py-2 px-3 font-mono">model</td>
                 <td className="py-2 px-3">string</td>
                 <td className="py-2 px-3">Yes</td>
-                <td className="py-2 px-3">Model ID (brok-search, brok-search-pro, brok-agent)</td>
+                <td className="py-2 px-3">
+                  Model ID (brok-search, brok-search-pro, brok-agent)
+                </td>
               </tr>
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">query</td>
@@ -205,7 +214,10 @@ export default function SearchCompletionsPage() {
                 <td className="py-2 px-3 font-mono">search_depth</td>
                 <td className="py-2 px-3">string</td>
                 <td className="py-2 px-3">No</td>
-                <td className="py-2 px-3">&quot;basic&quot; or &quot;deep&quot;. Default: &quot;basic&quot;</td>
+                <td className="py-2 px-3">
+                  &quot;basic&quot; or &quot;deep&quot;. Default:
+                  &quot;basic&quot;
+                </td>
               </tr>
               <tr className="border-b">
                 <td className="py-2 px-3 font-mono">max_tokens</td>
@@ -217,7 +229,9 @@ export default function SearchCompletionsPage() {
                 <td className="py-2 px-3 font-mono">temperature</td>
                 <td className="py-2 px-3">number</td>
                 <td className="py-2 px-3">No</td>
-                <td className="py-2 px-3">Sampling temperature (0-2). Default: 0.7</td>
+                <td className="py-2 px-3">
+                  Sampling temperature (0-2). Default: 0.7
+                </td>
               </tr>
             </tbody>
           </table>
@@ -310,19 +324,25 @@ export default function SearchCompletionsPage() {
 
         <h2>Available Search Models</h2>
         <div className="space-y-4">
-          {searchModels.map((model) => (
+          {searchModels.map(model => (
             <div key={model.id} className="border rounded-lg p-4">
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <h3 className="font-semibold">{model.name}</h3>
-                  <code className="text-sm text-muted-foreground">{model.id}</code>
+                  <code className="text-sm text-muted-foreground">
+                    {model.id}
+                  </code>
                 </div>
                 <div className="text-right text-sm">
                   <div>${model.inputCostPerMillion}/1M in</div>
-                  <div className="text-muted-foreground">${model.outputCostPerMillion}/1M out</div>
+                  <div className="text-muted-foreground">
+                    ${model.outputCostPerMillion}/1M out
+                  </div>
                 </div>
               </div>
-              <p className="text-muted-foreground text-sm">{model.description}</p>
+              <p className="text-muted-foreground text-sm">
+                {model.description}
+              </p>
               <div className="mt-2 text-xs text-muted-foreground">
                 Max tokens: {model.maxTokens}
               </div>
@@ -332,10 +352,21 @@ export default function SearchCompletionsPage() {
 
         <h2>Use Cases</h2>
         <ul>
-          <li><strong>Research assistance</strong> - Deep search for comprehensive reports</li>
-          <li><strong>Fact-checking</strong> - Quick basic search for verification</li>
-          <li><strong>Content creation</strong> - Search-powered content with citations</li>
-          <li><strong>Customer support</strong> - Knowledge base augmented responses</li>
+          <li>
+            <strong>Research assistance</strong> - Deep search for comprehensive
+            reports
+          </li>
+          <li>
+            <strong>Fact-checking</strong> - Quick basic search for verification
+          </li>
+          <li>
+            <strong>Content creation</strong> - Search-powered content with
+            citations
+          </li>
+          <li>
+            <strong>Customer support</strong> - Knowledge base augmented
+            responses
+          </li>
         </ul>
 
         <h2>Best Practices</h2>
@@ -387,9 +418,17 @@ export default function SearchCompletionsPage() {
 
         <h2>Next Steps</h2>
         <ul>
-          <li><Link href="/docs/chat-completions">Chat Completions</Link> - Standard chat API</li>
-          <li><Link href="/docs/models">Models</Link> - All available models</li>
-          <li><Link href="/docs/rate-limits">Rate Limits</Link> - Understanding limits</li>
+          <li>
+            <Link href="/docs/chat-completions">Chat Completions</Link> -
+            Standard chat API
+          </li>
+          <li>
+            <Link href="/docs/models">Models</Link> - All available models
+          </li>
+          <li>
+            <Link href="/docs/rate-limits">Rate Limits</Link> - Understanding
+            limits
+          </li>
         </ul>
       </div>
     </div>
