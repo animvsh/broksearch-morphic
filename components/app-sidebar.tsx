@@ -6,10 +6,16 @@ import { usePathname } from 'next/navigation'
 
 import {
   BookOpen,
+  Code2,
   Compass,
+  FlaskConical,
+  Mail,
   PanelLeft,
+  PlugZap,
   Plus,
-  Search
+  Presentation,
+  Search,
+  TerminalSquare
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -45,6 +51,8 @@ export default function AppSidebar() {
     href === '/'
       ? pathname === '/'
       : pathname === href || pathname.startsWith(`${href}/`)
+  const isCodeActive =
+    pathname.startsWith('/brokcode') && !pathname.startsWith('/brokcode/tui')
 
   return (
     <Sidebar
@@ -140,6 +148,96 @@ export default function AppSidebar() {
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
             </SidebarMenuSub>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="BrokMail"
+              className={navButtonClass}
+              isActive={isActive('/brokmail')}
+            >
+              <Link href="/brokmail" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <Mail className="size-4" />
+                </span>
+                <span className="flex-1">BrokMail</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Brok Code"
+              className={navButtonClass}
+              isActive={isCodeActive}
+            >
+              <Link href="/brokcode" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <Code2 className="size-4" />
+                </span>
+                <span className="flex-1">Brok Code</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Playground"
+              className={navButtonClass}
+              isActive={isActive('/playground')}
+            >
+              <Link href="/playground" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <FlaskConical className="size-4" />
+                </span>
+                <span className="flex-1">Playground</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="TUI"
+              className={navButtonClass}
+              isActive={isActive('/brokcode/tui')}
+            >
+              <Link href="/brokcode/tui" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <TerminalSquare className="size-4" />
+                </span>
+                <span className="flex-1">TUI</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Slides"
+              className={navButtonClass}
+              isActive={isActive('/presentations')}
+            >
+              <Link href="/presentations" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <Presentation className="size-4" />
+                </span>
+                <span className="flex-1">Slides</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Integrations"
+              className={navButtonClass}
+              isActive={isActive('/integrations')}
+            >
+              <Link href="/integrations" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <PlugZap className="size-4" />
+                </span>
+                <span className="flex-1">Integrations</span>
+              </Link>
+            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
         <div className="hidden flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden group-data-[collapsible=offcanvas]:hidden 2xl:block">
