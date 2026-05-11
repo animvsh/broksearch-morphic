@@ -100,6 +100,27 @@ function formatToolkitName(slug: string) {
     .join(' ')
 }
 
+function sanitizeConnectSessionSegment(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 80)
+}
+
+function buildConnectSessionId(userId?: string, toolkitSlug?: string) {
+  if (!userId) return undefined
+
+  const userSegment = sanitizeConnectSessionSegment(userId)
+  const toolkitSegment = toolkitSlug
+    ? sanitizeConnectSessionSegment(toolkitSlug)
+    : 'all'
+
+  if (!userSegment) return undefined
+  return `brok_${userSegment}_${toolkitSegment}`
+}
+
 function buildUrl(path: string, query?: URLSearchParams) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   const version = resolveApiVersion().replace(/^\/+/, '')
@@ -412,7 +433,8 @@ export async function listConnectedAccounts(
     const settled = await Promise.allSettled(
       toolkits.map(async slug => {
         const payload = await composioManageConnectionsConnect({
-          toolkits: [{ name: slug, action: 'list' }]
+          toolkits: [{ name: slug, action: 'list' }],
+          sessionId: buildConnectSessionId(userId, slug)
         })
         return normalizeConnectedAccountsFromConnect(payload)
       })
@@ -531,7 +553,8 @@ export async function createConnectedAccountLink(params: {
     }
 
     const payload = await composioManageConnectionsConnect({
-      toolkits: [{ name: toolkitSlug, action: 'add' }]
+      toolkits: [{ name: toolkitSlug, action: 'add' }],
+      sessionId: buildConnectSessionId(params.userId, toolkitSlug)
     })
 
     const toolkitResults = extractToolkitResultsFromConnect(payload)

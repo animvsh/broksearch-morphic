@@ -36,7 +36,21 @@ export async function GET() {
   }
 
   try {
-    const userId = (await getCurrentUserId()) || 'brokmail-user'
+    const userId = await getCurrentUserId()
+    if (!userId) {
+      return NextResponse.json(
+        {
+          configured: true,
+          connected: false,
+          provider: isComposioConnectMode()
+            ? 'composio-connect'
+            : 'composio',
+          message: 'Sign in to Brok before checking Gmail status.'
+        },
+        { status: 401 }
+      )
+    }
+
     const accountsByToolkit = await Promise.all(
       resolveToolkitCandidates().map(async toolkit => {
         const accounts = await listConnectedAccounts(userId, toolkit, 20)

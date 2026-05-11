@@ -646,6 +646,16 @@ export function BrokMailApp() {
       })
       const body = await response.json().catch(() => null)
 
+      if (!response.ok) {
+        const message =
+          typeof body?.message === 'string'
+            ? body.message
+            : 'Sign in to Brok before connecting Gmail.'
+        setConnectionStatus(message)
+        toast.error(message)
+        return
+      }
+
       if (body?.connectionUrl) {
         const popup = window.open(
           body.connectionUrl,
@@ -707,6 +717,16 @@ export function BrokMailApp() {
         method: 'POST'
       })
       const body = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        const message =
+          typeof body?.message === 'string'
+            ? body.message
+            : 'Sign in to Brok before connecting Calendar.'
+        setCalendarConnectionStatus(message)
+        toast.error(message)
+        return
+      }
 
       if (body?.connectionUrl) {
         const popup = window.open(

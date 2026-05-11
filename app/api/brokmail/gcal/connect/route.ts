@@ -58,44 +58,70 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const userId = (await getCurrentUserId()) || 'brokmail-user'
-  const candidates = resolveToolkitCandidates()
-  const errors: string[] = []
-
-  for (const toolkitSlug of candidates) {
-    try {
-      const link = await createConnectedAccountLink({
-        userId,
-        toolkitSlug,
-        redirectUrl
-      })
-
-      if (link.url) {
-        return NextResponse.json({
+  try {
+    const userId = await getCurrentUserId()
+    if (!userId) {
+      return NextResponse.json(
+        {
           provider: 'composio',
-          toolkit: toolkitSlug,
-          connectionUrl: link.url,
-          redirectUrl
-        })
-      }
-
-      errors.push(
-        `${toolkitSlug}: Composio did not return a Google Calendar connection URL.`
-      )
-    } catch (error) {
-      errors.push(
-        `${toolkitSlug}: ${error instanceof Error ? error.message : 'unknown error'}`
+          connectionUrl: null,
+          redirectUrl,
+          message: 'Sign in to Brok before connecting Calendar.'
+        },
+        { status: 401 }
       )
     }
-  }
 
-  return NextResponse.json({
-    provider: 'google-oauth',
-    connectionUrl: null,
-    redirectUrl,
-    message:
-      errors.length > 0
-        ? errors.join(' | ')
-        : 'Could not create a Composio Google Calendar connection link.'
-  })
+    const candidates = resolveToolkitCandidates()
+    const errors: string[] = []
+
+    for (const toolkitSlug of candidates) {
+      try {
+        const link = await createConnectedAccountLink({
+          userId,
+          toolkitSlug,
+          redirectUrl
+        })
+
+        if (link.url) {
+          return NextResponse.json({
+            provider: 'composio',
+            toolkit: toolkitSlug,
+            connectionUrl: link.url,
+            redirectUrl
+          })
+        }
+
+        errors.push(
+          `${toolkitSlug}: Composio did not return a Google Calendar connection URL.`
+        )
+      } catch (error) {
+        errors.push(
+          `${toolkitSlug}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`
+        )
+      }
+    }
+
+    return NextResponse.json({
+      provider: 'google-oauth',
+      connectionUrl: null,
+      redirectUrl,
+      message:
+        errors.length > 0
+          ? errors.join(' | ')
+          : 'Could not create a Composio Google Calendar connection link.'
+    })
+  } catch (error) {
+    return NextResponse.json({
+      provider: 'google-oauth',
+      connectionUrl: null,
+      redirectUrl,
+      message:
+        error instanceof Error
+          ? error.message
+          : 'Could not create Composio Calendar connection link.'
+    })
+  }
 }

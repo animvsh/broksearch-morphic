@@ -43,7 +43,21 @@ export async function GET() {
   }
 
   try {
-    const userId = (await getCurrentUserId()) || 'brokmail-user'
+    const userId = await getCurrentUserId()
+    if (!userId) {
+      return NextResponse.json(
+        {
+          configured: true,
+          connected: false,
+          provider: isComposioConnectMode()
+            ? 'composio-connect'
+            : 'composio',
+          message: 'Sign in to Brok before checking Calendar status.'
+        },
+        { status: 401 }
+      )
+    }
+
     const candidates = resolveToolkitCandidates()
     const accountsByToolkit = await Promise.all(
       candidates.map(async toolkit => {

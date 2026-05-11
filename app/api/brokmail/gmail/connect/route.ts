@@ -52,7 +52,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const userId = (await getCurrentUserId()) || 'brokmail-user'
+    const userId = await getCurrentUserId()
+    if (!userId) {
+      return NextResponse.json(
+        {
+          provider: 'composio',
+          connectionUrl: null,
+          redirectUrl,
+          message: 'Sign in to Brok before connecting Gmail.'
+        },
+        { status: 401 }
+      )
+    }
+
     const errors: string[] = []
 
     for (const toolkitSlug of resolveToolkitCandidates()) {
