@@ -3,4 +3,4 @@ ALTER TABLE "presentation_exports"
 
 ALTER TABLE "presentation_exports"
   ADD CONSTRAINT "presentation_exports_status_check"
-  CHECK ("status" = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'failed'::text, 'done'::text, 'error'::text]));
+  CHECK (("status")::text = ANY (ARRAY['pending', 'processing', 'completed', 'failed', 'done', 'error']));
