@@ -749,6 +749,11 @@
     text-transform: uppercase;
   }
 
+  [data-collapsible='icon'] [data-sidebar='menu-button'] > span:not(:first-child),
+  [data-collapsible='icon'] [data-sidebar='menu-sub-button'] > span:not(:first-child) {
+    display: none;
+  }
+
   .nav-live-dot {
     width: 0.38rem;
     height: 0.38rem;
