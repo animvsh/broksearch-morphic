@@ -40,13 +40,13 @@ import { IconBlinkingLogo } from './ui/icons'
 export default function AppSidebar() {
   const pathname = usePathname()
   const navButtonClass =
-    'group/sidebar relative h-9 rounded-lg border border-transparent px-2 text-[13px] font-medium text-sidebar-foreground/68 transition-all duration-200 hover:border-border/75 hover:bg-background/82 hover:text-sidebar-foreground hover:shadow-[0_12px_28px_-26px_rgba(15,23,42,0.28)] data-[active=true]:border-border/80 data-[active=true]:bg-background/92 data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[0_14px_30px_-26px_rgba(15,23,42,0.3)]'
+    'group/sidebar relative h-9 rounded-full border border-transparent px-2 text-[13px] font-medium text-sidebar-foreground/68 transition-all duration-200 hover:border-white/80 hover:bg-white/72 hover:text-sidebar-foreground hover:shadow-[0_12px_28px_-24px_rgba(27,96,190,0.22)] data-[active=true]:border-white/90 data-[active=true]:bg-white/92 data-[active=true]:text-blue-800 data-[active=true]:shadow-[0_14px_30px_-24px_rgba(27,96,190,0.28)]'
   const subButtonClass =
-    'group/subnav rounded-lg border border-transparent px-2 text-sidebar-foreground/58 transition-all duration-200 hover:border-border/65 hover:bg-background/74 hover:text-sidebar-foreground data-[active=true]:border-border/70 data-[active=true]:bg-background/88 data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[0_10px_24px_-22px_rgba(15,23,42,0.28)]'
+    'group/subnav rounded-full border border-transparent px-2 text-sidebar-foreground/58 transition-all duration-200 hover:border-white/70 hover:bg-white/64 hover:text-sidebar-foreground data-[active=true]:border-white/80 data-[active=true]:bg-white/86 data-[active=true]:text-blue-800 data-[active=true]:shadow-[0_10px_24px_-20px_rgba(27,96,190,0.22)]'
   const iconShellClass =
-    'flex size-6 items-center justify-center rounded-md border border-border/65 bg-background/72 text-foreground/75 transition-all duration-200 group-data-[active=true]/sidebar:border-transparent group-data-[active=true]/sidebar:bg-gradient-to-br group-data-[active=true]/sidebar:from-blue-500/90 group-data-[active=true]/sidebar:via-teal-400/80 group-data-[active=true]/sidebar:to-orange-400/85 group-data-[active=true]/sidebar:text-white group-hover/sidebar:border-border/85 group-hover/sidebar:bg-background group-hover/sidebar:text-foreground'
+    'flex size-6 items-center justify-center rounded-full border border-blue-100 bg-white/78 text-blue-700 transition-all duration-200 group-data-[active=true]/sidebar:border-transparent group-data-[active=true]/sidebar:bg-blue-600 group-data-[active=true]/sidebar:text-white group-hover/sidebar:border-white group-hover/sidebar:bg-white group-hover/sidebar:text-blue-700'
   const subIconShellClass =
-    'flex size-5.5 items-center justify-center rounded-md border border-border/65 bg-background/68 transition-all duration-200 group-data-[active=true]/subnav:border-border/80 group-data-[active=true]/subnav:bg-background/90'
+    'flex size-5.5 items-center justify-center rounded-full border border-blue-100 bg-white/68 text-blue-700 transition-all duration-200 group-data-[active=true]/subnav:border-white group-data-[active=true]/subnav:bg-white'
   const isActive = (href: string) =>
     href === '/'
       ? pathname === '/'
@@ -59,11 +59,11 @@ export default function AppSidebar() {
       side="left"
       variant="sidebar"
       collapsible="icon"
-      className="border-r border-sidebar-border/80 bg-sidebar/95 text-sidebar-foreground shadow-[12px_0_40px_-34px_rgba(15,23,42,0.28)] backdrop-blur-xl"
+      className="border-r border-white/42 bg-white/56 text-sidebar-foreground shadow-[18px_0_50px_-38px_rgba(27,96,190,0.34)] backdrop-blur-xl"
     >
-      <SidebarHeader className="flex flex-row items-center justify-between border-b border-sidebar-border/75">
+      <SidebarHeader className="flex flex-row items-center justify-between border-b border-white/50">
         <Link href="/" className="flex items-center gap-2 px-2 py-3">
-          <span className="brand-badge brand-halo rounded-lg p-1.5">
+          <span className="brand-badge brand-halo rounded-full p-1.5">
             <IconBlinkingLogo className={cn('size-5')} />
           </span>
           <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
@@ -71,7 +71,7 @@ export default function AppSidebar() {
               brok
             </span>
             <span className="sidebar-section-label text-[10px] font-medium leading-none">
-              enterprise workspace
+              watch it fly
             </span>
           </div>
         </Link>

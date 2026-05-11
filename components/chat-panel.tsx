@@ -29,24 +29,24 @@ import { UploadedFileList } from './uploaded-file-list'
 // Constants for timing delays
 const INPUT_UPDATE_DELAY_MS = 10 // Delay to ensure input value is updated before form submission
 const SUGGESTED_PROMPTS = [
-  'Build an executive brief on AI infrastructure shifts this week',
-  'Compare Cursor, Codex, and Brok Code for production teams',
-  'Find current benchmarks and cite the sources cleanly',
-  'Draft a customer follow-up sequence for enterprise outbound',
-  'Create a launch checklist for a new SaaS feature',
-  'Audit this workflow for security, cost, and operational risk'
+  'Send a launch brief across search, code, and mail',
+  'Compare Cursor, Codex, and Brok Code for my team',
+  'Find current benchmarks and make the answer citeable',
+  'Draft a warm customer follow-up sequence',
+  'Create a clean checklist for shipping this feature',
+  'Audit this workflow for security, cost, and risk'
 ]
 
 const PLAYFUL_TAGLINES = [
-  'Search, synthesize, and operate from one governed workspace.',
-  'Live tools, cited answers, and production-ready handoffs.',
-  'From messy question to clean execution with audit-grade context.'
+  'Thoughtful design meets intelligent work.',
+  'Search, build, mail, and present without losing the thread.',
+  'Drop in the ask. Brok handles the flight path.'
 ]
 
 const LOADING_TAGLINES = [
-  'Classifying intent',
-  'Calling governed tools',
-  'Composing the answer'
+  'Catching the wind',
+  'Calling the right tools',
+  'Writing the reply'
 ]
 
 interface ChatPanelProps {
@@ -229,26 +229,38 @@ export function ChatPanel({
   return (
     <div
       className={cn(
-        'w-full bg-transparent group/form-container shrink-0',
-        messages.length > 0 ? 'sticky bottom-0 px-2 pb-2 md:pb-4' : 'px-6'
+        'w-full group/form-container shrink-0',
+        messages.length > 0
+          ? 'sticky bottom-0 bg-transparent px-2 pb-2 md:pb-4'
+          : 'sky-hero-shell mx-auto flex flex-col justify-start px-4 pb-10 pt-56 sm:px-8 sm:pt-60 md:px-12 md:pt-64'
       )}
     >
       {messages.length === 0 && (
-        <div className="mb-6 flex flex-col items-center gap-4 md:mb-8 md:gap-5">
-          <div className="brand-halo inline-flex items-center gap-2 rounded-xl border border-border/70 bg-card/80 px-3 py-2 shadow-[0_16px_42px_-30px_rgba(15,23,42,0.3)] backdrop-blur-sm">
+        <>
+          <span className="sky-hero-cloud sky-hero-cloud-left" />
+          <span className="sky-hero-cloud sky-hero-cloud-right" />
+          <span className="paper-plane paper-plane-large" />
+          <span className="paper-plane paper-plane-small" />
+        </>
+      )}
+      {messages.length === 0 && (
+        <div className="mx-auto mb-6 flex w-full max-w-4xl flex-col items-center gap-4 text-white md:mb-8 md:gap-5">
+          <div className="brand-halo inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/16 px-3 py-2 shadow-[0_18px_46px_-30px_rgba(14,61,150,0.38)] backdrop-blur-sm">
             <IconBlinkingLogo className="size-6" />
-            <p className="brand-gradient-text text-2xl font-semibold tracking-tight">
+            <p className="text-2xl font-semibold tracking-normal text-white">
               brok
             </p>
-            <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/82 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-              governed
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-700">
+              <span className="size-1.5 animate-pulse rounded-full bg-yellow-400" />
+              live
             </span>
           </div>
-          <h1 className="text-balance text-center text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
-            Ask anything. Operate everything.
+          <h1 className="max-w-3xl text-balance text-center font-serif text-5xl font-semibold leading-[0.94] tracking-normal text-white drop-shadow-[0_18px_34px_rgba(22,86,190,0.28)] sm:text-6xl md:text-6xl lg:text-7xl">
+            Send it.
+            <br />
+            Watch it fly
           </h1>
-          <p className="max-w-2xl text-center text-sm text-muted-foreground">
+          <p className="max-w-2xl text-center text-sm font-medium text-white/88">
             <span>{playfulTagline}</span>
             <span className="typing-cursor" />
           </p>
@@ -258,12 +270,32 @@ export function ChatPanel({
                 key={prompt}
                 type="button"
                 onClick={() => handleSuggestedPrompt(prompt)}
-                className="group relative overflow-hidden rounded-lg border border-border/75 bg-card/86 px-3 py-2.5 text-left text-sm shadow-[0_10px_26px_-24px_rgba(15,23,42,0.2)] transition-all duration-200 hover:border-border hover:bg-background/92 hover:shadow-[0_16px_30px_-24px_rgba(15,23,42,0.28)]"
+                className="group relative overflow-hidden rounded-lg border border-white/55 bg-white/18 px-3 py-2.5 text-left text-sm font-medium text-white shadow-[0_12px_28px_-24px_rgba(18,72,160,0.42)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-white/85 hover:bg-white/26 hover:shadow-[0_18px_36px_-26px_rgba(18,72,160,0.48)]"
               >
-                <span className="pointer-events-none absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-gradient-to-b from-blue-500 via-teal-500 to-orange-500 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                <span className="pointer-events-none absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-yellow-300 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
                 <span className="relative z-10">{prompt}</span>
               </button>
             ))}
+          </div>
+          <div className="mt-3 hidden w-full max-w-lg sky-chat-preview p-3 text-blue-950 sm:block">
+            <div className="mb-2 flex items-center justify-between text-xs">
+              <span className="font-semibold">Brok workspace</span>
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-700">
+                ready
+              </span>
+            </div>
+            <div className="grid grid-cols-[0.7fr_1fr] gap-3">
+              <div className="rounded-lg bg-blue-50/90 p-3">
+                <p className="text-sm font-semibold">Flights</p>
+                <p className="mt-1 text-xs text-blue-700">Search, Code, Mail</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">Brok</p>
+                <p className="mt-1 text-sm font-medium">
+                  Just checked. Looks great.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
