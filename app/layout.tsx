@@ -76,7 +76,7 @@ export default async function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body
         className={cn(
-          'fixed inset-0 flex flex-col font-sans antialiased overflow-hidden',
+          'app-shell-gradient fixed inset-0 flex flex-col overflow-hidden font-sans antialiased',
           fontSans.variable
         )}
       >
@@ -87,7 +87,7 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <UserProvider hasUser={!!userId}>
-            <SidebarProvider defaultOpen={false}>
+            <SidebarProvider defaultOpen={true}>
               <AppSidebar />
               <KeyboardShortcutHandler />
               <div className="flex flex-col flex-1 min-w-0">

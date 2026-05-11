@@ -5,24 +5,30 @@ export default function BrokCodeDocsPage() {
     <div className="container max-w-3xl py-8">
       <h1 className="mb-4 text-4xl font-bold">Brok Code</h1>
       <p className="mb-8 text-xl text-muted-foreground">
-        Brok Code is the coding-agent surface for Brok: cloud chat with preview,
-        terminal TUI sync, OpenAI-compatible API access, and Railway deployment.
+        Brok Code is the coding-agent surface for Brok: brokcode-cloud chat with
+        preview, terminal TUI sync, Brok API model access, GitHub PRs, Composio
+        connection prompts, security scans, and explicit deploy controls.
       </p>
 
       <div className="prose prose-neutral dark:prose-invert">
-        <h2>Cloud</h2>
+        <h2>Brok Code Cloud</h2>
         <p>
           Open <Link href="/brokcode">Brok Code Cloud</Link>, save a{' '}
           <code>brok_sk_</code> key, connect GitHub, then describe the app or
-          repo change you want. The cloud view keeps chat on the left and live
-          preview, subagents, session sync, usage, and deploy controls on the
-          right.
+          repo change you want. The cloud view keeps chat, live preview,
+          execution status, Cloud/TUI sync, usage, version history, GitHub PR,
+          Composio integration, and deploy controls in one workspace.
         </p>
 
-        <h2>Terminal TUI</h2>
+        <h2>Terminal TUI Download And Run</h2>
         <p>
-          The terminal version uses the same Brok API key and sync session ID as
-          cloud, so terminal and browser work appear in one timeline.
+          The TUI is shipped from this repository as{' '}
+          <code>scripts/brokcode-tui.mjs</code>. There is no separate binary
+          download advertised in this app yet; clone the Brok repository,
+          install dependencies, and run the script through{' '}
+          <code>npm run brokcode</code>. The terminal version uses the same Brok
+          API key and sync session ID as cloud, so terminal and browser work
+          appear in one timeline.
         </p>
 
         <pre className="rounded-lg bg-muted p-4">
@@ -38,13 +44,23 @@ export BROKCODE_SESSION_ID="default"
 npm run brokcode`}</code>
         </pre>
 
-        <h3>Local Development</h3>
+        <h3>Local Development Run</h3>
         <pre className="rounded-lg bg-muted p-4">
-          <code>{`npm run dev
+          <code>{`npm run dev -- --hostname 127.0.0.1 --port 3001
 export BROK_BASE_URL="http://127.0.0.1:3001/api/v1"
 export BROK_SYNC_URL="http://127.0.0.1:3001"
-BROK_API_KEY="brok_sk_local_smoke" npm run brokcode`}</code>
+export BROKCODE_SESSION_ID="default"
+export BROK_API_KEY="brok_sk_..."
+npm run brokcode`}</code>
         </pre>
+
+        <h2>Cloud/TUI Sync</h2>
+        <p>
+          Use the same <code>BROKCODE_SESSION_ID</code> in Brok Code Cloud and
+          in the terminal. In cloud, save the session in Runtime setup and press
+          Sync. In the TUI, run <code>/sync</code> to pull the shared session
+          log from <code>/api/brokcode/sessions</code>.
+        </p>
 
         <h2>Core Commands</h2>
         <ul>
@@ -58,25 +74,49 @@ BROK_API_KEY="brok_sk_local_smoke" npm run brokcode`}</code>
             <code>/sync</code> - fetch cloud and TUI session events
           </li>
           <li>
-            <code>/worktree feature/my-branch</code> - create an isolated
-            worktree
+            <code>/session</code> - show the active shared session id and sync
+            origin
           </li>
           <li>
-            <code>/securityscan</code> - bootstrap DeepSec if needed and run
-            the repo security matcher scan
+            <code>/worktree feature/my-branch</code> - create an isolated Git
+            worktree under <code>.brokcode-worktrees</code>
+          </li>
+          <li>
+            <code>/securityscan</code> - bootstrap DeepSec if needed and run the
+            repo security matcher scan
           </li>
           <li>
             <code>/securityscan process</code> - run DeepSec&apos;s AI
             investigation stage after a scan
           </li>
           <li>
-            <code>/github</code> - review GitHub connection mode
+            <code>/github</code> - review GitHub connection mode through
+            Composio and Brok Code Cloud
           </li>
           <li>
             <code>/compat</code> - print Codex/OpenAI and Anthropic-compatible
             env setup
           </li>
         </ul>
+
+        <h2>GitHub PRs And Worktrees</h2>
+        <p>
+          In Brok Code Cloud, use Connect GitHub to open the Composio
+          authorization prompt. After GitHub is connected, set repository, base,
+          and head branch in Runtime setup, then use Open PR. In the TUI, use{' '}
+          <code>/worktree feature/name</code> before branch work when you want
+          an isolated checkout.
+        </p>
+
+        <h2>Composio Connection Prompts</h2>
+        <p>
+          Brok Code Cloud detects connection intent for GitHub, Supabase, Gmail,
+          Google Calendar, Linear, Slack, Notion, Vercel, and Railway. Prompts
+          such as <code>connect GitHub</code> or <code>connect Railway</code>{' '}
+          open the matching Composio authorization flow when the backend is
+          configured. If Composio is not configured, the UI shows that state
+          instead of pretending the connection exists.
+        </p>
 
         <h2>Compatible Coding Tools</h2>
         <pre className="rounded-lg bg-muted p-4">
@@ -91,19 +131,21 @@ export ANTHROPIC_BASE_URL="https://api.brok.ai"
 export ANTHROPIC_MODEL="brok-code"`}</code>
         </pre>
 
-        <h2>Deployment</h2>
+        <h2>1-Click Deploy</h2>
         <p>
-          Brok Code Cloud can trigger Railway deployments through either
+          Brok Code Cloud includes a one-click deploy button. It triggers the
+          configured deployment path through either{' '}
           <code>BROKCODE_DEPLOY_WEBHOOK_URL</code> or{' '}
-          <code>RAILWAY_API_TOKEN</code>. Deployment is explicit and
-          approval-gated from the UI.
+          <code>RAILWAY_API_TOKEN</code>. If neither is configured, the deploy
+          endpoint returns a configuration error rather than showing an
+          unsupported success state.
         </p>
 
         <h2>API Endpoints</h2>
         <ul>
           <li>
             <code>POST /api/brokcode/execute</code> - run a Brok Code command
-            through brokcode-cloud/OpenCode or Brok runtime
+            through brokcode-cloud or the Brok runtime
           </li>
           <li>
             <code>POST /api/brokcode/execute</code> with{' '}
@@ -113,6 +155,19 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
           <li>
             <code>POST /api/brokcode/deploy</code> - trigger configured Railway
             deployment
+          </li>
+          <li>
+            <code>POST /api/brokcode/github/connect</code> - open the Composio
+            GitHub authorization prompt
+          </li>
+          <li>
+            <code>POST /api/brokcode/github/pull-request</code> - create a
+            GitHub pull request from the selected repository, base, and head
+            branch
+          </li>
+          <li>
+            <code>POST /api/integrations/[toolkit]/connect</code> - open a
+            Composio prompt for supported toolkits
           </li>
           <li>
             <code>GET /api/brokcode/sessions</code> - list synced cloud/TUI/API

@@ -14,6 +14,8 @@ import type { UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
 import type { ModelSelectorData } from '@/lib/types/model-selector'
 import { cn } from '@/lib/utils'
 
+import { useTypewriterCycle } from '@/hooks/use-typewriter-cycle'
+
 import { useArtifact } from './artifact/artifact-context'
 import { Button } from './ui/button'
 import { IconBlinkingLogo } from './ui/icons'
@@ -33,6 +35,18 @@ const SUGGESTED_PROMPTS = [
   'Find benchmarks for brok-3',
   'Draft a customer follow-up sequence for B2B outbound',
   'Create a launch checklist for a new SaaS feature'
+]
+
+const PLAYFUL_TAGLINES = [
+  'Search, synthesize, and ship with personality.',
+  'Live answers, real tools, and faster flow.',
+  'From messy question to clean execution.'
+]
+
+const LOADING_TAGLINES = [
+  'Sketching a plan',
+  'Calling tools',
+  'Composing the response'
 ]
 
 interface ChatPanelProps {
@@ -89,12 +103,28 @@ export function ChatPanel({
   const [isInputFocused, setIsInputFocused] = useState(false) // Track input focus
   const { close: closeArtifact } = useArtifact()
   const isLoading = status === 'submitted' || status === 'streaming'
-  const hasUploadedFiles = uploadedFiles.some(file => file.status === 'uploaded')
+  const hasUploadedFiles = uploadedFiles.some(
+    file => file.status === 'uploaded'
+  )
   const hasUploadingFiles = uploadedFiles.some(
     file => file.status === 'uploading'
   )
   const hasAvailableModels =
     isCloudDeployment || modelSelectorData?.hasAvailableModels !== false
+  const { displayText: playfulTagline } = useTypewriterCycle(PLAYFUL_TAGLINES, {
+    firstDuration: 1700,
+    itemDuration: 2200,
+    idleDuration: 300,
+    charInterval: 18,
+    initialDelay: 120
+  })
+  const { displayText: loadingTagline } = useTypewriterCycle(LOADING_TAGLINES, {
+    firstDuration: 700,
+    itemDuration: 900,
+    idleDuration: 150,
+    charInterval: 24,
+    initialDelay: 80
+  })
 
   const handleCompositionStart = () => setIsComposing(true)
 
@@ -205,17 +235,22 @@ export function ChatPanel({
     >
       {messages.length === 0 && (
         <div className="mb-6 flex flex-col items-center gap-4 md:mb-8 md:gap-5">
-          <div className="flex items-center gap-2">
+          <div className="brand-halo inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-2 shadow-[0_12px_40px_-24px_rgba(80,80,255,0.45)]">
             <IconBlinkingLogo className="size-6" />
-            <p className="text-2xl font-semibold tracking-tight text-foreground">
+            <p className="brand-gradient-text text-2xl font-semibold tracking-tight">
               brok
             </p>
+            <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+              live
+            </span>
           </div>
-          <h1 className="text-xl font-medium text-foreground md:text-2xl">
+          <h1 className="brand-gradient-text text-xl font-semibold md:text-2xl">
             Ask anything
           </h1>
           <p className="max-w-2xl text-center text-sm text-muted-foreground">
-            Search, deep research, and code-native answers in one flow.
+            <span>{playfulTagline}</span>
+            <span className="typing-cursor" />
           </p>
           <div className="grid w-full max-w-3xl gap-2 sm:grid-cols-2">
             {SUGGESTED_PROMPTS.map(prompt => (
@@ -223,9 +258,10 @@ export function ChatPanel({
                 key={prompt}
                 type="button"
                 onClick={() => handleSuggestedPrompt(prompt)}
-                className="rounded-md border bg-background px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
+                className="group relative overflow-hidden rounded-md border bg-background/90 px-3 py-2 text-left text-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-muted/70 hover:shadow-sm"
               >
-                {prompt}
+                <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                <span className="relative z-10">{prompt}</span>
               </button>
             ))}
           </div>
@@ -284,23 +320,44 @@ export function ChatPanel({
           </div>
         )}
         {messages.length > 0 && isLoading && (
-          <div className="mx-auto mb-2 flex max-w-3xl items-center gap-2 px-1 text-xs text-muted-foreground">
-            <IconBlinkingLogo className="size-3.5" />
-            <span>
-              {isToolInvocationInProgress()
-                ? 'Working through tools and streaming the answer...'
-                : 'Thinking and streaming the answer...'}
-            </span>
+          <div className="mx-auto mb-2 max-w-3xl px-1">
+            <div className="overflow-hidden rounded-2xl border border-border/60 bg-background/80 px-3 py-2 shadow-[0_16px_44px_-28px_rgba(67,56,202,0.45)] backdrop-blur-sm">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <IconBlinkingLogo className="size-3.5" />
+                <span className="inline-flex min-w-0 items-center gap-1">
+                  {isToolInvocationInProgress()
+                    ? 'Working through tools:'
+                    : 'Thinking:'}
+                  <span className="truncate font-medium text-foreground/80">
+                    {loadingTagline}
+                  </span>
+                  <span className="typing-dots" aria-hidden>
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                </span>
+              </div>
+              <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted/70">
+                <div className="h-full w-2/5 animate-[pulse_1.4s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-primary/40 via-primary to-violet-500/70" />
+              </div>
+            </div>
           </div>
         )}
 
         <div
           className={cn(
-            'relative flex flex-col w-full gap-2 bg-muted rounded-3xl border border-input transition-shadow',
+            'relative flex w-full flex-col gap-2 overflow-hidden rounded-3xl border border-input bg-muted transition-shadow',
             isInputFocused &&
               'ring-1 ring-ring/20 ring-offset-1 ring-offset-background/50'
           )}
         >
+          <div
+            className={cn(
+              'pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent opacity-0 transition-opacity duration-200',
+              (isInputFocused || isLoading) && 'opacity-100'
+            )}
+          />
           <Textarea
             ref={inputRef}
             name="input"
@@ -354,6 +411,9 @@ export function ChatPanel({
               <SearchModeSelector />
             </div>
             <div className="flex items-center gap-2">
+              <span className="hidden text-[11px] text-muted-foreground md:inline">
+                Shift+Enter for newline
+              </span>
               {!isCloudDeployment && modelSelectorData && (
                 <ModelSelectorClient data={modelSelectorData} />
               )}
@@ -377,9 +437,11 @@ export function ChatPanel({
                   'size-8 md:size-10 rounded-full'
                 )}
                 disabled={
-                  ((!isLoading && input.trim().length === 0 && !hasUploadedFiles) ||
-                    hasUploadingFiles ||
-                    !hasAvailableModels)
+                  (!isLoading &&
+                    input.trim().length === 0 &&
+                    !hasUploadedFiles) ||
+                  hasUploadingFiles ||
+                  !hasAvailableModels
                 }
                 onClick={isLoading ? stop : undefined}
                 title={

@@ -13,6 +13,7 @@ export async function GET() {
     input_cost_per_million: config.inputCostPerMillion,
     output_cost_per_million: config.outputCostPerMillion,
     max_tokens: config.maxTokens,
+    context_window: config.contextWindow ?? config.maxTokens,
     supports_search: config.supportsSearch,
     supports_streaming: config.supportsStreaming,
     supports_tools: config.supportsTools,

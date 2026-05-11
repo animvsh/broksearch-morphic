@@ -10,6 +10,20 @@ import {
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+const DEFAULT_GMAIL_TOOLKIT_CANDIDATES = ['googlesuper', 'gmail']
+
+function resolveToolkitCandidates() {
+  const configured = process.env.COMPOSIO_GMAIL_TOOLKIT_SLUGS?.trim()
+  if (!configured) return DEFAULT_GMAIL_TOOLKIT_CANDIDATES
+
+  const candidates = configured
+    .split(',')
+    .map(value => value.trim().toLowerCase())
+    .filter(Boolean)
+
+  return candidates.length > 0 ? candidates : DEFAULT_GMAIL_TOOLKIT_CANDIDATES
+}
+
 export async function GET() {
   if (!isComposioConfigured()) {
     return NextResponse.json({
@@ -17,17 +31,25 @@ export async function GET() {
       connected: false,
       provider: 'google-oauth',
       message:
-        'Composio is not configured. BrokMail can still use Google Gmail OAuth.'
+        'Composio is not configured. BrokMail can still use browser Gmail live sync.'
     })
   }
 
   try {
     const userId = (await getCurrentUserId()) || 'brokmail-user'
-    const accounts = await listConnectedAccounts(userId, 'gmail', 20)
-    const connectedAccounts = accounts.filter(account => {
-      const status = account.status?.toLowerCase()
-      return !status || ['active', 'connected', 'enabled'].includes(status)
-    })
+    const accountsByToolkit = await Promise.all(
+      resolveToolkitCandidates().map(async toolkit => {
+        const accounts = await listConnectedAccounts(userId, toolkit, 20)
+        return { toolkit, accounts }
+      })
+    )
+
+    const connectedAccounts = accountsByToolkit.flatMap(result =>
+      result.accounts.filter(account => {
+        const status = account.status?.toLowerCase()
+        return !status || ['active', 'connected', 'enabled'].includes(status)
+      })
+    )
 
     return NextResponse.json({
       configured: true,

@@ -9,6 +9,20 @@ import {
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+const DEFAULT_GMAIL_TOOLKIT_CANDIDATES = ['googlesuper', 'gmail']
+
+function resolveToolkitCandidates() {
+  const configured = process.env.COMPOSIO_GMAIL_TOOLKIT_SLUGS?.trim()
+  if (!configured) return DEFAULT_GMAIL_TOOLKIT_CANDIDATES
+
+  const candidates = configured
+    .split(',')
+    .map(value => value.trim().toLowerCase())
+    .filter(Boolean)
+
+  return candidates.length > 0 ? candidates : DEFAULT_GMAIL_TOOLKIT_CANDIDATES
+}
+
 function resolveRequestOrigin(request: NextRequest) {
   const host =
     request.headers.get('x-forwarded-host') || request.headers.get('host')
@@ -33,33 +47,51 @@ export async function POST(request: NextRequest) {
       connectionUrl: null,
       redirectUrl,
       message:
-        'Composio is not configured. Use Google Gmail OAuth fallback on the client.'
+        'Composio is not configured. Use browser Gmail live sync in BrokMail.'
     })
   }
 
   try {
     const userId = (await getCurrentUserId()) || 'brokmail-user'
-    const link = await createConnectedAccountLink({
-      userId,
-      toolkitSlug: 'gmail',
-      redirectUrl
-    })
+    const errors: string[] = []
 
-    if (!link.url) {
-      return NextResponse.json({
-        provider: 'google-oauth',
-        connectionUrl: null,
-        redirectUrl,
-        raw: link.raw,
-        message:
-          'Composio did not return a Gmail connection URL. Use Google Gmail OAuth fallback.'
-      })
+    for (const toolkitSlug of resolveToolkitCandidates()) {
+      try {
+        const link = await createConnectedAccountLink({
+          userId,
+          toolkitSlug,
+          redirectUrl
+        })
+
+        if (link.url) {
+          return NextResponse.json({
+            provider: 'composio',
+            toolkit: toolkitSlug,
+            connectionUrl: link.url,
+            redirectUrl
+          })
+        }
+
+        errors.push(
+          `${toolkitSlug}: Composio did not return a Gmail connection URL.`
+        )
+      } catch (error) {
+        errors.push(
+          `${toolkitSlug}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`
+        )
+      }
     }
 
     return NextResponse.json({
-      provider: 'composio',
-      connectionUrl: link.url,
-      redirectUrl
+      provider: 'google-oauth',
+      connectionUrl: null,
+      redirectUrl,
+      message:
+        errors.length > 0
+          ? `${errors.join(' | ')} Browser Gmail live sync is still available in BrokMail.`
+          : 'Composio did not return a Gmail connection URL. Browser Gmail live sync is still available in BrokMail.'
     })
   } catch (error) {
     return NextResponse.json({

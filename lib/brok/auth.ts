@@ -118,7 +118,9 @@ function createLocalFallbackAuth(key: string): AuthResult | null {
     return null
   }
 
-  if (!key.startsWith('brok_sk_')) {
+  const allowedFallbackKey =
+    process.env.BROK_SMOKE_API_KEY || 'brok_sk_local_smoke'
+  if (key !== allowedFallbackKey) {
     return null
   }
 

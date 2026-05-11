@@ -10,6 +10,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const DEFAULT_GCAL_TOOLKIT_CANDIDATES = [
+  'googlesuper',
   'googlecalendar',
   'google-calendar',
   'google_calendar',
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
       connectionUrl: null,
       redirectUrl,
       message:
-        'Composio is not configured. Use Google OAuth fallback on the client.'
+        'Composio is not configured. Use browser Calendar live sync in BrokMail.'
     })
   }
 

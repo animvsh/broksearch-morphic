@@ -53,6 +53,27 @@ export async function GET(request: NextRequest) {
         )
       )
   } catch {
+    if (auth.apiKey.id === '00000000-0000-0000-0000-000000000001') {
+      return NextResponse.json(
+        {
+          period,
+          usage: {
+            requests: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            cached_tokens: 0,
+            search_queries: 0,
+            billed_usd: 0
+          }
+        },
+        {
+          headers: {
+            'x-brok-degraded': 'local-usage-storage-unavailable'
+          }
+        }
+      )
+    }
+
     return NextResponse.json(
       {
         error: {

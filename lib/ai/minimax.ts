@@ -2,7 +2,7 @@
  * OpenAI-compatible Brok provider settings.
  */
 
-export const MINIMAX_MODEL = process.env.BROK_PROVIDER_MODEL || 'minimax-m2.7'
+export const MINIMAX_MODEL = process.env.BROK_PROVIDER_MODEL || 'MiniMax-M2.7'
 export const MINIMAX_CHAT_MODEL = MINIMAX_MODEL
 
 export const MINIMAX_BASE_URL =

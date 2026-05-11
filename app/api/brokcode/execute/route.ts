@@ -65,6 +65,95 @@ function extractPreviewUrl(text: string): string | null {
   return match[0].replace(/[),.;:!?]+$/, '')
 }
 
+function formatSseEvent(event: string, payload: unknown) {
+  return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`
+}
+
+function getDeltaText(payload: any): string {
+  const choice = payload?.choices?.[0]
+  const delta = choice?.delta?.content
+  if (typeof delta === 'string') return delta
+
+  const messageContent = choice?.message?.content
+  if (typeof messageContent === 'string') return messageContent
+
+  if (Array.isArray(delta)) {
+    return delta
+      .map(part => {
+        if (typeof part === 'string') return part
+        if (typeof part?.text === 'string') return part.text
+        return ''
+      })
+      .join('')
+  }
+
+  return ''
+}
+
+async function forwardOpenAiCompatibleStream({
+  providerBody,
+  send
+}: {
+  providerBody: ReadableStream<Uint8Array>
+  send: (event: string, payload: unknown) => void
+}) {
+  const decoder = new TextDecoder()
+  const reader = providerBody.getReader()
+  let buffer = ''
+  let content = ''
+  let usage: unknown = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+
+    if (done) {
+      break
+    }
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split(/\r?\n/)
+    buffer = lines.pop() ?? ''
+
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue
+
+      const data = line.slice(5).trim()
+      if (!data || data === '[DONE]') continue
+
+      try {
+        const payload = JSON.parse(data)
+        const delta = getDeltaText(payload)
+        if (delta) {
+          content += delta
+          send('delta', { content: delta })
+        }
+        if (payload?.usage) {
+          usage = payload.usage
+        }
+      } catch {}
+    }
+  }
+
+  if (buffer.trim().startsWith('data:')) {
+    const data = buffer.trim().slice(5).trim()
+    if (data && data !== '[DONE]') {
+      try {
+        const payload = JSON.parse(data)
+        const delta = getDeltaText(payload)
+        if (delta) {
+          content += delta
+          send('delta', { content: delta })
+        }
+        if (payload?.usage) {
+          usage = payload.usage
+        }
+      } catch {}
+    }
+  }
+
+  return { content, usage }
+}
+
 function buildDefaultMessages(command: string): OpenAiMessage[] {
   return [
     {
@@ -77,6 +166,230 @@ function buildDefaultMessages(command: string): OpenAiMessage[] {
       content: command
     }
   ]
+}
+
+function createExecutionStream({
+  request,
+  command,
+  model,
+  messages,
+  authorization,
+  xApiKey,
+  opencodeBase,
+  opencodeApiKey,
+  requireOpenCode
+}: {
+  request: NextRequest
+  command: string
+  model: string
+  messages: OpenAiMessage[]
+  authorization: string | null
+  xApiKey: string | null
+  opencodeBase?: string
+  opencodeApiKey?: string | null
+  requireOpenCode: boolean
+}) {
+  const encoder = new TextEncoder()
+
+  return new Response(
+    new ReadableStream({
+      async start(controller) {
+        const send = (event: string, payload: unknown) => {
+          controller.enqueue(encoder.encode(formatSseEvent(event, payload)))
+        }
+
+        try {
+          send('status', {
+            message: 'Planning BrokCode Cloud execution.'
+          })
+
+          let opencodeFailure: string | null = null
+
+          if (opencodeBase) {
+            send('status', {
+              message: 'Connecting to brokcode-cloud runtime.'
+            })
+
+            const endpoint = buildOpenCodeEndpoint(opencodeBase)
+            const opencodeResponse = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(opencodeApiKey
+                  ? { Authorization: `Bearer ${opencodeApiKey}` }
+                  : {}),
+                ...(xApiKey ? { 'x-api-key': xApiKey } : {})
+              },
+              body: JSON.stringify({
+                model: process.env.BROKCODE_OPENCODE_MODEL ?? model,
+                stream: true,
+                temperature: 0.2,
+                max_tokens: 1200,
+                messages
+              })
+            })
+
+            if (opencodeResponse.ok) {
+              send('status', {
+                message: 'Streaming from brokcode-cloud runtime.'
+              })
+
+              const contentType =
+                opencodeResponse.headers.get('content-type') ?? ''
+              let content = ''
+              let usage: unknown = null
+
+              if (
+                contentType.includes('text/event-stream') &&
+                opencodeResponse.body
+              ) {
+                const streamed = await forwardOpenAiCompatibleStream({
+                  providerBody: opencodeResponse.body,
+                  send
+                })
+                content = streamed.content
+                usage = streamed.usage
+              } else {
+                const payload = await opencodeResponse.json().catch(() => null)
+                content = extractAssistantText(payload)
+                usage = payload?.usage ?? null
+                if (content) {
+                  send('delta', { content })
+                }
+              }
+
+              send('result', {
+                runtime: 'opencode',
+                model,
+                content:
+                  content.length > 0
+                    ? content
+                    : 'OpenCode completed the run but returned no text output.',
+                usage,
+                preview_url: extractPreviewUrl(`${command}\n${content}`),
+                note: 'Executed through OpenCode runtime.'
+              })
+              controller.close()
+              return
+            }
+
+            const opencodeBody = await opencodeResponse.json().catch(() => null)
+            opencodeFailure =
+              opencodeBody?.error?.message ??
+              opencodeBody?.message ??
+              `OpenCode returned ${opencodeResponse.status}.`
+
+            if (requireOpenCode) {
+              send('error', { message: opencodeFailure })
+              controller.close()
+              return
+            }
+          } else if (requireOpenCode) {
+            send('error', {
+              message:
+                'OpenCode runtime is required but BROKCODE_OPENCODE_BASE_URL is not configured.'
+            })
+            controller.close()
+            return
+          }
+
+          send('status', {
+            message: opencodeFailure
+              ? `${opencodeFailure} Falling back to Brok runtime.`
+              : 'Streaming from Brok runtime.'
+          })
+
+          const brokRuntimeResponse = await fetch(
+            new URL('/api/v1/chat/completions', request.url),
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(authorization ? { Authorization: authorization } : {}),
+                ...(xApiKey ? { 'x-api-key': xApiKey } : {})
+              },
+              body: JSON.stringify({
+                model,
+                stream: true,
+                temperature: 0.2,
+                max_tokens: 1200,
+                messages
+              })
+            }
+          )
+
+          if (!brokRuntimeResponse.ok) {
+            const brokRuntimeBody = await brokRuntimeResponse
+              .json()
+              .catch(() => null)
+            const brokRuntimeMessage =
+              brokRuntimeBody?.error?.message ?? 'Brok runtime failed.'
+            send('error', {
+              message: opencodeFailure
+                ? `${opencodeFailure} ${brokRuntimeMessage}`
+                : brokRuntimeMessage
+            })
+            controller.close()
+            return
+          }
+
+          const contentType =
+            brokRuntimeResponse.headers.get('content-type') ?? ''
+          let content = ''
+          let usage: unknown = null
+
+          if (
+            contentType.includes('text/event-stream') &&
+            brokRuntimeResponse.body
+          ) {
+            const streamed = await forwardOpenAiCompatibleStream({
+              providerBody: brokRuntimeResponse.body,
+              send
+            })
+            content = streamed.content
+            usage = streamed.usage
+          } else {
+            const payload = await brokRuntimeResponse.json().catch(() => null)
+            content = extractAssistantText(payload)
+            usage = payload?.usage ?? null
+            if (content) {
+              send('delta', { content })
+            }
+          }
+
+          send('result', {
+            runtime: 'brok',
+            model,
+            content:
+              content.length > 0
+                ? content
+                : 'Brok runtime completed the run but returned no text output.',
+            usage,
+            preview_url: extractPreviewUrl(`${command}\n${content}`),
+            note: opencodeFailure
+              ? `${opencodeFailure} Routed through Brok runtime.`
+              : 'Routed through Brok runtime.'
+          })
+          controller.close()
+        } catch (error) {
+          send('error', {
+            message:
+              error instanceof Error
+                ? error.message
+                : 'BrokCode Cloud execution failed.'
+          })
+          controller.close()
+        }
+      }
+    }),
+    {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive'
+      }
+    }
+  )
 }
 
 export async function POST(request: NextRequest) {
@@ -173,6 +486,20 @@ export async function POST(request: NextRequest) {
       },
       { status: 503 }
     )
+  }
+
+  if (body?.stream === true) {
+    return createExecutionStream({
+      request,
+      command,
+      model,
+      messages,
+      authorization,
+      xApiKey,
+      opencodeBase,
+      opencodeApiKey,
+      requireOpenCode
+    })
   }
 
   if (opencodeBase) {

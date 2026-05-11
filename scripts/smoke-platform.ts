@@ -195,7 +195,11 @@ async function runUiChecks(apiKeyName?: string, dbBacked = true) {
         throw new Error(`${check.path} missing text "${check.expectedText}"`)
       }
 
-      if (apiKeyName && check.path === '/api-keys' && !bodyText.includes(apiKeyName)) {
+      if (
+        apiKeyName &&
+        check.path === '/api-keys' &&
+        !bodyText.includes(apiKeyName)
+      ) {
         throw new Error('/api-keys did not show the created smoke-test key')
       }
 
@@ -226,6 +230,7 @@ async function main() {
   await runApiChecks(apiKey)
 
   console.log('smoke ok')
+  process.exit(0)
 }
 
 main().catch(error => {

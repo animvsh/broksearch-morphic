@@ -29,9 +29,9 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { createShareableChatFromTranscript } from '@/lib/actions/chat'
 import {
-  brokMailAutomations,
-  brokMailThreads,
+  AutomationRule,
   brokMailTonePreference,
   MailboxView,
   MailThread
@@ -42,7 +42,6 @@ import {
   deleteCalendarEvent,
   fetchCalendarEvents
 } from '@/lib/brokmail/google-calendar-client'
-import { createShareableChatFromTranscript } from '@/lib/actions/chat'
 import {
   archiveGmailThread,
   createGmailDraft,
@@ -77,8 +76,21 @@ type ApprovalState = {
   id: string
   title: string
   description: string
-  action: 'send' | 'archive' | 'label' | 'automation'
+  action:
+    | 'send'
+    | 'archive'
+    | 'label'
+    | 'automation'
+    | 'calendar_create'
+    | 'calendar_delete'
   count?: number
+  targetThreadIds?: string[]
+  calendarEvent?: {
+    id?: string
+    summary: string
+    startAt?: string
+    endAt?: string
+  }
 }
 
 type ActivityStep = {
@@ -87,7 +99,7 @@ type ActivityStep = {
   status: 'running' | 'done'
 }
 
-type IntegrationConnectionMode = 'demo' | 'google-oauth' | 'composio'
+type IntegrationConnectionMode = 'none' | 'google-oauth' | 'composio'
 
 const viewLabels: Array<{
   id: MailboxView
@@ -161,17 +173,18 @@ function makeDraft(thread: MailThread, instruction: string): DraftState {
   const asksForPricing = /pricing|price|pilot/i.test(instruction)
   const asksSigned = /signed|contract|version|resend/i.test(instruction)
   const asksConfirm = /confirm|topic|project/i.test(instruction)
+  const firstName = thread.sender.split(/\s+/)[0] || thread.sender
 
-  let body = `Hi ${thread.sender},\n\nThanks for the note. This sounds good to me. I will review and follow up shortly.\n\nBest,\nAnimesh`
+  let body = `Hi ${firstName},\n\nThanks for the note. I will review this and follow up shortly.\n\nBest,\nAnimesh`
 
-  if (asksSigned || thread.id === 'thread-adithya-contract') {
-    body = `Hi Adithya,\n\nThanks for clarifying. The start date works for me. Could you please resend the final signed version when you have it?\n\nBest,\nAnimesh`
-  } else if (asksForPricing || thread.id === 'thread-sarah-pricing') {
-    body = `Hi Sarah,\n\nThanks for reaching out. I am glad to hear the team is interested. I can send over pricing, but first could you share roughly how many sales seats you want to include in the pilot?\n\nBest,\nAnimesh`
-  } else if (asksConfirm || thread.id === 'thread-professor-lee') {
-    body = `Hi Professor Lee,\n\nConfirming that my final project topic is BrokMail, an AI-native email workspace for inbox triage, search, and reply drafting.\n\nBest,\nAnimesh`
+  if (asksSigned) {
+    body = `Hi ${firstName},\n\nThanks for sending this over. Could you please resend the final signed version when you have it?\n\nBest,\nAnimesh`
+  } else if (asksForPricing) {
+    body = `Hi ${firstName},\n\nThanks for reaching out. I am interested in learning more. Could you send over the pricing details before we move forward?\n\nBest,\nAnimesh`
+  } else if (asksConfirm) {
+    body = `Hi ${firstName},\n\nConfirming this works for me. Please let me know if you need anything else from my side.\n\nBest,\nAnimesh`
   } else if (thread.waitingOnReply) {
-    body = `Hi ${thread.sender.split(' ')[0]},\n\nJust checking in on this. Would love to hear your thoughts when you have a chance.\n\nBest,\nAnimesh`
+    body = `Hi ${firstName},\n\nJust checking in on this. Would love to hear your thoughts when you have a chance.\n\nBest,\nAnimesh`
   }
 
   return {
@@ -238,13 +251,15 @@ function parseEventTitle(command: string) {
 
   if (!byKeyword) return 'BrokMail Calendar Event'
 
-  return byKeyword
-    .replace(/\b(today|tomorrow)\b/gi, '')
-    .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '')
-    .replace(/\b\d{1,2}(:\d{2})?\s*(am|pm)\b/gi, '')
-    .replace(/\b(at|on)\b/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim() || 'BrokMail Calendar Event'
+  return (
+    byKeyword
+      .replace(/\b(today|tomorrow)\b/gi, '')
+      .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '')
+      .replace(/\b\d{1,2}(:\d{2})?\s*(am|pm)\b/gi, '')
+      .replace(/\b(at|on)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim() || 'BrokMail Calendar Event'
+  )
 }
 
 function parseTimeParts(command: string) {
@@ -303,7 +318,10 @@ function findCalendarEventToDelete(
     return events.find(event => event.id === eventIdMatch) ?? null
   }
 
-  const quoted = command.match(/"([^"]+)"/)?.[1]?.trim().toLowerCase()
+  const quoted = command
+    .match(/"([^"]+)"/)?.[1]
+    ?.trim()
+    .toLowerCase()
   if (quoted) {
     return (
       events.find(event => event.summary.toLowerCase().includes(quoted)) || null
@@ -331,13 +349,13 @@ function findCalendarEventToDelete(
 }
 
 export function BrokMailApp() {
-  const [threads, setThreads] = useState(brokMailThreads)
-  const [selectedThreadId, setSelectedThreadId] = useState(threads[0]?.id)
+  const [threads, setThreads] = useState<MailThread[]>([])
+  const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>()
   const [view, setView] = useState<MailboxView>('inbox')
   const [query, setQuery] = useState('')
   const [connected, setConnected] = useState(false)
   const [connectionMode, setConnectionMode] =
-    useState<IntegrationConnectionMode>('demo')
+    useState<IntegrationConnectionMode>('none')
   const [connectionStatus, setConnectionStatus] = useState('Checking Gmail...')
   const [calendarEvents, setCalendarEvents] = useState<BrokCalendarEvent[]>([])
   const [selectedCalendarEventId, setSelectedCalendarEventId] = useState<
@@ -345,16 +363,19 @@ export function BrokMailApp() {
   >(null)
   const [calendarConnected, setCalendarConnected] = useState(false)
   const [calendarConnectionMode, setCalendarConnectionMode] =
-    useState<IntegrationConnectionMode>('demo')
+    useState<IntegrationConnectionMode>('none')
   const [calendarConnectionStatus, setCalendarConnectionStatus] = useState(
     'Checking Google Calendar...'
   )
-  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null)
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(
+    null
+  )
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnectingCalendar, setIsConnectingCalendar] = useState(false)
   const [isSyncingMail, setIsSyncingMail] = useState(false)
   const [isSyncingCalendar, setIsSyncingCalendar] = useState(false)
   const [isSharing, startShareTransition] = useTransition()
+  const [automationRules, setAutomationRules] = useState<AutomationRule[]>([])
   const [activity, setActivity] = useState<ActivityStep[]>([])
   const [agentInput, setAgentInput] = useState('')
   const [isRunning, setIsRunning] = useState(false)
@@ -364,7 +385,7 @@ export function BrokMailApp() {
       id: 'welcome',
       role: 'assistant',
       content:
-        'Ask BrokMail anything about mail or calendar. I can search, summarize, draft, triage, add events, remove events, and prepare approval-safe actions.'
+        'Connect Gmail or Google Calendar to start. Once connected, I can search, summarize, draft, triage, add events, remove events, and prepare approval-safe actions against your live account.'
     }
   ])
 
@@ -399,9 +420,9 @@ export function BrokMailApp() {
                     ? thread.category === 'receipt'
                     : view === 'calendar'
                       ? false
-                    : view === 'drafts'
-                      ? false
-                      : true
+                      : view === 'drafts'
+                        ? false
+                        : true
 
       if (!matchesView) return false
       if (!normalizedQuery) return true
@@ -431,15 +452,29 @@ export function BrokMailApp() {
         .length,
       receipts: threads.filter(thread => thread.category === 'receipt').length,
       calendar: calendarEvents.length,
-      automations: brokMailAutomations.length
+      automations: automationRules.length
     }),
-    [calendarEvents.length, messages, threads]
+    [automationRules.length, calendarEvents.length, messages, threads]
   )
-  const listCount = view === 'calendar' ? calendarEvents.length : filteredThreads.length
+  const listCount =
+    view === 'calendar' ? calendarEvents.length : filteredThreads.length
   const listLabel = view === 'calendar' ? 'events' : 'conversations'
 
   useEffect(() => {
     void bootstrapGmail()
+    const storedAutomations = window.localStorage.getItem(
+      'brokmail_automation_rules'
+    )
+
+    if (storedAutomations) {
+      try {
+        const parsed = JSON.parse(storedAutomations)
+        if (Array.isArray(parsed)) {
+          setAutomationRules(parsed)
+        }
+      } catch {}
+    }
+
     // BrokMail bootstraps once on mount; refresh is user-driven afterwards.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -453,12 +488,18 @@ export function BrokMailApp() {
         setSelectedThreadId(liveThreads[0].id)
         setConnected(true)
         setConnectionMode('google-oauth')
-        setConnectionStatus(`Google Gmail OAuth connected (${liveThreads.length} threads)`)
+        setConnectionStatus(
+          `Live Gmail sync connected (${liveThreads.length} threads)`
+        )
         toast.success('Loaded live Gmail inbox')
         return
       }
 
-      setConnectionStatus('Google Gmail OAuth connected, but no recent mail was returned.')
+      setThreads([])
+      setSelectedThreadId(undefined)
+      setConnectionStatus(
+        'Live Gmail sync connected, but no recent mail was returned.'
+      )
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Could not load Gmail threads.'
@@ -492,6 +533,42 @@ export function BrokMailApp() {
     } finally {
       setIsSyncingCalendar(false)
     }
+  }
+
+  async function startBrowserGoogleSync(
+    kind: 'gmail' | 'calendar' | 'workspace'
+  ) {
+    const label =
+      kind === 'calendar'
+        ? 'Google Calendar'
+        : kind === 'gmail'
+          ? 'Gmail'
+          : 'Google Workspace'
+
+    if (kind !== 'calendar') {
+      setConnectionStatus(
+        `Opening ${label} live sync. Grant access so BrokMail can load real threads in this browser.`
+      )
+    }
+    if (kind !== 'gmail') {
+      setCalendarConnectionStatus(
+        `Opening ${label} live sync. Grant access so BrokMail can load and update live events in this browser.`
+      )
+    }
+
+    const supabase = createClient()
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/oauth?next=${encodeURIComponent('/brokmail')}`,
+        scopes: GMAIL_SUPER_OAUTH_SCOPES,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent'
+        }
+      }
+    })
+    if (error) throw error
   }
 
   async function bootstrapGmail() {
@@ -531,27 +608,33 @@ export function BrokMailApp() {
       if (gmailStatus.connected) {
         setConnected(true)
         setConnectionMode('composio')
-        setConnectionStatus('Gmail connected through Composio.')
+        setConnectionStatus(
+          'Gmail is connected through Composio. Load live inbox in this browser to read threads and create drafts.'
+        )
       } else {
         setConnectionStatus(
           gmailStatus.message ||
-            'Connect Gmail with Google OAuth or Composio to load live mail.'
+            'Connect Gmail through Composio, then load live inbox in this browser.'
         )
       }
 
       if (gcalStatus.connected) {
         setCalendarConnected(true)
         setCalendarConnectionMode('composio')
-        setCalendarConnectionStatus('Google Calendar connected through Composio.')
+        setCalendarConnectionStatus(
+          'Google Calendar is connected through Composio. Load live calendar in this browser to read and update events.'
+        )
       } else {
         setCalendarConnectionStatus(
           gcalStatus.message ||
-            'Connect Google Calendar with Google OAuth or Composio to load events.'
+            'Connect Google Calendar through Composio, then load live calendar in this browser.'
         )
       }
     } catch {
       setConnectionStatus('Connect Gmail to load live mail.')
-      setCalendarConnectionStatus('Connect Google Calendar to load live events.')
+      setCalendarConnectionStatus(
+        'Connect Google Calendar to load live events.'
+      )
     }
   }
 
@@ -592,34 +675,24 @@ export function BrokMailApp() {
         if (connectedThroughComposio) {
           setConnected(true)
           setConnectionMode('composio')
-          setConnectionStatus('Gmail connected through Composio.')
+          setConnectionStatus(
+            'Gmail is connected through Composio. Load live inbox in this browser to read threads and create drafts.'
+          )
           toast.success('Gmail connected through Composio')
           return
         }
 
         setConnectionStatus(
-          'Connection was not confirmed yet. You can retry or use Google OAuth fallback.'
+          'Connection was not confirmed yet. Retry Composio or load live inbox in this browser.'
         )
         toast.error('Could not confirm Gmail connection yet')
         return
       }
 
-      const supabase = createClient()
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/oauth?next=${encodeURIComponent('/brokmail')}`,
-          scopes: GMAIL_SUPER_OAUTH_SCOPES,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent'
-          }
-        }
-      })
-      if (error) throw error
+      await startBrowserGoogleSync('gmail')
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Could not start Gmail OAuth.'
+        error instanceof Error ? error.message : 'Could not start Gmail sync.'
       setConnectionStatus(message)
       toast.error(message)
     } finally {
@@ -664,36 +737,26 @@ export function BrokMailApp() {
         if (connectedThroughComposio) {
           setCalendarConnected(true)
           setCalendarConnectionMode('composio')
-          setCalendarConnectionStatus('Google Calendar connected through Composio.')
+          setCalendarConnectionStatus(
+            'Google Calendar is connected through Composio. Load live calendar in this browser to read and update events.'
+          )
           toast.success('Google Calendar connected through Composio')
           return
         }
 
         setCalendarConnectionStatus(
-          'Connection was not confirmed yet. You can retry or use Google OAuth fallback.'
+          'Connection was not confirmed yet. Retry Composio or load live calendar in this browser.'
         )
         toast.error('Could not confirm Google Calendar connection yet')
         return
       }
 
-      const supabase = createClient()
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/oauth?next=${encodeURIComponent('/brokmail')}`,
-          scopes: GMAIL_SUPER_OAUTH_SCOPES,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent'
-          }
-        }
-      })
-      if (error) throw error
+      await startBrowserGoogleSync('calendar')
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : 'Could not start Google Calendar OAuth.'
+          : 'Could not start Google Calendar sync.'
       setCalendarConnectionStatus(message)
       toast.error(message)
     } finally {
@@ -717,7 +780,7 @@ export function BrokMailApp() {
 
   async function runAgent(prompt: string) {
     const command = prompt.trim()
-    if (!command || isRunning || !selectedThread) return
+    if (!command || isRunning) return
 
     setAgentInput('')
     setIsRunning(true)
@@ -734,6 +797,7 @@ export function BrokMailApp() {
     await wait(140)
 
     const lower = command.toLowerCase()
+    const hasMail = threads.length > 0
     let response = ''
     let draft: DraftState | undefined
     let approval: ApprovalState | undefined
@@ -751,7 +815,7 @@ export function BrokMailApp() {
 
       if (!googleAccessToken) {
         response =
-          'I can connect calendar through Composio, but to read or modify your live events in this session I need Google OAuth access. Click Connect Calendar and retry.'
+          'Google Calendar is connected through Composio, but this browser still needs live calendar sync before I can read or change events. Click Load Live Calendar and retry.'
       } else {
         try {
           const events = await fetchCalendarEvents(googleAccessToken, 12)
@@ -791,7 +855,7 @@ export function BrokMailApp() {
 
       if (!googleAccessToken) {
         response =
-          'I can only create live events after Google OAuth is connected. Click Connect Calendar and then run this command again.'
+          'I can only create live events after live calendar sync is active in this browser. Click Load Live Calendar and run this again.'
       } else {
         const summary = parseEventTitle(command)
         const startAt = parseCalendarStartDate(command)
@@ -801,31 +865,24 @@ export function BrokMailApp() {
         const durationMinutes = parseDurationMinutes(command)
         const endAt = new Date(startAt.getTime() + durationMinutes * 60_000)
 
-        updateActivity('Creating event in Google Calendar...')
+        updateActivity('Preparing a calendar approval card...')
         await wait(170)
-        try {
-          const created = await createCalendarEvent({
-            accessToken: googleAccessToken,
+        response = [
+          'Calendar event ready for approval:',
+          `Title: ${summary}`,
+          `When: ${formatCalendarTimestamp(startAt.toISOString(), false)}`,
+          'Confirm before I add it to Google Calendar.'
+        ].join('\n')
+        approval = {
+          id: createId('approval'),
+          title: 'Create Calendar Event?',
+          description: `${summary} at ${formatCalendarTimestamp(startAt.toISOString(), false)}.`,
+          action: 'calendar_create',
+          calendarEvent: {
             summary,
-            startAt,
-            endAt
-          })
-          const updatedEvents = [...calendarEvents, created].sort((a, b) =>
-            a.startAt.localeCompare(b.startAt)
-          )
-          setCalendarEvents(updatedEvents)
-          setSelectedCalendarEventId(created.id)
-          setCalendarConnected(true)
-          setCalendarConnectionMode('google-oauth')
-          setCalendarConnectionStatus(
-            `Google Calendar connected (${updatedEvents.length} upcoming events)`
-          )
-          response = `Added event: ${created.summary}\nWhen: ${formatCalendarTimestamp(created.startAt, created.isAllDay)}\nEvent ID: ${created.id}`
-        } catch (error) {
-          response =
-            error instanceof Error
-              ? `Could not create event: ${error.message}`
-              : 'Could not create event.'
+            startAt: startAt.toISOString(),
+            endAt: endAt.toISOString()
+          }
         }
       }
     } else if (
@@ -840,7 +897,7 @@ export function BrokMailApp() {
 
       if (!googleAccessToken) {
         response =
-          'I can only remove live events after Google OAuth is connected. Click Connect Calendar and then retry.'
+          'I can only remove live events after live calendar sync is active in this browser. Click Load Live Calendar and retry.'
       } else {
         let candidate = findCalendarEventToDelete(command, calendarEvents)
 
@@ -854,24 +911,27 @@ export function BrokMailApp() {
           response =
             'I could not find that calendar event. Try quoting the event title or include the event id.'
         } else {
-          updateActivity(`Removing "${candidate.summary}" from Google Calendar...`)
+          updateActivity(
+            `Preparing removal approval for "${candidate.summary}"...`
+          )
           await wait(170)
-          try {
-            await deleteCalendarEvent({
-              accessToken: googleAccessToken,
-              eventId: candidate.id
-            })
-            const updatedEvents = calendarEvents.filter(
-              event => event.id !== candidate.id
-            )
-            setCalendarEvents(updatedEvents)
-            setSelectedCalendarEventId(updatedEvents[0]?.id || null)
-            response = `Removed event: ${candidate.summary}`
-          } catch (error) {
-            response =
-              error instanceof Error
-                ? `Could not remove event: ${error.message}`
-                : 'Could not remove event.'
+          response = [
+            'Calendar removal ready for approval:',
+            `Title: ${candidate.summary}`,
+            `When: ${formatCalendarTimestamp(candidate.startAt, candidate.isAllDay)}`,
+            'Confirm before I remove it from Google Calendar.'
+          ].join('\n')
+          approval = {
+            id: createId('approval'),
+            title: 'Remove Calendar Event?',
+            description: `${candidate.summary} at ${formatCalendarTimestamp(candidate.startAt, candidate.isAllDay)}.`,
+            action: 'calendar_delete',
+            calendarEvent: {
+              id: candidate.id,
+              summary: candidate.summary,
+              startAt: candidate.startAt,
+              endAt: candidate.endAt
+            }
           }
         }
       }
@@ -882,36 +942,40 @@ export function BrokMailApp() {
         'Classifying needs reply, waiting-on, and low-priority mail...'
       )
       await wait(160)
-      response = [
-        'Here is the inbox brief:',
-        '',
-        'Needs reply:',
-        ...threads
-          .filter(thread => thread.needsReply)
-          .map(thread => `- ${thread.sender}: ${thread.aiSummary}`),
-        '',
-        'Follow up:',
-        ...threads
-          .filter(thread => thread.waitingOnReply)
-          .map(thread => `- ${thread.sender}: ${thread.aiSummary}`),
-        '',
-        'Can ignore:',
-        `- ${threads.filter(thread => thread.category === 'newsletter').length} newsletter`,
-        `- ${threads.filter(thread => thread.category === 'receipt').length} receipt already ready for Expenses`
-      ].join('\n')
+      response = hasMail
+        ? [
+            'Here is the inbox brief:',
+            '',
+            'Needs reply:',
+            ...threads
+              .filter(thread => thread.needsReply)
+              .map(thread => `- ${thread.sender}: ${thread.aiSummary}`),
+            '',
+            'Follow up:',
+            ...threads
+              .filter(thread => thread.waitingOnReply)
+              .map(thread => `- ${thread.sender}: ${thread.aiSummary}`),
+            '',
+            'Can ignore:',
+            `- ${threads.filter(thread => thread.category === 'newsletter').length} newsletter`,
+            `- ${threads.filter(thread => thread.category === 'receipt').length} receipt already ready for Expenses`
+          ].join('\n')
+        : 'Connect Gmail first so I can triage your live inbox. I will not use demo mail data.'
     } else if (lower.includes('follow')) {
       updateActivity('Checking sent conversations without a recent reply...')
       await wait(170)
       const followUps = threads.filter(thread => thread.waitingOnReply)
       if (followUps[0]) setSelectedThreadId(followUps[0].id)
-      response = followUps.length
-        ? followUps
-            .map(
-              thread =>
-                `${thread.sender}: ${thread.aiSummary}\nSuggested action: ${thread.actionItems[0]}.`
-            )
-            .join('\n\n')
-        : 'No follow-ups are waiting right now.'
+      response = !hasMail
+        ? 'Connect Gmail first so I can scan your real sent mail for follow-ups.'
+        : followUps.length
+          ? followUps
+              .map(
+                thread =>
+                  `${thread.sender}: ${thread.aiSummary}\nSuggested action: ${thread.actionItems[0]}.`
+              )
+              .join('\n\n')
+          : 'No follow-ups are waiting right now.'
     } else if (lower.includes('archive') || lower.includes('newsletter')) {
       updateActivity('Searching newsletter-like emails older than 30 days...')
       await wait(150)
@@ -923,14 +987,26 @@ export function BrokMailApp() {
           !thread.starred &&
           !thread.important
       ).length
-      response = `I found ${archiveCount} newsletter-like email ready to archive. Starred and important messages are excluded.`
-      approval = {
-        id: createId('approval'),
-        title: 'Confirm Archive',
-        description:
-          'Archive newsletter-like emails older than 30 days, excluding starred and important messages.',
-        action: 'archive',
-        count: archiveCount
+      response = hasMail
+        ? `I found ${archiveCount} newsletter-like email ready to archive. Starred and important messages are excluded.`
+        : 'Connect Gmail first so I can search and archive real newsletter threads.'
+      if (hasMail) {
+        approval = {
+          id: createId('approval'),
+          title: 'Confirm Archive',
+          description:
+            'Archive newsletter-like emails older than 30 days, excluding starred and important messages.',
+          action: 'archive',
+          count: archiveCount,
+          targetThreadIds: threads
+            .filter(
+              thread =>
+                thread.category === 'newsletter' &&
+                !thread.starred &&
+                !thread.important
+            )
+            .map(thread => thread.id)
+        }
       }
     } else if (lower.includes('receipt') || lower.includes('automation')) {
       updateActivity('Building an automation preview...')
@@ -960,20 +1036,26 @@ export function BrokMailApp() {
             .toLowerCase()
             .includes('contract')
         ) ?? selectedThread
-      setSelectedThreadId(match.id)
-      updateActivity('Reading the best matching thread...')
-      await wait(140)
-      updateActivity('Summarizing context and drafting a safe reply...')
-      await wait(180)
-      draft = makeDraft(match, command)
-      setComposer(draft.body)
-      response = `${match.sender} - ${match.subject}\nFound because it mentions the contract and has ${match.hasAttachments ? 'an attachment' : 'matching context'}.\n\n${summarizeThread(match)}\n\nI also drafted the reply for review.`
-      approval = {
-        id: createId('approval'),
-        title: 'Ready to Send?',
-        description:
-          'This sends the drafted reply to the current thread after your explicit approval.',
-        action: 'send'
+      if (!match) {
+        response =
+          'Connect Gmail first so I can search real threads and draft from actual email context.'
+      } else {
+        setSelectedThreadId(match.id)
+        updateActivity('Reading the best matching thread...')
+        await wait(140)
+        updateActivity('Summarizing context and drafting a safe reply...')
+        await wait(180)
+        draft = makeDraft(match, command)
+        setComposer(draft.body)
+        response = `${match.sender} - ${match.subject}\nFound because it mentions the contract and has ${match.hasAttachments ? 'an attachment' : 'matching context'}.\n\n${summarizeThread(match)}\n\nI also drafted the reply for review.`
+        approval = {
+          id: createId('approval'),
+          title: 'Ready to Send?',
+          description:
+            'This sends the drafted reply to the current thread after your explicit approval.',
+          action: 'send',
+          targetThreadIds: [match.id]
+        }
       }
     } else if (
       lower.includes('find') ||
@@ -988,30 +1070,42 @@ export function BrokMailApp() {
             .toLowerCase()
             .includes('contract')
         ) ?? selectedThread
-      setSelectedThreadId(match.id)
-      updateActivity('Opening the most relevant thread...')
-      await wait(120)
-      response = `${match.sender} - ${match.subject}\nFound because it mentions the contract and has ${match.hasAttachments ? 'an attachment' : 'matching context'}.\n\n${summarizeThread(match)}`
+      if (!match) {
+        response = 'Connect Gmail first so I can search your real mailbox.'
+      } else {
+        setSelectedThreadId(match.id)
+        updateActivity('Opening the most relevant thread...')
+        await wait(120)
+        response = `${match.sender} - ${match.subject}\nFound because it mentions the contract and has ${match.hasAttachments ? 'an attachment' : 'matching context'}.\n\n${summarizeThread(match)}`
+      }
     } else if (lower.includes('draft') || lower.includes('reply')) {
       updateActivity('Reading the selected thread before drafting...')
       await wait(150)
       updateActivity('Writing a concise reply in your saved tone...')
       await wait(180)
-      draft = makeDraft(selectedThread, command)
-      setComposer(draft.body)
-      response =
-        'I drafted a reply from the selected thread. Review it below before sending or saving.'
-      approval = {
-        id: createId('approval'),
-        title: 'Ready to Send?',
-        description:
-          'This sends the drafted reply to the current thread after your explicit approval.',
-        action: 'send'
+      if (!selectedThread) {
+        response =
+          'Connect Gmail and select a live thread before drafting. I always read the real thread before writing.'
+      } else {
+        draft = makeDraft(selectedThread, command)
+        setComposer(draft.body)
+        response =
+          'I drafted a reply from the selected thread. Review it below before sending or saving.'
+        approval = {
+          id: createId('approval'),
+          title: 'Ready to Send?',
+          description:
+            'This sends the drafted reply to the current thread after your explicit approval.',
+          action: 'send',
+          targetThreadIds: [selectedThread.id]
+        }
       }
     } else {
       updateActivity('Reading the selected thread...')
       await wait(150)
-      response = summarizeThread(selectedThread)
+      response = selectedThread
+        ? summarizeThread(selectedThread)
+        : 'Connect Gmail first or select a live thread so I can summarize real email context.'
     }
 
     finishActivity()
@@ -1030,19 +1124,41 @@ export function BrokMailApp() {
 
   async function approveAction(approval: ApprovalState, draft?: DraftState) {
     if (approval.action === 'archive') {
-      if (googleAccessToken && selectedThread) {
-        await archiveGmailThread({
-          accessToken: googleAccessToken,
-          thread: selectedThread
-        }).catch(error => {
-          toast.error(
-            error instanceof Error ? error.message : 'Could not archive in Gmail.'
+      const targetThreads = (
+        approval.targetThreadIds?.length
+          ? threads.filter(thread =>
+              approval.targetThreadIds?.includes(thread.id)
+            )
+          : selectedThread
+            ? [selectedThread]
+            : []
+      ) as MailThread[]
+
+      if (!googleAccessToken || targetThreads.length === 0) {
+        toast.error(
+          'Load live inbox and choose real thread targets before archiving in Gmail.'
+        )
+        return
+      }
+
+      try {
+        await Promise.all(
+          targetThreads.map(thread =>
+            archiveGmailThread({
+              accessToken: googleAccessToken,
+              thread
+            })
           )
-        })
+        )
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'Could not archive in Gmail.'
+        )
+        return
       }
       setThreads(current =>
         current.map(thread =>
-          thread.category === 'newsletter'
+          targetThreads.some(target => target.id === thread.id)
             ? {
                 ...thread,
                 labels: thread.labels.filter(label => label !== 'Inbox')
@@ -1050,23 +1166,118 @@ export function BrokMailApp() {
             : thread
         )
       )
-      toast.success('Newsletter cleanup approved')
+      toast.success('Archived in Gmail')
     }
 
     if (approval.action === 'send') {
-      if (draft && googleAccessToken && selectedThread) {
+      const targetThread =
+        (approval.targetThreadIds?.[0]
+          ? threads.find(thread => thread.id === approval.targetThreadIds?.[0])
+          : null) ?? selectedThread
+
+      if (!draft || !googleAccessToken || !targetThread) {
+        toast.error(
+          'Load live inbox and select a real thread before creating a Gmail draft.'
+        )
+        return
+      }
+
+      try {
         await createGmailDraft({
           accessToken: googleAccessToken,
-          thread: selectedThread,
+          thread: targetThread,
           body: draft.body
         })
-        toast.success('Gmail draft created for approval')
-      } else {
-        toast.success(draft ? 'Draft approved locally' : 'Action approved')
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : 'Could not create Gmail draft.'
+        )
+        return
+      }
+      toast.success('Gmail draft created for approval')
+    }
+
+    if (approval.action === 'calendar_create') {
+      if (!googleAccessToken || !approval.calendarEvent?.startAt) {
+        toast.error('Load live calendar before creating events.')
+        return
+      }
+
+      try {
+        const created = await createCalendarEvent({
+          accessToken: googleAccessToken,
+          summary: approval.calendarEvent.summary,
+          startAt: new Date(approval.calendarEvent.startAt),
+          endAt: new Date(
+            approval.calendarEvent.endAt ||
+              new Date(approval.calendarEvent.startAt).getTime() + 45 * 60_000
+          )
+        })
+        const updatedEvents = [...calendarEvents, created].sort((a, b) =>
+          a.startAt.localeCompare(b.startAt)
+        )
+        setCalendarEvents(updatedEvents)
+        setSelectedCalendarEventId(created.id)
+        setCalendarConnected(true)
+        setCalendarConnectionMode('google-oauth')
+        setCalendarConnectionStatus(
+          `Google Calendar connected (${updatedEvents.length} upcoming events)`
+        )
+        toast.success('Google Calendar event created')
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'Could not create event.'
+        )
+        return
+      }
+    }
+
+    if (approval.action === 'calendar_delete') {
+      if (!googleAccessToken || !approval.calendarEvent?.id) {
+        toast.error('Load live calendar before removing events.')
+        return
+      }
+
+      try {
+        await deleteCalendarEvent({
+          accessToken: googleAccessToken,
+          eventId: approval.calendarEvent.id
+        })
+        const updatedEvents = calendarEvents.filter(
+          event => event.id !== approval.calendarEvent?.id
+        )
+        setCalendarEvents(updatedEvents)
+        setSelectedCalendarEventId(updatedEvents[0]?.id || null)
+        toast.success('Google Calendar event removed')
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'Could not remove event.'
+        )
+        return
       }
     }
 
     if (approval.action === 'automation') {
+      const rule: AutomationRule = {
+        id: approval.id,
+        name: approval.title,
+        trigger: 'New email arrives',
+        condition: approval.description,
+        action: 'Apply Expenses label',
+        approval: 'Not required',
+        enabled: true,
+        lastRun: 'Never'
+      }
+      setAutomationRules(current => {
+        const next = [rule, ...current.filter(item => item.id !== rule.id)]
+        window.localStorage.setItem(
+          'brokmail_automation_rules',
+          JSON.stringify(next)
+        )
+        return next
+      })
       toast.success('Automation created')
     }
 
@@ -1083,6 +1294,38 @@ export function BrokMailApp() {
   function insertDraft(draft: DraftState) {
     setComposer(draft.body)
     toast.success('Draft inserted into composer')
+  }
+
+  function requestComposerSendApproval() {
+    if (!selectedThread || !composer.trim()) {
+      toast.info('Select a live thread and write a draft first.')
+      return
+    }
+
+    const draft: DraftState = {
+      subject: `Re: ${selectedThread.subject.replace(/^Re:\s*/i, '')}`,
+      body: composer,
+      threadId: selectedThread.id
+    }
+
+    setMessages(current => [
+      ...current,
+      {
+        id: createId('assistant'),
+        role: 'assistant',
+        content:
+          'Ready to create this as a Gmail draft. Confirm first, then you can review and send it from Gmail.',
+        draft,
+        approval: {
+          id: createId('approval'),
+          title: 'Create Gmail Draft?',
+          description:
+            'This creates a Gmail draft in the selected live thread. It does not send email.',
+          action: 'send',
+          targetThreadIds: [selectedThread.id]
+        }
+      }
+    ])
   }
 
   async function saveComposerDraft() {
@@ -1129,7 +1372,26 @@ export function BrokMailApp() {
     const transcript = messages
       .map(message => ({
         role: message.role,
-        content: message.content
+        content: [
+          message.content,
+          message.draft
+            ? [
+                '',
+                'Draft:',
+                `Subject: ${message.draft.subject}`,
+                message.draft.body
+              ].join('\n')
+            : '',
+          message.approval
+            ? [
+                '',
+                'Approval:',
+                `${message.approval.title} - ${message.approval.description}`
+              ].join('\n')
+            : ''
+        ]
+          .filter(Boolean)
+          .join('\n')
       }))
       .filter(entry => entry.content.trim().length > 0)
 
@@ -1155,9 +1417,7 @@ export function BrokMailApp() {
     }
 
     if (!sharedChat) {
-      toast.error(
-        'Could not create a share link. Make sure you are logged in.'
-      )
+      toast.error('Could not create a share link. Make sure you are logged in.')
       return
     }
 
@@ -1177,8 +1437,8 @@ export function BrokMailApp() {
   }
 
   return (
-    <div className="flex h-full w-full flex-col bg-background pt-12 text-foreground lg:flex-row">
-      <aside className="flex max-h-[48dvh] shrink-0 flex-col border-b bg-muted/20 lg:max-h-none lg:w-[370px] lg:border-b-0 lg:border-r 2xl:w-[410px]">
+    <div className="dashboard-shell brokmail-shell flex h-full w-full flex-col overflow-hidden pt-12 text-foreground lg:flex-row">
+      <aside className="dashboard-rail flex max-h-[44dvh] shrink-0 flex-col border-b lg:max-h-none lg:w-[340px] lg:border-b-0 lg:border-r 2xl:w-[380px]">
         <AgentPanel
           activity={activity}
           agentInput={agentInput}
@@ -1197,8 +1457,8 @@ export function BrokMailApp() {
         />
       </aside>
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
-        <aside className="hidden w-52 shrink-0 border-r bg-muted/25 xl:flex xl:flex-col">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col 2xl:flex-row">
+        <aside className="dashboard-rail hidden w-52 shrink-0 border-r 2xl:flex 2xl:flex-col">
           <div className="border-b p-3">
             <Button
               className="h-9 w-full gap-2"
@@ -1216,8 +1476,8 @@ export function BrokMailApp() {
                 <button
                   key={item.id}
                   className={cn(
-                    'flex h-9 w-full items-center justify-between rounded-md px-2 text-sm transition-colors hover:bg-accent',
-                    view === item.id && 'bg-accent font-medium'
+                    'flex h-9 w-full items-center justify-between rounded-md px-2 text-sm transition-colors hover:bg-muted/70',
+                    view === item.id && 'dashboard-pill-active font-medium'
                   )}
                   onClick={() => setView(item.id)}
                 >
@@ -1235,7 +1495,7 @@ export function BrokMailApp() {
 
           <div className="border-t p-3">
             <div className="space-y-3">
-              <div className="rounded-md border bg-background p-3">
+              <div className="dashboard-card p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="text-xs font-medium">Gmail</p>
@@ -1245,7 +1505,7 @@ export function BrokMailApp() {
                   </div>
                   <Badge variant={connected ? 'default' : 'outline'}>
                     {connectionMode === 'google-oauth'
-                      ? 'Google OAuth'
+                      ? 'Live Sync'
                       : connectionMode === 'composio'
                         ? 'Composio'
                         : 'Ready'}
@@ -1264,8 +1524,21 @@ export function BrokMailApp() {
                   <UserRoundCheck className="size-4" />
                   {isConnecting ? 'Connecting...' : 'Connect Gmail'}
                 </Button>
+                {connectionMode === 'composio' && !googleAccessToken && (
+                  <Button
+                    size="sm"
+                    className="mt-2 h-8 w-full gap-2"
+                    onClick={() => {
+                      void startBrowserGoogleSync('gmail')
+                    }}
+                    disabled={isConnecting}
+                  >
+                    <MailCheck className="size-4" />
+                    Load Live Inbox
+                  </Button>
+                )}
               </div>
-              <div className="rounded-md border bg-background p-3">
+              <div className="dashboard-card p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="text-xs font-medium">Google Calendar</p>
@@ -1275,7 +1548,7 @@ export function BrokMailApp() {
                   </div>
                   <Badge variant={calendarConnected ? 'default' : 'outline'}>
                     {calendarConnectionMode === 'google-oauth'
-                      ? 'Google OAuth'
+                      ? 'Live Sync'
                       : calendarConnectionMode === 'composio'
                         ? 'Composio'
                         : 'Ready'}
@@ -1292,16 +1565,28 @@ export function BrokMailApp() {
                   disabled={isConnectingCalendar}
                 >
                   <CalendarDays className="size-4" />
-                  {isConnectingCalendar
-                    ? 'Connecting...'
-                    : 'Connect Calendar'}
+                  {isConnectingCalendar ? 'Connecting...' : 'Connect Calendar'}
                 </Button>
+                {calendarConnectionMode === 'composio' &&
+                  !googleAccessToken && (
+                    <Button
+                      size="sm"
+                      className="mt-2 h-8 w-full gap-2"
+                      onClick={() => {
+                        void startBrowserGoogleSync('calendar')
+                      }}
+                      disabled={isConnectingCalendar}
+                    >
+                      <CalendarDays className="size-4" />
+                      Load Live Calendar
+                    </Button>
+                  )}
               </div>
             </div>
           </div>
         </aside>
 
-        <div className="border-b bg-background px-3 py-3 xl:hidden">
+        <div className="dashboard-rail border-b px-3 py-3 2xl:hidden">
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <Button
@@ -1314,28 +1599,51 @@ export function BrokMailApp() {
               <Button
                 variant="outline"
                 className="h-9 flex-1 gap-2"
-                onClick={connectGmail}
+                onClick={() => {
+                  if (connectionMode === 'composio' && !googleAccessToken) {
+                    void startBrowserGoogleSync('gmail')
+                    return
+                  }
+                  void connectGmail()
+                }}
                 disabled={isConnecting}
               >
                 <UserRoundCheck className="size-4" />
                 {isConnecting
                   ? 'Connecting...'
-                  : connected
-                    ? 'Gmail Live'
-                    : 'Connect Gmail'}
+                  : googleAccessToken
+                    ? 'Inbox Live'
+                    : connectionMode === 'composio'
+                      ? 'Load Inbox'
+                      : connected
+                        ? 'Gmail Ready'
+                        : 'Connect Gmail'}
               </Button>
               <Button
                 variant="outline"
                 className="h-9 flex-1 gap-2"
-                onClick={connectCalendar}
+                onClick={() => {
+                  if (
+                    calendarConnectionMode === 'composio' &&
+                    !googleAccessToken
+                  ) {
+                    void startBrowserGoogleSync('calendar')
+                    return
+                  }
+                  void connectCalendar()
+                }}
                 disabled={isConnectingCalendar}
               >
                 <CalendarDays className="size-4" />
                 {isConnectingCalendar
                   ? 'Connecting...'
-                  : calendarConnected
+                  : googleAccessToken
                     ? 'Calendar Live'
-                    : 'Connect Calendar'}
+                    : calendarConnectionMode === 'composio'
+                      ? 'Load Calendar'
+                      : calendarConnected
+                        ? 'Calendar Ready'
+                        : 'Connect Calendar'}
               </Button>
             </div>
             <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
@@ -1345,8 +1653,10 @@ export function BrokMailApp() {
                   <button
                     key={item.id}
                     className={cn(
-                      'flex h-9 shrink-0 items-center gap-2 rounded-md border px-3 text-sm transition-colors',
-                      view === item.id ? 'bg-accent font-medium' : 'bg-muted/20'
+                      'flex h-9 shrink-0 items-center gap-2 rounded-md border border-border/70 bg-card/88 px-3 text-sm transition-colors hover:bg-muted/70',
+                      view === item.id
+                        ? 'dashboard-pill-active font-medium'
+                        : 'text-muted-foreground'
                     )}
                     onClick={() => setView(item.id)}
                   >
@@ -1362,7 +1672,7 @@ export function BrokMailApp() {
           </div>
         </div>
 
-        <div className="flex max-h-[34dvh] w-full shrink-0 flex-col border-b md:max-h-none md:w-[320px] md:border-b-0 md:border-r 2xl:w-[370px]">
+        <div className="flex max-h-[34dvh] w-full shrink-0 flex-col border-b 2xl:max-h-none 2xl:w-[360px] 2xl:border-b-0 2xl:border-r">
           <div className="border-b p-3">
             <div className="flex items-center gap-2">
               <Search className="size-4 text-muted-foreground" />
@@ -1374,14 +1684,16 @@ export function BrokMailApp() {
               />
             </div>
             <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-              <span>{listCount} {listLabel}</span>
+              <span>
+                {listCount} {listLabel}
+              </span>
               <span>AI sorted</span>
             </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             {view === 'automations' ? (
-              <AutomationList />
+              <AutomationList rules={automationRules} />
             ) : view === 'calendar' ? (
               <CalendarEventList
                 events={calendarEvents}
@@ -1396,8 +1708,9 @@ export function BrokMailApp() {
                 <button
                   key={thread.id}
                   className={cn(
-                    'block w-full border-b p-3 text-left transition-colors hover:bg-muted/50',
-                    selectedThread?.id === thread.id && 'bg-muted'
+                    'block w-full border-b border-border/65 p-3 text-left transition-colors hover:bg-muted/70',
+                    selectedThread?.id === thread.id &&
+                      'dashboard-list-row-active'
                   )}
                   onClick={() => setSelectedThreadId(thread.id)}
                 >
@@ -1444,7 +1757,7 @@ export function BrokMailApp() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
           {view === 'calendar' ? (
             <CalendarWorkspace
               events={calendarEvents}
@@ -1455,9 +1768,13 @@ export function BrokMailApp() {
               isSyncing={isSyncingCalendar}
               isConnecting={isConnectingCalendar}
               connectCalendar={connectCalendar}
+              syncCalendar={() => startBrowserGoogleSync('calendar')}
+              canSyncCalendar={
+                calendarConnectionMode === 'composio' && !googleAccessToken
+              }
               runAgent={runAgent}
             />
-          ) : (
+          ) : selectedThread ? (
             <ThreadView
               thread={selectedThread}
               composer={composer}
@@ -1465,8 +1782,20 @@ export function BrokMailApp() {
               runAgent={runAgent}
               rewriteComposer={rewriteComposer}
               saveComposerDraft={saveComposerDraft}
+              requestComposerSendApproval={requestComposerSendApproval}
               gmailConnected={connected}
               isSyncingMail={isSyncingMail}
+            />
+          ) : (
+            <EmptyMailWorkspace
+              connected={connected}
+              connectionStatus={connectionStatus}
+              connectGmail={connectGmail}
+              syncGmail={() => startBrowserGoogleSync('gmail')}
+              canSyncGmail={connectionMode === 'composio' && !googleAccessToken}
+              isConnecting={isConnecting}
+              isSyncingMail={isSyncingMail}
+              runAgent={runAgent}
             />
           )}
         </div>
@@ -1482,6 +1811,7 @@ function ThreadView({
   runAgent,
   rewriteComposer,
   saveComposerDraft,
+  requestComposerSendApproval,
   gmailConnected,
   isSyncingMail
 }: {
@@ -1491,17 +1821,18 @@ function ThreadView({
   runAgent: (prompt: string) => void
   rewriteComposer: (style: 'shorter' | 'warmer' | 'direct') => void
   saveComposerDraft: () => void
+  requestComposerSendApproval: () => void
   gmailConnected: boolean
   isSyncingMail: boolean
 }) {
   return (
-    <main className="flex h-full min-w-0 flex-1 flex-col">
+    <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       <div className="border-b px-3 py-3 sm:px-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <Mail className="size-3.5" />
-              <span>{thread.senderEmail}</span>
+              <span className="break-all">{thread.senderEmail}</span>
               {gmailConnected && (
                 <Badge variant="outline" className="rounded-md">
                   Live Gmail
@@ -1535,14 +1866,14 @@ function ThreadView({
         </div>
 
         <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr]">
-          <div className="rounded-md border bg-background p-3">
+          <div className="dashboard-card p-3">
             <div className="mb-2 flex items-center gap-2 text-xs font-medium">
               <Sparkles className="size-3.5" />
               AI Summary
             </div>
             <p className="text-sm text-muted-foreground">{thread.aiSummary}</p>
           </div>
-          <div className="rounded-md border bg-background p-3">
+          <div className="dashboard-card p-3">
             <div className="mb-2 flex items-center gap-2 text-xs font-medium">
               <CheckCircle2 className="size-3.5" />
               Action Items
@@ -1561,10 +1892,7 @@ function ThreadView({
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
         <div className="mx-auto max-w-3xl space-y-3">
           {thread.messages.map(message => (
-            <article
-              key={message.id}
-              className="rounded-md border bg-background p-4"
-            >
+            <article key={message.id} className="dashboard-card p-4">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium">{message.from}</p>
@@ -1582,7 +1910,7 @@ function ThreadView({
             </article>
           ))}
 
-          <section className="rounded-md border bg-background p-4">
+          <section className="dashboard-card p-4">
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <PenLine className="size-4" />
@@ -1632,7 +1960,12 @@ function ThreadView({
                   <FileText className="size-4" />
                   Save Draft
                 </Button>
-                <Button size="sm" className="gap-2">
+                <Button
+                  size="sm"
+                  className="gap-2"
+                  onClick={requestComposerSendApproval}
+                  disabled={!composer.trim()}
+                >
                   <ShieldCheck className="size-4" />
                   Send With Approval
                 </Button>
@@ -1696,7 +2029,7 @@ function AgentPanel({
           {quickPrompts.map(prompt => (
             <button
               key={prompt}
-              className="shrink-0 rounded-md border bg-background px-2.5 py-2 text-left text-xs transition-colors hover:bg-accent"
+              className="dashboard-card shrink-0 px-2.5 py-2 text-left text-xs transition-colors hover:bg-muted/70"
               onClick={() => runAgent(prompt)}
               disabled={isRunning}
             >
@@ -1708,7 +2041,7 @@ function AgentPanel({
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 sm:p-4">
         {activity.length > 0 && (
-          <div className="rounded-md border bg-background p-3">
+          <div className="dashboard-card p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-medium">
               <Wand2 className="size-4" />
               Agent Activity
@@ -1736,76 +2069,80 @@ function AgentPanel({
             key={message.id}
             className={cn(
               'flex',
-              message.role === 'user'
-                ? 'justify-end'
-                : 'justify-start'
+              message.role === 'user' ? 'justify-end' : 'justify-start'
             )}
           >
             <div
               className={cn(
-                'max-w-[92%] rounded-md border p-3 text-sm sm:max-w-[88%]',
+                'max-w-[92%] rounded-md border border-border/70 p-3 text-sm sm:max-w-[88%]',
                 message.role === 'user'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-background'
+                  ? 'border-sky-200 bg-sky-50 text-sky-950'
+                  : 'bg-card/95'
               )}
             >
-              <p className="whitespace-pre-wrap leading-6">{message.content}</p>
-            {message.draft && (
-              <div className="mt-3 rounded-md border bg-muted/40 p-3 text-foreground">
-                <div className="mb-2 flex items-center gap-2 font-medium">
-                  <PenLine className="size-4" />
-                  Draft Reply
+              <p className="whitespace-pre-wrap break-words leading-6">
+                {message.content}
+              </p>
+              {message.draft && (
+                <div className="mt-3 rounded-md border bg-muted/40 p-3 text-foreground">
+                  <div className="mb-2 flex items-center gap-2 font-medium">
+                    <PenLine className="size-4" />
+                    Draft Reply
+                  </div>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    {message.draft.subject}
+                  </p>
+                  <p className="whitespace-pre-wrap text-sm leading-6">
+                    {message.draft.body}
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      onClick={() => insertDraft(message.draft!)}
+                    >
+                      Insert
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      onClick={() => insertDraft(message.draft!)}
+                    >
+                      Edit
+                    </Button>
+                  </div>
                 </div>
-                <p className="mb-2 text-xs text-muted-foreground">
-                  {message.draft.subject}
-                </p>
-                <p className="whitespace-pre-wrap text-sm leading-6">
-                  {message.draft.body}
-                </p>
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full sm:w-auto"
-                    onClick={() => insertDraft(message.draft!)}
-                  >
-                    Insert
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="w-full sm:w-auto"
-                    onClick={() => insertDraft(message.draft!)}
-                  >
-                    Edit
-                  </Button>
+              )}
+              {message.approval && (
+                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900">
+                  <div className="mb-2 flex items-center gap-2 font-medium">
+                    <AlertTriangle className="size-4" />
+                    {message.approval.title}
+                  </div>
+                  <p className="text-xs leading-5">
+                    {message.approval.description}
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <Button
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      onClick={() =>
+                        approveAction(message.approval!, message.draft)
+                      }
+                    >
+                      Confirm
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full sm:w-auto"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
-            {message.approval && (
-              <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-50">
-                <div className="mb-2 flex items-center gap-2 font-medium">
-                  <AlertTriangle className="size-4" />
-                  {message.approval.title}
-                </div>
-                <p className="text-xs leading-5">
-                  {message.approval.description}
-                </p>
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <Button
-                    size="sm"
-                    className="w-full sm:w-auto"
-                    onClick={() =>
-                      approveAction(message.approval!, message.draft)
-                    }
-                  >
-                    Confirm
-                  </Button>
-                  <Button variant="outline" size="sm" className="w-full sm:w-auto">
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
+              )}
             </div>
           </article>
         ))}
@@ -1865,8 +2202,8 @@ function CalendarEventList({
         <button
           key={event.id}
           className={cn(
-            'block w-full rounded-md border bg-background p-3 text-left transition-colors hover:bg-muted/40',
-            selectedEventId === event.id && 'border-primary/40 bg-muted'
+            'dashboard-card block w-full p-3 text-left transition-colors hover:bg-muted/70',
+            selectedEventId === event.id && 'dashboard-list-row-active'
           )}
           onClick={() => onSelect(event.id)}
         >
@@ -1894,6 +2231,8 @@ function CalendarWorkspace({
   isSyncing,
   isConnecting,
   connectCalendar,
+  syncCalendar,
+  canSyncCalendar,
   runAgent
 }: {
   events: BrokCalendarEvent[]
@@ -1904,19 +2243,21 @@ function CalendarWorkspace({
   isSyncing: boolean
   isConnecting: boolean
   connectCalendar: () => Promise<void>
+  syncCalendar: () => Promise<void>
+  canSyncCalendar: boolean
   runAgent: (prompt: string) => void
 }) {
   return (
-    <main className="flex h-full min-w-0 flex-1 flex-col">
+    <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       <div className="border-b px-3 py-3 sm:px-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <CalendarDays className="size-3.5" />
               <span>Brok Calendar</span>
               <Badge variant={connected ? 'default' : 'outline'}>
                 {connectionMode === 'google-oauth'
-                  ? 'Google OAuth'
+                  ? 'Live Sync'
                   : connectionMode === 'composio'
                     ? 'Composio'
                     : 'Ready'}
@@ -1941,6 +2282,20 @@ function CalendarWorkspace({
               <UserRoundCheck className="size-4" />
               {isConnecting ? 'Connecting...' : 'Connect Calendar'}
             </Button>
+            {canSyncCalendar && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-2 sm:flex-none"
+                onClick={() => {
+                  void syncCalendar()
+                }}
+                disabled={isConnecting}
+              >
+                <CalendarDays className="size-4" />
+                Load Live Calendar
+              </Button>
+            )}
             <Button
               size="sm"
               className="flex-1 gap-2 sm:flex-none"
@@ -1983,7 +2338,7 @@ function CalendarWorkspace({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
         <div className="mx-auto max-w-3xl space-y-3">
-          <div className="rounded-md border bg-background p-4">
+          <div className="dashboard-card p-4">
             <div className="mb-2 flex items-center gap-2 text-xs font-medium">
               <CalendarDays className="size-3.5" />
               Upcoming Events
@@ -1996,7 +2351,7 @@ function CalendarWorkspace({
           </div>
 
           {selectedEvent ? (
-            <section className="rounded-md border bg-background p-4">
+            <section className="dashboard-card p-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-medium">{selectedEvent.summary}</p>
@@ -2048,7 +2403,7 @@ function CalendarWorkspace({
               </div>
             </section>
           ) : (
-            <section className="rounded-md border bg-background p-4 text-sm text-muted-foreground">
+            <section className="dashboard-card p-4 text-sm text-muted-foreground">
               Select an event from the list to inspect or remove it.
             </section>
           )}
@@ -2058,11 +2413,99 @@ function CalendarWorkspace({
   )
 }
 
-function AutomationList() {
+function EmptyMailWorkspace({
+  connected,
+  connectionStatus,
+  connectGmail,
+  syncGmail,
+  canSyncGmail,
+  isConnecting,
+  isSyncingMail,
+  runAgent
+}: {
+  connected: boolean
+  connectionStatus: string
+  connectGmail: () => Promise<void>
+  syncGmail: () => Promise<void>
+  canSyncGmail: boolean
+  isConnecting: boolean
+  isSyncingMail: boolean
+  runAgent: (prompt: string) => void
+}) {
+  return (
+    <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+        <section className="dashboard-card w-full max-w-xl p-5 sm:p-6">
+          <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+            <Mail className="size-4" />
+            Live Gmail Required
+          </div>
+          <h2 className="text-xl font-semibold tracking-tight">
+            Connect Gmail to load your real inbox.
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            BrokMail will not show sample mail. After connection, this workspace
+            loads live Gmail threads, summaries, drafts, and approval-safe
+            actions.
+          </p>
+          <div className="mt-4 rounded-lg border border-border/70 bg-background/70 p-3 text-xs text-muted-foreground">
+            {isSyncingMail ? 'Syncing Gmail...' : connectionStatus}
+          </div>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <Button
+              className="gap-2"
+              onClick={connectGmail}
+              disabled={isConnecting}
+            >
+              <UserRoundCheck className="size-4" />
+              {isConnecting
+                ? 'Connecting...'
+                : connected
+                  ? 'Reconnect Gmail'
+                  : 'Connect Gmail'}
+            </Button>
+            {canSyncGmail && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => {
+                  void syncGmail()
+                }}
+                disabled={isConnecting}
+              >
+                <MailCheck className="size-4" />
+                Load Live Inbox
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => runAgent('What needs my attention today?')}
+            >
+              <Sparkles className="size-4" />
+              Try Inbox Brief
+            </Button>
+          </div>
+        </section>
+      </div>
+    </main>
+  )
+}
+
+function AutomationList({ rules }: { rules: AutomationRule[] }) {
+  if (rules.length === 0) {
+    return (
+      <div className="p-6 text-sm leading-6 text-muted-foreground">
+        No automations yet. Ask BrokMail to create one, then approve it before
+        it is saved.
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3 p-3">
-      {brokMailAutomations.map(rule => (
-        <article key={rule.id} className="rounded-md border bg-background p-3">
+      {rules.map(rule => (
+        <article key={rule.id} className="dashboard-card p-3">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm font-medium">{rule.name}</p>
@@ -2111,7 +2554,7 @@ function DraftList({
       {drafts.map(draft => (
         <article
           key={`${draft.threadId}-${draft.subject}`}
-          className="rounded-md border bg-background p-3"
+          className="dashboard-card p-3"
         >
           <p className="text-sm font-medium">{draft.subject}</p>
           <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-xs text-muted-foreground">

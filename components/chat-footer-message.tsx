@@ -52,7 +52,33 @@ function FooterContent() {
 }
 
 export function ChatFooterMessage({ isLoading }: { isLoading: boolean }) {
-  if (isLoading) return null
+  const loadingItems = useMemo(
+    () => ['Planning', 'Reading tools', 'Drafting answer'],
+    []
+  )
+  const { displayText: loadingText } = useTypewriterCycle(loadingItems, {
+    firstDuration: 800,
+    itemDuration: 900,
+    idleDuration: 120,
+    charInterval: 26,
+    initialDelay: 60
+  })
+
+  if (isLoading) {
+    return (
+      <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+        <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+        <span className="brand-gradient-text">
+          {loadingText || 'Thinking'}
+        </span>
+        <span className="typing-dots" aria-hidden>
+          <span />
+          <span />
+          <span />
+        </span>
+      </div>
+    )
+  }
 
   return <FooterContent />
 }

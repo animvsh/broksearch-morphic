@@ -1,16 +1,21 @@
 import { NextResponse } from 'next/server'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
-import { getPresentation } from '@/lib/db/actions/presentations'
+import {
+  getOutline,
+  getPresentation,
+  getSlides
+} from '@/lib/db/actions/presentations'
+
+const textEncoder = new TextEncoder()
 
 /**
  * GET /api/presentations/:id/stream
  * SSE stream for generation events
  *
- * Note: This is a placeholder endpoint. The actual streaming is handled
- * by the generate-outline and generate-slides routes which return
- * SSE streams directly. This endpoint exists for clients that need to
- * poll for stream status or reconnect to an existing stream.
+ * This endpoint replays the current generation state as SSE so clients can
+ * reconnect without falling back to polling. The generation routes still emit
+ * live token/slide events while work is running.
  *
  * Events returned:
  * - outline_started, outline_delta, outline_complete
@@ -26,22 +31,73 @@ export async function GET(
     const userId = await getCurrentUserId()
 
     // Optional: verify user has access to this presentation
+    let presentation = null
     if (userId) {
-      const presentation = await getPresentation(id, userId)
+      presentation = await getPresentation(id, userId)
       if (!presentation) {
         return NextResponse.json(
           { error: 'Presentation not found' },
           { status: 404 }
         )
       }
+    } else {
+      presentation = await getPresentation(id)
     }
 
-    // Return a simple status endpoint since actual streaming
-    // happens in generate-outline and generate-slides routes
-    return NextResponse.json({
-      message:
-        'Stream endpoint. Use generate-outline or generate-slides to start generation.',
-      presentationId: id
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sendEvent = (type: string, data: Record<string, unknown>) => {
+          controller.enqueue(
+            textEncoder.encode(`data: ${JSON.stringify({ type, data })}\n\n`)
+          )
+        }
+
+        try {
+          sendEvent('stream_connected', {
+            presentationId: id,
+            status: presentation?.status ?? 'unknown'
+          })
+
+          const outline = await getOutline(id)
+          if (outline) {
+            sendEvent('outline_complete', {
+              slideCount: outline.outlineJson.length,
+              outline: outline.outlineJson
+            })
+          }
+
+          const slides = await getSlides(id)
+          for (const slide of slides) {
+            sendEvent('slide_complete', {
+              index: slide.slideIndex,
+              title: slide.title,
+              slideId: slide.id
+            })
+          }
+
+          sendEvent('stream_complete', {
+            presentationId: id,
+            slideCount: slides.length
+          })
+        } catch (error) {
+          sendEvent('error', {
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Could not replay presentation stream.'
+          })
+        } finally {
+          controller.close()
+        }
+      }
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive'
+      }
     })
   } catch (error) {
     console.error('Error in stream endpoint:', error)

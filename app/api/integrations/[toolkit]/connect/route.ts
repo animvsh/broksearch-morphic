@@ -24,10 +24,23 @@ function resolveRequestOrigin(request: NextRequest) {
 }
 
 function normalizeToolkit(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '')
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '')
 }
 
-function resolveSafeRedirectUrl(origin: string, value: unknown, fallback: string) {
+function readStringField(payload: unknown, field: string) {
+  if (!payload || typeof payload !== 'object') return undefined
+  const value = (payload as Record<string, unknown>)[field]
+  return typeof value === 'string' ? value : undefined
+}
+
+function resolveSafeRedirectUrl(
+  origin: string,
+  value: unknown,
+  fallback: string
+) {
   if (typeof value !== 'string' || !value.trim()) {
     return fallback
   }
@@ -51,10 +64,11 @@ export async function POST(
   const toolkit = normalizeToolkit(params.toolkit || '')
   const origin = resolveRequestOrigin(request)
   const body = await request.json().catch(() => null)
-  const defaultRedirectUrl = `${origin}/integrations?integration=${encodeURIComponent(toolkit)}&connected=1`
+  const defaultRedirectUrl = `${origin}/integrations?integration=${encodeURIComponent(toolkit)}&connection=callback`
   const redirectUrl = resolveSafeRedirectUrl(
     origin,
-    body?.redirectUrl,
+    readStringField(body, 'redirectUrl') ||
+      request.nextUrl.searchParams.get('redirectUrl'),
     defaultRedirectUrl
   )
 
@@ -62,6 +76,7 @@ export async function POST(
     return NextResponse.json(
       {
         provider: 'composio',
+        ok: false,
         connectionUrl: null,
         redirectUrl,
         message: 'Missing toolkit slug.'
@@ -75,6 +90,7 @@ export async function POST(
     return NextResponse.json(
       {
         provider: 'composio',
+        ok: false,
         toolkit,
         connectionUrl: null,
         redirectUrl,
@@ -85,13 +101,18 @@ export async function POST(
   }
 
   if (!isComposioConfigured()) {
-    return NextResponse.json({
-      provider: 'composio',
-      toolkit,
-      connectionUrl: null,
-      redirectUrl,
-      message: 'Composio is not configured for integrations.'
-    })
+    return NextResponse.json(
+      {
+        provider: 'composio',
+        ok: false,
+        toolkit,
+        connectionUrl: null,
+        redirectUrl,
+        message:
+          'Composio is not configured. Add COMPOSIO_API_KEY or COMPOSIO_CONNECT_KEY, then reload integrations.'
+      },
+      { status: 503 }
+    )
   }
 
   try {
@@ -102,32 +123,42 @@ export async function POST(
     })
 
     if (!link.url) {
-      return NextResponse.json({
-        provider: 'composio',
-        toolkit,
-        connectionUrl: null,
-        redirectUrl,
-        raw: link.raw,
-        message: `Composio did not return a ${toolkit} connection URL.`
-      })
+      return NextResponse.json(
+        {
+          provider: 'composio',
+          ok: false,
+          toolkit,
+          connectionUrl: null,
+          redirectUrl,
+          raw: link.raw,
+          message: `Composio did not return a connection URL for ${toolkit}. Check that the auth config is enabled and has a valid callback URL.`
+        },
+        { status: 502 }
+      )
     }
 
     return NextResponse.json({
       provider: 'composio',
+      ok: true,
       toolkit,
       connectionUrl: link.url,
-      redirectUrl
+      redirectUrl,
+      callbackUrl: redirectUrl
     })
   } catch (error) {
-    return NextResponse.json({
-      provider: 'composio',
-      toolkit,
-      connectionUrl: null,
-      redirectUrl,
-      message:
-        error instanceof Error
-          ? error.message
-          : `Could not create ${toolkit} connection link.`
-    })
+    return NextResponse.json(
+      {
+        provider: 'composio',
+        ok: false,
+        toolkit,
+        connectionUrl: null,
+        redirectUrl,
+        message:
+          error instanceof Error
+            ? error.message
+            : `Could not create the ${toolkit} connection link.`
+      },
+      { status: 502 }
+    )
   }
 }

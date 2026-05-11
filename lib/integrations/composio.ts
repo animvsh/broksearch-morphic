@@ -36,6 +36,7 @@ type ComposioConnectToolkitAction = 'add' | 'rename' | 'list' | 'remove'
 const DEFAULT_COMPOSIO_BASE_URL = 'https://backend.composio.dev'
 const DEFAULT_COMPOSIO_CONNECT_MCP_URL = 'https://connect.composio.dev/mcp'
 const DEFAULT_CONNECT_TOOLKITS = [
+  'googlesuper',
   'linear',
   'github',
   'gmail',
@@ -134,7 +135,9 @@ function extractArrayPayload(payload: unknown): Record<string, unknown>[] {
         typeof candidate === 'object' &&
         Array.isArray((candidate as Record<string, unknown>).items)
       ) {
-        return ((candidate as Record<string, unknown>).items as unknown[]).filter(
+        return (
+          (candidate as Record<string, unknown>).items as unknown[]
+        ).filter(
           (item): item is Record<string, unknown> =>
             Boolean(item) && typeof item === 'object'
         )
@@ -267,7 +270,9 @@ function normalizeConnectedAccountsFromConnect(
   const toolkitResults = extractToolkitResultsFromConnect(payload)
   const accounts: ComposioConnectedAccount[] = []
 
-  for (const [toolkitSlug, rawToolkitResult] of Object.entries(toolkitResults)) {
+  for (const [toolkitSlug, rawToolkitResult] of Object.entries(
+    toolkitResults
+  )) {
     if (!rawToolkitResult || typeof rawToolkitResult !== 'object') continue
 
     const toolkitResult = rawToolkitResult as Record<string, unknown>
@@ -298,6 +303,49 @@ function inferToolkitFromAuthConfigId(authConfigId?: string) {
     return authConfigId.slice('connect-'.length)
   }
   return undefined
+}
+
+function resolveToolkitEnvKeys(toolkitSlug?: string) {
+  if (!toolkitSlug) return []
+
+  const upper = toolkitSlug
+    .trim()
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase()
+
+  const keys = [`COMPOSIO_${upper}_AUTH_CONFIG_ID`]
+
+  if (toolkitSlug.toLowerCase() === 'googlesuper') {
+    keys.push('COMPOSIO_GOOGLE_SUPER_AUTH_CONFIG_ID')
+  }
+
+  return [...new Set(keys)]
+}
+
+async function resolveBackendAuthConfigId(
+  authConfigId?: string,
+  toolkitSlug?: string
+) {
+  if (authConfigId) return authConfigId
+
+  for (const key of resolveToolkitEnvKeys(toolkitSlug)) {
+    const value = process.env[key]?.trim()
+    if (value) return value
+  }
+
+  const fallback = process.env.COMPOSIO_AUTH_CONFIG_ID?.trim()
+  if (fallback) return fallback
+
+  const authConfigs = await listAuthConfigs(toolkitSlug)
+  const matchingConfig = authConfigs.find(config =>
+    toolkitSlug
+      ? config.toolkit_slug === toolkitSlug && config.id
+      : Boolean(config.id)
+  )
+
+  return matchingConfig?.id
 }
 
 async function composioRequest(
@@ -500,14 +548,23 @@ export async function createConnectedAccountLink(params: {
     }
   }
 
-  if (!params.authConfigId) {
-    throw new Error('authConfigId is required for backend Composio mode.')
+  const authConfigId = await resolveBackendAuthConfigId(
+    params.authConfigId,
+    params.toolkitSlug
+  )
+
+  if (!authConfigId) {
+    throw new Error(
+      params.toolkitSlug
+        ? `Could not find a Composio auth config for ${params.toolkitSlug}. Set COMPOSIO_${params.toolkitSlug.toUpperCase()}_AUTH_CONFIG_ID or create an enabled auth config.`
+        : 'authConfigId is required for backend Composio mode.'
+    )
   }
 
   const payload = await composioRequest('/connected_accounts/link', {
     method: 'POST',
     body: {
-      auth_config_id: params.authConfigId,
+      auth_config_id: authConfigId,
       user_id: params.userId,
       ...(params.toolkitSlug ? { toolkit_slug: params.toolkitSlug } : {}),
       ...(params.redirectUrl

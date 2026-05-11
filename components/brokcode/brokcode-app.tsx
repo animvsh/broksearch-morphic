@@ -151,6 +151,15 @@ type BrokCodeVersion = {
   createdAt: string
 }
 
+type BrokCodeStreamResult = {
+  runtime: BrokCodeRuntime
+  model?: string
+  content: string
+  usage?: unknown
+  preview_url?: string | null
+  note?: string
+}
+
 type GithubRepoContext = {
   repository: string | null
   remoteUrl: string | null
@@ -278,26 +287,27 @@ const runStreamingHints = [
   'Preparing final response'
 ]
 
-const integrationConnectMatchers: Array<{ toolkit: string; pattern: RegExp }> = [
-  { toolkit: 'github', pattern: /\b(github|git hub|repo|repository)\b/i },
-  {
-    toolkit: 'supabase',
-    pattern: /\b(supabase|postgres|database|pgvector)\b/i
-  },
-  {
-    toolkit: 'gmail',
-    pattern: /\b(gmail|google mail|inbox|email)\b/i
-  },
-  {
-    toolkit: 'googlecalendar',
-    pattern: /\b(google calendar|gcal|calendar)\b/i
-  },
-  { toolkit: 'linear', pattern: /\b(linear)\b/i },
-  { toolkit: 'slack', pattern: /\b(slack)\b/i },
-  { toolkit: 'notion', pattern: /\b(notion)\b/i },
-  { toolkit: 'vercel', pattern: /\b(vercel)\b/i },
-  { toolkit: 'railway', pattern: /\b(railway)\b/i }
-]
+const integrationConnectMatchers: Array<{ toolkit: string; pattern: RegExp }> =
+  [
+    { toolkit: 'github', pattern: /\b(github|git hub|repo|repository)\b/i },
+    {
+      toolkit: 'supabase',
+      pattern: /\b(supabase|postgres|database|pgvector)\b/i
+    },
+    {
+      toolkit: 'gmail',
+      pattern: /\b(gmail|google mail|inbox|email)\b/i
+    },
+    {
+      toolkit: 'googlecalendar',
+      pattern: /\b(google calendar|gcal|calendar)\b/i
+    },
+    { toolkit: 'linear', pattern: /\b(linear)\b/i },
+    { toolkit: 'slack', pattern: /\b(slack)\b/i },
+    { toolkit: 'notion', pattern: /\b(notion)\b/i },
+    { toolkit: 'vercel', pattern: /\b(vercel)\b/i },
+    { toolkit: 'railway', pattern: /\b(railway)\b/i }
+  ]
 
 function formatToolkitName(slug: string) {
   return slug
@@ -418,7 +428,10 @@ function normalizePreviewUrl(value: string) {
 function isBrokCodeWorkspaceUrl(value: string) {
   try {
     const parsed = new URL(value)
-    if (typeof window !== 'undefined' && parsed.origin !== window.location.origin) {
+    if (
+      typeof window !== 'undefined' &&
+      parsed.origin !== window.location.origin
+    ) {
       return false
     }
     return parsed.pathname.startsWith('/brokcode')
@@ -430,6 +443,117 @@ function isBrokCodeWorkspaceUrl(value: string) {
 function extractPreviewUrlFromText(text: string) {
   const match = text.match(/https?:\/\/(?:127\.0\.0\.1|localhost|[^\s"'<>]+)/i)
   return match?.[0] ?? null
+}
+
+async function readBrokCodeExecutionStream(
+  response: Response,
+  onEvent: (
+    event:
+      | { type: 'status'; message: string }
+      | { type: 'delta'; content: string; accumulated: string }
+  ) => void
+): Promise<BrokCodeStreamResult> {
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('BrokCode stream did not include a response body.')
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let accumulated = ''
+  let result: Partial<BrokCodeStreamResult> = {}
+
+  const processBlock = (block: string) => {
+    const lines = block.split(/\r?\n/)
+    let eventType = 'message'
+    const dataLines: string[] = []
+
+    for (const line of lines) {
+      if (line.startsWith('event:')) {
+        eventType = line.slice(6).trim() || 'message'
+      } else if (line.startsWith('data:')) {
+        dataLines.push(line.slice(5).trim())
+      }
+    }
+
+    if (dataLines.length === 0) return
+
+    let payload: Record<string, unknown>
+    try {
+      payload = JSON.parse(dataLines.join('\n')) as Record<string, unknown>
+    } catch {
+      return
+    }
+
+    if (eventType === 'status') {
+      const message =
+        typeof payload.message === 'string' ? payload.message : null
+      if (message) {
+        onEvent({ type: 'status', message })
+      }
+      return
+    }
+
+    if (eventType === 'delta') {
+      const content =
+        typeof payload.content === 'string' ? payload.content : ''
+      if (content) {
+        accumulated += content
+        onEvent({ type: 'delta', content, accumulated })
+      }
+      return
+    }
+
+    if (eventType === 'result') {
+      result = payload as Partial<BrokCodeStreamResult>
+      if (typeof result.content === 'string' && !accumulated) {
+        accumulated = result.content
+      }
+      return
+    }
+
+    if (eventType === 'error') {
+      const message =
+        typeof payload.message === 'string'
+          ? payload.message
+          : 'BrokCode Cloud execution failed.'
+      throw new Error(message)
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const blocks = buffer.split(/\n\n/)
+    buffer = blocks.pop() ?? ''
+    for (const block of blocks) {
+      processBlock(block)
+    }
+  }
+
+  if (buffer.trim()) {
+    processBlock(buffer)
+  }
+
+  return {
+    runtime:
+      result?.runtime === 'opencode' ||
+      result?.runtime === 'brok' ||
+      result?.runtime === 'not_connected'
+        ? result.runtime
+        : 'brok',
+    model: typeof result?.model === 'string' ? result.model : undefined,
+    content:
+      accumulated.trim() ||
+      (typeof result?.content === 'string' ? result.content.trim() : '') ||
+      'BrokCode Cloud completed the run but returned no text output.',
+    usage: result?.usage,
+    preview_url:
+      typeof result?.preview_url === 'string' ? result.preview_url : null,
+    note: typeof result?.note === 'string' ? result.note : undefined
+  }
 }
 
 type BrokCodeAppProps = {
@@ -470,7 +594,9 @@ export function BrokCodeApp({
   )
   const [syncLoading, setSyncLoading] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
-  const [previewUrl, setPreviewUrl] = useState('http://127.0.0.1:3001/playground')
+  const [previewUrl, setPreviewUrl] = useState(
+    'http://127.0.0.1:3001/playground'
+  )
   const [previewInput, setPreviewInput] = useState(
     'http://127.0.0.1:3001/playground'
   )
@@ -745,11 +871,14 @@ export function BrokCodeApp({
         const context: GithubRepoContext = {
           repository:
             typeof body?.repository === 'string' ? body.repository : null,
-          remoteUrl: typeof body?.remoteUrl === 'string' ? body.remoteUrl : null,
+          remoteUrl:
+            typeof body?.remoteUrl === 'string' ? body.remoteUrl : null,
           currentBranch:
             typeof body?.currentBranch === 'string' ? body.currentBranch : null,
           defaultBranch:
-            typeof body?.defaultBranch === 'string' ? body.defaultBranch : 'main',
+            typeof body?.defaultBranch === 'string'
+              ? body.defaultBranch
+              : 'main',
           commitSha: typeof body?.commitSha === 'string' ? body.commitSha : null
         }
 
@@ -759,7 +888,9 @@ export function BrokCodeApp({
         }
         if (context.defaultBranch) {
           setGithubBaseBranch(current =>
-            current && current !== 'main' ? current : context.defaultBranch || 'main'
+            current && current !== 'main'
+              ? current
+              : context.defaultBranch || 'main'
           )
         }
         if (context.currentBranch) {
@@ -1115,7 +1246,10 @@ export function BrokCodeApp({
       if (!body?.version) return null
 
       const version = body.version as BrokCodeVersion
-      setVersions(current => [version, ...current.filter(v => v.id !== version.id)])
+      setVersions(current => [
+        version,
+        ...current.filter(v => v.id !== version.id)
+      ])
       return version
     } catch {
       return null
@@ -1462,7 +1596,8 @@ export function BrokCodeApp({
     }
 
     const latestRun = executionRuns[0]
-    const titleBase = latestRun?.command?.trim() || input.trim() || 'Brok Code update'
+    const titleBase =
+      latestRun?.command?.trim() || input.trim() || 'Brok Code update'
     const title =
       titleBase.length > 120 ? `${titleBase.slice(0, 117)}...` : titleBase
     const bodyLines = [
@@ -1497,7 +1632,9 @@ export function BrokCodeApp({
 
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
-        throw new Error(payload?.error?.message ?? 'Failed to open pull request.')
+        throw new Error(
+          payload?.error?.message ?? 'Failed to open pull request.'
+        )
       }
 
       const prUrl = payload?.pullRequest?.url
@@ -1621,6 +1758,7 @@ export function BrokCodeApp({
     }
 
     const run = createExecutionRun(trimmed)
+    const assistantMessageId = createId('assistant')
     setExecutionRuns(current => [run, ...current].slice(0, 8))
     setInput('')
     setIsRunning(true)
@@ -1632,6 +1770,11 @@ export function BrokCodeApp({
         id: createId('system'),
         role: 'system',
         content: 'Starting a real BrokCode Cloud run...'
+      },
+      {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: 'Connecting to brokcode-cloud runtime...'
       }
     ])
     setRuntimeError(null)
@@ -1682,6 +1825,7 @@ export function BrokCodeApp({
         body: JSON.stringify({
           command: trimmed,
           model: selectedModel,
+          stream: true,
           require_opencode: true,
           messages: [
             { role: 'system', content: buildCommandPrompt(trimmed) },
@@ -1695,7 +1839,37 @@ export function BrokCodeApp({
         throw new Error(body?.error?.message ?? 'Live Brok request failed.')
       }
 
-      const body = await response.json()
+      const responseContentType = response.headers.get('content-type') ?? ''
+      const body = responseContentType.includes('text/event-stream')
+        ? await readBrokCodeExecutionStream(response, event => {
+            if (event.type === 'status') {
+              updateExecutionStep(run.id, 'execute', 'running', event.message)
+              setMessages(current =>
+                current.map(message =>
+                  message.id === assistantMessageId &&
+                  message.content.startsWith('Connecting')
+                    ? {
+                        ...message,
+                        content: `${event.message}\n\nWaiting for the first token...`
+                      }
+                    : message
+                )
+              )
+              return
+            }
+
+            setMessages(current =>
+              current.map(message =>
+                message.id === assistantMessageId
+                  ? {
+                      ...message,
+                      content: `Live (${selectedModel} via brokcode-cloud)\n\n${event.accumulated}`
+                    }
+                  : message
+              )
+            )
+          })
+        : await response.json()
       const runtime = (body?.runtime ?? 'brok') as BrokCodeRuntime
       const content = body?.content
       const assistantContent =
@@ -1748,15 +1922,19 @@ export function BrokCodeApp({
         }
       }
 
-      setMessages(current => [
-        ...current,
-        {
-          id: createId('assistant'),
-          role: 'assistant',
-          content: `Live (${selectedModel} via ${runtime === 'opencode' ? 'brokcode-cloud' : 'Brok'})\n\n${assistantContent}`,
-          actions
-        }
-      ])
+      setMessages(current =>
+        current.map(message =>
+          message.id === assistantMessageId
+            ? {
+                ...message,
+                content: `Live (${selectedModel} via ${
+                  runtime === 'opencode' ? 'brokcode-cloud' : 'Brok'
+                })\n\n${assistantContent}`,
+                actions
+              }
+            : message
+        )
+      )
       void appendSyncEvent({
         role: 'assistant',
         type: 'response',
@@ -1796,15 +1974,17 @@ export function BrokCodeApp({
         note: 'Real runtime failed. No generated placeholder output was produced.'
       })
       setRuntimeError(message)
-      setMessages(current => [
-        ...current,
-        {
-          id: createId('assistant'),
-          role: 'assistant',
-          content: `Real run failed: ${message}\n\nNo generated placeholder output was produced.`,
-          actions
-        }
-      ])
+      setMessages(current =>
+        current.map(existing =>
+          existing.id === assistantMessageId
+            ? {
+                ...existing,
+                content: `Real run failed: ${message}\n\nNo generated placeholder output was produced.`,
+                actions
+              }
+            : existing
+        )
+      )
       void appendSyncEvent({
         role: 'assistant',
         type: 'error',
@@ -1909,11 +2089,11 @@ export function BrokCodeApp({
   }, [connectGithub, githubStatus, hasLiveKey, isRunning])
 
   return (
-    <div className="flex h-full w-full flex-col bg-background pt-12 text-foreground">
-      <header className="border-b bg-background/95 px-3 py-3 sm:px-4">
+    <div className="dashboard-shell brokcode-shell flex h-full w-full flex-col pt-12 text-foreground">
+      <header className="dashboard-panel sticky top-0 z-20 mx-3 border-b px-3 py-3 sm:mx-4 sm:px-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-md border bg-muted">
+            <div className="flex size-10 items-center justify-center rounded-md border bg-muted shadow-[0_16px_36px_-22px_rgba(99,102,241,0.45)]">
               <Code2 className="size-5" />
             </div>
             <div className="min-w-0">
@@ -1929,11 +2109,15 @@ export function BrokCodeApp({
                 Chat-first app builder on the left, live preview and runtime
                 controls on the right.
               </p>
+              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-2 py-1 text-[11px] text-muted-foreground">
+                <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+                Cloud feels live while it works
+              </div>
             </div>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="inline-flex items-center rounded-md border bg-muted/20 p-0.5">
+            <div className="inline-flex items-center rounded-md border border-border/70 bg-card/45 p-0.5 backdrop-blur-sm">
               <Button size="sm" className="h-7 rounded-sm px-2.5 text-xs">
                 Cloud
               </Button>
@@ -2027,11 +2211,12 @@ export function BrokCodeApp({
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 sm:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:grid-cols-[minmax(340px,430px)_minmax(0,1fr)] xl:grid-cols-[minmax(380px,480px)_minmax(0,1fr)]">
-        <section className="flex min-h-0 flex-col bg-muted/10 sm:border-r">
+      <main className="grid min-h-0 flex-1 grid-cols-1 px-3 pb-3 sm:px-4 sm:pb-4 sm:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:grid-cols-[minmax(340px,430px)_minmax(0,1fr)] xl:grid-cols-[minmax(380px,480px)_minmax(0,1fr)]">
+        <section className="dashboard-rail flex min-h-0 flex-col border sm:border-r sm:rounded-l-xl">
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-5">
             <div className="flex flex-col gap-4">
-              <div className="rounded-md border bg-background p-3">
+              <div className="overflow-hidden rounded-md border bg-background p-3">
+                <div className="pointer-events-none -mx-3 -mt-3 mb-3 h-px bg-gradient-to-r from-transparent via-primary/65 to-transparent" />
                 <div className="flex items-start gap-3">
                   <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted">
                     <Sparkles className="size-4" />
@@ -2043,6 +2228,16 @@ export function BrokCodeApp({
                       through brokcode-cloud and keeps runtime errors visible
                       when execution fails.
                     </p>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {runStreamingHints.slice(0, 3).map(hint => (
+                        <span
+                          key={hint}
+                          className="rounded-full border border-border/60 bg-muted/25 px-2 py-1 text-[11px] text-muted-foreground"
+                        >
+                          {hint}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2236,7 +2431,9 @@ export function BrokCodeApp({
                       <Input
                         id="brok-github-repo"
                         value={githubRepository}
-                        onChange={event => setGithubRepository(event.target.value)}
+                        onChange={event =>
+                          setGithubRepository(event.target.value)
+                        }
                         placeholder="owner/repo"
                         className="mt-1 h-9"
                       />
@@ -2248,7 +2445,9 @@ export function BrokCodeApp({
                       <Input
                         id="brok-github-base"
                         value={githubBaseBranch}
-                        onChange={event => setGithubBaseBranch(event.target.value)}
+                        onChange={event =>
+                          setGithubBaseBranch(event.target.value)
+                        }
                         placeholder="main"
                         className="mt-1 h-9"
                       />
@@ -2261,7 +2460,9 @@ export function BrokCodeApp({
                     <Input
                       id="brok-github-head"
                       value={githubHeadBranch}
-                      onChange={event => setGithubHeadBranch(event.target.value)}
+                      onChange={event =>
+                        setGithubHeadBranch(event.target.value)
+                      }
                       placeholder="feature/my-branch"
                       className="mt-1 h-9"
                     />
@@ -2472,7 +2673,7 @@ export function BrokCodeApp({
               ))}
 
               {isRunning && (
-                <div className="mr-auto max-w-[min(100%,42rem)] rounded-md border bg-muted/30 p-4">
+                <div className="mr-auto max-w-[min(100%,42rem)] overflow-hidden rounded-md border bg-muted/30 p-4 shadow-[0_18px_50px_-32px_rgba(56,189,248,0.55)]">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Wand2 className="size-4" />
                     Brok Code is working{'.'.repeat(livePulse)}
@@ -2481,6 +2682,9 @@ export function BrokCodeApp({
                     {runStreamingHints[runHintIndex]}
                     {'.'.repeat(livePulse)}
                   </p>
+                  <div className="mt-3 h-1 overflow-hidden rounded-full bg-background/70">
+                    <div className="h-full w-2/5 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-cyan-500/40 via-cyan-500 to-violet-500/70" />
+                  </div>
                   <div className="mt-3">
                     <ExecutionVisualizer runs={executionRuns.slice(0, 1)} />
                   </div>
@@ -2505,12 +2709,13 @@ export function BrokCodeApp({
               </div>
 
               <form
-                className="flex items-end gap-2 rounded-md border bg-background p-2 shadow-sm"
+                className="relative flex items-end gap-2 overflow-hidden rounded-md border bg-background p-2 shadow-sm"
                 onSubmit={event => {
                   event.preventDefault()
                   runCommand(input)
                 }}
               >
+                <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent" />
                 <Textarea
                   value={input}
                   onChange={event => setInput(event.target.value)}
@@ -2664,7 +2869,7 @@ function SyncedSessionPanel({
   const events = session?.events.slice(-6).reverse() ?? []
 
   return (
-    <div className="rounded-md border bg-background p-3">
+    <div className="rounded-md border bg-background p-3 shadow-[0_16px_40px_-32px_rgba(15,23,42,0.45)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold">Cloud/TUI Sync</p>
@@ -2702,7 +2907,7 @@ function SyncedSessionPanel({
           </div>
           <div className="mt-3 space-y-2">
             {events.map(event => (
-              <div key={event.id} className="rounded-md border bg-muted/20 p-2">
+              <div key={event.id} className="rounded-md border bg-muted/20 p-2 transition-colors hover:bg-muted/30">
                 <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                   <span>
                     {event.source === 'tui' ? 'Terminal' : 'Cloud'} ·{' '}
@@ -2735,7 +2940,7 @@ function VersionHistoryPanel({
   onRefresh: () => void
 }) {
   return (
-    <div className="rounded-md border bg-background p-3">
+    <div className="rounded-md border bg-background p-3 shadow-[0_16px_40px_-32px_rgba(15,23,42,0.45)]">
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-sm font-semibold">Version History</p>
@@ -2837,13 +3042,21 @@ function ChatBubble({
       )}
       <div
         className={cn(
-          'max-w-[min(100%,42rem)] rounded-md border p-3 text-sm leading-6 sm:p-4',
+          'max-w-[min(100%,42rem)] rounded-md border p-3 text-sm leading-6 shadow-[0_16px_44px_-34px_rgba(15,23,42,0.45)] sm:p-4',
           isUser && 'bg-primary text-primary-foreground',
           isSystem &&
             'border-dashed bg-muted/30 py-2 text-xs text-muted-foreground',
-          !isUser && !isSystem && 'bg-background'
+          !isUser &&
+            !isSystem &&
+            'bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.08),transparent_45%),var(--background)]'
         )}
       >
+        {!isUser && !isSystem && (
+          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/25 px-2 py-1 text-[11px] font-medium text-muted-foreground">
+            <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+            Brok Code
+          </div>
+        )}
         <p className="whitespace-pre-wrap">{message.content}</p>
 
         {agents.length > 0 && !isSystem && (
@@ -2947,7 +3160,7 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
   return (
     <div className="space-y-3">
       {runs.slice(0, 4).map(run => (
-        <div key={run.id} className="rounded-md border bg-muted/10 p-3">
+        <div key={run.id} className="rounded-md border bg-muted/10 p-3 shadow-[0_14px_36px_-30px_rgba(15,23,42,0.45)]">
           <div className="mb-2 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{run.command}</p>
@@ -2970,6 +3183,33 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
                   ? 'Brok'
                   : 'Not connected'}
             </Badge>
+          </div>
+
+          <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                'h-full rounded-full transition-all duration-500',
+                run.status === 'error'
+                  ? 'bg-rose-500'
+                  : run.status === 'done'
+                    ? 'bg-emerald-500'
+                    : 'animate-pulse bg-cyan-500'
+              )}
+              style={{
+                width: `${Math.max(
+                  18,
+                  Math.round(
+                    (run.steps.reduce((total, step) => {
+                      if (step.status === 'done') return total + 1
+                      if (step.status === 'running') return total + 0.55
+                      return total
+                    }, 0) /
+                      Math.max(run.steps.length, 1)) *
+                      100
+                  )
+                )}%`
+              }}
+            />
           </div>
 
           <div className="space-y-2">
@@ -3093,7 +3333,7 @@ function BrowserPreviewPanel({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-md border bg-background">
+      <div className="overflow-hidden rounded-md border bg-background shadow-[0_16px_44px_-32px_rgba(15,23,42,0.45)]">
         <div className="flex items-center justify-between gap-3 border-b px-3 py-2 text-xs">
           <span className="truncate text-muted-foreground">{previewUrl}</span>
           <a

@@ -322,15 +322,15 @@ export function Chat({
           .join('\n') ?? ''
 
       if (text) {
-        void safeCopyTextToClipboard(stripSpecBlocks(stripThinkingBlocks(text))).then(
-          copied => {
-            if (copied) {
-              toast.success('Message copied to clipboard')
-              return
-            }
-            toast.error('Failed to copy message')
+        void safeCopyTextToClipboard(
+          stripSpecBlocks(stripThinkingBlocks(text))
+        ).then(copied => {
+          if (copied) {
+            toast.success('Message copied to clipboard')
+            return
           }
-        )
+          toast.error('Failed to copy message')
+        })
       }
     }
 
@@ -552,7 +552,7 @@ export function Chat({
     <ChatProvider sendMessage={sendMessage}>
       <div
         className={cn(
-          'relative flex h-full min-w-0 flex-1 flex-col',
+          'dashboard-shell playful-canvas relative flex h-full min-w-0 flex-1 flex-col',
           messages.length === 0 ? 'items-center justify-center' : ''
         )}
         data-testid="full-chat"
@@ -696,7 +696,8 @@ export function Chat({
                 type="button"
                 className="gap-2"
                 onClick={() => {
-                  if (pendingCodingPrompt) openBrokCodeCloud(pendingCodingPrompt)
+                  if (pendingCodingPrompt)
+                    openBrokCodeCloud(pendingCodingPrompt)
                 }}
               >
                 <Github className="size-4" />

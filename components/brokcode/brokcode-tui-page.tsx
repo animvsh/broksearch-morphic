@@ -8,9 +8,12 @@ import {
   CheckCircle2,
   Code2,
   Download,
+  Github,
   KeyRound,
   Link2,
   Monitor,
+  PlugZap,
+  Rocket,
   TerminalSquare
 } from 'lucide-react'
 
@@ -22,7 +25,7 @@ const installSteps = [
   'git clone <your Brok repo URL> brok',
   'cd brok',
   'npm install',
-  'open /api-keys/new and create a Brok API key',
+  'open Brok Code Cloud or /api-keys/new and create a Brok API key',
   'export BROK_API_KEY="brok_sk_..."',
   'export BROK_BASE_URL="https://your-brok-domain.com/api/v1"',
   'export BROK_SYNC_URL="https://your-brok-domain.com"',
@@ -74,7 +77,7 @@ const compatibilitySteps = [
 const workflowCards = [
   {
     title: 'Cloud + Terminal Sync',
-    body: 'Use the same BROKCODE_SESSION_ID in the web app and terminal. /sync pulls the shared log so both surfaces stay aligned.'
+    body: 'Use the same BROKCODE_SESSION_ID in Brok Code Cloud and terminal. /sync pulls the shared log from /api/brokcode/sessions.'
   },
   {
     title: 'Worktrees',
@@ -85,8 +88,34 @@ const workflowCards = [
     body: '/securityscan initializes DeepSec when needed and runs the real matcher scan. Add process, revalidate, or export for deeper DeepSec phases.'
   },
   {
-    title: 'Skills',
-    body: '/skills shows the Agent Skills setup command. Install real skills with npx skills update before relying on them.'
+    title: 'GitHub PRs',
+    body: 'Connect GitHub through Composio in Brok Code Cloud, set repository/base/head, then use Open PR after checks pass.'
+  },
+  {
+    title: 'One-click deploy',
+    body: 'Use the Brok Code Cloud 1-Click Deploy button when BROKCODE_DEPLOY_WEBHOOK_URL or RAILWAY_API_TOKEN is configured.'
+  },
+  {
+    title: 'Composio prompts',
+    body: 'In Brok Code Cloud, prompts like connect GitHub, connect Railway, or connect Linear open the matching Composio flow when configured.'
+  }
+]
+
+const cloudActions = [
+  {
+    icon: Github,
+    title: 'GitHub PR + repo context',
+    body: 'Use Connect GitHub, let Brok Code detect repository context, or enter owner/repo, base, and head before opening a PR.'
+  },
+  {
+    icon: PlugZap,
+    title: 'Composio connections',
+    body: 'Ask to connect GitHub, Supabase, Gmail, Google Calendar, Linear, Slack, Notion, Vercel, or Railway from the cloud chat.'
+  },
+  {
+    icon: Rocket,
+    title: '1-Click Deploy',
+    body: 'Deploy only reports success when the configured webhook or Railway API path confirms the trigger.'
   }
 ]
 
@@ -98,7 +127,9 @@ export default function BrokCodeTuiPage() {
       <header className="border-b px-4 py-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-lg font-semibold sm:text-xl">BrokCode TUI</h1>
+            <h1 className="text-lg font-semibold sm:text-xl">
+              Brok Code Terminal TUI
+            </h1>
             <p className="text-sm text-muted-foreground">
               Download, configure, and run the terminal version of Brok Code.
             </p>
@@ -134,6 +165,12 @@ export default function BrokCodeTuiPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                <p className="text-sm leading-6 text-muted-foreground">
+                  The TUI ships with this repo as{' '}
+                  <code>scripts/brokcode-tui.mjs</code>. Clone the repo and run
+                  it with <code>npm run brokcode</code>; no standalone binary is
+                  claimed here.
+                </p>
                 <ol className="space-y-2 text-sm">
                   {installSteps.map((step, index) => (
                     <li
@@ -149,8 +186,8 @@ export default function BrokCodeTuiPage() {
                 </ol>
                 <p className="text-xs leading-5 text-muted-foreground">
                   The TUI runs the real script at{' '}
-                  <code>scripts/brokcode-tui.mjs</code>. It streams from{' '}
-                  <code>/chat/completions</code>, writes sync events to{' '}
+                  <code>scripts/brokcode-tui.mjs</code>. It sends chat to{' '}
+                  <code>/api/brokcode/execute</code>, writes sync events to{' '}
                   <code>/api/brokcode/sessions</code>, and refuses non-Brok API
                   keys.
                 </p>
@@ -270,7 +307,7 @@ export default function BrokCodeTuiPage() {
             </Card>
           </section>
 
-          <section className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <section className="grid gap-4">
             <Card className="rounded-md">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -280,19 +317,46 @@ export default function BrokCodeTuiPage() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <p className="leading-6 text-muted-foreground">
-                  Open BrokCode Cloud, save the same key, set the same session
+                  Open Brok Code Cloud, save the same key, set the same session
                   id, then use the Cloud/TUI Sync panel to see terminal events
                   and web runs in one place.
                 </p>
                 <Button asChild size="sm" className="gap-2">
                   <Link href="/brokcode">
-                    Open BrokCode Cloud
+                    Open Brok Code Cloud
                     <ArrowRight className="size-4" />
                   </Link>
                 </Button>
               </CardContent>
             </Card>
 
+            <Card className="rounded-md">
+              <CardHeader>
+                <CardTitle className="text-base">Cloud Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                {cloudActions.map(action => {
+                  const Icon = action.icon
+                  return (
+                    <div
+                      key={action.title}
+                      className="rounded-md border bg-muted/20 p-3"
+                    >
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Icon className="size-4" />
+                        {action.title}
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {action.body}
+                      </p>
+                    </div>
+                  )
+                })}
+              </CardContent>
+            </Card>
+          </section>
+
+          <section className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
             <Card className="rounded-md">
               <CardHeader>
                 <CardTitle className="text-base">Troubleshooting</CardTitle>
@@ -328,7 +392,7 @@ export default function BrokCodeTuiPage() {
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-2">
           <Button asChild size="sm" className="gap-2">
             <Link href="/brokcode">
-              Open BrokCode Cloud
+              Open Brok Code Cloud
               <ArrowRight className="size-4" />
             </Link>
           </Button>

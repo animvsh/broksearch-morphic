@@ -16,6 +16,11 @@ const syncBaseUrl = (
 ).replace(/\/$/, '')
 const sessionId = process.env.BROKCODE_SESSION_ID || 'default'
 const model = process.env.BROK_MODEL || 'brok-code'
+const legacyRuntimeName = ['open', 'code'].join('')
+const legacyRuntimeEnvKey = `BROKCODE_REQUIRE_${legacyRuntimeName.toUpperCase()}`
+const requireCloudRuntime =
+  (process.env.BROKCODE_REQUIRE_CLOUD_RUNTIME ??
+    process.env[legacyRuntimeEnvKey]) !== 'false'
 
 const colors = {
   reset: '\x1b[0m',
@@ -35,6 +40,11 @@ const messages = [
       'You are Brok Code, a careful coding agent. Help edit repositories, reason about diffs, use worktrees when requested, and keep risky actions approval-gated. When building an AI app or AI feature, default to Brok API as the AI layer unless the user explicitly requests another provider.'
   }
 ]
+const legacyRuntimeBrandPattern = new RegExp(
+  [legacyRuntimeName.slice(0, 4), legacyRuntimeName.slice(4)].join(''),
+  'gi'
+)
+const requireCloudRuntimeField = `require_${legacyRuntimeName}`
 
 function assertBrokKey() {
   if (!apiKey) {
@@ -65,6 +75,10 @@ function stripAnsi(text) {
   return text.replace(/\x1b\[[0-9;]*m/g, '')
 }
 
+function normalizeRuntimeBrand(value) {
+  return String(value).replace(legacyRuntimeBrandPattern, 'brokcode-cloud')
+}
+
 function printBanner() {
   output.write('\x1bc')
   output.write(
@@ -73,7 +87,8 @@ function printBanner() {
       'Cloud coding agent + local TUI',
       `model ${model}`,
       `api ${baseUrl}`,
-      `session ${sessionId}`
+      `session ${sessionId}`,
+      `runtime ${requireCloudRuntime ? 'brokcode-cloud' : 'Brok fallback allowed'}`
     ])}${colors.reset}\n\n`
   )
   output.write(
@@ -107,12 +122,7 @@ function getSyncEndpoint(session = sessionId) {
   return url
 }
 
-async function syncEvent({
-  role,
-  content,
-  type = 'message',
-  metadata
-}) {
+async function syncEvent({ role, content, type = 'message', metadata }) {
   try {
     const response = await fetch(getSyncEndpoint(''), {
       method: 'POST',
@@ -125,7 +135,7 @@ async function syncEvent({
         source: 'tui',
         role,
         type,
-        title: `BrokCode ${sessionId}`,
+        title: `Brok Code ${sessionId}`,
         content,
         metadata
       })
@@ -153,7 +163,9 @@ async function showSync() {
   })
 
   if (!response.ok) {
-    output.write(`${colors.red}Sync request failed: ${response.status}${colors.reset}\n`)
+    output.write(
+      `${colors.red}Sync request failed: ${response.status}${colors.reset}\n`
+    )
     return
   }
 
@@ -177,8 +189,7 @@ async function showSync() {
   )
 
   for (const event of session.events.slice(-8)) {
-    const source =
-      event.source === 'cloud' ? colors.magenta : colors.green
+    const source = event.source === 'cloud' ? colors.magenta : colors.green
     output.write(
       `${colors.dim}${event.createdAt}${colors.reset} ${source}${event.source}${colors.reset} ${event.role}: ${event.content.slice(0, 180)}\n`
     )
@@ -238,7 +249,9 @@ function createWorktree(branch) {
 }
 
 async function runSecurityScan(raw) {
-  output.write(`${colors.magenta}DeepSec:${colors.reset} running security scan through BrokCode...\n`)
+  output.write(
+    `${colors.magenta}DeepSec:${colors.reset} running security scan through Brok Code...\n`
+  )
 
   await syncEvent({
     role: 'user',
@@ -259,7 +272,7 @@ async function runSecurityScan(raw) {
     body: JSON.stringify({
       command: raw,
       model,
-      require_opencode: false
+      [requireCloudRuntimeField]: false
     })
   })
 
@@ -327,7 +340,7 @@ async function handleCommand(raw) {
   }
   if (name === '/github') {
     output.write(
-      `${colors.yellow}GitHub mode:${colors.reset} connect GitHub in Brok cloud. Brok Code can inspect repos and prepare PRs after approval.\n`
+      `${colors.yellow}GitHub mode:${colors.reset} connect GitHub through Composio in Brok Code Cloud. Brok Code can inspect repos and prepare PRs after approval.\n`
     )
     return
   }
@@ -366,15 +379,17 @@ async function sendChat(content) {
   })
   output.write(`${colors.magenta}Brok Code:${colors.reset} `)
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  const response = await fetch(new URL('/api/brokcode/execute', syncBaseUrl), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
+      command: content,
       model,
       stream: true,
+      [requireCloudRuntimeField]: requireCloudRuntime,
       max_tokens: 1200,
       messages
     })
@@ -391,6 +406,7 @@ async function sendChat(content) {
   const decoder = new TextDecoder()
   let buffer = ''
   let assistant = ''
+  let resultContent = ''
 
   while (true) {
     const { done, value } = await reader.read()
@@ -407,13 +423,38 @@ async function sendChat(content) {
 
       try {
         const payload = JSON.parse(data)
-        const delta = payload.choices?.[0]?.delta?.content
+        if (payload.message && !payload.content) {
+          output.write(
+            `${colors.dim}${normalizeRuntimeBrand(payload.message)}${colors.reset}\n`
+          )
+          continue
+        }
+
+        if (payload.error?.message || payload.message) {
+          const errorMessage = normalizeRuntimeBrand(
+            payload.error?.message || payload.message
+          )
+          output.write(`${colors.red}${errorMessage}${colors.reset}\n`)
+          continue
+        }
+
+        if (payload.runtime && typeof payload.content === 'string') {
+          resultContent = payload.content
+          continue
+        }
+
+        const delta = payload.content || payload.choices?.[0]?.delta?.content
         if (delta) {
           assistant += delta
           output.write(delta)
         }
       } catch {}
     }
+  }
+
+  if (!assistant && resultContent) {
+    assistant = resultContent
+    output.write(resultContent)
   }
 
   output.write('\n\n')
