@@ -106,7 +106,7 @@ export default async function RootLayout({
             />
           ) : null}
           <UserProvider hasUser={!!userId}>
-            <SidebarProvider defaultOpen={false}>
+            <SidebarProvider defaultOpen={true}>
               <AppSidebar />
               <KeyboardShortcutHandler />
               <div className="flex flex-col flex-1 min-w-0">

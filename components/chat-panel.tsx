@@ -2,10 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Textarea from 'react-textarea-autosize'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import { UseChatHelpers } from '@ai-sdk/react'
-import { ArrowUp, ChevronDown, MessageCirclePlus, Square } from 'lucide-react'
+import {
+  ArrowUp,
+  ChevronDown,
+  Code2,
+  FlaskConical,
+  Mail,
+  MessageCirclePlus,
+  PlugZap,
+  Presentation,
+  Square
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { SHORTCUT_EVENTS } from '@/lib/keyboard-shortcuts'
@@ -206,6 +217,45 @@ export function ChatPanel({
           : 'mx-auto flex w-full max-w-4xl flex-col px-4 pb-8 pt-32 sm:px-6 md:pt-40'
       )}
     >
+      {messages.length === 0 ? (
+        <div className="mx-auto mb-3 flex w-full max-w-3xl flex-wrap items-center gap-2 px-1">
+          <Link
+            href="/brokcode"
+            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+          >
+            <Code2 className="size-3.5" />
+            Brok Code
+          </Link>
+          <Link
+            href="/brokmail"
+            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+          >
+            <Mail className="size-3.5" />
+            BrokMail
+          </Link>
+          <Link
+            href="/playground"
+            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+          >
+            <FlaskConical className="size-3.5" />
+            Playground
+          </Link>
+          <Link
+            href="/presentations"
+            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+          >
+            <Presentation className="size-3.5" />
+            Slides
+          </Link>
+          <Link
+            href="/integrations"
+            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+          >
+            <PlugZap className="size-3.5" />
+            Integrations
+          </Link>
+        </div>
+      ) : null}
       {uploadedFiles.length > 0 && (
         <UploadedFileList files={uploadedFiles} onRemove={handleFileRemove} />
       )}
