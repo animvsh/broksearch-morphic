@@ -32,6 +32,9 @@ const metadataBaseUrl =
   process.env.NEXT_PUBLIC_APP_URL ||
   process.env.NEXT_PUBLIC_BASE_URL ||
   'http://localhost:8080'
+const enableVercelAnalytics =
+  process.env.VERCEL === '1' ||
+  process.env.NEXT_PUBLIC_ENABLE_VERCEL_ANALYTICS === 'true'
 
 export const metadata: Metadata = {
   metadataBase: new URL(metadataBaseUrl),
@@ -115,7 +118,7 @@ export default async function RootLayout({
             </SidebarProvider>
           </UserProvider>
           <Toaster />
-          <Analytics />
+          {enableVercelAnalytics ? <Analytics /> : null}
         </ThemeProvider>
       </body>
     </html>
