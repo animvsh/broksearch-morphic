@@ -29,24 +29,24 @@ import { UploadedFileList } from './uploaded-file-list'
 // Constants for timing delays
 const INPUT_UPDATE_DELAY_MS = 10 // Delay to ensure input value is updated before form submission
 const SUGGESTED_PROMPTS = [
-  'What changed in AI this week?',
-  'Summarize the latest updates in Next.js 16',
-  'Compare Cursor vs Codex for production coding workflows',
-  'Find benchmarks for brok-3',
-  'Draft a customer follow-up sequence for B2B outbound',
-  'Create a launch checklist for a new SaaS feature'
+  'Build an executive brief on AI infrastructure shifts this week',
+  'Compare Cursor, Codex, and Brok Code for production teams',
+  'Find current benchmarks and cite the sources cleanly',
+  'Draft a customer follow-up sequence for enterprise outbound',
+  'Create a launch checklist for a new SaaS feature',
+  'Audit this workflow for security, cost, and operational risk'
 ]
 
 const PLAYFUL_TAGLINES = [
-  'Search, synthesize, and ship with personality.',
-  'Live answers, real tools, and faster flow.',
-  'From messy question to clean execution.'
+  'Search, synthesize, and operate from one governed workspace.',
+  'Live tools, cited answers, and production-ready handoffs.',
+  'From messy question to clean execution with audit-grade context.'
 ]
 
 const LOADING_TAGLINES = [
-  'Sketching a plan',
-  'Calling tools',
-  'Composing the response'
+  'Classifying intent',
+  'Calling governed tools',
+  'Composing the answer'
 ]
 
 interface ChatPanelProps {
@@ -229,24 +229,24 @@ export function ChatPanel({
   return (
     <div
       className={cn(
-        'w-full bg-background group/form-container shrink-0',
+        'w-full bg-transparent group/form-container shrink-0',
         messages.length > 0 ? 'sticky bottom-0 px-2 pb-2 md:pb-4' : 'px-6'
       )}
     >
       {messages.length === 0 && (
         <div className="mb-6 flex flex-col items-center gap-4 md:mb-8 md:gap-5">
-          <div className="brand-halo inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-2 shadow-[0_12px_40px_-24px_rgba(80,80,255,0.45)]">
+          <div className="brand-halo inline-flex items-center gap-2 rounded-xl border border-border/70 bg-card/80 px-3 py-2 shadow-[0_16px_42px_-30px_rgba(15,23,42,0.3)] backdrop-blur-sm">
             <IconBlinkingLogo className="size-6" />
             <p className="brand-gradient-text text-2xl font-semibold tracking-tight">
               brok
             </p>
-            <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/82 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
               <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-              live
+              governed
             </span>
           </div>
-          <h1 className="brand-gradient-text text-xl font-semibold md:text-2xl">
-            Ask anything
+          <h1 className="text-balance text-center text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+            Ask anything. Operate everything.
           </h1>
           <p className="max-w-2xl text-center text-sm text-muted-foreground">
             <span>{playfulTagline}</span>
@@ -258,9 +258,9 @@ export function ChatPanel({
                 key={prompt}
                 type="button"
                 onClick={() => handleSuggestedPrompt(prompt)}
-                className="group relative overflow-hidden rounded-md border bg-background/90 px-3 py-2 text-left text-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-muted/70 hover:shadow-sm"
+                className="group relative overflow-hidden rounded-lg border border-border/75 bg-card/86 px-3 py-2.5 text-left text-sm shadow-[0_10px_26px_-24px_rgba(15,23,42,0.2)] transition-all duration-200 hover:border-border hover:bg-background/92 hover:shadow-[0_16px_30px_-24px_rgba(15,23,42,0.28)]"
               >
-                <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                <span className="pointer-events-none absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-gradient-to-b from-blue-500 via-teal-500 to-orange-500 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
                 <span className="relative z-10">{prompt}</span>
               </button>
             ))}
@@ -321,7 +321,7 @@ export function ChatPanel({
         )}
         {messages.length > 0 && isLoading && (
           <div className="mx-auto mb-2 max-w-3xl px-1">
-            <div className="overflow-hidden rounded-2xl border border-border/60 bg-background/80 px-3 py-2 shadow-[0_16px_44px_-28px_rgba(67,56,202,0.45)] backdrop-blur-sm">
+            <div className="overflow-hidden rounded-xl border border-border/70 bg-card/88 px-3 py-2 shadow-[0_16px_38px_-30px_rgba(15,23,42,0.32)] backdrop-blur-sm">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <IconBlinkingLogo className="size-3.5" />
                 <span className="inline-flex min-w-0 items-center gap-1">
@@ -339,7 +339,7 @@ export function ChatPanel({
                 </span>
               </div>
               <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted/70">
-                <div className="h-full w-2/5 animate-[pulse_1.4s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-primary/40 via-primary to-violet-500/70" />
+                <div className="h-full w-2/5 animate-[pulse_1.4s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-blue-500/50 via-teal-500 to-orange-500/70" />
               </div>
             </div>
           </div>
@@ -347,9 +347,9 @@ export function ChatPanel({
 
         <div
           className={cn(
-            'relative flex w-full flex-col gap-2 overflow-hidden rounded-3xl border border-input bg-muted transition-shadow',
+            'relative flex w-full flex-col gap-2 overflow-hidden rounded-xl border border-input bg-card/92 shadow-[0_18px_44px_-34px_rgba(15,23,42,0.35)] backdrop-blur-md transition-shadow',
             isInputFocused &&
-              'ring-1 ring-ring/20 ring-offset-1 ring-offset-background/50'
+              'ring-2 ring-ring/15 ring-offset-2 ring-offset-background/70'
           )}
         >
           <div
@@ -372,7 +372,7 @@ export function ChatPanel({
             spellCheck={false}
             value={input}
             disabled={isLoading || isToolInvocationInProgress()}
-            className="resize-none w-full min-h-12 bg-transparent border-0 p-3 md:p-4 text-sm placeholder:text-muted-foreground focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+            className="resize-none w-full min-h-12 bg-transparent border-0 p-3 text-sm placeholder:text-muted-foreground focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 md:p-4"
             onChange={handleInputChange}
             onKeyDown={e => {
               if (
@@ -422,7 +422,7 @@ export function ChatPanel({
                   variant="outline"
                   size="icon"
                   onClick={handleNewChat}
-                  className="shrink-0 size-8 md:size-10 rounded-full group"
+                  className="shrink-0 size-8 rounded-lg group md:size-10"
                   type="button"
                   disabled={isLoading}
                 >
@@ -434,7 +434,7 @@ export function ChatPanel({
                 size={'icon'}
                 className={cn(
                   isLoading && 'animate-pulse',
-                  'size-8 md:size-10 rounded-full'
+                  'size-8 rounded-lg shadow-[0_12px_24px_-18px_rgba(37,99,235,0.45)] md:size-10'
                 )}
                 disabled={
                   (!isLoading &&

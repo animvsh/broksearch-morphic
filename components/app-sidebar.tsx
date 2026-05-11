@@ -40,9 +40,13 @@ import { IconBlinkingLogo } from './ui/icons'
 export default function AppSidebar() {
   const pathname = usePathname()
   const navButtonClass =
-    'group/sidebar relative h-10 rounded-2xl border border-transparent px-2.5 text-[13px] font-medium text-sidebar-foreground/68 transition-all duration-200 hover:-translate-y-0.5 hover:border-border/75 hover:bg-background/82 hover:text-sidebar-foreground hover:shadow-[0_18px_40px_-30px_rgba(15,23,42,0.34)] data-[active=true]:border-border/80 data-[active=true]:bg-background/92 data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[0_20px_42px_-30px_rgba(15,23,42,0.36)]'
+    'group/sidebar relative h-9 rounded-lg border border-transparent px-2 text-[13px] font-medium text-sidebar-foreground/68 transition-all duration-200 hover:border-border/75 hover:bg-background/82 hover:text-sidebar-foreground hover:shadow-[0_12px_28px_-26px_rgba(15,23,42,0.28)] data-[active=true]:border-border/80 data-[active=true]:bg-background/92 data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[0_14px_30px_-26px_rgba(15,23,42,0.3)]'
   const subButtonClass =
-    'group/subnav rounded-2xl border border-transparent px-2 text-sidebar-foreground/58 transition-all duration-200 hover:border-border/65 hover:bg-background/74 hover:text-sidebar-foreground data-[active=true]:border-border/70 data-[active=true]:bg-background/88 data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[0_14px_28px_-24px_rgba(15,23,42,0.34)]'
+    'group/subnav rounded-lg border border-transparent px-2 text-sidebar-foreground/58 transition-all duration-200 hover:border-border/65 hover:bg-background/74 hover:text-sidebar-foreground data-[active=true]:border-border/70 data-[active=true]:bg-background/88 data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[0_10px_24px_-22px_rgba(15,23,42,0.28)]'
+  const iconShellClass =
+    'flex size-6 items-center justify-center rounded-md border border-border/65 bg-background/72 text-foreground/75 transition-all duration-200 group-data-[active=true]/sidebar:border-transparent group-data-[active=true]/sidebar:bg-gradient-to-br group-data-[active=true]/sidebar:from-blue-500/90 group-data-[active=true]/sidebar:via-teal-400/80 group-data-[active=true]/sidebar:to-orange-400/85 group-data-[active=true]/sidebar:text-white group-hover/sidebar:border-border/85 group-hover/sidebar:bg-background group-hover/sidebar:text-foreground'
+  const subIconShellClass =
+    'flex size-5.5 items-center justify-center rounded-md border border-border/65 bg-background/68 transition-all duration-200 group-data-[active=true]/subnav:border-border/80 group-data-[active=true]/subnav:bg-background/90'
   const isActive = (href: string) =>
     href === '/'
       ? pathname === '/'
@@ -55,11 +59,11 @@ export default function AppSidebar() {
       side="left"
       variant="sidebar"
       collapsible="icon"
-      className="border-r border-sidebar-border/75 bg-sidebar/92 text-sidebar-foreground shadow-sm backdrop-blur-xl"
+      className="border-r border-sidebar-border/80 bg-sidebar/95 text-sidebar-foreground shadow-[12px_0_40px_-34px_rgba(15,23,42,0.28)] backdrop-blur-xl"
     >
-      <SidebarHeader className="flex flex-row items-center justify-between border-b border-sidebar-border/70">
+      <SidebarHeader className="flex flex-row items-center justify-between border-b border-sidebar-border/75">
         <Link href="/" className="flex items-center gap-2 px-2 py-3">
-          <span className="brand-badge brand-halo rounded-full p-1.5">
+          <span className="brand-badge brand-halo rounded-lg p-1.5">
             <IconBlinkingLogo className={cn('size-5')} />
           </span>
           <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
@@ -67,7 +71,7 @@ export default function AppSidebar() {
               brok
             </span>
             <span className="sidebar-section-label text-[10px] font-medium leading-none">
-              search, build, ship
+              enterprise workspace
             </span>
           </div>
         </Link>
@@ -81,7 +85,7 @@ export default function AppSidebar() {
               className={navButtonClass}
             >
               <Link href="/" className="flex items-center gap-2">
-                <span className="flex size-7 items-center justify-center rounded-xl border border-border/65 bg-background/70 text-foreground/80 transition-all duration-200 group-hover/sidebar:border-border/85 group-hover/sidebar:bg-background group-hover/sidebar:text-foreground">
+                <span className={iconShellClass}>
                   <Plus className="size-4" />
                 </span>
                 <span>New</span>
@@ -96,7 +100,7 @@ export default function AppSidebar() {
               isActive={isActive('/') || isActive('/search')}
             >
               <Link href="/" className="flex items-center gap-2">
-                <span className="flex size-7 items-center justify-center rounded-xl border border-border/65 bg-background/70 text-foreground/80 transition-all duration-200 group-data-[active=true]/sidebar:border-transparent group-data-[active=true]/sidebar:bg-gradient-to-br group-data-[active=true]/sidebar:from-orange-400/90 group-data-[active=true]/sidebar:via-amber-300/85 group-data-[active=true]/sidebar:to-sky-400/90 group-data-[active=true]/sidebar:text-slate-950 group-hover/sidebar:border-border/85 group-hover/sidebar:bg-background group-hover/sidebar:text-foreground">
+                <span className={iconShellClass}>
                   <Search className="size-4" />
                 </span>
                 <span className="flex-1">Search</span>
@@ -114,7 +118,7 @@ export default function AppSidebar() {
                   isActive={isActive('/discover')}
                 >
                   <Link href="/discover" className="flex items-center gap-2">
-                    <span className="flex size-6 items-center justify-center rounded-xl border border-border/65 bg-background/68 transition-all duration-200 group-data-[active=true]/subnav:border-border/80 group-data-[active=true]/subnav:bg-background/90">
+                    <span className={subIconShellClass}>
                       <Compass className="size-4" />
                     </span>
                     <span className="flex-1">Discover</span>
@@ -132,7 +136,7 @@ export default function AppSidebar() {
                   isActive={isActive('/library')}
                 >
                   <Link href="/library" className="flex items-center gap-2">
-                    <span className="flex size-6 items-center justify-center rounded-xl border border-border/65 bg-background/68 transition-all duration-200 group-data-[active=true]/subnav:border-border/80 group-data-[active=true]/subnav:bg-background/90">
+                    <span className={subIconShellClass}>
                       <BookOpen className="size-4" />
                     </span>
                     <span className="flex-1">Library</span>
@@ -150,7 +154,7 @@ export default function AppSidebar() {
                   isActive={isActive('/spaces')}
                 >
                   <Link href="/spaces" className="flex items-center gap-2">
-                    <span className="flex size-6 items-center justify-center rounded-xl border border-border/65 bg-background/68 transition-all duration-200 group-data-[active=true]/subnav:border-border/80 group-data-[active=true]/subnav:bg-background/90">
+                    <span className={subIconShellClass}>
                       <PanelLeft className="size-4" />
                     </span>
                     <span className="flex-1">Spaces</span>
@@ -170,7 +174,7 @@ export default function AppSidebar() {
               isActive={isActive('/brokmail')}
             >
               <Link href="/brokmail" className="flex items-center gap-2">
-                <span className="flex size-7 items-center justify-center rounded-xl border border-border/65 bg-background/70 text-foreground/80 transition-all duration-200 group-data-[active=true]/sidebar:border-transparent group-data-[active=true]/sidebar:bg-gradient-to-br group-data-[active=true]/sidebar:from-orange-400/90 group-data-[active=true]/sidebar:via-amber-300/85 group-data-[active=true]/sidebar:to-sky-400/90 group-data-[active=true]/sidebar:text-slate-950 group-hover/sidebar:border-border/85 group-hover/sidebar:bg-background group-hover/sidebar:text-foreground">
+                <span className={iconShellClass}>
                   <Mail className="size-4" />
                 </span>
                 <span className="flex-1">BrokMail</span>
@@ -188,11 +192,13 @@ export default function AppSidebar() {
               isActive={isCodeActive}
             >
               <Link href="/brokcode" className="flex items-center gap-2">
-                <span className="flex size-7 items-center justify-center rounded-xl border border-border/65 bg-background/70 text-foreground/80 transition-all duration-200 group-data-[active=true]/sidebar:border-transparent group-data-[active=true]/sidebar:bg-gradient-to-br group-data-[active=true]/sidebar:from-orange-400/90 group-data-[active=true]/sidebar:via-amber-300/85 group-data-[active=true]/sidebar:to-sky-400/90 group-data-[active=true]/sidebar:text-slate-950 group-hover/sidebar:border-border/85 group-hover/sidebar:bg-background group-hover/sidebar:text-foreground">
+                <span className={iconShellClass}>
                   <Code2 className="size-4" />
                 </span>
-                <span className="flex-1">Code</span>
-                {isCodeActive ? <span className="nav-live-dot" aria-hidden /> : null}
+                <span className="flex-1">Brok Code</span>
+                {isCodeActive ? (
+                  <span className="nav-live-dot" aria-hidden />
+                ) : null}
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -204,7 +210,7 @@ export default function AppSidebar() {
               isActive={isActive('/brokcode/tui')}
             >
               <Link href="/brokcode/tui" className="flex items-center gap-2">
-                <span className="flex size-7 items-center justify-center rounded-xl border border-border/65 bg-background/70 text-foreground/80 transition-all duration-200 group-data-[active=true]/sidebar:border-transparent group-data-[active=true]/sidebar:bg-gradient-to-br group-data-[active=true]/sidebar:from-orange-400/90 group-data-[active=true]/sidebar:via-amber-300/85 group-data-[active=true]/sidebar:to-sky-400/90 group-data-[active=true]/sidebar:text-slate-950 group-hover/sidebar:border-border/85 group-hover/sidebar:bg-background group-hover/sidebar:text-foreground">
+                <span className={iconShellClass}>
                   <TerminalSquare className="size-4" />
                 </span>
                 <span className="flex-1">TUI</span>
@@ -222,7 +228,7 @@ export default function AppSidebar() {
               isActive={isActive('/playground')}
             >
               <Link href="/playground" className="flex items-center gap-2">
-                <span className="flex size-7 items-center justify-center rounded-xl border border-border/65 bg-background/70 text-foreground/80 transition-all duration-200 group-data-[active=true]/sidebar:border-transparent group-data-[active=true]/sidebar:bg-gradient-to-br group-data-[active=true]/sidebar:from-orange-400/90 group-data-[active=true]/sidebar:via-amber-300/85 group-data-[active=true]/sidebar:to-sky-400/90 group-data-[active=true]/sidebar:text-slate-950 group-hover/sidebar:border-border/85 group-hover/sidebar:bg-background group-hover/sidebar:text-foreground">
+                <span className={iconShellClass}>
                   <FlaskConical className="size-4" />
                 </span>
                 <span className="flex-1">Playground</span>
@@ -240,7 +246,7 @@ export default function AppSidebar() {
               isActive={isActive('/presentations')}
             >
               <Link href="/presentations" className="flex items-center gap-2">
-                <span className="flex size-7 items-center justify-center rounded-xl border border-border/65 bg-background/70 text-foreground/80 transition-all duration-200 group-data-[active=true]/sidebar:border-transparent group-data-[active=true]/sidebar:bg-gradient-to-br group-data-[active=true]/sidebar:from-orange-400/90 group-data-[active=true]/sidebar:via-amber-300/85 group-data-[active=true]/sidebar:to-sky-400/90 group-data-[active=true]/sidebar:text-slate-950 group-hover/sidebar:border-border/85 group-hover/sidebar:bg-background group-hover/sidebar:text-foreground">
+                <span className={iconShellClass}>
                   <Presentation className="size-4" />
                 </span>
                 <span className="flex-1">Slides</span>
@@ -258,7 +264,7 @@ export default function AppSidebar() {
               isActive={isActive('/integrations')}
             >
               <Link href="/integrations" className="flex items-center gap-2">
-                <span className="flex size-7 items-center justify-center rounded-xl border border-border/65 bg-background/70 text-foreground/80 transition-all duration-200 group-data-[active=true]/sidebar:border-transparent group-data-[active=true]/sidebar:bg-gradient-to-br group-data-[active=true]/sidebar:from-orange-400/90 group-data-[active=true]/sidebar:via-amber-300/85 group-data-[active=true]/sidebar:to-sky-400/90 group-data-[active=true]/sidebar:text-slate-950 group-hover/sidebar:border-border/85 group-hover/sidebar:bg-background group-hover/sidebar:text-foreground">
+                <span className={iconShellClass}>
                   <PlugZap className="size-4" />
                 </span>
                 <span className="flex-1">Integrations</span>

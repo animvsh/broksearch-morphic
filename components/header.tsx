@@ -23,7 +23,7 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
   return (
     <header
       className={cn(
-        'shell-topbar pointer-events-none absolute top-0 right-0 z-[70] m-2 flex items-center justify-between rounded-[1.35rem] border border-border/70 bg-background/90 p-2 text-foreground backdrop-blur-xl transition-[width] duration-200 ease-linear md:m-3 md:p-3',
+        'shell-topbar pointer-events-none absolute top-0 right-0 z-[70] m-2 flex items-center justify-between rounded-xl border border-border/75 bg-card/92 p-2 text-foreground backdrop-blur-xl transition-[width] duration-200 ease-linear md:m-3 md:p-3',
         open ? 'md:w-[calc(100%-var(--sidebar-width))]' : 'md:w-full',
         'w-full'
       )}
@@ -34,7 +34,7 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
           title="Toggle sidebar"
         />
         <Link href="/" className="inline-flex min-w-0 items-center gap-2.5">
-          <span className="brand-badge brand-halo rounded-full p-1.5">
+          <span className="brand-badge brand-halo rounded-lg p-1.5">
             <IconBlinkingLogo className="size-4" />
           </span>
           <div className="flex min-w-0 flex-col">
@@ -43,7 +43,7 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
             </span>
             <span className="hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:inline-flex">
               <span className="brand-status-pulse" aria-hidden />
-              beautifully alive
+              enterprise AI workspace
             </span>
           </div>
         </Link>

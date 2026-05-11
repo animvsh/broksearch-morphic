@@ -25,7 +25,8 @@ const fontSans = FontSans({
 })
 
 const title = 'brok'
-const description = 'Fast, intelligent AI search powered by Brok.'
+const description =
+  'Enterprise AI workspace for search, mail, code, presentations, and governed tool workflows.'
 const metadataBaseUrl =
   process.env.NEXT_PUBLIC_APP_URL ||
   process.env.NEXT_PUBLIC_BASE_URL ||
