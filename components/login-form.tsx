@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
+import { resolveSafeNextPath } from '@/lib/auth/redirect'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils/index'
 
@@ -31,8 +32,7 @@ export function LoginForm({
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
-  const safeRedirectTo =
-    redirectTo && redirectTo.startsWith('/') ? redirectTo : '/'
+  const safeRedirectTo = resolveSafeNextPath(redirectTo)
   const signUpHref =
     safeRedirectTo === '/'
       ? '/auth/sign-up'

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { generateApiKey, hashApiKey } from '@/lib/api-key'
 
@@ -35,6 +35,14 @@ vi.mock('@/lib/db/schema', () => ({
 
 describe('verifyRequestAuth', () => {
   const testKey = generateApiKey('live')
+
+  afterEach(() => {
+    delete process.env.BROK_CLOUD_DEPLOYMENT
+    delete process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK
+    delete process.env.BROK_DISABLE_LOCAL_AUTH_FALLBACK
+    delete process.env.BROK_SMOKE_API_KEY
+    vi.clearAllMocks()
+  })
 
   it('returns error for missing authorization header', async () => {
     const mockRequest = {
@@ -89,6 +97,27 @@ describe('verifyRequestAuth', () => {
     if (!result.success) {
       expect(result.error).toBe('invalid_api_key')
       expect(result.status).toBe(401)
+    }
+  })
+
+  it('does not allow the local fallback key in cloud deployments', async () => {
+    process.env.BROK_CLOUD_DEPLOYMENT = 'true'
+    mockSelect.mockImplementationOnce(() => {
+      throw new Error('database unavailable')
+    })
+
+    const mockRequest = {
+      headers: {
+        get: (name: string) =>
+          name === 'x-api-key' ? 'brok_sk_local_smoke' : null
+      }
+    } as unknown as Request
+
+    const result = await verifyRequestAuth(mockRequest)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error).toBe('auth_storage_unavailable')
+      expect(result.status).toBe(503)
     }
   })
 })
