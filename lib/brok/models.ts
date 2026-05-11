@@ -99,7 +99,7 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
   'MiniMax-M2.7': {
     name: 'MiniMax M2.7',
     description:
-      'Beginning the journey of recursive self-improvement (about 60 tokens/sec).',
+      'Beginning the journey of recursive self-improvement (output speed approximately 60 tps).',
     provider: 'minimax',
     providerModel: 'MiniMax-M2.7',
     inputCostPerMillion: 0.1,
@@ -114,7 +114,7 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
   'MiniMax-M2.7-highspeed': {
     name: 'MiniMax M2.7 Highspeed',
     description:
-      'Same M2.7 performance with faster output, around 100 tokens/sec.',
+      'M2.7 Highspeed: Same performance, faster and more agile (output speed approximately 100 tps).',
     provider: 'minimax',
     providerModel: 'MiniMax-M2.7-highspeed',
     inputCostPerMillion: 0.1,
@@ -129,7 +129,7 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
   'MiniMax-M2.5': {
     name: 'MiniMax M2.5',
     description:
-      'Peak performance and strong value for complex work, around 60 tokens/sec.',
+      'Peak Performance. Ultimate Value. Master the Complex (output speed approximately 60 tps).',
     provider: 'minimax',
     providerModel: 'MiniMax-M2.5',
     inputCostPerMillion: 0.1,
@@ -143,7 +143,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
   },
   'MiniMax-M2.5-highspeed': {
     name: 'MiniMax M2.5 Highspeed',
-    description: 'MiniMax M2.5 with faster output, around 100 tokens/sec.',
+    description:
+      'M2.5 highspeed: Same performance, faster and more agile (output speed approximately 100 tps).',
     provider: 'minimax',
     providerModel: 'MiniMax-M2.5-highspeed',
     inputCostPerMillion: 0.1,
@@ -158,7 +159,7 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
   'MiniMax-M2.1': {
     name: 'MiniMax M2.1',
     description:
-      'Powerful multilingual programming capabilities, around 60 tokens/sec.',
+      'Powerful Multi-Language Programming Capabilities with Comprehensively Enhanced Programming Experience (output speed approximately 60 tps).',
     provider: 'minimax',
     providerModel: 'MiniMax-M2.1',
     inputCostPerMillion: 0.1,
@@ -172,8 +173,7 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
   },
   'MiniMax-M2.1-highspeed': {
     name: 'MiniMax M2.1 Highspeed',
-    description:
-      'MiniMax M2.1 with faster, more agile output around 100 tokens/sec.',
+    description: 'Faster and More Agile (output speed approximately 100 tps).',
     provider: 'minimax',
     providerModel: 'MiniMax-M2.1-highspeed',
     inputCostPerMillion: 0.1,

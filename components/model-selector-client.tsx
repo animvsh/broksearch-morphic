@@ -64,6 +64,10 @@ function ProviderLogo({ providerId }: { providerId: string }) {
   )
 }
 
+function formatContextWindow(contextWindow?: number) {
+  return contextWindow ? contextWindow.toLocaleString('en-US') : null
+}
+
 interface ModelSelectorClientProps {
   data: ModelSelectorData
 }
@@ -154,7 +158,7 @@ export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
                   return (
                     <CommandItem
                       key={value}
-                      value={`${value} ${model.name} ${provider}`}
+                      value={`${value} ${model.name} ${model.description ?? ''} ${provider}`}
                       onSelect={() => {
                         const nextModel = selectableByKey[value]
                         if (!nextModel) {
@@ -171,16 +175,40 @@ export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
                         )
                         setOpen(false)
                       }}
-                      className="cursor-pointer"
+                      className="cursor-pointer items-start gap-2 py-2"
                     >
                       <Check
                         className={cn(
-                          'h-4 w-4',
+                          'mt-0.5 h-4 w-4',
                           isSelected ? 'opacity-100' : 'opacity-0'
                         )}
                       />
-                      <ProviderLogo providerId={model.providerId} />
-                      <span className="truncate">{model.name}</span>
+                      <span className="mt-0.5">
+                        <ProviderLogo providerId={model.providerId} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate font-medium">
+                            {model.name}
+                          </span>
+                          {model.speedLabel ? (
+                            <span className="shrink-0 rounded-md border border-border/60 bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                              {model.speedLabel}
+                            </span>
+                          ) : null}
+                        </span>
+                        {model.description || model.contextWindow ? (
+                          <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                            {model.description}
+                            {model.contextWindow ? (
+                              <>
+                                {model.description ? ' · ' : ''}
+                                {formatContextWindow(model.contextWindow)} ctx
+                              </>
+                            ) : null}
+                          </span>
+                        ) : null}
+                      </span>
                     </CommandItem>
                   )
                 })}

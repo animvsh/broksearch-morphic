@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 
+import { BROK_CHAT_MODELS } from '@/lib/brok/chat-models'
 import { DEFAULT_MODEL } from '@/lib/config/default-model'
 import {
   MODEL_SELECTION_COOKIE,
@@ -40,25 +41,30 @@ function withDefaultModel(
     return modelsByProvider
   }
 
-  const alreadyListed = Object.values(modelsByProvider)
-    .flat()
-    .some(
-      model =>
-        model.providerId === DEFAULT_MODEL.providerId &&
-        model.id === DEFAULT_MODEL.id
-    )
-
-  if (alreadyListed) {
-    return modelsByProvider
-  }
-
   return {
     ...modelsByProvider,
-    [DEFAULT_MODEL.provider]: [
-      DEFAULT_MODEL,
-      ...(modelsByProvider[DEFAULT_MODEL.provider] ?? [])
-    ]
+    [DEFAULT_MODEL.provider]: mergeModels(
+      BROK_CHAT_MODELS,
+      modelsByProvider[DEFAULT_MODEL.provider] ?? []
+    )
   }
+}
+
+function mergeModels(primaryModels: Model[], secondaryModels: Model[]): Model[] {
+  const seen = new Set<string>()
+  const merged: Model[] = []
+
+  for (const model of [...primaryModels, ...secondaryModels]) {
+    const key = modelKey(model)
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    merged.push(model)
+  }
+
+  return merged
 }
 
 function resolveSelectedModelKey(
@@ -87,15 +93,6 @@ function resolveSelectedModelKey(
 }
 
 export async function getModelSelectorData(): Promise<ModelSelectorData> {
-  if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') {
-    return {
-      enabled: false,
-      modelsByProvider: {},
-      selectedModelKey: '',
-      hasAvailableModels: false
-    }
-  }
-
   const modelsByProvider = withDefaultModel(await fetchAvailableModels())
   const fallbackModel =
     isProviderEnabled(DEFAULT_MODEL.providerId) &&

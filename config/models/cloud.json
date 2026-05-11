@@ -2,28 +2,40 @@
   "version": 2,
   "models": {
     "quick": {
-      "id": "minimax-m2.7",
-      "name": "brok-3",
+      "id": "MiniMax-M2.7-highspeed",
+      "name": "Brok 3 Fast",
       "provider": "Brok",
-      "providerId": "openai-compatible"
+      "providerId": "openai-compatible",
+      "description": "M2.7 Highspeed: same performance, faster and more agile.",
+      "contextWindow": 204800,
+      "speedLabel": "about 100 tps"
     },
     "search": {
-      "id": "minimax-m2.7",
-      "name": "brok-3 search",
+      "id": "MiniMax-M2.7",
+      "name": "Brok 3 Search",
       "provider": "Brok",
-      "providerId": "openai-compatible"
+      "providerId": "openai-compatible",
+      "description": "M2.7 reasoning for search-grounded long-context work.",
+      "contextWindow": 204800,
+      "speedLabel": "about 60 tps"
     },
     "deep": {
-      "id": "minimax-m2.7",
-      "name": "brok-3 deep",
+      "id": "MiniMax-M2.7",
+      "name": "Brok 3 Deep",
       "provider": "Brok",
-      "providerId": "openai-compatible"
+      "providerId": "openai-compatible",
+      "description": "M2.7 reasoning for deeper research and synthesis.",
+      "contextWindow": 204800,
+      "speedLabel": "about 60 tps"
     },
     "code": {
-      "id": "brok-code",
-      "name": "brok-code",
+      "id": "MiniMax-M2.7-highspeed",
+      "name": "Brok Code",
       "provider": "Brok",
-      "providerId": "openai-compatible"
+      "providerId": "openai-compatible",
+      "description": "Fast coding-agent route for interactive implementation work.",
+      "contextWindow": 204800,
+      "speedLabel": "about 100 tps"
     }
   }
 }

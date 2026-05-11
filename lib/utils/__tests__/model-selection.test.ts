@@ -89,6 +89,25 @@ describe('selectModel', () => {
     expect(result).toEqual(quickModel)
   })
 
+  it('uses the selected Brok chat model in cloud mode', async () => {
+    const result = await selectModel({
+      searchMode: 'quick',
+      cookieStore: createCookieStore(
+        'openai-compatible:MiniMax-M2.7-highspeed'
+      )
+    })
+
+    expect(result).toEqual({
+      id: 'MiniMax-M2.7-highspeed',
+      name: 'Brok 3 Fast',
+      provider: 'Brok',
+      providerId: 'openai-compatible',
+      description: 'M2.7 Highspeed: same performance, faster and more agile.',
+      contextWindow: 204800,
+      speedLabel: 'about 100 tps'
+    })
+  })
+
   it('falls back to DEFAULT_MODEL when cloud models are unavailable', async () => {
     matrix = {}
     setMatrixImplementation()

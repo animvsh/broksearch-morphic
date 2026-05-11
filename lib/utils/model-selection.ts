@@ -1,5 +1,6 @@
 import { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies'
 
+import { getBrokChatModel } from '@/lib/brok/chat-models'
 import { DEFAULT_MODEL } from '@/lib/config/default-model'
 import { isCloudDeployment } from '@/lib/config/load-models-config'
 import {
@@ -60,6 +61,12 @@ interface ModelSelectionParams {
 }
 
 function buildLocalCookieModel(providerId: string, modelId: string): Model {
+  const brokChatModel =
+    providerId === DEFAULT_MODEL.providerId ? getBrokChatModel(modelId) : null
+  if (brokChatModel) {
+    return brokChatModel
+  }
+
   const providerOptions = buildProviderOptions(providerId, modelId)
 
   return {
@@ -108,11 +115,21 @@ export async function selectModel({
   searchMode,
   cookieStore
 }: ModelSelectionParams): Promise<Model | null> {
-  if (!isCloudDeployment()) {
-    const parsedCookie = parseModelSelectionCookie(
-      cookieStore?.get(MODEL_SELECTION_COOKIE)?.value
-    )
+  const parsedCookie = parseModelSelectionCookie(
+    cookieStore?.get(MODEL_SELECTION_COOKIE)?.value
+  )
 
+  if (
+    parsedCookie?.providerId === DEFAULT_MODEL.providerId &&
+    isProviderEnabled(DEFAULT_MODEL.providerId)
+  ) {
+    const brokChatModel = getBrokChatModel(parsedCookie.modelId)
+    if (brokChatModel) {
+      return brokChatModel
+    }
+  }
+
+  if (!isCloudDeployment()) {
     if (parsedCookie) {
       try {
         if (!isProviderEnabled(parsedCookie.providerId)) {

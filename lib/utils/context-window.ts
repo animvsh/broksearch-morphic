@@ -30,7 +30,16 @@ const MODEL_CONTEXT_WINDOWS: Record<string, ModelContextInfo> = {
   // xAI Models
   'grok-4-0709': { contextWindow: 256000, outputTokens: 8192 },
   'grok-3': { contextWindow: 131072, outputTokens: 8192 },
-  'grok-3-mini': { contextWindow: 131072, outputTokens: 8192 }
+  'grok-3-mini': { contextWindow: 131072, outputTokens: 8192 },
+
+  // Brok / MiniMax Token Plan Models
+  'MiniMax-M2.7': { contextWindow: 204800, outputTokens: 8192 },
+  'MiniMax-M2.7-highspeed': { contextWindow: 204800, outputTokens: 8192 },
+  'MiniMax-M2.5': { contextWindow: 204800, outputTokens: 8192 },
+  'MiniMax-M2.5-highspeed': { contextWindow: 204800, outputTokens: 8192 },
+  'MiniMax-M2.1': { contextWindow: 204800, outputTokens: 8192 },
+  'MiniMax-M2.1-highspeed': { contextWindow: 204800, outputTokens: 8192 },
+  'MiniMax-M2': { contextWindow: 204800, outputTokens: 8192 }
 }
 
 // Default values for unknown models
@@ -59,7 +68,14 @@ const MODEL_TO_ENCODING: Record<string, TiktokenEncoding> = {
   'gemini-2.5-pro': 'cl100k_base',
   'grok-4-0709': 'cl100k_base', // Use GPT-4 tokenizer as approximation for Grok
   'grok-3': 'cl100k_base',
-  'grok-3-mini': 'cl100k_base'
+  'grok-3-mini': 'cl100k_base',
+  'MiniMax-M2.7': 'cl100k_base',
+  'MiniMax-M2.7-highspeed': 'cl100k_base',
+  'MiniMax-M2.5': 'cl100k_base',
+  'MiniMax-M2.5-highspeed': 'cl100k_base',
+  'MiniMax-M2.1': 'cl100k_base',
+  'MiniMax-M2.1-highspeed': 'cl100k_base',
+  'MiniMax-M2': 'cl100k_base'
 }
 
 /**

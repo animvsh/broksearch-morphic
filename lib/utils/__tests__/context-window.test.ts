@@ -42,6 +42,19 @@ describe('context-window', () => {
       expect(maxTokens).toBe(10650)
     })
 
+    test('uses the full MiniMax token-plan context window', () => {
+      const tokenPlanModel: Model = {
+        id: 'MiniMax-M2.7-highspeed',
+        name: 'Brok 3 Fast',
+        provider: 'Brok',
+        providerId: 'openai-compatible'
+      }
+
+      const maxTokens = getMaxAllowedTokens(tokenPlanModel)
+      // Expected: (204800 - 8192) - (204800 * 0.1) = 196608 - 20480 = 176128
+      expect(maxTokens).toBe(176128)
+    })
+
     test('ensures minimum viable token count', () => {
       // This would need a model with very small context window to test
       // For now, verify the function returns at least 1000
