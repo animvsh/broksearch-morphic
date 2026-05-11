@@ -28,6 +28,7 @@ const CACHE_TTL = 3600 // Cache time-to-live in seconds (1 hour)
 const CACHE_EXPIRATION_CHECK_INTERVAL = 3600000 // 1 hour in milliseconds
 
 let redisClient: Redis | ReturnType<typeof createClient> | null = null
+let redisUnavailableLogged = false
 
 // Initialize Redis client based on environment variables
 async function initializeRedisClient() {
@@ -45,18 +46,34 @@ async function initializeRedisClient() {
     return redisClient
   }
 
+  // In production, do not probe localhost Redis unless LOCAL_REDIS_URL is
+  // explicitly configured. This avoids noisy ECONNREFUSED loops on platforms
+  // like Railway when no Redis sidecar is present.
+  if (!process.env.LOCAL_REDIS_URL && process.env.NODE_ENV === 'production') {
+    if (!redisUnavailableLogged) {
+      console.warn(
+        'LOCAL_REDIS_URL is not configured; advanced search caching disabled.'
+      )
+      redisUnavailableLogged = true
+    }
+    redisClient = null
+    return redisClient
+  }
+
   // Otherwise, try to use local Redis (for Docker/SearXNG usage)
   try {
-    const localRedisUrl =
-      process.env.LOCAL_REDIS_URL || 'redis://localhost:6379'
+    const localRedisUrl = process.env.LOCAL_REDIS_URL || 'redis://localhost:6379'
     const client = createClient({ url: localRedisUrl })
     await client.connect()
     redisClient = client
   } catch (error) {
-    console.warn(
-      'Failed to connect to local Redis. Advanced search caching disabled.',
-      error
-    )
+    if (!redisUnavailableLogged) {
+      console.warn(
+        'Failed to connect to local Redis. Advanced search caching disabled.',
+        error
+      )
+      redisUnavailableLogged = true
+    }
     redisClient = null
   }
 
