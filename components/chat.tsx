@@ -553,7 +553,7 @@ export function Chat({
       <div
         className={cn(
           'dashboard-shell playful-canvas relative flex h-full min-w-0 flex-1 flex-col',
-          messages.length === 0 ? 'items-center justify-start' : ''
+          messages.length === 0 ? 'items-center justify-center pb-14' : ''
         )}
         data-testid="full-chat"
         onDragOver={handleDragOver}
