@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter as FontSans } from 'next/font/google'
+import Script from 'next/script'
 
 import { Analytics } from '@vercel/analytics/next'
 
@@ -72,6 +73,13 @@ export default async function RootLayout({
   }
 
   const userId = user?.id ?? (await getCurrentUserId())
+  const publicEnvScript =
+    supabaseUrl && supabaseAnonKey
+      ? `window.__BROK_PUBLIC_ENV__=${JSON.stringify({
+          NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseAnonKey
+        }).replace(/</g, '\\u003c')};`
+      : null
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -87,6 +95,13 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          {publicEnvScript ? (
+            <Script
+              id="brok-public-env"
+              strategy="beforeInteractive"
+              dangerouslySetInnerHTML={{ __html: publicEnvScript }}
+            />
+          ) : null}
           <UserProvider hasUser={!!userId}>
             <SidebarProvider defaultOpen={false}>
               <AppSidebar />

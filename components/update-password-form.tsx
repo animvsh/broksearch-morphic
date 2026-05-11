@@ -28,11 +28,11 @@ export function UpdatePasswordForm({
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    const supabase = createClient()
     setIsLoading(true)
     setError(null)
 
     try {
+      const supabase = createClient()
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw error
       // Redirect to root and refresh to ensure server components get updated session.

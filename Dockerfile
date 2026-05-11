@@ -13,6 +13,18 @@ RUN bun install
 # Copy source code and build
 COPY . .
 RUN npx next telemetry disable
+
+# Next.js inlines NEXT_PUBLIC_* values at build time. Railway exposes service
+# variables at runtime, but Docker builds need explicit build args/env for
+# browser-side auth code such as Supabase signup/login.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_BASE_URL
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_BASE_URL=$NEXT_PUBLIC_BASE_URL
 ENV DATABASE_URL=postgresql://user:pass@localhost:5432/db
 RUN npm run build
 
