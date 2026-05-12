@@ -1,6 +1,13 @@
 import { chromium } from 'playwright'
 
-import { createApiKey, ensureWorkspaceForUser } from '../lib/actions/api-keys'
+import { ensureWorkspaceForUser } from '../lib/actions/api-keys'
+import {
+  generateApiKey,
+  getKeyPrefix,
+  hashApiKey
+} from '../lib/api-key'
+import { db } from '../lib/db'
+import { apiKeys } from '../lib/db/schema'
 
 type UiCheck = {
   path: string
@@ -19,11 +26,10 @@ const uiChecks: UiCheck[] = [
   { path: '/', expectedText: 'Shift+Enter for newline' },
   { path: '/docs', expectedText: 'Brok Documentation' },
   { path: '/docs/quickstart', expectedText: 'Quickstart' },
+  { path: '/docs/api-keys', expectedText: 'API Keys' },
   { path: '/playground', expectedText: 'Brok Playground' },
   { path: '/presentations', expectedText: 'Presentations' },
-  { path: '/admin/brok', expectedText: 'Brok API' },
-  { path: '/api-keys', expectedText: 'Brok API Keys' },
-  { path: '/api-keys/new', expectedText: 'Create New API Key' }
+  { path: '/admin/brok', expectedText: 'Brok API' }
 ]
 
 const apiChecks: ApiCheck[] = [
@@ -129,30 +135,24 @@ const apiChecks: ApiCheck[] = [
 ]
 
 async function createSmokeTestKey() {
-  try {
-    const workspace = await ensureWorkspaceForUser(smokeUserId)
-    const key = await createApiKey(smokeUserId, workspace.id, {
-      name: 'Smoke Test Key',
-      environment: 'test',
-      scopes: ['chat:write', 'search:write', 'usage:read'],
-      allowedModels: [],
-      rpmLimit: 60,
-      dailyRequestLimit: 5000,
-      monthlyBudgetCents: 0
-    })
+  const workspace = await ensureWorkspaceForUser(smokeUserId)
+  const rawKey = generateApiKey('test')
 
-    return { workspaceId: workspace.id, apiKey: key.key, dbBacked: true }
-  } catch (error) {
-    console.warn(
-      'smoke key setup failed, using development fallback key:',
-      error instanceof Error ? error.message : error
-    )
-    return {
-      workspaceId: 'dev_workspace',
-      apiKey: process.env.BROK_SMOKE_API_KEY || 'brok_sk_local_smoke',
-      dbBacked: false
-    }
-  }
+  await db.insert(apiKeys).values({
+    workspaceId: workspace.id,
+    userId: smokeUserId,
+    name: 'Smoke Test Key',
+    keyPrefix: getKeyPrefix(rawKey),
+    keyHash: hashApiKey(rawKey),
+    environment: 'test',
+    scopes: ['chat:write', 'search:write', 'usage:read'],
+    allowedModels: [],
+    rpmLimit: 60,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0
+  })
+
+  return { workspaceId: workspace.id, apiKey: rawKey, dbBacked: true }
 }
 
 async function runUiChecks(apiKeyName?: string, dbBacked = true) {
