@@ -10,7 +10,7 @@ export interface SearchModeConfig {
   color: string
 }
 
-export const DEFAULT_SEARCH_MODE: SearchMode = 'quick'
+export const DEFAULT_SEARCH_MODE: SearchMode = 'search'
 export const VALID_SEARCH_MODES: SearchMode[] = [
   'quick',
   'search',
