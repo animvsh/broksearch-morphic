@@ -353,25 +353,98 @@ function resolveToolkitEnvKeys(toolkitSlug?: string) {
   return [...new Set(keys)]
 }
 
+function authConfigMatchesToolkit(
+  config: ComposioAuthConfig,
+  toolkitSlug?: string
+) {
+  if (!config.id) return false
+  if (!toolkitSlug) return true
+
+  return config.toolkit_slug === toolkitSlug
+}
+
+function isEnabledAuthConfig(config: ComposioAuthConfig) {
+  const status = config.status?.toLowerCase()
+  return !status || ['active', 'connected', 'enabled'].includes(status)
+}
+
+async function getAuthConfigById(
+  authConfigId: string,
+  toolkitSlug?: string
+): Promise<ComposioAuthConfig | null> {
+  if (isComposioConnectMode()) {
+    return {
+      id: authConfigId,
+      toolkit_slug: inferToolkitFromAuthConfigId(authConfigId) || toolkitSlug,
+      status: 'ENABLED'
+    }
+  }
+
+  try {
+    const payload = await composioRequest(
+      `/auth_configs/${encodeURIComponent(authConfigId)}`
+    )
+    const data =
+      payload &&
+      typeof payload === 'object' &&
+      (payload as Record<string, unknown>).data &&
+      typeof (payload as Record<string, unknown>).data === 'object'
+        ? ((payload as Record<string, unknown>).data as Record<string, unknown>)
+        : payload && typeof payload === 'object'
+          ? (payload as Record<string, unknown>)
+          : null
+
+    if (!data) return null
+
+    const config: ComposioAuthConfig = {
+      id: typeof data.id === 'string' ? data.id : undefined,
+      toolkit_slug:
+        typeof data.toolkit_slug === 'string'
+          ? data.toolkit_slug
+          : typeof data.toolkit === 'string'
+            ? data.toolkit
+            : undefined,
+      appName: typeof data.appName === 'string' ? data.appName : undefined,
+      status: typeof data.status === 'string' ? data.status : undefined
+    }
+
+    return authConfigMatchesToolkit(config, toolkitSlug) &&
+      isEnabledAuthConfig(config)
+      ? config
+      : null
+  } catch {
+    return null
+  }
+}
+
 async function resolveBackendAuthConfigId(
   authConfigId?: string,
   toolkitSlug?: string
 ) {
-  if (authConfigId) return authConfigId
+  if (authConfigId) {
+    const config = await getAuthConfigById(authConfigId, toolkitSlug)
+    if (config?.id) return config.id
+  }
 
   for (const key of resolveToolkitEnvKeys(toolkitSlug)) {
     const value = process.env[key]?.trim()
-    if (value) return value
+    if (!value) continue
+
+    const config = await getAuthConfigById(value, toolkitSlug)
+    if (config?.id) return config.id
   }
 
   const fallback = process.env.COMPOSIO_AUTH_CONFIG_ID?.trim()
-  if (fallback) return fallback
+  if (fallback) {
+    const config = await getAuthConfigById(fallback, toolkitSlug)
+    if (config?.id) return config.id
+  }
 
   const authConfigs = await listAuthConfigs(toolkitSlug)
   const matchingConfig = authConfigs.find(config =>
     toolkitSlug
-      ? config.toolkit_slug === toolkitSlug && config.id
-      : Boolean(config.id)
+      ? config.toolkit_slug === toolkitSlug && isEnabledAuthConfig(config)
+      : isEnabledAuthConfig(config)
   )
 
   return matchingConfig?.id
