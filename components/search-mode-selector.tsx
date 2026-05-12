@@ -42,6 +42,12 @@ export function SearchModeSelector() {
   useEffect(() => {
     const savedMode = getCookie('searchMode')
     const normalizedMode = normalizeSearchMode(savedMode)
+    const hasMigratedDefault = getCookie('searchModeDefaultMigrated') === 'true'
+    if (!hasMigratedDefault && (!savedMode || savedMode === 'quick')) {
+      setCookie('searchMode', 'search')
+      setCookie('searchModeDefaultMigrated', 'true')
+      return
+    }
     if (normalizedMode === 'code') {
       setCookie('searchMode', 'search')
       return

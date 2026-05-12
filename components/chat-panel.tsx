@@ -214,42 +214,42 @@ export function ChatPanel({
         'w-full group/form-container shrink-0',
         messages.length > 0
           ? 'sticky bottom-0 bg-transparent px-2 pb-2 md:pb-4'
-          : 'mx-auto flex w-full max-w-4xl flex-col px-4 pb-8 pt-32 sm:px-6 md:pt-40'
+          : 'mx-auto flex w-full max-w-4xl flex-col px-4 pb-8 pt-24 sm:px-6 md:pt-32'
       )}
     >
       {messages.length === 0 ? (
-        <div className="mx-auto mb-3 flex w-full max-w-3xl flex-wrap items-center gap-2 px-1">
+        <div className="mx-auto mb-3 flex w-full max-w-3xl flex-wrap items-center justify-center gap-2 px-1">
           <Link
             href="/brokcode"
-            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
           >
             <Code2 className="size-3.5" />
             Brok Code
           </Link>
           <Link
             href="/brokmail"
-            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
           >
             <Mail className="size-3.5" />
             BrokMail
           </Link>
           <Link
             href="/playground"
-            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
           >
             <FlaskConical className="size-3.5" />
             Playground
           </Link>
           <Link
             href="/presentations"
-            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
           >
             <Presentation className="size-3.5" />
             Slides
           </Link>
           <Link
             href="/integrations"
-            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
           >
             <PlugZap className="size-3.5" />
             Integrations
@@ -336,7 +336,7 @@ export function ChatPanel({
 
         <div
           className={cn(
-            'relative flex w-full flex-col gap-2 overflow-hidden rounded-xl border border-zinc-200 bg-white transition-colors',
+            'relative flex w-full flex-col gap-2 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_18px_50px_-42px_rgba(15,23,42,0.35)] transition-colors',
             isInputFocused &&
               'ring-2 ring-zinc-300 ring-offset-1 ring-offset-background'
           )}
