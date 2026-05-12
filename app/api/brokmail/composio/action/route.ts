@@ -33,8 +33,8 @@ type BrokMailComposioCalendarEvent = {
 
 const DEFAULT_GMAIL_TOOLKITS = ['gmail', 'googlesuper']
 const CALENDAR_TOOLKITS = [
-  'googlesuper',
   'googlecalendar',
+  'googlesuper',
   'google-calendar',
   'google_calendar',
   'gcal',

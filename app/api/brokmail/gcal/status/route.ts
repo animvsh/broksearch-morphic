@@ -11,8 +11,8 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const DEFAULT_GCAL_TOOLKIT_CANDIDATES = [
-  'googlesuper',
   'googlecalendar',
+  'googlesuper',
   'google-calendar',
   'google_calendar',
   'gcal',
