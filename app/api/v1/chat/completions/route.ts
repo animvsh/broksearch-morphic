@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { unauthorizedResponse, verifyRequestAuth } from '@/lib/brok/auth'
+import {
+  apiKeyHasScope,
+  forbiddenScopeResponse,
+  unauthorizedResponse,
+  verifyRequestAuth
+} from '@/lib/brok/auth'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import {
   calculateCost,
@@ -21,6 +26,9 @@ export async function POST(request: NextRequest) {
   const auth = await verifyRequestAuth(request)
   if (!auth.success) {
     return unauthorizedResponse(auth)
+  }
+  if (!apiKeyHasScope(auth.apiKey, 'chat:write')) {
+    return forbiddenScopeResponse('chat:write')
   }
 
   // Parse body

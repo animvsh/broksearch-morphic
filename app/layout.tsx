@@ -4,18 +4,13 @@ import Script from 'next/script'
 
 import { Analytics } from '@vercel/analytics/next'
 
-import { getCurrentUserId } from '@/lib/auth/get-current-user'
 import { UserProvider } from '@/lib/contexts/user-context'
 import { createClient } from '@/lib/supabase/server'
 import { cn } from '@/lib/utils'
 
-import { SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
 
-import AppSidebar from '@/components/app-sidebar'
-import ArtifactRoot from '@/components/artifact/artifact-root'
-import Header from '@/components/header'
-import { KeyboardShortcutHandler } from '@/components/keyboard-shortcut-handler'
+import { AppChrome } from '@/components/app-chrome'
 import { ThemeProvider } from '@/components/theme-provider'
 
 import './globals.css'
@@ -75,7 +70,6 @@ export default async function RootLayout({
     user = supabaseUser
   }
 
-  const userId = user?.id ?? (await getCurrentUserId())
   const publicEnvScript =
     supabaseUrl && supabaseAnonKey
       ? `window.__BROK_PUBLIC_ENV__=${JSON.stringify({
@@ -105,17 +99,8 @@ export default async function RootLayout({
               dangerouslySetInnerHTML={{ __html: publicEnvScript }}
             />
           ) : null}
-          <UserProvider hasUser={!!userId}>
-            <SidebarProvider defaultOpen={true}>
-              <AppSidebar />
-              <KeyboardShortcutHandler />
-              <div className="flex flex-col flex-1 min-w-0">
-                <Header user={user} />
-                <main className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
-                  <ArtifactRoot>{children}</ArtifactRoot>
-                </main>
-              </div>
-            </SidebarProvider>
+          <UserProvider hasUser={!!user}>
+            <AppChrome user={user}>{children}</AppChrome>
           </UserProvider>
           <Toaster />
           {enableVercelAnalytics ? <Analytics /> : null}

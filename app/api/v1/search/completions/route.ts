@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { unauthorizedResponse, verifyRequestAuth } from '@/lib/brok/auth'
+import {
+  apiKeyHasScope,
+  forbiddenScopeResponse,
+  unauthorizedResponse,
+  verifyRequestAuth
+} from '@/lib/brok/auth'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
 import { runSearchPipeline } from '@/lib/brok/search-pipeline'
@@ -20,6 +25,9 @@ export async function POST(request: NextRequest) {
   const auth = await verifyRequestAuth(request)
   if (!auth.success) {
     return unauthorizedResponse(auth)
+  }
+  if (!apiKeyHasScope(auth.apiKey, 'search:write')) {
+    return forbiddenScopeResponse('search:write')
   }
 
   // Parse body
@@ -58,6 +66,20 @@ export async function POST(request: NextRequest) {
         }
       },
       { status: 400 }
+    )
+  }
+
+  const allowedModels = auth.apiKey.allowedModels as string[]
+  if (allowedModels.length > 0 && !allowedModels.includes(model)) {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'invalid_request_error',
+          code: 'model_not_allowed',
+          message: `This API key does not have access to ${model}.`
+        }
+      },
+      { status: 403 }
     )
   }
 

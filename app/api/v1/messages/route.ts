@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { unauthorizedResponse, verifyRequestAuth } from '@/lib/brok/auth'
+import {
+  apiKeyHasScope,
+  forbiddenScopeResponse,
+  unauthorizedResponse,
+  verifyRequestAuth
+} from '@/lib/brok/auth'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import {
   calculateCost,
@@ -36,6 +41,9 @@ export async function POST(request: NextRequest) {
 
   if (!auth.success) {
     return unauthorizedResponse(auth)
+  }
+  if (!apiKeyHasScope(auth.apiKey, 'code:write')) {
+    return forbiddenScopeResponse('code:write')
   }
 
   const body = await request.json()

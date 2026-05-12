@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import { getCurrentUser } from '@/lib/auth/get-current-user'
 import {
   isComposioConfigured,
   isComposioConnectMode,
@@ -36,8 +36,8 @@ export async function GET() {
   }
 
   try {
-    const userId = await getCurrentUserId()
-    if (!userId) {
+    const user = await getCurrentUser()
+    if (!user) {
       return NextResponse.json(
         {
           configured: true,
@@ -53,7 +53,7 @@ export async function GET() {
 
     const accountsByToolkit = await Promise.all(
       resolveToolkitCandidates().map(async toolkit => {
-        const accounts = await listConnectedAccounts(userId, toolkit, 20)
+        const accounts = await listConnectedAccounts(user.id, toolkit, 20)
         return { toolkit, accounts }
       })
     )

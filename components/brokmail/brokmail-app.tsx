@@ -396,6 +396,7 @@ export function BrokMailApp() {
   const [isSharing, startShareTransition] = useTransition()
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>([])
   const [activity, setActivity] = useState<ActivityStep[]>([])
+  const [handledApprovalIds, setHandledApprovalIds] = useState<string[]>([])
   const [agentInput, setAgentInput] = useState('')
   const [isRunning, setIsRunning] = useState(false)
   const [composer, setComposer] = useState('')
@@ -1103,9 +1104,9 @@ export function BrokMailApp() {
         response = `${match.sender} - ${match.subject}\nFound because it mentions the contract and has ${match.hasAttachments ? 'an attachment' : 'matching context'}.\n\n${summarizeThread(match)}\n\nI also drafted the reply for review.`
         approval = {
           id: createId('approval'),
-          title: 'Ready to Send?',
+          title: 'Create Gmail Draft?',
           description:
-            'This sends the drafted reply to the current thread after your explicit approval.',
+            'This creates a Gmail draft in the current live thread. It does not send email.',
           action: 'send',
           targetThreadIds: [match.id]
         }
@@ -1146,9 +1147,9 @@ export function BrokMailApp() {
           'I drafted a reply from the selected thread. Review it below before sending or saving.'
         approval = {
           id: createId('approval'),
-          title: 'Ready to Send?',
+          title: 'Create Gmail Draft?',
           description:
-            'This sends the drafted reply to the current thread after your explicit approval.',
+            'This creates a Gmail draft in the selected live thread. It does not send email.',
           action: 'send',
           targetThreadIds: [selectedThread.id]
         }
@@ -1176,6 +1177,11 @@ export function BrokMailApp() {
   }
 
   async function approveAction(approval: ApprovalState, draft?: DraftState) {
+    if (handledApprovalIds.includes(approval.id)) {
+      toast.info('This approval has already been handled.')
+      return
+    }
+
     if (approval.action === 'archive') {
       const targetThreads = (
         approval.targetThreadIds?.length
@@ -1342,6 +1348,21 @@ export function BrokMailApp() {
         content: `${approval.title} approved. I logged the action and kept the approval trail.`
       }
     ])
+    setHandledApprovalIds(current => [...current, approval.id])
+  }
+
+  function cancelAction(approval: ApprovalState) {
+    setHandledApprovalIds(current =>
+      current.includes(approval.id) ? current : [...current, approval.id]
+    )
+    setMessages(current => [
+      ...current,
+      {
+        id: createId('assistant'),
+        role: 'assistant',
+        content: `${approval.title} cancelled. No Gmail or Calendar action was taken.`
+      }
+    ])
   }
 
   function insertDraft(draft: DraftState) {
@@ -1502,6 +1523,8 @@ export function BrokMailApp() {
           setAgentInput={setAgentInput}
           insertDraft={insertDraft}
           approveAction={approveAction}
+          cancelAction={cancelAction}
+          handledApprovalIds={handledApprovalIds}
           onShare={() => {
             startShareTransition(() => {
               void shareBrokMailChat()
@@ -2041,6 +2064,8 @@ function AgentPanel({
   setAgentInput,
   insertDraft,
   approveAction,
+  cancelAction,
+  handledApprovalIds,
   onShare
 }: {
   activity: ActivityStep[]
@@ -2052,6 +2077,8 @@ function AgentPanel({
   setAgentInput: (value: string) => void
   insertDraft: (draft: DraftState) => void
   approveAction: (approval: ApprovalState, draft?: DraftState) => void
+  cancelAction: (approval: ApprovalState) => void
+  handledApprovalIds: string[]
   onShare: () => void
 }) {
   return (
@@ -2176,24 +2203,31 @@ function AgentPanel({
                   <p className="text-xs leading-5">
                     {message.approval.description}
                   </p>
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <Button
-                      size="sm"
-                      className="w-full sm:w-auto"
-                      onClick={() =>
-                        approveAction(message.approval!, message.draft)
-                      }
-                    >
-                      Confirm
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full sm:w-auto"
-                    >
-                      Cancel
-                    </Button>
-                  </div>
+                  {handledApprovalIds.includes(message.approval.id) ? (
+                    <p className="mt-3 rounded-md bg-white/70 px-2 py-1.5 text-xs font-medium">
+                      Approval handled. This card cannot be reused.
+                    </p>
+                  ) : (
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        onClick={() =>
+                          approveAction(message.approval!, message.draft)
+                        }
+                      >
+                        Confirm
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        onClick={() => cancelAction(message.approval!)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

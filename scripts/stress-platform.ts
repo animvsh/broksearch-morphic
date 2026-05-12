@@ -352,12 +352,33 @@ async function runBrowserChecks(presentationId: string) {
   })
 
   try {
+    const protectedChecks = [
+      '/admin/brok',
+      '/admin/brok/logs',
+      '/admin/brok/providers'
+    ]
     const checks = [
-      { path: '/admin/brok', text: 'Brok API' },
-      { path: '/admin/brok/logs', text: 'Brok API Logs' },
-      { path: '/admin/brok/providers', text: 'Provider Routing' },
       { path: `/presentations/${presentationId}/present`, text: 'Intro' }
     ]
+
+    for (const path of protectedChecks) {
+      pageErrors.length = 0
+      await page.goto(`${baseUrl}${path}`, {
+        waitUntil: 'networkidle'
+      })
+
+      if (!page.url().includes('/auth/login')) {
+        throw new Error(`${path} should redirect to login when unauthenticated`)
+      }
+      if (!page.url().includes('redirectTo=')) {
+        throw new Error(`${path} login redirect missing redirectTo`)
+      }
+      if (pageErrors.length > 0) {
+        throw new Error(`${path} page errors: ${pageErrors.join('; ')}`)
+      }
+
+      console.log(`stress ui protected ok ${path}`)
+    }
 
     for (const check of checks) {
       pageErrors.length = 0

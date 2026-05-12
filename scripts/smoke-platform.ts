@@ -14,6 +14,10 @@ type UiCheck = {
   expectedText: string
 }
 
+type ProtectedUiCheck = {
+  path: string
+}
+
 type ApiCheck = {
   name: string
   run: (baseUrl: string, apiKey: string) => Promise<void>
@@ -27,9 +31,15 @@ const uiChecks: UiCheck[] = [
   { path: '/docs', expectedText: 'Brok Documentation' },
   { path: '/docs/quickstart', expectedText: 'Quickstart' },
   { path: '/docs/api-keys', expectedText: 'API Keys' },
-  { path: '/playground', expectedText: 'Brok Playground' },
-  { path: '/presentations', expectedText: 'Presentations' },
-  { path: '/admin/brok', expectedText: 'Brok API' }
+  { path: '/playground', expectedText: 'Brok Playground' }
+]
+
+const protectedUiChecks: ProtectedUiCheck[] = [
+  { path: '/presentations' },
+  { path: '/admin/brok' },
+  { path: '/brokcode' },
+  { path: '/brokmail' },
+  { path: '/integrations' }
 ]
 
 const apiChecks: ApiCheck[] = [
@@ -165,15 +175,7 @@ async function runUiChecks(apiKeyName?: string, dbBacked = true) {
   })
 
   try {
-    const checksToRun = dbBacked
-      ? uiChecks
-      : uiChecks.filter(
-          check =>
-            !check.path.startsWith('/admin') &&
-            !check.path.startsWith('/api-keys')
-        )
-
-    for (const check of checksToRun) {
+    for (const check of uiChecks) {
       pageErrors.length = 0
 
       const response = await page.goto(`${baseUrl}${check.path}`, {
@@ -208,6 +210,36 @@ async function runUiChecks(apiKeyName?: string, dbBacked = true) {
       }
 
       console.log(`ui ok ${check.path}`)
+    }
+
+    for (const check of protectedUiChecks) {
+      pageErrors.length = 0
+
+      const response = await page.goto(`${baseUrl}${check.path}`, {
+        waitUntil: 'networkidle'
+      })
+      const currentUrl = page.url()
+      const status = response?.status() ?? 0
+
+      if (
+        !currentUrl.includes('/auth/login') &&
+        status !== 307 &&
+        status !== 308
+      ) {
+        throw new Error(
+          `${check.path} should redirect to /auth/login when unauthenticated; got ${currentUrl}`
+        )
+      }
+
+      if (!currentUrl.includes('redirectTo=')) {
+        throw new Error(`${check.path} login redirect missing redirectTo`)
+      }
+
+      if (pageErrors.length > 0) {
+        throw new Error(`${check.path} page errors: ${pageErrors.join('; ')}`)
+      }
+
+      console.log(`ui protected ok ${check.path}`)
     }
   } finally {
     await browser.close()

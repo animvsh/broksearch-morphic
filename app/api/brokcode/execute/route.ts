@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { unauthorizedResponse, verifyRequestAuth } from '@/lib/brok/auth'
+import {
+  apiKeyHasScope,
+  forbiddenScopeResponse,
+  unauthorizedResponse,
+  verifyRequestAuth
+} from '@/lib/brok/auth'
 import { BrokModelId } from '@/lib/brok/models'
 import { routeToProviderResponse } from '@/lib/brok/provider-router'
 import {
@@ -444,14 +449,30 @@ export async function POST(request: NextRequest) {
   const inboundApiKey = xApiKey ?? extractBearerToken(request)
   const authResult = await verifyRequestAuth(request)
 
-  if (authResult.success) {
-    const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
-    if (accountMismatch) return accountMismatch
-  } else {
-    const user = await getRequiredBrokAccountUser()
-    if (!user) {
-      return unauthorizedResponse(authResult)
-    }
+  if (!authResult.success) {
+    return unauthorizedResponse(authResult)
+  }
+
+  const user = await getRequiredBrokAccountUser()
+  if (!user) {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'authentication_error',
+          code: 'brok_login_required',
+          message:
+            'Sign in to Brok and use an API key from that account before running BrokCode Cloud.'
+        }
+      },
+      { status: 401 }
+    )
+  }
+
+  const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
+  if (accountMismatch) return accountMismatch
+
+  if (!apiKeyHasScope(authResult.apiKey, 'code:write')) {
+    return forbiddenScopeResponse('code:write')
   }
 
   if (isDeepSecSecurityScanCommand(command)) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import { getCurrentUser } from '@/lib/auth/get-current-user'
 import {
   createConnectedAccountLink,
   isComposioConfigured
@@ -52,8 +52,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const userId = await getCurrentUserId()
-    if (!userId) {
+    const user = await getCurrentUser()
+    if (!user) {
       return NextResponse.json(
         {
           provider: 'composio',
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     for (const toolkitSlug of resolveToolkitCandidates()) {
       try {
         const link = await createConnectedAccountLink({
-          userId,
+          userId: user.id,
           toolkitSlug,
           redirectUrl
         })

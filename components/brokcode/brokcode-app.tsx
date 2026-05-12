@@ -745,7 +745,7 @@ export function BrokCodeApp({
 
   const hasLiveKey = Boolean(apiKey && isValidBrokApiKey(apiKey))
   const hasAccountRuntime = Boolean(accountEmail)
-  const hasLiveRuntime = hasAccountRuntime || hasLiveKey
+  const hasLiveRuntime = hasLiveKey
   const maskedKey = hasLiveKey && apiKey ? maskBrokApiKey(apiKey) : null
   const codeModels =
     models.length > 0
@@ -1816,15 +1816,15 @@ export function BrokCodeApp({
       return
     }
 
-    if (!hasLiveRuntime) {
-      setRuntimeError('Sign in to Brok before starting a real run.')
+    if (!hasLiveKey || !apiKey) {
+      setRuntimeError('Add a Brok API key before starting a real run.')
       setMessages(current => [
         ...current,
         {
           id: createId('system'),
           role: 'system',
           content:
-            'Real execution requires a signed-in Brok account. Sign in, then run this command again.'
+            'Real BrokCode execution requires a signed-in Brok account and an account-owned brok_sk_ API key. Create or paste your key, then run this command again.'
         }
       ])
       return
@@ -2124,7 +2124,7 @@ export function BrokCodeApp({
         return
       }
 
-      if (!hasLiveRuntime) {
+      if (!hasLiveKey) {
         pendingCloudStartPromptRef.current = prompt
         setMessages(current => [
           ...current,
@@ -2132,7 +2132,7 @@ export function BrokCodeApp({
             id: createId('system'),
             role: 'system',
             content:
-              'BrokCode Cloud is queued. Sign in to Brok and the cloud run will start with this prompt.',
+              'BrokCode Cloud is queued. Sign in and add an account-owned Brok API key to start this cloud run.',
             actions: ['connect-github']
           }
         ])
@@ -2149,13 +2149,14 @@ export function BrokCodeApp({
     autoStart,
     connectGithub,
     githubStatus,
+    hasLiveKey,
     hasLiveRuntime,
     initialPrompt,
     runtimeBootstrapped
   ])
 
   useEffect(() => {
-    if (!hasLiveRuntime || isRunning) return
+    if (!hasLiveKey || !hasLiveRuntime || isRunning) return
     if (connectGithub && githubStatus !== 'connected') return
 
     const prompt = pendingCloudStartPromptRef.current
@@ -2163,7 +2164,7 @@ export function BrokCodeApp({
 
     pendingCloudStartPromptRef.current = null
     void runCommandRef.current?.(buildCloudStartCommand(prompt, connectGithub))
-  }, [connectGithub, githubStatus, hasLiveRuntime, isRunning])
+  }, [connectGithub, githubStatus, hasLiveKey, hasLiveRuntime, isRunning])
 
   return (
     <div className="dashboard-shell brokcode-shell flex h-full w-full flex-col pt-12 text-foreground">
@@ -2217,7 +2218,7 @@ export function BrokCodeApp({
               {hasLiveKey
                 ? 'Account key'
                 : hasAccountRuntime
-                  ? 'Account ready'
+                  ? 'Key required'
                   : 'Sign in required'}
             </Badge>
             <Badge variant="outline" className="rounded-md">

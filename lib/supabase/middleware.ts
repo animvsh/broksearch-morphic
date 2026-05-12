@@ -40,22 +40,29 @@ export async function updateSession(request: NextRequest) {
     data: { user }
   } = await supabase.auth.getUser()
 
-  // Define public paths that don't require authentication
-  const publicPaths = [
-    '/', // Root path
-    '/auth', // Auth-related pages
-    '/share', // Share pages
-    '/api' // API routes
-    // Add other public paths here if needed
-  ]
-
   const pathname = request.nextUrl.pathname
+  const isPublicPath =
+    pathname === '/' ||
+    pathname === '/discover' ||
+    pathname === '/library' ||
+    pathname === '/spaces' ||
+    pathname === '/playground' ||
+    pathname.startsWith('/auth') ||
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/docs') ||
+    pathname.startsWith('/search') ||
+    pathname.startsWith('/share') ||
+    /^\/presentations\/[^/]+\/present$/.test(pathname)
 
   // Redirect to login if the user is not authenticated and the path is not public
-  if (!user && !publicPaths.some(path => pathname.startsWith(path))) {
+  if (!user && !isPublicPath) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
+    url.searchParams.set(
+      'redirectTo',
+      `${request.nextUrl.pathname}${request.nextUrl.search}`
+    )
     return NextResponse.redirect(url)
   }
 

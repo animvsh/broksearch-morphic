@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { unauthorizedResponse, verifyRequestAuth } from '@/lib/brok/auth'
+import {
+  apiKeyHasScope,
+  forbiddenScopeResponse,
+  unauthorizedResponse,
+  verifyRequestAuth
+} from '@/lib/brok/auth'
 import { enforceBrokCodeAccountOwnership } from '@/lib/brokcode/account-guard'
 
 export const runtime = 'nodejs'
@@ -308,6 +313,9 @@ export async function POST(request: NextRequest) {
   }
   const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
   if (accountMismatch) return accountMismatch
+  if (!apiKeyHasScope(authResult.apiKey, 'code:write')) {
+    return forbiddenScopeResponse('code:write')
+  }
 
   const body = await request.json().catch(() => ({}))
   const commitSha =

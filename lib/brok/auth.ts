@@ -24,6 +24,27 @@ export type AuthResult =
       status: number
     }
 
+export function apiKeyHasScope(
+  apiKey: typeof apiKeys.$inferSelect,
+  requiredScope: string
+) {
+  const scopes = Array.isArray(apiKey.scopes) ? apiKey.scopes : []
+  return scopes.includes(requiredScope) || scopes.includes('*')
+}
+
+export function forbiddenScopeResponse(requiredScope: string) {
+  return NextResponse.json(
+    {
+      error: {
+        type: 'permission_error',
+        code: 'missing_scope',
+        message: `This API key requires the ${requiredScope} scope.`
+      }
+    },
+    { status: 403 }
+  )
+}
+
 export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   const authHeader = request.headers.get('authorization')
   const apiKeyHeader = request.headers.get('x-api-key')
@@ -99,18 +120,13 @@ function canUseLocalAuthFallback() {
   }
 
   if (process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK === 'true') {
+    if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') {
+      return false
+    }
     return true
   }
 
-  if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') {
-    return false
-  }
-
-  if (process.env.NODE_ENV !== 'production') {
-    return true
-  }
-
-  return process.env.ENABLE_AUTH !== 'true'
+  return false
 }
 
 function createLocalFallbackAuth(key: string): AuthResult | null {
