@@ -129,6 +129,48 @@ const quickPrompts = [
   'Whenever I get a receipt, label it expenses.'
 ]
 
+async function executeComposioBrokMailAction({
+  action,
+  threads,
+  draftBody,
+  calendarEvent
+}: {
+  action:
+    | 'create_draft'
+    | 'archive_threads'
+    | 'create_calendar_event'
+    | 'delete_calendar_event'
+  threads?: MailThread[]
+  draftBody?: string
+  calendarEvent?: ApprovalState['calendarEvent']
+}) {
+  const response = await fetch('/api/brokmail/composio/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action,
+      threads: (threads ?? []).map(thread => ({
+        id: thread.id,
+        providerThreadId: thread.providerThreadId,
+        providerMessageIds: thread.providerMessageIds,
+        senderEmail: thread.senderEmail,
+        subject: thread.subject
+      })),
+      draftBody,
+      calendarEvent
+    })
+  })
+
+  const body = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(
+      typeof body?.error === 'string' ? body.error : 'Composio action failed.'
+    )
+  }
+
+  return body
+}
+
 function consumeBrokMailGoogleTokenFromHash() {
   if (typeof window === 'undefined' || !window.location.hash) return null
 
@@ -907,9 +949,9 @@ export function BrokMailApp() {
       updateActivity('Parsing calendar command...')
       await wait(130)
 
-      if (!googleAccessToken) {
+      if (!googleAccessToken && calendarConnectionMode !== 'composio') {
         response =
-          'I can only create live events after live calendar sync is active in this browser. Click Load Live Calendar and run this again.'
+          'I can only create live events after live calendar sync is active in this browser or Google Calendar is connected through Composio.'
       } else {
         const summary = parseEventTitle(command)
         const startAt = parseCalendarStartDate(command)
@@ -949,16 +991,35 @@ export function BrokMailApp() {
       updateActivity('Locating calendar event to remove...')
       await wait(140)
 
-      if (!googleAccessToken) {
+      if (!googleAccessToken && calendarConnectionMode !== 'composio') {
         response =
-          'I can only remove live events after live calendar sync is active in this browser. Click Load Live Calendar and retry.'
+          'I can only remove live events after live calendar sync is active in this browser or Google Calendar is connected through Composio.'
       } else {
         let candidate = findCalendarEventToDelete(command, calendarEvents)
 
-        if (!candidate) {
+        if (!candidate && googleAccessToken) {
           const latestEvents = await fetchCalendarEvents(googleAccessToken, 20)
           setCalendarEvents(latestEvents)
           candidate = findCalendarEventToDelete(command, latestEvents)
+        }
+
+        const explicitEventId = command.match(/\bid\s+([^\s]+)/i)?.[1]
+
+        if (
+          !candidate &&
+          explicitEventId &&
+          calendarConnectionMode === 'composio'
+        ) {
+          candidate = {
+            id: explicitEventId,
+            summary: `Calendar event ${explicitEventId}`,
+            description: '',
+            location: '',
+            startAt: new Date().toISOString(),
+            endAt: new Date(Date.now() + 45 * 60_000).toISOString(),
+            isAllDay: false,
+            htmlLink: ''
+          }
         }
 
         if (!candidate) {
@@ -1193,22 +1254,32 @@ export function BrokMailApp() {
             : []
       ) as MailThread[]
 
-      if (!googleAccessToken || targetThreads.length === 0) {
-        toast.error(
-          'Load live inbox and choose real thread targets before archiving in Gmail.'
-        )
+      if (targetThreads.length === 0) {
+        toast.error('Choose real thread targets before archiving in Gmail.')
         return
       }
 
       try {
-        await Promise.all(
-          targetThreads.map(thread =>
-            archiveGmailThread({
-              accessToken: googleAccessToken,
-              thread
-            })
+        if (googleAccessToken) {
+          await Promise.all(
+            targetThreads.map(thread =>
+              archiveGmailThread({
+                accessToken: googleAccessToken,
+                thread
+              })
+            )
           )
-        )
+        } else if (connectionMode === 'composio') {
+          await executeComposioBrokMailAction({
+            action: 'archive_threads',
+            threads: targetThreads
+          })
+        } else {
+          toast.error(
+            'Load live inbox or connect Gmail through Composio before archiving.'
+          )
+          return
+        }
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : 'Could not archive in Gmail.'
@@ -1225,7 +1296,9 @@ export function BrokMailApp() {
             : thread
         )
       )
-      toast.success('Archived in Gmail')
+      toast.success(
+        googleAccessToken ? 'Archived in Gmail' : 'Archived through Composio'
+      )
     }
 
     if (approval.action === 'send') {
@@ -1234,19 +1307,30 @@ export function BrokMailApp() {
           ? threads.find(thread => thread.id === approval.targetThreadIds?.[0])
           : null) ?? selectedThread
 
-      if (!draft || !googleAccessToken || !targetThread) {
-        toast.error(
-          'Load live inbox and select a real thread before creating a Gmail draft.'
-        )
+      if (!draft || !targetThread) {
+        toast.error('Select a real thread before creating a Gmail draft.')
         return
       }
 
       try {
-        await createGmailDraft({
-          accessToken: googleAccessToken,
-          thread: targetThread,
-          body: draft.body
-        })
+        if (googleAccessToken) {
+          await createGmailDraft({
+            accessToken: googleAccessToken,
+            thread: targetThread,
+            body: draft.body
+          })
+        } else if (connectionMode === 'composio') {
+          await executeComposioBrokMailAction({
+            action: 'create_draft',
+            threads: [targetThread],
+            draftBody: draft.body
+          })
+        } else {
+          toast.error(
+            'Load live inbox or connect Gmail through Composio before creating a draft.'
+          )
+          return
+        }
       } catch (error) {
         toast.error(
           error instanceof Error
@@ -1255,36 +1339,54 @@ export function BrokMailApp() {
         )
         return
       }
-      toast.success('Gmail draft created for approval')
+      toast.success(
+        googleAccessToken
+          ? 'Gmail draft created for approval'
+          : 'Composio created the Gmail draft'
+      )
     }
 
     if (approval.action === 'calendar_create') {
-      if (!googleAccessToken || !approval.calendarEvent?.startAt) {
-        toast.error('Load live calendar before creating events.')
+      if (!approval.calendarEvent?.startAt) {
+        toast.error('Calendar event start time is required.')
         return
       }
 
       try {
-        const created = await createCalendarEvent({
-          accessToken: googleAccessToken,
-          summary: approval.calendarEvent.summary,
-          startAt: new Date(approval.calendarEvent.startAt),
-          endAt: new Date(
-            approval.calendarEvent.endAt ||
-              new Date(approval.calendarEvent.startAt).getTime() + 45 * 60_000
+        if (googleAccessToken) {
+          const created = await createCalendarEvent({
+            accessToken: googleAccessToken,
+            summary: approval.calendarEvent.summary,
+            startAt: new Date(approval.calendarEvent.startAt),
+            endAt: new Date(
+              approval.calendarEvent.endAt ||
+                new Date(approval.calendarEvent.startAt).getTime() + 45 * 60_000
+            )
+          })
+          const updatedEvents = [...calendarEvents, created].sort((a, b) =>
+            a.startAt.localeCompare(b.startAt)
           )
-        })
-        const updatedEvents = [...calendarEvents, created].sort((a, b) =>
-          a.startAt.localeCompare(b.startAt)
-        )
-        setCalendarEvents(updatedEvents)
-        setSelectedCalendarEventId(created.id)
-        setCalendarConnected(true)
-        setCalendarConnectionMode('google-oauth')
-        setCalendarConnectionStatus(
-          `Google Calendar connected (${updatedEvents.length} upcoming events)`
-        )
-        toast.success('Google Calendar event created')
+          setCalendarEvents(updatedEvents)
+          setSelectedCalendarEventId(created.id)
+          setCalendarConnected(true)
+          setCalendarConnectionMode('google-oauth')
+          setCalendarConnectionStatus(
+            `Google Calendar connected (${updatedEvents.length} upcoming events)`
+          )
+          toast.success('Google Calendar event created')
+        } else if (calendarConnectionMode === 'composio') {
+          await executeComposioBrokMailAction({
+            action: 'create_calendar_event',
+            calendarEvent: approval.calendarEvent
+          })
+          setCalendarConnected(true)
+          toast.success('Composio created the Google Calendar event')
+        } else {
+          toast.error(
+            'Load live calendar or connect Calendar through Composio before creating events.'
+          )
+          return
+        }
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : 'Could not create event.'
@@ -1294,22 +1396,35 @@ export function BrokMailApp() {
     }
 
     if (approval.action === 'calendar_delete') {
-      if (!googleAccessToken || !approval.calendarEvent?.id) {
-        toast.error('Load live calendar before removing events.')
+      if (!approval.calendarEvent?.id) {
+        toast.error('Calendar event id is required.')
         return
       }
 
       try {
-        await deleteCalendarEvent({
-          accessToken: googleAccessToken,
-          eventId: approval.calendarEvent.id
-        })
-        const updatedEvents = calendarEvents.filter(
-          event => event.id !== approval.calendarEvent?.id
-        )
-        setCalendarEvents(updatedEvents)
-        setSelectedCalendarEventId(updatedEvents[0]?.id || null)
-        toast.success('Google Calendar event removed')
+        if (googleAccessToken) {
+          await deleteCalendarEvent({
+            accessToken: googleAccessToken,
+            eventId: approval.calendarEvent.id
+          })
+          const updatedEvents = calendarEvents.filter(
+            event => event.id !== approval.calendarEvent?.id
+          )
+          setCalendarEvents(updatedEvents)
+          setSelectedCalendarEventId(updatedEvents[0]?.id || null)
+          toast.success('Google Calendar event removed')
+        } else if (calendarConnectionMode === 'composio') {
+          await executeComposioBrokMailAction({
+            action: 'delete_calendar_event',
+            calendarEvent: approval.calendarEvent
+          })
+          toast.success('Composio removed the Google Calendar event')
+        } else {
+          toast.error(
+            'Load live calendar or connect Calendar through Composio before removing events.'
+          )
+          return
+        }
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : 'Could not remove event.'

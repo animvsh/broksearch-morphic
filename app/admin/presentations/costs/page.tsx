@@ -9,6 +9,8 @@ interface Costs {
   imageGeneration: number
   webSearch: number
   storage: number
+  deckCount: number
+  dailyCosts?: Array<{ date: string; amount: number }>
 }
 
 export default function CostsPage() {
@@ -16,7 +18,9 @@ export default function CostsPage() {
     textGeneration: 0,
     imageGeneration: 0,
     webSearch: 0,
-    storage: 0
+    storage: 0,
+    deckCount: 0,
+    dailyCosts: []
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -51,15 +55,7 @@ export default function CostsPage() {
     { label: 'Storage', amount: costs.storage }
   ]
 
-  const dailyCosts = [
-    { date: '2026-05-08', amount: total * 0.15 },
-    { date: '2026-05-07', amount: total * 0.18 },
-    { date: '2026-05-06', amount: total * 0.14 },
-    { date: '2026-05-05', amount: total * 0.22 },
-    { date: '2026-05-04', amount: total * 0.09 },
-    { date: '2026-05-03', amount: total * 0.12 },
-    { date: '2026-05-02', amount: total * 0.1 }
-  ]
+  const dailyCosts = costs.dailyCosts ?? []
 
   const maxDaily = Math.max(...dailyCosts.map(d => d.amount), 0.01)
 
@@ -170,6 +166,11 @@ export default function CostsPage() {
                     </div>
                   )
                 })}
+                {dailyCosts.length === 0 && (
+                  <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+                    No generation cost recorded in the last 7 days.
+                  </div>
+                )}
               </div>
             </div>
 
@@ -183,7 +184,9 @@ export default function CostsPage() {
                 <p className="text-sm text-muted-foreground">Avg. per Deck</p>
                 <p className="text-3xl font-bold mt-2">
                   $
-                  {total > 0 ? (total / Math.max(total, 1)).toFixed(2) : '0.00'}
+                  {total > 0 && costs.deckCount > 0
+                    ? (total / costs.deckCount).toFixed(2)
+                    : '0.00'}
                 </p>
               </div>
               <div className="rounded-lg border bg-card p-6">

@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
-import { cn } from '@/lib/utils'
-
 import { Button } from '@/components/ui/button'
 
 import { StatsCard } from '@/components/admin/presentations/stats-card'
@@ -14,6 +12,7 @@ interface Stats {
   slidesGeneratedToday: number
   exportsToday: number
   generationCost: string
+  recentActivity?: RecentActivity[]
 }
 
 interface RecentActivity {
@@ -26,19 +25,11 @@ export default function PresentationsOverviewPage() {
     presentationsToday: 0,
     slidesGeneratedToday: 0,
     exportsToday: 0,
-    generationCost: '0.00'
+    generationCost: '0.00',
+    recentActivity: []
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [recentActivity] = useState<RecentActivity[]>([
-    { date: '2026-05-08', count: 12 },
-    { date: '2026-05-07', count: 18 },
-    { date: '2026-05-06', count: 15 },
-    { date: '2026-05-05', count: 22 },
-    { date: '2026-05-04', count: 9 },
-    { date: '2026-05-03', count: 14 },
-    { date: '2026-05-02', count: 11 }
-  ])
 
   useEffect(() => {
     fetchStats()
@@ -57,6 +48,7 @@ export default function PresentationsOverviewPage() {
     }
   }
 
+  const recentActivity = stats.recentActivity ?? []
   const maxCount = Math.max(...recentActivity.map(a => a.count), 1)
 
   const navItems = [
@@ -153,8 +145,8 @@ export default function PresentationsOverviewPage() {
           <h2 className="text-lg font-semibold mb-6">
             Presentations Created (Last 7 Days)
           </h2>
-          <div className="flex items-end justify-between gap-2 h-40">
-            {recentActivity.map(day => {
+          <div className="flex h-40 items-end justify-between gap-2">
+            {(recentActivity.length ? recentActivity : []).map(day => {
               const heightPct = (day.count / maxCount) * 100
               return (
                 <div
@@ -176,6 +168,11 @@ export default function PresentationsOverviewPage() {
                 </div>
               )
             })}
+            {recentActivity.length === 0 && (
+              <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+                No presentation activity recorded in the last 7 days.
+              </div>
+            )}
           </div>
         </div>
 

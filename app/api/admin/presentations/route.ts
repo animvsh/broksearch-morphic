@@ -29,12 +29,15 @@ export async function GET(request: NextRequest) {
     if (type === 'stats') {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
+      const sevenDaysAgo = new Date(today)
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
 
       const [
         [presentationsToday],
         [slidesGeneratedToday],
         [exportsToday],
-        [costRow]
+        [costRow],
+        activityRows
       ] = await Promise.all([
         db
           .select({ count: sql<number>`count(*)::int` })
@@ -57,14 +60,36 @@ export async function GET(request: NextRequest) {
           })
           .from(presentationGenerations)
           .where(gte(presentationGenerations.createdAt, today))
-          .limit(1)
+          .limit(1),
+        db
+          .select({
+            date: sql<string>`to_char(${presentations.createdAt}, 'YYYY-MM-DD')`,
+            count: sql<number>`count(*)::int`
+          })
+          .from(presentations)
+          .where(gte(presentations.createdAt, sevenDaysAgo))
+          .groupBy(sql`to_char(${presentations.createdAt}, 'YYYY-MM-DD')`)
       ])
+
+      const activityByDate = new Map(
+        activityRows.map(row => [row.date, row.count])
+      )
+      const recentActivity = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(sevenDaysAgo)
+        date.setDate(sevenDaysAgo.getDate() + index)
+        const key = date.toISOString().slice(0, 10)
+        return {
+          date: key,
+          count: activityByDate.get(key) ?? 0
+        }
+      })
 
       return NextResponse.json({
         presentationsToday: presentationsToday?.count ?? 0,
         slidesGeneratedToday: slidesGeneratedToday?.count ?? 0,
         exportsToday: exportsToday?.count ?? 0,
-        generationCost: centsToDollars(costRow?.totalCents).toFixed(2)
+        generationCost: centsToDollars(costRow?.totalCents).toFixed(2),
+        recentActivity
       })
     }
 
@@ -168,23 +193,48 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === 'costs') {
-      const generationRows = await db
-        .select({
-          generation_type: presentationGenerations.generationType,
-          web_search_enabled: presentationGenerations.webSearchEnabled,
-          cost_usd: presentationGenerations.costUsd
-        })
-        .from(presentationGenerations)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const sevenDaysAgo = new Date(today)
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
 
-      const assetCountRow = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(presentationAssets)
-        .limit(1)
-
-      const exportCountRow = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(presentationExports)
-        .limit(1)
+      const [
+        generationRows,
+        assetCountRow,
+        exportCountRow,
+        deckCountRow,
+        dailyCostRows
+      ] = await Promise.all([
+        db
+          .select({
+            generation_type: presentationGenerations.generationType,
+            web_search_enabled: presentationGenerations.webSearchEnabled,
+            cost_usd: presentationGenerations.costUsd
+          })
+          .from(presentationGenerations),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(presentationAssets)
+          .limit(1),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(presentationExports)
+          .limit(1),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(presentations)
+          .limit(1),
+        db
+          .select({
+            date: sql<string>`to_char(${presentationGenerations.createdAt}, 'YYYY-MM-DD')`,
+            totalCents: sql<number>`coalesce(sum(${presentationGenerations.costUsd}), 0)::int`
+          })
+          .from(presentationGenerations)
+          .where(gte(presentationGenerations.createdAt, sevenDaysAgo))
+          .groupBy(
+            sql`to_char(${presentationGenerations.createdAt}, 'YYYY-MM-DD')`
+          )
+      ])
 
       const textGeneration = centsToDollars(
         generationRows
@@ -211,12 +261,26 @@ export async function GET(request: NextRequest) {
       const storage =
         ((assetCountRow[0]?.count ?? 0) + (exportCountRow[0]?.count ?? 0)) *
         0.01
+      const dailyCostByDate = new Map(
+        dailyCostRows.map(row => [row.date, centsToDollars(row.totalCents)])
+      )
+      const dailyCosts = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(sevenDaysAgo)
+        date.setDate(sevenDaysAgo.getDate() + index)
+        const key = date.toISOString().slice(0, 10)
+        return {
+          date: key,
+          amount: dailyCostByDate.get(key) ?? 0
+        }
+      })
 
       return NextResponse.json({
         textGeneration,
         imageGeneration,
         webSearch,
-        storage
+        storage,
+        deckCount: deckCountRow[0]?.count ?? 0,
+        dailyCosts
       })
     }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
@@ -105,8 +106,17 @@ export default function NewPresentationPage() {
           {/* Header */}
           <div className="border-b px-6 py-5">
             <div className="flex items-center gap-3">
-              <span className="text-xl font-bold tracking-tight">[BROK]</span>
-              <span className="text-xl font-bold tracking-tight">
+              <span className="flex size-9 items-center justify-center rounded-full border bg-background shadow-sm">
+                <Image
+                  src="/brand/brok-logo.png"
+                  alt="Brok"
+                  width={22}
+                  height={22}
+                  className="size-5 object-contain"
+                  priority
+                />
+              </span>
+              <span className="text-xl font-semibold tracking-tight">
                 Presentations
               </span>
               <span className="text-muted-foreground">— New</span>

@@ -4,6 +4,14 @@ type ComposioRequestOptions = {
   body?: Record<string, unknown>
 }
 
+type ComposioToolExecuteParams = {
+  toolSlug: string
+  userId: string
+  text?: string
+  arguments?: Record<string, unknown>
+  connectedAccountId?: string
+}
+
 type ComposioConnectedAccount = {
   id?: string
   status?: string
@@ -603,4 +611,34 @@ export async function createConnectedAccountLink(params: {
     raw: payload,
     url: resolveConnectionUrl(payload)
   }
+}
+
+export async function executeComposioTool({
+  toolSlug,
+  userId,
+  text,
+  arguments: toolArguments,
+  connectedAccountId
+}: ComposioToolExecuteParams) {
+  if (isComposioConnectMode() && !resolveBackendApiKey()) {
+    throw new Error(
+      'Composio tool execution requires COMPOSIO_API_KEY. COMPOSIO_CONNECT_KEY can create links but cannot run backend actions.'
+    )
+  }
+
+  if (!text && !toolArguments) {
+    throw new Error('Provide text or arguments for Composio tool execution.')
+  }
+
+  return composioRequest(`/tools/execute/${toolSlug}`, {
+    method: 'POST',
+    body: {
+      user_id: userId,
+      ...(connectedAccountId
+        ? { connected_account_id: connectedAccountId }
+        : {}),
+      ...(text ? { text } : {}),
+      ...(toolArguments ? { arguments: toolArguments } : {})
+    }
+  })
 }
