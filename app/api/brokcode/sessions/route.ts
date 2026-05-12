@@ -20,13 +20,26 @@ const VALID_ROLES = new Set<BrokCodeSessionRole>([
   'system'
 ])
 
-function sessionBelongsToWorkspace(
-  session: Awaited<ReturnType<typeof getBrokCodeSession>>,
-  workspaceId: string
-) {
-  return Boolean(
-    session?.events.some(event => event.metadata?.workspaceId === workspaceId)
+function filterSessionForWorkspace<
+  T extends Awaited<ReturnType<typeof getBrokCodeSession>>
+>(session: T, workspaceId: string): T {
+  if (!session) return session
+
+  const events = session.events.filter(
+    event => event.metadata?.workspaceId === workspaceId
   )
+  if (events.length === 0) return null as T
+
+  const sources = Array.from(new Set(events.map(event => event.source)))
+
+  return {
+    ...session,
+    sources,
+    events,
+    title: events[0]?.content.trim().slice(0, 72) || session.title,
+    createdAt: events[0]?.createdAt ?? session.createdAt,
+    updatedAt: events[events.length - 1]?.createdAt ?? session.updatedAt
+  } as T
 }
 
 function jsonNoStore(body: unknown, init?: ResponseInit) {
@@ -47,15 +60,13 @@ export async function GET(request: NextRequest) {
   if (sessionId) {
     const session = await getBrokCodeSession(sessionId)
     return jsonNoStore({
-      session: sessionBelongsToWorkspace(session, authResult.workspace.id)
-        ? session
-        : null
+      session: filterSessionForWorkspace(session, authResult.workspace.id)
     })
   }
 
-  const sessions = (await listBrokCodeSessions()).filter(session =>
-    sessionBelongsToWorkspace(session, authResult.workspace.id)
-  )
+  const sessions = (await listBrokCodeSessions())
+    .map(session => filterSessionForWorkspace(session, authResult.workspace.id))
+    .filter(session => Boolean(session))
   return jsonNoStore({ sessions })
 }
 

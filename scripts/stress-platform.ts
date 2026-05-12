@@ -44,7 +44,7 @@ async function createStressKeys() {
   const mainKey = await createStressKey(workspace.id, {
     name: 'Stress Main Key',
     environment: 'test',
-    scopes: ['chat:write', 'search:write', 'usage:read'],
+    scopes: ['chat:write', 'search:write', 'code:write', 'usage:read'],
     allowedModels: [],
     rpmLimit: 5,
     dailyRequestLimit: 5000,
@@ -201,6 +201,27 @@ async function runSearch(baseKey: string) {
   }
 }
 
+async function runBrokCode(baseKey: string) {
+  const response = await fetch(`${baseUrl}/api/brokcode/execute`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${baseKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      command: '/securityscan status',
+      model: 'brok-code',
+      stream: false
+    })
+  })
+
+  const body = await expectJson(response, 200)
+
+  if (body?.security_scan?.provider !== 'deepsec') {
+    throw new Error('brokcode security scan response missing DeepSec payload')
+  }
+}
+
 async function runApiStress(
   keys: Awaited<ReturnType<typeof createStressKeys>>
 ) {
@@ -210,13 +231,16 @@ async function runApiStress(
   await runSearch(keys.mainKey)
   console.log('stress api ok search success')
 
+  await runBrokCode(keys.mainKey)
+  console.log('stress api ok brokcode execution success')
+
   const usageResponse = await fetch(`${baseUrl}/api/v1/usage`, {
     headers: {
       Authorization: `Bearer ${keys.mainKey}`
     }
   })
   const usageBody = await expectJson(usageResponse, 200)
-  if ((usageBody?.usage?.requests ?? 0) < 2) {
+  if ((usageBody?.usage?.requests ?? 0) < 3) {
     throw new Error('usage endpoint did not reflect successful API activity')
   }
   console.log('stress api ok usage aggregation')

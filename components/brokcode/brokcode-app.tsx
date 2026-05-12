@@ -46,7 +46,6 @@ import { createShareableChatFromTranscript } from '@/lib/actions/chat'
 import {
   brokCodeCommands,
   BrokCodeSubagent,
-  brokCodeSubagents,
   SubagentStatus
 } from '@/lib/brokcode/data'
 import { cn } from '@/lib/utils'
@@ -252,6 +251,78 @@ function statusTone(status: SubagentStatus) {
   if (status === 'review') return 'bg-violet-500'
   if (status === 'done') return 'bg-emerald-500'
   return 'bg-amber-500'
+}
+
+function createRuntimeSubagents(runs: ExecutionRun[]): BrokCodeSubagent[] {
+  return runs.slice(0, 6).map((run, index) => {
+    const activeStep =
+      run.steps.find(step => step.status === 'running') ??
+      [...run.steps].reverse().find(step => step.status === 'done') ??
+      run.steps[0]
+    const completed = run.steps.filter(step => step.status === 'done').length
+    const progress =
+      run.status === 'done'
+        ? 100
+        : run.status === 'error'
+          ? Math.max(8, Math.round((completed / run.steps.length) * 100))
+          : Math.max(
+              12,
+              Math.round(
+                ((completed + (activeStep?.status === 'running' ? 0.5 : 0)) /
+                  run.steps.length) *
+                  100
+              )
+            )
+    const status: SubagentStatus =
+      run.status === 'running'
+        ? 'running'
+        : run.status === 'error'
+          ? 'blocked'
+          : 'done'
+    const accents: BrokCodeSubagent['accent'][] = [
+      'cyan',
+      'emerald',
+      'violet',
+      'amber',
+      'blue',
+      'rose'
+    ]
+
+    return {
+      id: run.id,
+      name: `Run ${index + 1}`,
+      role:
+        run.runtime === 'opencode'
+          ? 'brokcode-cloud'
+          : run.runtime === 'brok'
+            ? 'Brok API runtime'
+            : 'Waiting for runtime',
+      status,
+      accent: accents[index % accents.length],
+      progress,
+      currentTask: activeStep
+        ? `${activeStep.label}: ${activeStep.detail}`
+        : run.command,
+      branch: 'Runtime reported branch unavailable',
+      files: run.previewUrl ? [run.previewUrl] : ['No file changes reported'],
+      tools: [
+        run.runtime === 'opencode' ? 'brokcode-cloud' : 'brok-api',
+        'SSE',
+        'usage-metering'
+      ],
+      events: run.steps.map(step => ({
+        time: new Date(run.startedAt).toLocaleTimeString(),
+        label: `${step.label} - ${step.status}`,
+        detail: step.detail
+      })),
+      nextStep:
+        run.status === 'error'
+          ? run.note || 'Fix the runtime issue, then rerun the command.'
+          : run.status === 'done'
+            ? 'Review the output, preview URL, or open a PR.'
+            : activeStep?.detail || 'Waiting for the next runtime event.'
+    }
+  })
 }
 
 const executionStepTemplate: ExecutionStep[] = [
@@ -733,8 +804,12 @@ export function BrokCodeApp({
     }
   }, [])
 
+  const runtimeAgents = useMemo(
+    () => createRuntimeSubagents(executionRuns),
+    [executionRuns]
+  )
   const selectedAgent =
-    brokCodeSubagents.find(agent => agent.id === selectedId) ?? null
+    runtimeAgents.find(agent => agent.id === selectedId) ?? null
   const activeSyncSession = useMemo(
     () =>
       syncedSessions.find(session => session.id === syncSessionId) ??
@@ -1901,7 +1976,7 @@ export function BrokCodeApp({
           command: trimmed,
           model: selectedModel,
           stream: true,
-          require_opencode: false,
+          require_opencode: true,
           messages: [
             { role: 'system', content: buildCommandPrompt(trimmed) },
             { role: 'user', content: trimmed }
@@ -1938,7 +2013,7 @@ export function BrokCodeApp({
                 message.id === assistantMessageId
                   ? {
                       ...message,
-                      content: `Live (${selectedModel} via brokcode-cloud)\n\n${event.accumulated}`
+                      content: `Live (${selectedModel})\n\n${event.accumulated}`
                     }
                   : message
               )
@@ -2189,7 +2264,7 @@ export function BrokCodeApp({
               </p>
               <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-2 py-1 text-[11px] text-muted-foreground">
                 <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-                Cloud feels live while it works
+                Runtime and fallback state stay visible
               </div>
             </div>
           </div>
@@ -2307,7 +2382,7 @@ export function BrokCodeApp({
                     <p className="text-sm font-semibold">Build from a prompt</p>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
                       Describe the app you want like Lovable. BrokCode runs it
-                      through brokcode-cloud and keeps runtime errors visible
+                      through the configured runtime and keeps errors visible
                       when execution fails.
                     </p>
                     <div className="mt-3 flex flex-wrap gap-1.5">
@@ -2702,11 +2777,11 @@ export function BrokCodeApp({
                     </p>
                   </div>
                   <Badge variant="outline" className="rounded-md">
-                    {brokCodeSubagents.length}
+                    {runtimeAgents.length}
                   </Badge>
                 </div>
                 <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
-                  {brokCodeSubagents.map(agent => (
+                  {runtimeAgents.map(agent => (
                     <button
                       key={agent.id}
                       className={cn(
@@ -2756,6 +2831,7 @@ export function BrokCodeApp({
                 <ChatBubble
                   key={message.id}
                   message={message}
+                  runtimeAgents={runtimeAgents}
                   onAgentClick={setSelectedId}
                   onAction={handleChatAction}
                   selectedId={selectedId ?? ''}
@@ -2842,9 +2918,9 @@ export function BrokCodeApp({
             <Tabs defaultValue="browser">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold">Preview Workspace</p>
+                  <p className="text-sm font-semibold">External Preview</p>
                   <p className="text-xs text-muted-foreground">
-                    Live browser + execution visualizer.
+                    Load a running app URL next to the execution visualizer.
                   </p>
                 </div>
                 <Badge variant="outline" className="rounded-md">
@@ -2919,11 +2995,11 @@ export function BrokCodeApp({
                   </p>
                 </div>
                 <Badge variant="outline" className="rounded-md">
-                  {brokCodeSubagents.length}
+                  {runtimeAgents.length}
                 </Badge>
               </div>
               <div className="mt-3 grid gap-2">
-                {brokCodeSubagents.map(agent => (
+                {runtimeAgents.map(agent => (
                   <SubagentCard
                     key={agent.id}
                     agent={agent}
@@ -2933,7 +3009,7 @@ export function BrokCodeApp({
                   />
                 ))}
               </div>
-              {brokCodeSubagents.length === 0 && (
+              {runtimeAgents.length === 0 && (
                 <p className="mt-3 rounded-md border bg-background p-3 text-xs text-muted-foreground">
                   No real subagent events reported yet.
                 </p>
@@ -3111,11 +3187,13 @@ function VersionHistoryPanel({
 
 function ChatBubble({
   message,
+  runtimeAgents,
   onAgentClick,
   onAction,
   selectedId
 }: {
   message: ChatMessage
+  runtimeAgents: BrokCodeSubagent[]
   onAgentClick: (id: string) => void
   onAction: (action: ChatAction, integrationToolkit?: string) => void
   selectedId: string
@@ -3123,7 +3201,7 @@ function ChatBubble({
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const agents = (message.agentIds ?? [])
-    .map(id => brokCodeSubagents.find(agent => agent.id === id))
+    .map(id => runtimeAgents.find(agent => agent.id === id))
     .filter((agent): agent is BrokCodeSubagent => Boolean(agent))
 
   return (
@@ -3398,10 +3476,10 @@ function BrowserPreviewPanel({
       <div className="rounded-md border bg-background px-3 py-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold">Server Preview</p>
+            <p className="text-sm font-semibold">External Preview URL</p>
             <p className="text-xs text-muted-foreground">
-              Points at the running dev server. Hot reload stays live inside
-              the frame when that server supports HMR.
+              Points at your running app server. HMR is shown only when that
+              server provides it.
             </p>
           </div>
           <div className="flex items-center gap-2">

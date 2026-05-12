@@ -138,10 +138,10 @@ export function ChatArtifactContainer({
         )}
       </div>
 
-      {/* Desktop: Independent panels like morphic-studio */}
+      {/* Chat is mounted once so keyboard handlers and textareas never duplicate. */}
       <div
         ref={setContainerRef}
-        className="hidden md:flex flex-1 min-w-0 overflow-hidden"
+        className="flex flex-1 min-w-0 overflow-hidden"
       >
         {/* Chat Panel - Independent container */}
         <div className="flex-1 min-w-0 flex flex-col">{children}</div>
@@ -150,7 +150,7 @@ export function ChatArtifactContainer({
         {state.isOpen && state.part && (
           <div
             className={cn(
-              'w-1 mx-0.5 my-6 hover:bg-border transition-colors duration-200 cursor-col-resize select-none relative',
+              'hidden md:block w-1 mx-0.5 my-6 hover:bg-border transition-colors duration-200 cursor-col-resize select-none relative',
               isResizing && 'bg-border/50'
             )}
             onMouseDown={startResize}
@@ -162,7 +162,7 @@ export function ChatArtifactContainer({
         {/* Right Panel - Independent with own animation */}
         <div
           className={cn(
-            'bg-background overflow-hidden',
+            'hidden md:block bg-background overflow-hidden',
             state.isOpen && state.part ? 'opacity-100' : 'w-0 opacity-0',
             !isResizing && 'transition-all duration-300 ease-out'
           )}
@@ -184,11 +184,7 @@ export function ChatArtifactContainer({
         />
       )}
 
-      {/* Mobile: full-width chat + drawer */}
-      <div className="md:hidden flex-1 h-full min-w-0">
-        {children}
-        <InspectorDrawer />
-      </div>
+      <InspectorDrawer />
     </div>
   )
 }

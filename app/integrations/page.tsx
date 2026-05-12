@@ -351,9 +351,10 @@ export default async function IntegrationsPage() {
             </CardHeader>
             <CardContent className="pt-0">
               <p className="text-sm text-muted-foreground">
-                Brok agents can inspect connection status, create OAuth links,
-                and execute tool workflows through Composio from chat and agent
-                runs.
+                Brok agents can inspect connection status and create OAuth
+                links through Composio from chat and agent runs. Product tools
+                only execute actions after their own approval-safe runtime is
+                connected.
               </p>
               <p className="mt-2 inline-flex items-center gap-2 text-xs text-muted-foreground">
                 <Link2 className="size-3.5" />

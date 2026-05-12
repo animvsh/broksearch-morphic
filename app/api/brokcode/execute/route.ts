@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import {
   apiKeyHasScope,
+  AuthResult,
   forbiddenScopeResponse,
   unauthorizedResponse,
   verifyRequestAuth
@@ -10,12 +11,11 @@ import { BrokModelId } from '@/lib/brok/models'
 import { routeToProviderResponse } from '@/lib/brok/provider-router'
 import {
   checkUsageLimits,
+  generateRequestId,
+  recordUsage,
   usageLimitResponse
 } from '@/lib/brok/usage-tracker'
-import {
-  enforceBrokCodeAccountOwnership,
-  getRequiredBrokAccountUser
-} from '@/lib/brokcode/account-guard'
+import { enforceBrokCodeAccountOwnership } from '@/lib/brokcode/account-guard'
 import {
   isDeepSecSecurityScanCommand,
   runDeepSecSecurityScan
@@ -29,6 +29,8 @@ type OpenAiMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
 }
+
+type SuccessfulAuth = Extract<AuthResult, { success: true }>
 
 function buildOpenCodeEndpoint(rawBase: string) {
   const base = rawBase.trim().replace(/\/$/, '')
@@ -121,6 +123,81 @@ function getDeltaText(payload: any): string {
   }
 
   return ''
+}
+
+function estimateTokensFromText(text: string) {
+  return Math.max(0, Math.ceil(text.length / 4))
+}
+
+function estimateInputTokens(messages: OpenAiMessage[]) {
+  return estimateTokensFromText(
+    messages.map(message => message.content).join('\n')
+  )
+}
+
+function usageNumber(usage: unknown, keys: string[]) {
+  if (!usage || typeof usage !== 'object') return 0
+
+  for (const key of keys) {
+    const value = (usage as Record<string, unknown>)[key]
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && Number.isFinite(Number(value))) {
+      return Number(value)
+    }
+  }
+
+  return 0
+}
+
+async function recordCodeExecutionUsage({
+  auth,
+  requestId,
+  startTime,
+  model,
+  provider,
+  messages,
+  content,
+  usage,
+  status,
+  errorCode,
+  toolCalls
+}: {
+  auth: SuccessfulAuth
+  requestId: string
+  startTime: number
+  model: string
+  provider: string
+  messages: OpenAiMessage[]
+  content?: string
+  usage?: unknown
+  status: 'success' | 'error'
+  errorCode?: string
+  toolCalls?: number
+}) {
+  const inputTokens =
+    usageNumber(usage, ['prompt_tokens', 'input_tokens']) ||
+    estimateInputTokens(messages)
+  const outputTokens =
+    usageNumber(usage, ['completion_tokens', 'output_tokens']) ||
+    estimateTokensFromText(content ?? '')
+
+  await recordUsage({
+    requestId,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId,
+    apiKeyId: auth.apiKey.id,
+    endpoint: 'code',
+    model,
+    provider,
+    inputTokens,
+    outputTokens,
+    toolCalls: toolCalls ?? 0,
+    providerCostUsd: 0,
+    billedUsd: 0,
+    latencyMs: Date.now() - startTime,
+    status,
+    errorCode
+  })
 }
 
 async function forwardOpenAiCompatibleStream({
@@ -250,6 +327,9 @@ function buildDefaultMessages(command: string): OpenAiMessage[] {
 }
 
 function createExecutionStream({
+  auth,
+  requestId,
+  startTime,
   request,
   command,
   model,
@@ -260,6 +340,9 @@ function createExecutionStream({
   opencodeApiKey,
   requireOpenCode
 }: {
+  auth: SuccessfulAuth
+  requestId: string
+  startTime: number
   request: NextRequest
   command: string
   model: string
@@ -350,6 +433,17 @@ function createExecutionStream({
                 preview_url: extractPreviewUrl(`${command}\n${content}`),
                 note: 'Executed through OpenCode runtime.'
               })
+              await recordCodeExecutionUsage({
+                auth,
+                requestId,
+                startTime,
+                model,
+                provider: 'brokcode-cloud',
+                messages,
+                content,
+                usage,
+                status: 'success'
+              })
               controller.close()
               return
             }
@@ -361,15 +455,34 @@ function createExecutionStream({
               `OpenCode returned ${opencodeResponse.status}.`
 
             if (requireOpenCode) {
+              await recordCodeExecutionUsage({
+                auth,
+                requestId,
+                startTime,
+                model,
+                provider: 'brokcode-cloud',
+                messages,
+                status: 'error',
+                errorCode: opencodeFailure ?? 'brokcode_cloud_error'
+              })
               send('error', { message: opencodeFailure })
               controller.close()
               return
             }
           } else if (requireOpenCode) {
-            send('error', {
-              message:
-                'OpenCode runtime is required but BROKCODE_OPENCODE_BASE_URL is not configured.'
+            const message =
+              'brokcode-cloud runtime is required but BROKCODE_OPENCODE_BASE_URL is not configured.'
+            await recordCodeExecutionUsage({
+              auth,
+              requestId,
+              startTime,
+              model,
+              provider: 'brokcode-cloud',
+              messages,
+              status: 'error',
+              errorCode: 'brokcode_cloud_not_configured'
             })
+            send('error', { message })
             controller.close()
             return
           }
@@ -405,8 +518,30 @@ function createExecutionStream({
               ? `${opencodeFailure} Routed through Brok runtime.`
               : 'Routed through Brok runtime.'
           })
+          await recordCodeExecutionUsage({
+            auth,
+            requestId,
+            startTime,
+            model,
+            provider: 'Brok',
+            messages,
+            content,
+            usage,
+            status: 'success'
+          })
           controller.close()
         } catch (error) {
+          await recordCodeExecutionUsage({
+            auth,
+            requestId,
+            startTime,
+            model,
+            provider: 'Brok',
+            messages,
+            status: 'error',
+            errorCode:
+              error instanceof Error ? error.message : 'brokcode_execution_failed'
+          })
           send('error', {
             message:
               error instanceof Error
@@ -428,6 +563,8 @@ function createExecutionStream({
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now()
+  const requestId = generateRequestId()
   const body = await request.json().catch(() => null)
   const command =
     typeof body?.command === 'string' ? body.command.trim() : undefined
@@ -457,26 +594,24 @@ export async function POST(request: NextRequest) {
     return unauthorizedResponse(authResult)
   }
 
-  const user = await getRequiredBrokAccountUser()
-  if (!user) {
-    return NextResponse.json(
-      {
-        error: {
-          type: 'authentication_error',
-          code: 'brok_login_required',
-          message:
-            'Sign in to Brok and use an API key from that account before running BrokCode Cloud.'
-        }
-      },
-      { status: 401 }
-    )
-  }
-
   const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
   if (accountMismatch) return accountMismatch
 
   if (!apiKeyHasScope(authResult.apiKey, 'code:write')) {
     return forbiddenScopeResponse('code:write')
+  }
+  const allowedModels = authResult.apiKey.allowedModels as string[]
+  if (allowedModels.length > 0 && !allowedModels.includes(model)) {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'invalid_request_error',
+          code: 'model_not_allowed',
+          message: `This API key does not have access to ${model}.`
+        }
+      },
+      { status: 403 }
+    )
   }
   const usageLimit = await checkUsageLimits({
     apiKey: authResult.apiKey,
@@ -495,6 +630,18 @@ export async function POST(request: NextRequest) {
       command,
       apiKey: inboundApiKey,
       baseUrl
+    })
+    await recordCodeExecutionUsage({
+      auth: authResult,
+      requestId,
+      startTime,
+      model,
+      provider: 'DeepSec',
+      messages: buildDefaultMessages(command),
+      content: scan.content,
+      status: scan.ok ? 'success' : 'error',
+      errorCode: scan.ok ? undefined : 'deepsec_scan_failed',
+      toolCalls: scan.commands.length
     })
 
     return NextResponse.json({
@@ -544,12 +691,22 @@ export async function POST(request: NextRequest) {
   let opencodeFailure: string | null = null
 
   if (requireOpenCode && !opencodeBase) {
+    await recordCodeExecutionUsage({
+      auth: authResult,
+      requestId,
+      startTime,
+      model,
+      provider: 'brokcode-cloud',
+      messages,
+      status: 'error',
+      errorCode: 'brokcode_cloud_not_configured'
+    })
     return NextResponse.json(
       {
         error: {
           type: 'runtime_error',
           message:
-            'OpenCode runtime is required but BROKCODE_OPENCODE_BASE_URL is not configured.'
+            'brokcode-cloud runtime is required but BROKCODE_OPENCODE_BASE_URL is not configured.'
         }
       },
       { status: 503 }
@@ -558,6 +715,9 @@ export async function POST(request: NextRequest) {
 
   if (body?.stream === true) {
     return createExecutionStream({
+      auth: authResult,
+      requestId,
+      startTime,
       request,
       command,
       model,
@@ -594,6 +754,17 @@ export async function POST(request: NextRequest) {
       if (opencodeResponse.ok) {
         const payload = await opencodeResponse.json()
         const content = extractAssistantText(payload)
+        await recordCodeExecutionUsage({
+          auth: authResult,
+          requestId,
+          startTime,
+          model: payload?.model ?? model,
+          provider: 'brokcode-cloud',
+          messages,
+          content,
+          usage: payload?.usage ?? null,
+          status: 'success'
+        })
 
         return NextResponse.json({
           runtime: 'opencode',
@@ -616,6 +787,16 @@ export async function POST(request: NextRequest) {
       opencodeFailure = errorMessage
 
       if (requireOpenCode) {
+        await recordCodeExecutionUsage({
+          auth: authResult,
+          requestId,
+          startTime,
+          model,
+          provider: 'brokcode-cloud',
+          messages,
+          status: 'error',
+          errorCode: errorMessage
+        })
         return NextResponse.json(
           {
             error: {
@@ -630,6 +811,16 @@ export async function POST(request: NextRequest) {
       opencodeFailure = 'OpenCode endpoint was unreachable.'
 
       if (requireOpenCode) {
+        await recordCodeExecutionUsage({
+          auth: authResult,
+          requestId,
+          startTime,
+          model,
+          provider: 'brokcode-cloud',
+          messages,
+          status: 'error',
+          errorCode: opencodeFailure ?? 'brokcode_cloud_error'
+        })
         return NextResponse.json(
           {
             error: {
@@ -654,6 +845,17 @@ export async function POST(request: NextRequest) {
   })
   content = direct.content
   usage = direct.usage
+  await recordCodeExecutionUsage({
+    auth: authResult,
+    requestId,
+    startTime,
+    model,
+    provider: 'Brok',
+    messages,
+    content,
+    usage,
+    status: 'success'
+  })
 
   return NextResponse.json({
     runtime: 'brok',

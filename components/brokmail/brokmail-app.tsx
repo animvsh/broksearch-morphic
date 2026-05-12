@@ -405,7 +405,7 @@ export function BrokMailApp() {
       id: 'welcome',
       role: 'assistant',
       content:
-        'Connect Gmail or Google Calendar to start. Once connected, I can search, summarize, draft, triage, add events, remove events, and prepare approval-safe actions against your live account.'
+        'Connect Gmail or Google Calendar to start. Composio creates the connection; live mail and calendar actions run after this browser loads your Google session, so nothing is simulated.'
     }
   ])
 
@@ -2532,8 +2532,8 @@ function EmptyMailWorkspace({
           </h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             BrokMail will not show sample mail. After connection, this workspace
-            loads live Gmail threads, summaries, drafts, and approval-safe
-            actions.
+            loads live Gmail threads in this browser, then prepares summaries,
+            drafts, and approval-safe actions.
           </p>
           <div className="mt-4 rounded-lg border border-border/70 bg-background/70 p-3 text-xs text-muted-foreground">
             {isSyncingMail ? 'Syncing Gmail...' : connectionStatus}
