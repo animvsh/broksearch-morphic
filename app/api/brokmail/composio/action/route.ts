@@ -31,7 +31,7 @@ type BrokMailComposioCalendarEvent = {
   endAt?: string
 }
 
-const GMAIL_TOOLKITS = ['googlesuper', 'gmail']
+const DEFAULT_GMAIL_TOOLKITS = ['gmail', 'googlesuper']
 const CALENDAR_TOOLKITS = [
   'googlesuper',
   'googlecalendar',
@@ -40,6 +40,18 @@ const CALENDAR_TOOLKITS = [
   'gcal',
   'calendar'
 ]
+
+function resolveGmailToolkits() {
+  const configured = process.env.COMPOSIO_GMAIL_TOOLKIT_SLUGS?.trim()
+  if (!configured) return DEFAULT_GMAIL_TOOLKITS
+
+  const candidates = configured
+    .split(',')
+    .map(value => value.trim().toLowerCase())
+    .filter(Boolean)
+
+  return candidates.length > 0 ? candidates : DEFAULT_GMAIL_TOOLKITS
+}
 
 const DEFAULT_TOOL_SLUGS: Record<BrokMailComposioAction, string[]> = {
   create_draft: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_CREATE_DRAFT'],
@@ -143,7 +155,7 @@ async function findConnectedAccountId(
   const toolkits =
     action === 'create_calendar_event' || action === 'delete_calendar_event'
       ? CALENDAR_TOOLKITS
-      : GMAIL_TOOLKITS
+      : resolveGmailToolkits()
 
   const settled = await Promise.allSettled(
     toolkits.map(async toolkit => listConnectedAccounts(userId, toolkit, 10))

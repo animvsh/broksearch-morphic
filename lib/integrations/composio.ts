@@ -424,7 +424,11 @@ async function composioRequest(
 }
 
 export function isComposioConnectMode() {
-  return Boolean(resolveConnectApiKey())
+  if (process.env.COMPOSIO_FORCE_CONNECT_MODE === 'true') {
+    return Boolean(resolveConnectApiKey())
+  }
+
+  return Boolean(resolveConnectApiKey() && !resolveBackendApiKey())
 }
 
 export function isComposioConfigured() {
