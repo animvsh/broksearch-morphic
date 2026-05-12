@@ -8,7 +8,7 @@ export function AnimatedLogo({
   animate = true,
   className,
   ...props
-}: React.ComponentProps<'svg'> & {
+}: React.ComponentProps<'img'> & {
   animate?: boolean
 }) {
   return (

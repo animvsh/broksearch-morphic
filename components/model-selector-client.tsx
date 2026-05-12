@@ -34,7 +34,7 @@ const PROVIDER_LOGO_BY_ID: Record<string, string> = {
   anthropic: '/providers/logos/anthropic.svg',
   google: '/providers/logos/google.svg',
   gateway: '/providers/logos/gateway.svg',
-  'openai-compatible': '/providers/logos/openai-compatible.svg',
+  'openai-compatible': '/brand/brok-logo.png',
   ollama: '/providers/logos/ollama.svg'
 }
 

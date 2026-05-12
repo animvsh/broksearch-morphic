@@ -53,22 +53,23 @@ function FooterContent() {
 
 export function ChatFooterMessage({ isLoading }: { isLoading: boolean }) {
   const loadingItems = useMemo(
-    () => ['Planning', 'Reading tools', 'Drafting answer'],
+    () => ['Searching', 'Reading context', 'Writing'],
     []
   )
   const { displayText: loadingText } = useTypewriterCycle(loadingItems, {
-    firstDuration: 800,
-    itemDuration: 900,
-    idleDuration: 120,
-    charInterval: 26,
-    initialDelay: 60
+    firstDuration: 1100,
+    itemDuration: 1200,
+    idleDuration: 70,
+    charInterval: 18,
+    initialDelay: 50,
+    erase: false
   })
 
   if (isLoading) {
     return (
       <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground backdrop-blur-sm">
-        <span className="size-1.5 animate-pulse rounded-full bg-primary" />
-        <span className="brand-gradient-text">
+        <span className="size-1.5 animate-pulse rounded-full bg-zinc-900 dark:bg-zinc-100" />
+        <span className="thinking-text font-medium text-foreground/80">
           {loadingText || 'Thinking'}
         </span>
         <span className="typing-dots" aria-hidden>

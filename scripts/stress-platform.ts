@@ -1,7 +1,12 @@
 import { eq } from 'drizzle-orm'
 import { chromium } from 'playwright'
 
-import { createApiKey, ensureWorkspaceForUser } from '../lib/actions/api-keys'
+import { ensureWorkspaceForUser } from '../lib/actions/api-keys'
+import {
+  generateApiKey,
+  getKeyPrefix,
+  hashApiKey
+} from '../lib/api-key'
 import { db } from '../lib/db'
 import {
   createOrUpdateOutline,
@@ -36,7 +41,7 @@ async function expectJson(
 async function createStressKeys() {
   const workspace = await ensureWorkspaceForUser(stressUserId)
 
-  const mainKey = await createApiKey(stressUserId, workspace.id, {
+  const mainKey = await createStressKey(workspace.id, {
     name: 'Stress Main Key',
     environment: 'test',
     scopes: ['chat:write', 'search:write', 'usage:read'],
@@ -46,7 +51,7 @@ async function createStressKeys() {
     monthlyBudgetCents: 0
   })
 
-  const lowRpmKey = await createApiKey(stressUserId, workspace.id, {
+  const lowRpmKey = await createStressKey(workspace.id, {
     name: 'Stress Low RPM Key',
     environment: 'test',
     scopes: ['chat:write', 'usage:read'],
@@ -56,7 +61,7 @@ async function createStressKeys() {
     monthlyBudgetCents: 0
   })
 
-  const pausedKey = await createApiKey(stressUserId, workspace.id, {
+  const pausedKey = await createStressKey(workspace.id, {
     name: 'Stress Paused Key',
     environment: 'test',
     scopes: ['chat:write'],
@@ -70,7 +75,7 @@ async function createStressKeys() {
     .set({ status: 'paused' })
     .where(eq(apiKeys.id, pausedKey.id))
 
-  const revokedKey = await createApiKey(stressUserId, workspace.id, {
+  const revokedKey = await createStressKey(workspace.id, {
     name: 'Stress Revoked Key',
     environment: 'test',
     scopes: ['chat:write'],
@@ -91,6 +96,39 @@ async function createStressKeys() {
     pausedKey: pausedKey.key,
     revokedKey: revokedKey.key
   }
+}
+
+async function createStressKey(
+  workspaceId: string,
+  input: {
+    name: string
+    environment: 'test' | 'live'
+    scopes: string[]
+    allowedModels: string[]
+    rpmLimit: number
+    dailyRequestLimit: number
+    monthlyBudgetCents: number
+  }
+) {
+  const rawKey = generateApiKey(input.environment)
+  const [created] = await db
+    .insert(apiKeys)
+    .values({
+      workspaceId,
+      userId: stressUserId,
+      name: input.name,
+      keyPrefix: getKeyPrefix(rawKey),
+      keyHash: hashApiKey(rawKey),
+      environment: input.environment,
+      scopes: input.scopes,
+      allowedModels: input.allowedModels,
+      rpmLimit: input.rpmLimit,
+      dailyRequestLimit: input.dailyRequestLimit,
+      monthlyBudgetCents: input.monthlyBudgetCents
+    })
+    .returning()
+
+  return { ...created, key: rawKey }
 }
 
 async function runChat(baseKey: string, label: string) {
@@ -125,6 +163,7 @@ async function runSearch(baseKey: string) {
     body: JSON.stringify({
       model: 'brok-search',
       depth: 'lite',
+      stream: false,
       query: 'What is Brok? Answer briefly.'
     })
   })

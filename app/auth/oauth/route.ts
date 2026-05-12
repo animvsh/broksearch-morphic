@@ -15,6 +15,26 @@ function resolvePublicOrigin(request: Request, fallbackOrigin: string) {
   return fallbackOrigin
 }
 
+function buildRedirectUrl({
+  baseOrigin,
+  next,
+  providerToken
+}: {
+  baseOrigin: string
+  next: string
+  providerToken?: string | null
+}) {
+  const redirectUrl = new URL(next, baseOrigin)
+
+  if (providerToken && next.startsWith('/brokmail')) {
+    const hash = new URLSearchParams()
+    hash.set('brokmail_google_token', providerToken)
+    redirectUrl.hash = hash.toString()
+  }
+
+  return redirectUrl
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const publicOrigin = resolvePublicOrigin(request, origin)
@@ -24,14 +44,17 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
       const isLocalEnv = process.env.NODE_ENV === 'development'
-      if (isLocalEnv) {
-        // we can be sure that there is no load balancer in between, so no need to watch for X-Forwarded-Host
-        return NextResponse.redirect(`${origin}${next}`)
-      }
-      return NextResponse.redirect(`${publicOrigin}${next}`)
+      const redirectOrigin = isLocalEnv ? origin : publicOrigin
+      const redirectUrl = buildRedirectUrl({
+        baseOrigin: redirectOrigin,
+        next,
+        providerToken: data.session?.provider_token
+      })
+
+      return NextResponse.redirect(redirectUrl)
     }
   }
 

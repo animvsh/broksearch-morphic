@@ -21,6 +21,8 @@ export interface TypewriterCycleOptions {
   charInterval?: number
   /** Delay before first item appears (ms) */
   initialDelay?: number
+  /** Whether text should erase before the next item types in */
+  erase?: boolean
 }
 
 const DEFAULTS: Required<TypewriterCycleOptions> = {
@@ -28,7 +30,8 @@ const DEFAULTS: Required<TypewriterCycleOptions> = {
   itemDuration: 15000,
   idleDuration: 15000,
   charInterval: 25,
-  initialDelay: 300
+  initialDelay: 300,
+  erase: true
 }
 
 export function useTypewriterCycle(
@@ -40,7 +43,8 @@ export function useTypewriterCycle(
     itemDuration,
     idleDuration,
     charInterval,
-    initialDelay
+    initialDelay,
+    erase
   } = { ...DEFAULTS, ...options }
 
   const [stage, setStage] = useState<Stage>('init')
@@ -83,7 +87,7 @@ export function useTypewriterCycle(
       case 'visible': {
         const duration = currentIndex === 0 ? firstDuration : itemDuration
         timerRef.current = setTimeout(() => {
-          setStage('typing-out')
+          setStage(erase ? 'typing-out' : 'switching')
         }, duration)
         break
       }
@@ -126,7 +130,8 @@ export function useTypewriterCycle(
     charInterval,
     firstDuration,
     itemDuration,
-    idleDuration
+    idleDuration,
+    erase
   ])
 
   return {

@@ -25,28 +25,28 @@ export const SEARCH_MODE_CONFIGS: SearchModeConfig[] = [
     label: 'Quick Answer',
     description: 'Instant answer with minimal tool hops',
     icon: Zap,
-    color: 'text-amber-500'
+    color: 'text-zinc-900'
   },
   {
     value: 'search',
     label: 'Search',
     description: 'Balanced web research with clear citations',
     icon: Search,
-    color: 'text-sky-500'
+    color: 'text-zinc-900'
   },
   {
     value: 'deep',
     label: 'Deep Search',
     description: 'Deep research with comprehensive analysis',
     icon: Brain,
-    color: 'text-violet-500'
+    color: 'text-zinc-900'
   },
   {
     value: 'code',
     label: 'Code',
     description: 'Coding-focused answers and implementation help',
     icon: Braces,
-    color: 'text-emerald-500'
+    color: 'text-zinc-900'
   }
 ]
 

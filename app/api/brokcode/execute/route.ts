@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { unauthorizedResponse, verifyRequestAuth } from '@/lib/brok/auth'
-import { enforceBrokCodeAccountOwnership } from '@/lib/brokcode/account-guard'
+import { BrokModelId } from '@/lib/brok/models'
+import { routeToProviderResponse } from '@/lib/brok/provider-router'
+import {
+  enforceBrokCodeAccountOwnership,
+  getRequiredBrokAccountUser
+} from '@/lib/brokcode/account-guard'
 import {
   isDeepSecSecurityScanCommand,
   runDeepSecSecurityScan
 } from '@/lib/brokcode/security-scan'
+import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -27,6 +33,24 @@ function buildOpenCodeEndpoint(rawBase: string) {
   }
 
   return `${base}/v1/chat/completions`
+}
+
+function isSelfBrokApiEndpoint(rawBase: string | undefined, requestUrl: string) {
+  if (!rawBase) return false
+
+  try {
+    const base = new URL(rawBase)
+    const current = new URL(requestUrl)
+    const localHosts = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1'])
+    const sameOrigin =
+      base.origin === current.origin ||
+      (localHosts.has(base.hostname) &&
+        localHosts.has(current.hostname) &&
+        base.port === current.port)
+    return sameOrigin && base.pathname.startsWith('/api/v1')
+  } catch {
+    return false
+  }
 }
 
 function extractBearerToken(request: NextRequest) {
@@ -101,6 +125,7 @@ async function forwardOpenAiCompatibleStream({
   const reader = providerBody.getReader()
   let buffer = ''
   let content = ''
+  let visibleContent = ''
   let usage: unknown = null
 
   while (true) {
@@ -125,7 +150,12 @@ async function forwardOpenAiCompatibleStream({
         const delta = getDeltaText(payload)
         if (delta) {
           content += delta
-          send('delta', { content: delta })
+          const stripped = stripThinkingBlocks(content).trimStart()
+          const visibleDelta = stripped.slice(visibleContent.length)
+          if (visibleDelta) {
+            visibleContent = stripped
+            send('delta', { content: visibleDelta })
+          }
         }
         if (payload?.usage) {
           usage = payload.usage
@@ -142,7 +172,12 @@ async function forwardOpenAiCompatibleStream({
         const delta = getDeltaText(payload)
         if (delta) {
           content += delta
-          send('delta', { content: delta })
+          const stripped = stripThinkingBlocks(content).trimStart()
+          const visibleDelta = stripped.slice(visibleContent.length)
+          if (visibleDelta) {
+            visibleContent = stripped
+            send('delta', { content: visibleDelta })
+          }
         }
         if (payload?.usage) {
           usage = payload.usage
@@ -151,7 +186,44 @@ async function forwardOpenAiCompatibleStream({
     }
   }
 
-  return { content, usage }
+  return { content: visibleContent || stripThinkingBlocks(content), usage }
+}
+
+async function runDirectBrokRuntime({
+  model,
+  messages,
+  stream,
+  send
+}: {
+  model: string
+  messages: OpenAiMessage[]
+  stream: boolean
+  send?: (event: string, payload: unknown) => void
+}) {
+  const providerResponse = await routeToProviderResponse(model as BrokModelId, {
+    model,
+    messages,
+    stream,
+    temperature: 0.2,
+    maxTokens: 1200
+  })
+
+  if (stream) {
+    if (!providerResponse.body) {
+      throw new Error('Brok runtime did not include a stream body.')
+    }
+
+    return forwardOpenAiCompatibleStream({
+      providerBody: providerResponse.body,
+      send: send ?? (() => {})
+    })
+  }
+
+  const payload = await providerResponse.json().catch(() => null)
+  return {
+    content: stripThinkingBlocks(extractAssistantText(payload)).trim(),
+    usage: payload?.usage ?? null
+  }
 }
 
 function buildDefaultMessages(command: string): OpenAiMessage[] {
@@ -299,63 +371,17 @@ function createExecutionStream({
               : 'Streaming from Brok runtime.'
           })
 
-          const brokRuntimeResponse = await fetch(
-            new URL('/api/v1/chat/completions', request.url),
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(authorization ? { Authorization: authorization } : {}),
-                ...(xApiKey ? { 'x-api-key': xApiKey } : {})
-              },
-              body: JSON.stringify({
-                model,
-                stream: true,
-                temperature: 0.2,
-                max_tokens: 1200,
-                messages
-              })
-            }
-          )
-
-          if (!brokRuntimeResponse.ok) {
-            const brokRuntimeBody = await brokRuntimeResponse
-              .json()
-              .catch(() => null)
-            const brokRuntimeMessage =
-              brokRuntimeBody?.error?.message ?? 'Brok runtime failed.'
-            send('error', {
-              message: opencodeFailure
-                ? `${opencodeFailure} ${brokRuntimeMessage}`
-                : brokRuntimeMessage
-            })
-            controller.close()
-            return
-          }
-
-          const contentType =
-            brokRuntimeResponse.headers.get('content-type') ?? ''
           let content = ''
           let usage: unknown = null
 
-          if (
-            contentType.includes('text/event-stream') &&
-            brokRuntimeResponse.body
-          ) {
-            const streamed = await forwardOpenAiCompatibleStream({
-              providerBody: brokRuntimeResponse.body,
-              send
-            })
-            content = streamed.content
-            usage = streamed.usage
-          } else {
-            const payload = await brokRuntimeResponse.json().catch(() => null)
-            content = extractAssistantText(payload)
-            usage = payload?.usage ?? null
-            if (content) {
-              send('delta', { content })
-            }
-          }
+          const direct = await runDirectBrokRuntime({
+            model,
+            messages,
+            stream: true,
+            send
+          })
+          content = direct.content
+          usage = direct.usage
 
           send('result', {
             runtime: 'brok',
@@ -413,16 +439,20 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const authResult = await verifyRequestAuth(request)
-  if (!authResult.success) {
-    return unauthorizedResponse(authResult)
-  }
-  const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
-  if (accountMismatch) return accountMismatch
-
   const authorization = request.headers.get('authorization')
   const xApiKey = request.headers.get('x-api-key')
   const inboundApiKey = xApiKey ?? extractBearerToken(request)
+  const authResult = await verifyRequestAuth(request)
+
+  if (authResult.success) {
+    const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
+    if (accountMismatch) return accountMismatch
+  } else {
+    const user = await getRequiredBrokAccountUser()
+    if (!user) {
+      return unauthorizedResponse(authResult)
+    }
+  }
 
   if (isDeepSecSecurityScanCommand(command)) {
     const baseUrl =
@@ -467,12 +497,18 @@ export async function POST(request: NextRequest) {
       ? inboundMessages
       : buildDefaultMessages(command)
 
-  const opencodeBase = process.env.BROKCODE_OPENCODE_BASE_URL
+  const configuredOpenCodeBase = process.env.BROKCODE_OPENCODE_BASE_URL
+  const selfBrokApiEndpoint = isSelfBrokApiEndpoint(
+    configuredOpenCodeBase,
+    request.url
+  )
+  const opencodeBase = selfBrokApiEndpoint ? undefined : configuredOpenCodeBase
   const opencodeApiKey =
     process.env.BROKCODE_OPENCODE_API_KEY ?? extractBearerToken(request)
   const requireOpenCode =
-    body?.require_opencode === true ||
-    process.env.BROKCODE_REQUIRE_OPENCODE === 'true'
+    !selfBrokApiEndpoint &&
+    (body?.require_opencode === true ||
+      process.env.BROKCODE_REQUIRE_OPENCODE === 'true')
   let opencodeFailure: string | null = null
 
   if (requireOpenCode && !opencodeBase) {
@@ -575,54 +611,26 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const brokRuntimeResponse = await fetch(
-    new URL('/api/v1/chat/completions', request.url),
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(authorization ? { Authorization: authorization } : {}),
-        ...(xApiKey ? { 'x-api-key': xApiKey } : {})
-      },
-      body: JSON.stringify({
-        model,
-        stream: false,
-        temperature: 0.2,
-        max_tokens: 1200,
-        messages
-      })
-    }
-  )
+  let content = ''
+  let usage: unknown = null
+  let responseModel = model
 
-  if (!brokRuntimeResponse.ok) {
-    const brokRuntimeBody = await brokRuntimeResponse.json().catch(() => null)
-    const brokRuntimeMessage =
-      brokRuntimeBody?.error?.message ?? 'Brok runtime failed.'
-
-    return NextResponse.json(
-      {
-        error: {
-          type: 'runtime_error',
-          message: opencodeFailure
-            ? `${opencodeFailure} ${brokRuntimeMessage}`
-            : brokRuntimeMessage
-        }
-      },
-      { status: 502 }
-    )
-  }
-
-  const payload = await brokRuntimeResponse.json()
-  const content = extractAssistantText(payload)
+  const direct = await runDirectBrokRuntime({
+    model,
+    messages,
+    stream: false
+  })
+  content = direct.content
+  usage = direct.usage
 
   return NextResponse.json({
     runtime: 'brok',
-    model: payload?.model ?? model,
+    model: responseModel,
     content:
       content.length > 0
         ? content
         : 'Brok runtime completed the run but returned no text output.',
-    usage: payload?.usage ?? null,
+    usage,
     preview_url: extractPreviewUrl(`${command}\n${content}`),
     note: opencodeFailure
       ? `${opencodeFailure} Routed through Brok runtime.`

@@ -129,6 +129,25 @@ const quickPrompts = [
   'Whenever I get a receipt, label it expenses.'
 ]
 
+function consumeBrokMailGoogleTokenFromHash() {
+  if (typeof window === 'undefined' || !window.location.hash) return null
+
+  const params = new URLSearchParams(window.location.hash.slice(1))
+  const token =
+    params.get('brokmail_google_token') || params.get('provider_token')
+
+  if (!token) return null
+
+  window.localStorage.setItem('brokmail_google_token', token)
+  window.history.replaceState(
+    null,
+    '',
+    `${window.location.pathname}${window.location.search}`
+  )
+
+  return token
+}
+
 function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`
 }
@@ -572,6 +591,20 @@ export function BrokMailApp() {
   }
 
   async function bootstrapGmail() {
+    const tokenFromRedirect = consumeBrokMailGoogleTokenFromHash()
+    if (tokenFromRedirect) {
+      setGoogleAccessToken(tokenFromRedirect)
+      setConnectionStatus('Loading live Gmail from Google authorization...')
+      setCalendarConnectionStatus(
+        'Loading live Google Calendar from Google authorization...'
+      )
+      await Promise.all([
+        loadGmailThreads(tokenFromRedirect),
+        loadCalendarEvents(tokenFromRedirect)
+      ])
+      return
+    }
+
     const storedToken = window.localStorage.getItem('brokmail_google_token')
     if (storedToken) {
       setGoogleAccessToken(storedToken)

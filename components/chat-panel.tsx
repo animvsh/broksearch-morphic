@@ -2,19 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Textarea from 'react-textarea-autosize'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import { UseChatHelpers } from '@ai-sdk/react'
 import {
   ArrowUp,
   ChevronDown,
-  Code2,
-  FlaskConical,
-  Mail,
   MessageCirclePlus,
-  PlugZap,
-  Presentation,
   Square
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -37,9 +31,9 @@ import { SearchModeSelector } from './search-mode-selector'
 import { UploadedFileList } from './uploaded-file-list'
 
 const LOADING_TAGLINES = [
-  'Catching the wind',
-  'Calling the right tools',
-  'Writing the reply'
+  'Searching sources',
+  'Reading context',
+  'Composing answer'
 ]
 
 interface ChatPanelProps {
@@ -105,11 +99,12 @@ export function ChatPanel({
   const hasAvailableModels =
     isCloudDeployment || modelSelectorData?.hasAvailableModels !== false
   const { displayText: loadingTagline } = useTypewriterCycle(LOADING_TAGLINES, {
-    firstDuration: 700,
-    itemDuration: 900,
-    idleDuration: 150,
-    charInterval: 24,
-    initialDelay: 80
+    firstDuration: 1200,
+    itemDuration: 1300,
+    idleDuration: 80,
+    charInterval: 18,
+    initialDelay: 60,
+    erase: false
   })
 
   const handleCompositionStart = () => setIsComposing(true)
@@ -217,45 +212,6 @@ export function ChatPanel({
           : 'mx-auto flex w-full max-w-4xl flex-col px-4 pb-8 pt-24 sm:px-6 md:pt-32'
       )}
     >
-      {messages.length === 0 ? (
-        <div className="mx-auto mb-3 flex w-full max-w-3xl flex-wrap items-center justify-center gap-2 px-1">
-          <Link
-            href="/brokcode"
-            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
-          >
-            <Code2 className="size-3.5" />
-            Brok Code
-          </Link>
-          <Link
-            href="/brokmail"
-            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
-          >
-            <Mail className="size-3.5" />
-            BrokMail
-          </Link>
-          <Link
-            href="/playground"
-            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
-          >
-            <FlaskConical className="size-3.5" />
-            Playground
-          </Link>
-          <Link
-            href="/presentations"
-            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
-          >
-            <Presentation className="size-3.5" />
-            Slides
-          </Link>
-          <Link
-            href="/integrations"
-            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
-          >
-            <PlugZap className="size-3.5" />
-            Integrations
-          </Link>
-        </div>
-      ) : null}
       {uploadedFiles.length > 0 && (
         <UploadedFileList files={uploadedFiles} onRemove={handleFileRemove} />
       )}
@@ -317,7 +273,7 @@ export function ChatPanel({
                   {isToolInvocationInProgress()
                     ? 'Working through tools:'
                     : 'Thinking:'}
-                  <span className="truncate font-medium text-foreground/80">
+                  <span className="thinking-text truncate font-medium text-foreground/80">
                     {loadingTagline}
                   </span>
                   <span className="typing-dots" aria-hidden>
@@ -328,7 +284,7 @@ export function ChatPanel({
                 </span>
               </div>
               <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted/70">
-                <div className="h-full w-2/5 animate-[pulse_1.4s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-blue-500/50 via-teal-500 to-orange-500/70" />
+                <div className="h-full w-2/5 animate-[pulse_1.4s_ease-in-out_infinite] rounded-full bg-zinc-950/80 dark:bg-white/80" />
               </div>
             </div>
           </div>

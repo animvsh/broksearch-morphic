@@ -97,6 +97,7 @@ type BrokUsage = {
 
 type BrokCodeRuntime = 'opencode' | 'brok' | 'not_connected'
 type GithubConnectionStatus = 'checking' | 'connected' | 'ready' | 'unavailable'
+type PreviewHealthStatus = 'idle' | 'checking' | 'online' | 'offline'
 
 type ExecutionStepStatus = 'queued' | 'running' | 'done' | 'error'
 
@@ -166,6 +167,13 @@ type GithubRepoContext = {
   currentBranch: string | null
   defaultBranch: string | null
   commitSha: string | null
+}
+
+type PreviewHealth = {
+  status: PreviewHealthStatus
+  message: string
+  checkedAt?: string
+  httpStatus?: number
 }
 
 const BROK_KEY_STORAGE = 'brok_code_api_key'
@@ -600,6 +608,11 @@ export function BrokCodeApp({
   const [previewInput, setPreviewInput] = useState(
     'http://127.0.0.1:3001/playground'
   )
+  const [previewFrameKey, setPreviewFrameKey] = useState(0)
+  const [previewHealth, setPreviewHealth] = useState<PreviewHealth>({
+    status: 'idle',
+    message: 'Preview has not been checked yet.'
+  })
   const [executionRuns, setExecutionRuns] = useState<ExecutionRun[]>([])
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [runtimeBootstrapped, setRuntimeBootstrapped] = useState(false)
@@ -624,7 +637,7 @@ export function BrokCodeApp({
       id: 'welcome',
       role: 'assistant',
       content:
-        'I am Brok Code. Add a Brok API key, connect GitHub for repo work, then tell me what to build, fix, audit, or ship.'
+        'I am Brok Code. You are signed in, so the cloud chat is ready. Connect GitHub for repo work, or add a Brok API key when you want CLI/TUI sync and external agent access.'
     }
   ])
 
@@ -731,6 +744,8 @@ export function BrokCodeApp({
   )
 
   const hasLiveKey = Boolean(apiKey && isValidBrokApiKey(apiKey))
+  const hasAccountRuntime = Boolean(accountEmail)
+  const hasLiveRuntime = hasAccountRuntime || hasLiveKey
   const maskedKey = hasLiveKey && apiKey ? maskBrokApiKey(apiKey) : null
   const codeModels =
     models.length > 0
@@ -992,7 +1007,7 @@ export function BrokCodeApp({
     return {
       id: createId('run'),
       command,
-      runtime: hasLiveKey ? 'opencode' : 'not_connected',
+      runtime: hasLiveRuntime ? 'opencode' : 'not_connected',
       status: 'running',
       startedAt: Date.now(),
       steps: executionStepTemplate.map(step => ({
@@ -1067,12 +1082,70 @@ export function BrokCodeApp({
     }
     setPreviewUrl(normalized)
     setPreviewInput(normalized)
+    setPreviewFrameKey(value => value + 1)
     setRuntimeError(null)
   }
 
   function applyPreviewInput() {
     loadPreviewTarget(previewInput)
   }
+
+  const checkPreviewHealth = useCallback(async (target = previewUrl) => {
+    const normalized = normalizePreviewUrl(target)
+    if (!normalized || isBrokCodeWorkspaceUrl(normalized)) {
+      setPreviewHealth({
+        status: 'offline',
+        message: 'Choose a generated app URL, not Brok Code itself.'
+      })
+      return
+    }
+
+    setPreviewHealth(current => ({
+      ...current,
+      status: 'checking',
+      message: 'Checking preview server...'
+    }))
+
+    try {
+      const response = await fetch(
+        `/api/brokcode/preview/status?${new URLSearchParams({
+          url: normalized
+        })}`,
+        { cache: 'no-store' }
+      )
+      const body = await response.json().catch(() => null)
+
+      setPreviewHealth({
+        status: body?.ok ? 'online' : 'offline',
+        message:
+          typeof body?.message === 'string'
+            ? body.message
+            : body?.ok
+              ? 'Preview server is reachable.'
+              : 'Preview server is not reachable yet.',
+        checkedAt:
+          typeof body?.checkedAt === 'string'
+            ? body.checkedAt
+            : new Date().toISOString(),
+        httpStatus: typeof body?.status === 'number' ? body.status : undefined
+      })
+    } catch {
+      setPreviewHealth({
+        status: 'offline',
+        message: 'Preview health check failed.',
+        checkedAt: new Date().toISOString()
+      })
+    }
+  }, [previewUrl])
+
+  function reloadPreview() {
+    setPreviewFrameKey(value => value + 1)
+    void checkPreviewHealth(previewUrl)
+  }
+
+  useEffect(() => {
+    void checkPreviewHealth(previewUrl)
+  }, [checkPreviewHealth, previewUrl])
 
   async function refreshUsage(key: string) {
     setUsageLoading(true)
@@ -1743,15 +1816,15 @@ export function BrokCodeApp({
       return
     }
 
-    if (!hasLiveKey || !apiKey) {
-      setRuntimeError('Save a valid Brok API key before starting a real run.')
+    if (!hasLiveRuntime) {
+      setRuntimeError('Sign in to Brok before starting a real run.')
       setMessages(current => [
         ...current,
         {
           id: createId('system'),
           role: 'system',
           content:
-            'Real execution requires a valid brok_sk_ API key. Save the key, then run this command again.'
+            'Real execution requires a signed-in Brok account. Sign in, then run this command again.'
         }
       ])
       return
@@ -1819,14 +1892,16 @@ export function BrokCodeApp({
       const response = await fetch('/api/brokcode/execute', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          ...(hasLiveKey && apiKey
+            ? { Authorization: `Bearer ${apiKey}` }
+            : {}),
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           command: trimmed,
           model: selectedModel,
           stream: true,
-          require_opencode: true,
+          require_opencode: false,
           messages: [
             { role: 'system', content: buildCommandPrompt(trimmed) },
             { role: 'user', content: trimmed }
@@ -1951,7 +2026,9 @@ export function BrokCodeApp({
         status: 'done',
         previewUrl: discoveredPreviewUrl ?? null
       })
-      await refreshUsage(apiKey)
+      if (apiKey) {
+        await refreshUsage(apiKey)
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Live Brok request failed.'
@@ -2047,7 +2124,7 @@ export function BrokCodeApp({
         return
       }
 
-      if (!hasLiveKey) {
+      if (!hasLiveRuntime) {
         pendingCloudStartPromptRef.current = prompt
         setMessages(current => [
           ...current,
@@ -2055,7 +2132,7 @@ export function BrokCodeApp({
             id: createId('system'),
             role: 'system',
             content:
-              'BrokCode Cloud is queued. Add a valid brok_sk_ API key and the cloud run will start with this prompt.',
+              'BrokCode Cloud is queued. Sign in to Brok and the cloud run will start with this prompt.',
             actions: ['connect-github']
           }
         ])
@@ -2072,13 +2149,13 @@ export function BrokCodeApp({
     autoStart,
     connectGithub,
     githubStatus,
-    hasLiveKey,
+    hasLiveRuntime,
     initialPrompt,
     runtimeBootstrapped
   ])
 
   useEffect(() => {
-    if (!hasLiveKey || isRunning) return
+    if (!hasLiveRuntime || isRunning) return
     if (connectGithub && githubStatus !== 'connected') return
 
     const prompt = pendingCloudStartPromptRef.current
@@ -2086,7 +2163,7 @@ export function BrokCodeApp({
 
     pendingCloudStartPromptRef.current = null
     void runCommandRef.current?.(buildCloudStartCommand(prompt, connectGithub))
-  }, [connectGithub, githubStatus, hasLiveKey, isRunning])
+  }, [connectGithub, githubStatus, hasLiveRuntime, isRunning])
 
   return (
     <div className="dashboard-shell brokcode-shell flex h-full w-full flex-col pt-12 text-foreground">
@@ -2134,10 +2211,14 @@ export function BrokCodeApp({
               {executionRuns.length} real runs
             </Badge>
             <Badge
-              variant={hasLiveKey ? 'default' : 'secondary'}
+              variant={hasLiveRuntime ? 'default' : 'secondary'}
               className="rounded-md"
             >
-              {hasLiveKey ? 'Account key' : 'Key required'}
+              {hasLiveKey
+                ? 'Account key'
+                : hasAccountRuntime
+                  ? 'Account ready'
+                  : 'Sign in required'}
             </Badge>
             <Badge variant="outline" className="rounded-md">
               Sync:{' '}
@@ -2253,7 +2334,10 @@ export function BrokCodeApp({
                   <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_150px] sm:items-end">
                     <div>
                       <Label htmlFor="brok-code-key" className="text-xs">
-                        Brok account API key
+                      Brok account API key
+                      <span className="ml-1 font-normal text-muted-foreground">
+                        optional for CLI/TUI
+                      </span>
                       </Label>
                       <div className="mt-1 flex items-center gap-2">
                         <KeyRound className="size-4 text-muted-foreground" />
@@ -2319,7 +2403,9 @@ export function BrokCodeApp({
                       </Button>
                     </div>
                     <p className="mt-1 text-muted-foreground">
-                      {maskedKey ? `Using ${maskedKey}` : 'No key configured'}
+                      {maskedKey
+                        ? `Using ${maskedKey}`
+                        : `Using signed-in account (${accountEmail})`}
                     </p>
                     {usageLoading ? (
                       <p className="mt-1 text-muted-foreground">
@@ -2570,9 +2656,12 @@ export function BrokCodeApp({
                     <BrowserPreviewPanel
                       previewInput={previewInput}
                       previewUrl={previewUrl}
+                      previewFrameKey={previewFrameKey}
+                      previewHealth={previewHealth}
                       onPreviewInputChange={setPreviewInput}
                       onApply={applyPreviewInput}
                       onDirectLoad={loadPreviewTarget}
+                      onReload={reloadPreview}
                       runtimeError={runtimeError}
                       latestRun={executionRuns[0]}
                     />
@@ -2673,17 +2762,23 @@ export function BrokCodeApp({
               ))}
 
               {isRunning && (
-                <div className="mr-auto max-w-[min(100%,42rem)] overflow-hidden rounded-md border bg-muted/30 p-4 shadow-[0_18px_50px_-32px_rgba(56,189,248,0.55)]">
+                <div className="mr-auto max-w-[min(100%,42rem)] overflow-hidden rounded-md border bg-muted/30 p-4 shadow-[0_18px_50px_-34px_rgba(15,23,42,0.28)]">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Wand2 className="size-4" />
-                    Brok Code is working{'.'.repeat(livePulse)}
+                    <span>Brok Code is working</span>
+                    <span className="typing-dots" aria-hidden>
+                      <span />
+                      <span />
+                      <span />
+                    </span>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    {runStreamingHints[runHintIndex]}
-                    {'.'.repeat(livePulse)}
+                    <span className="thinking-text">
+                      {runStreamingHints[runHintIndex]}
+                    </span>
                   </p>
                   <div className="mt-3 h-1 overflow-hidden rounded-full bg-background/70">
-                    <div className="h-full w-2/5 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-cyan-500/40 via-cyan-500 to-violet-500/70" />
+                    <div className="h-full w-2/5 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-zinc-950/80 dark:bg-white/80" />
                   </div>
                   <div className="mt-3">
                     <ExecutionVisualizer runs={executionRuns.slice(0, 1)} />
@@ -2773,9 +2868,12 @@ export function BrokCodeApp({
                 <BrowserPreviewPanel
                   previewInput={previewInput}
                   previewUrl={previewUrl}
+                  previewFrameKey={previewFrameKey}
+                  previewHealth={previewHealth}
                   onPreviewInputChange={setPreviewInput}
                   onApply={applyPreviewInput}
                   onDirectLoad={loadPreviewTarget}
+                  onReload={reloadPreview}
                   runtimeError={runtimeError}
                   latestRun={executionRuns[0]}
                 />
@@ -3048,12 +3146,12 @@ function ChatBubble({
             'border-dashed bg-muted/30 py-2 text-xs text-muted-foreground',
           !isUser &&
             !isSystem &&
-            'bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.08),transparent_45%),var(--background)]'
+            'bg-background'
         )}
       >
         {!isUser && !isSystem && (
           <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/25 px-2 py-1 text-[11px] font-medium text-muted-foreground">
-            <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+            <span className="size-1.5 animate-pulse rounded-full bg-zinc-900 dark:bg-zinc-100" />
             Brok Code
           </div>
         )}
@@ -3260,18 +3358,24 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
 function BrowserPreviewPanel({
   previewInput,
   previewUrl,
+  previewFrameKey,
+  previewHealth,
   latestRun,
   onPreviewInputChange,
   onApply,
   onDirectLoad,
+  onReload,
   runtimeError
 }: {
   previewInput: string
   previewUrl: string
+  previewFrameKey: number
+  previewHealth: PreviewHealth
   latestRun?: ExecutionRun
   onPreviewInputChange: (value: string) => void
   onApply: () => void
   onDirectLoad: (value: string) => void
+  onReload: () => void
   runtimeError: string | null
 }) {
   const previewShortcuts = [
@@ -3281,9 +3385,51 @@ function BrowserPreviewPanel({
     { label: 'Playground', value: 'http://127.0.0.1:3001/playground' }
   ]
   const isBlockedPreview = isBrokCodeWorkspaceUrl(previewUrl)
+  const healthTone =
+    previewHealth.status === 'online'
+      ? 'default'
+      : previewHealth.status === 'checking'
+        ? 'secondary'
+        : 'outline'
 
   return (
     <div className="space-y-3">
+      <div className="rounded-md border bg-background px-3 py-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold">Server Preview</p>
+            <p className="text-xs text-muted-foreground">
+              Points at the running dev server. Hot reload stays live inside
+              the frame when that server supports HMR.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={healthTone} className="rounded-md">
+              {previewHealth.status === 'online'
+                ? 'Live'
+                : previewHealth.status === 'checking'
+                  ? 'Checking'
+                  : previewHealth.status === 'offline'
+                    ? 'Offline'
+                    : 'Ready'}
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-2"
+              onClick={onReload}
+            >
+              <RefreshCcw className="size-3.5" />
+              Reload Preview
+            </Button>
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {previewHealth.message}
+          {previewHealth.httpStatus ? ` (${previewHealth.httpStatus})` : ''}
+        </p>
+      </div>
+
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input
           value={previewInput}
@@ -3353,6 +3499,7 @@ function BrowserPreviewPanel({
           </div>
         ) : (
           <iframe
+            key={previewFrameKey}
             src={previewUrl}
             title="Brok Code browser preview"
             className="h-[360px] min-h-[360px] w-full bg-white lg:h-[calc(100vh-22rem)] lg:min-h-[420px]"
