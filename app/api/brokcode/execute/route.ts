@@ -9,6 +9,10 @@ import {
 import { BrokModelId } from '@/lib/brok/models'
 import { routeToProviderResponse } from '@/lib/brok/provider-router'
 import {
+  checkUsageLimits,
+  usageLimitResponse
+} from '@/lib/brok/usage-tracker'
+import {
   enforceBrokCodeAccountOwnership,
   getRequiredBrokAccountUser
 } from '@/lib/brokcode/account-guard'
@@ -473,6 +477,13 @@ export async function POST(request: NextRequest) {
 
   if (!apiKeyHasScope(authResult.apiKey, 'code:write')) {
     return forbiddenScopeResponse('code:write')
+  }
+  const usageLimit = await checkUsageLimits({
+    apiKey: authResult.apiKey,
+    workspace: authResult.workspace
+  })
+  if (!usageLimit.allowed) {
+    return usageLimitResponse(usageLimit)
   }
 
   if (isDeepSecSecurityScanCommand(command)) {

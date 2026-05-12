@@ -9,7 +9,12 @@ import {
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
 import { runSearchPipeline } from '@/lib/brok/search-pipeline'
-import { generateRequestId, recordUsage } from '@/lib/brok/usage-tracker'
+import {
+  checkUsageLimits,
+  generateRequestId,
+  recordUsage,
+  usageLimitResponse
+} from '@/lib/brok/usage-tracker'
 
 export const runtime = 'nodejs'
 
@@ -28,6 +33,13 @@ export async function POST(request: NextRequest) {
   }
   if (!apiKeyHasScope(auth.apiKey, 'search:write')) {
     return forbiddenScopeResponse('search:write')
+  }
+  const usageLimit = await checkUsageLimits({
+    apiKey: auth.apiKey,
+    workspace: auth.workspace
+  })
+  if (!usageLimit.allowed) {
+    return usageLimitResponse(usageLimit)
   }
 
   // Parse body

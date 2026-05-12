@@ -14,7 +14,7 @@ import {
   createSlides,
   setPresentationShare
 } from '../lib/db/actions/presentations'
-import { apiKeys } from '../lib/db/schema'
+import { apiKeys, usageEvents } from '../lib/db/schema'
 import { exportToPptx } from '../lib/presentations/export/pptx'
 import type { SlideContent } from '../lib/presentations/theme-utils'
 import { getThemeById } from '../lib/presentations/theme-utils'
@@ -61,6 +61,31 @@ async function createStressKeys() {
     monthlyBudgetCents: 0
   })
 
+  const dailyLimitedKey = await createStressKey(workspace.id, {
+    name: 'Stress Daily Limited Key',
+    environment: 'test',
+    scopes: ['chat:write'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 1,
+    monthlyBudgetCents: 0
+  })
+  await db.insert(usageEvents).values({
+    requestId: `stress_daily_${Date.now()}`,
+    workspaceId: workspace.id,
+    userId: stressUserId,
+    apiKeyId: dailyLimitedKey.id,
+    endpoint: 'chat',
+    model: 'brok-lite',
+    provider: 'Brok',
+    inputTokens: 1,
+    outputTokens: 1,
+    providerCostUsd: '0',
+    billedUsd: '0',
+    latencyMs: 1,
+    status: 'success'
+  })
+
   const pausedKey = await createStressKey(workspace.id, {
     name: 'Stress Paused Key',
     environment: 'test',
@@ -93,6 +118,7 @@ async function createStressKeys() {
     workspaceId: workspace.id,
     mainKey: mainKey.key,
     lowRpmKey: lowRpmKey.key,
+    dailyLimitedKey: dailyLimitedKey.key,
     pausedKey: pausedKey.key,
     revokedKey: revokedKey.key
   }
@@ -216,6 +242,51 @@ async function runApiStress(
     throw new Error('revoked key did not return inactive_key')
   }
   console.log('stress api ok revoked key rejection')
+
+  const missingScopeResponse = await fetch(
+    `${baseUrl}/api/v1/search/completions`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${keys.lowRpmKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'brok-search',
+        stream: false,
+        query: 'scope check'
+      })
+    }
+  )
+  const missingScopeBody = await expectJson(missingScopeResponse, 403)
+  if (missingScopeBody?.error?.code !== 'missing_scope') {
+    throw new Error('search without search:write did not return missing_scope')
+  }
+  console.log('stress api ok scope enforcement')
+
+  const dailyLimitedResponse = await fetch(
+    `${baseUrl}/api/v1/chat/completions`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${keys.dailyLimitedKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'brok-lite',
+        stream: false,
+        max_tokens: 16,
+        messages: [{ role: 'user', content: 'daily limit check' }]
+      })
+    }
+  )
+  const dailyLimitedBody = await expectJson(dailyLimitedResponse, 429)
+  if (dailyLimitedBody?.error?.code !== 'daily_request_limit_exceeded') {
+    throw new Error(
+      'daily-limited key did not return daily_request_limit_exceeded'
+    )
+  }
+  console.log('stress api ok daily usage limit enforcement')
 
   await runChat(keys.lowRpmKey, 'rate-limit-first')
 
@@ -422,6 +493,7 @@ async function main() {
   await runBrowserChecks(presentationId)
 
   console.log('stress ok')
+  process.exit(0)
 }
 
 main().catch(error => {

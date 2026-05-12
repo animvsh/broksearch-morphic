@@ -13,7 +13,12 @@ import {
   routeToProviderResponse
 } from '@/lib/brok/provider-router'
 import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
-import { generateRequestId, recordUsage } from '@/lib/brok/usage-tracker'
+import {
+  checkUsageLimits,
+  generateRequestId,
+  recordUsage,
+  usageLimitResponse
+} from '@/lib/brok/usage-tracker'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 export const runtime = 'nodejs'
@@ -29,6 +34,13 @@ export async function POST(request: NextRequest) {
   }
   if (!apiKeyHasScope(auth.apiKey, 'chat:write')) {
     return forbiddenScopeResponse('chat:write')
+  }
+  const usageLimit = await checkUsageLimits({
+    apiKey: auth.apiKey,
+    workspace: auth.workspace
+  })
+  if (!usageLimit.allowed) {
+    return usageLimitResponse(usageLimit)
   }
 
   // Parse body
