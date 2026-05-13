@@ -121,10 +121,9 @@ export function LoginForm({
                 variant="outline"
                 type="button"
                 className="w-full"
-                onClick={handleSocialLogin}
-                disabled={isLoading}
+                disabled
               >
-                Google sign-in needs setup
+                Google sign-in unavailable
               </Button>
             )}
 

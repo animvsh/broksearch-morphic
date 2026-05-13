@@ -26,6 +26,7 @@ describe('BrokMail Gmail routes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     delete process.env.COMPOSIO_GMAIL_TOOLKIT_SLUGS
+    delete process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED
     vi.mocked(isComposioConfigured).mockReturnValue(true)
     vi.mocked(isComposioConnectMode).mockReturnValue(false)
     vi.mocked(getCurrentUser).mockResolvedValue({
@@ -117,5 +118,58 @@ describe('BrokMail Gmail routes', () => {
       'googlesuper',
       20
     )
+  })
+
+  it('does not advertise browser Gmail sync when Google auth is disabled', async () => {
+    vi.mocked(isComposioConfigured).mockReturnValue(false)
+
+    const request = new Request(
+      'https://brok.test/api/brokmail/gmail/connect',
+      {
+        method: 'POST',
+        headers: {
+          host: 'brok.test',
+          'x-forwarded-proto': 'https'
+        }
+      }
+    )
+
+    const response = await connectGmail(request as any)
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body).toMatchObject({
+      provider: 'unavailable',
+      connectionUrl: null,
+      redirectUrl: 'https://brok.test/brokmail?gmail=connected'
+    })
+    expect(body.message).toContain('Browser Google sync is disabled')
+  })
+
+  it('keeps browser Gmail sync fallback when Google auth is enabled', async () => {
+    process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED = 'true'
+    vi.mocked(isComposioConfigured).mockReturnValue(false)
+
+    const request = new Request(
+      'https://brok.test/api/brokmail/gmail/connect',
+      {
+        method: 'POST',
+        headers: {
+          host: 'brok.test',
+          'x-forwarded-proto': 'https'
+        }
+      }
+    )
+
+    const response = await connectGmail(request as any)
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      provider: 'google-oauth',
+      connectionUrl: null,
+      redirectUrl: 'https://brok.test/brokmail?gmail=connected'
+    })
+    expect(body.message).toContain('Use browser Gmail live sync')
   })
 })

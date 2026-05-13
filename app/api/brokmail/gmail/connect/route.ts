@@ -37,18 +37,38 @@ function resolveRequestOrigin(request: NextRequest) {
   return request.nextUrl.origin
 }
 
+function isBrowserGoogleSyncEnabled() {
+  return process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
+}
+
+function unavailableBrowserSyncMessage(prefix: string) {
+  return `${prefix} Browser Google sync is disabled for this deployment. Enable Composio Gmail or enable Google in Supabase Auth to connect Gmail.`
+}
+
 export async function POST(request: NextRequest) {
   const origin = resolveRequestOrigin(request)
   const redirectUrl = `${origin}/brokmail?gmail=connected`
 
   if (!isComposioConfigured()) {
-    return NextResponse.json({
-      provider: 'google-oauth',
-      connectionUrl: null,
-      redirectUrl,
-      message:
-        'Composio is not configured. Use browser Gmail live sync in BrokMail.'
-    })
+    if (isBrowserGoogleSyncEnabled()) {
+      return NextResponse.json({
+        provider: 'google-oauth',
+        connectionUrl: null,
+        redirectUrl,
+        message:
+          'Composio is not configured. Use browser Gmail live sync in BrokMail.'
+      })
+    }
+
+    return NextResponse.json(
+      {
+        provider: 'unavailable',
+        connectionUrl: null,
+        redirectUrl,
+        message: unavailableBrowserSyncMessage('Composio is not configured.')
+      },
+      { status: 503 }
+    )
   }
 
   try {
@@ -96,15 +116,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      provider: 'google-oauth',
-      connectionUrl: null,
-      redirectUrl,
-      message:
-        errors.length > 0
-          ? `${errors.join(' | ')} Browser Gmail live sync is still available in BrokMail.`
-          : 'Composio did not return a Gmail connection URL. Browser Gmail live sync is still available in BrokMail.'
-    })
+    const message =
+      errors.length > 0
+        ? errors.join(' | ')
+        : 'Composio did not return a Gmail connection URL.'
+
+    if (isBrowserGoogleSyncEnabled()) {
+      return NextResponse.json({
+        provider: 'google-oauth',
+        connectionUrl: null,
+        redirectUrl,
+        message: `${message} Browser Gmail live sync is still available in BrokMail.`
+      })
+    }
+
+    return NextResponse.json(
+      {
+        provider: 'unavailable',
+        connectionUrl: null,
+        redirectUrl,
+        message: unavailableBrowserSyncMessage(message)
+      },
+      { status: 502 }
+    )
   } catch (error) {
     return NextResponse.json({
       provider: 'google-oauth',

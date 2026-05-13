@@ -451,6 +451,7 @@ export function BrokMailApp() {
         'Connect Gmail or Google Calendar to start. Composio creates the connection; live mail and calendar actions run after this browser loads your Google session, so nothing is simulated.'
     }
   ])
+  const googleAuthEnabled = isGoogleAuthEnabled()
 
   const selectedThread = useMemo(
     () => threads.find(thread => thread.id === selectedThreadId) ?? threads[0],
@@ -619,7 +620,7 @@ export function BrokMailApp() {
       )
     }
 
-    if (!isGoogleAuthEnabled()) {
+    if (!googleAuthEnabled) {
       throw new Error('Unsupported provider: provider is not enabled')
     }
 
@@ -690,12 +691,16 @@ export function BrokMailApp() {
         setConnected(true)
         setConnectionMode('composio')
         setConnectionStatus(
-          'Gmail is connected through Composio. Load live inbox in this browser to read threads and create drafts.'
+          googleAuthEnabled
+            ? 'Gmail is connected through Composio. Load live inbox in this browser to read threads and create drafts.'
+            : 'Gmail is connected through Composio. Browser live inbox sync is disabled until Google auth is enabled for this deployment.'
         )
       } else {
         setConnectionStatus(
           gmailStatus.message ||
-            'Connect Gmail through Composio, then load live inbox in this browser.'
+            (googleAuthEnabled
+              ? 'Connect Gmail through Composio, then load live inbox in this browser.'
+              : 'Connect Gmail through Composio. Browser live inbox sync is disabled until Google auth is enabled for this deployment.')
         )
       }
 
@@ -703,12 +708,16 @@ export function BrokMailApp() {
         setCalendarConnected(true)
         setCalendarConnectionMode('composio')
         setCalendarConnectionStatus(
-          'Google Calendar is connected through Composio. Load live calendar in this browser to read and update events.'
+          googleAuthEnabled
+            ? 'Google Calendar is connected through Composio. Load live calendar in this browser to read and update events.'
+            : 'Google Calendar is connected through Composio. Browser live calendar sync is disabled until Google auth is enabled for this deployment.'
         )
       } else {
         setCalendarConnectionStatus(
           gcalStatus.message ||
-            'Connect Google Calendar through Composio, then load live calendar in this browser.'
+            (googleAuthEnabled
+              ? 'Connect Google Calendar through Composio, then load live calendar in this browser.'
+              : 'Connect Google Calendar through Composio. Browser live calendar sync is disabled until Google auth is enabled for this deployment.')
         )
       }
     } catch {
@@ -767,14 +776,18 @@ export function BrokMailApp() {
           setConnected(true)
           setConnectionMode('composio')
           setConnectionStatus(
-            'Gmail is connected through Composio. Load live inbox in this browser to read threads and create drafts.'
+            googleAuthEnabled
+              ? 'Gmail is connected through Composio. Load live inbox in this browser to read threads and create drafts.'
+              : 'Gmail is connected through Composio. Browser live inbox sync is disabled until Google auth is enabled for this deployment.'
           )
           toast.success('Gmail connected through Composio')
           return
         }
 
         setConnectionStatus(
-          'Connection was not confirmed yet. Retry Composio or load live inbox in this browser.'
+          googleAuthEnabled
+            ? 'Connection was not confirmed yet. Retry Composio or load live inbox in this browser.'
+            : 'Connection was not confirmed yet. Retry Composio after the Gmail account is connected.'
         )
         toast.error('Could not confirm Gmail connection yet')
         return
@@ -838,14 +851,18 @@ export function BrokMailApp() {
           setCalendarConnected(true)
           setCalendarConnectionMode('composio')
           setCalendarConnectionStatus(
-            'Google Calendar is connected through Composio. Load live calendar in this browser to read and update events.'
+            googleAuthEnabled
+              ? 'Google Calendar is connected through Composio. Load live calendar in this browser to read and update events.'
+              : 'Google Calendar is connected through Composio. Browser live calendar sync is disabled until Google auth is enabled for this deployment.'
           )
           toast.success('Google Calendar connected through Composio')
           return
         }
 
         setCalendarConnectionStatus(
-          'Connection was not confirmed yet. Retry Composio or load live calendar in this browser.'
+          googleAuthEnabled
+            ? 'Connection was not confirmed yet. Retry Composio or load live calendar in this browser.'
+            : 'Connection was not confirmed yet. Retry Composio after Calendar is connected.'
         )
         toast.error('Could not confirm Google Calendar connection yet')
         return
@@ -911,8 +928,9 @@ export function BrokMailApp() {
       await wait(170)
 
       if (!googleAccessToken) {
-        response =
-          'Google Calendar is connected through Composio, but this browser still needs live calendar sync before I can read or change events. Click Load Live Calendar and retry.'
+        response = googleAuthEnabled
+          ? 'Google Calendar is connected through Composio, but this browser still needs live calendar sync before I can read or change events. Click Load Live Calendar and retry.'
+          : 'Google Calendar is connected through Composio, but browser live calendar sync is disabled until Google auth is enabled for this deployment.'
       } else {
         try {
           const events = await fetchCalendarEvents(googleAccessToken, 12)
@@ -1716,19 +1734,21 @@ export function BrokMailApp() {
                   <UserRoundCheck className="size-4" />
                   {isConnecting ? 'Connecting...' : 'Connect Gmail'}
                 </Button>
-                {connectionMode === 'composio' && !googleAccessToken && (
-                  <Button
-                    size="sm"
-                    className="mt-2 h-8 w-full gap-2"
-                    onClick={() => {
-                      void startBrowserGoogleSync('gmail')
-                    }}
-                    disabled={isConnecting}
-                  >
-                    <MailCheck className="size-4" />
-                    Load Live Inbox
-                  </Button>
-                )}
+                {connectionMode === 'composio' &&
+                  !googleAccessToken &&
+                  googleAuthEnabled && (
+                    <Button
+                      size="sm"
+                      className="mt-2 h-8 w-full gap-2"
+                      onClick={() => {
+                        void startBrowserGoogleSync('gmail')
+                      }}
+                      disabled={isConnecting}
+                    >
+                      <MailCheck className="size-4" />
+                      Load Live Inbox
+                    </Button>
+                  )}
               </div>
               <div className="dashboard-card p-3">
                 <div className="flex items-center justify-between gap-2">
@@ -1760,7 +1780,8 @@ export function BrokMailApp() {
                   {isConnectingCalendar ? 'Connecting...' : 'Connect Calendar'}
                 </Button>
                 {calendarConnectionMode === 'composio' &&
-                  !googleAccessToken && (
+                  !googleAccessToken &&
+                  googleAuthEnabled && (
                     <Button
                       size="sm"
                       className="mt-2 h-8 w-full gap-2"
@@ -1792,7 +1813,11 @@ export function BrokMailApp() {
                 variant="outline"
                 className="h-9 flex-1 gap-2"
                 onClick={() => {
-                  if (connectionMode === 'composio' && !googleAccessToken) {
+                  if (
+                    connectionMode === 'composio' &&
+                    !googleAccessToken &&
+                    googleAuthEnabled
+                  ) {
                     void startBrowserGoogleSync('gmail')
                     return
                   }
@@ -1805,7 +1830,7 @@ export function BrokMailApp() {
                   ? 'Connecting...'
                   : googleAccessToken
                     ? 'Inbox Live'
-                    : connectionMode === 'composio'
+                    : connectionMode === 'composio' && googleAuthEnabled
                       ? 'Load Inbox'
                       : connected
                         ? 'Gmail Ready'
@@ -1817,7 +1842,8 @@ export function BrokMailApp() {
                 onClick={() => {
                   if (
                     calendarConnectionMode === 'composio' &&
-                    !googleAccessToken
+                    !googleAccessToken &&
+                    googleAuthEnabled
                   ) {
                     void startBrowserGoogleSync('calendar')
                     return
@@ -1831,7 +1857,7 @@ export function BrokMailApp() {
                   ? 'Connecting...'
                   : googleAccessToken
                     ? 'Calendar Live'
-                    : calendarConnectionMode === 'composio'
+                    : calendarConnectionMode === 'composio' && googleAuthEnabled
                       ? 'Load Calendar'
                       : calendarConnected
                         ? 'Calendar Ready'
@@ -1962,7 +1988,9 @@ export function BrokMailApp() {
               connectCalendar={connectCalendar}
               syncCalendar={() => startBrowserGoogleSync('calendar')}
               canSyncCalendar={
-                calendarConnectionMode === 'composio' && !googleAccessToken
+                calendarConnectionMode === 'composio' &&
+                !googleAccessToken &&
+                googleAuthEnabled
               }
               runAgent={runAgent}
             />
@@ -1984,7 +2012,11 @@ export function BrokMailApp() {
               connectionStatus={connectionStatus}
               connectGmail={connectGmail}
               syncGmail={() => startBrowserGoogleSync('gmail')}
-              canSyncGmail={connectionMode === 'composio' && !googleAccessToken}
+              canSyncGmail={
+                connectionMode === 'composio' &&
+                !googleAccessToken &&
+                googleAuthEnabled
+              }
               isConnecting={isConnecting}
               isSyncingMail={isSyncingMail}
               runAgent={runAgent}

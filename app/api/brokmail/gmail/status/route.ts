@@ -31,7 +31,9 @@ export async function GET() {
       connected: false,
       provider: 'google-oauth',
       message:
-        'Composio is not configured. BrokMail can still use browser Gmail live sync.'
+        process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
+          ? 'Composio is not configured. BrokMail can still use browser Gmail live sync.'
+          : 'Composio is not configured and browser Gmail live sync is disabled for this deployment.'
     })
   }
 

@@ -38,7 +38,9 @@ export async function GET() {
       connected: false,
       provider: 'google-oauth',
       message:
-        'Composio is not configured. Brok Calendar can still use browser Calendar live sync.'
+        process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
+          ? 'Composio is not configured. Brok Calendar can still use browser Calendar live sync.'
+          : 'Composio is not configured and browser Calendar live sync is disabled for this deployment.'
     })
   }
 
@@ -49,9 +51,7 @@ export async function GET() {
         {
           configured: true,
           connected: false,
-          provider: isComposioConnectMode()
-            ? 'composio-connect'
-            : 'composio',
+          provider: isComposioConnectMode() ? 'composio-connect' : 'composio',
           message: 'Sign in to Brok before checking Calendar status.'
         },
         { status: 401 }
