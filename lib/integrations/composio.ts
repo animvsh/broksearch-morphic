@@ -363,6 +363,20 @@ function authConfigMatchesToolkit(
   return config.toolkit_slug === toolkitSlug
 }
 
+function resolveToolkitSlug(data: Record<string, unknown>) {
+  if (typeof data.toolkit_slug === 'string') return data.toolkit_slug
+  if (typeof data.toolkit === 'string') return data.toolkit
+  if (
+    data.toolkit &&
+    typeof data.toolkit === 'object' &&
+    typeof (data.toolkit as Record<string, unknown>).slug === 'string'
+  ) {
+    return (data.toolkit as Record<string, unknown>).slug as string
+  }
+
+  return undefined
+}
+
 function isEnabledAuthConfig(config: ComposioAuthConfig) {
   const status = config.status?.toLowerCase()
   return !status || ['active', 'connected', 'enabled'].includes(status)
@@ -398,12 +412,7 @@ async function getAuthConfigById(
 
     const config: ComposioAuthConfig = {
       id: typeof data.id === 'string' ? data.id : undefined,
-      toolkit_slug:
-        typeof data.toolkit_slug === 'string'
-          ? data.toolkit_slug
-          : typeof data.toolkit === 'string'
-            ? data.toolkit
-            : undefined,
+      toolkit_slug: resolveToolkitSlug(data),
       appName: typeof data.appName === 'string' ? data.appName : undefined,
       status: typeof data.status === 'string' ? data.status : undefined
     }
@@ -594,8 +603,7 @@ export async function listAuthConfigs(
 
   return items.map(item => ({
     id: typeof item.id === 'string' ? item.id : undefined,
-    toolkit_slug:
-      typeof item.toolkit_slug === 'string' ? item.toolkit_slug : undefined,
+    toolkit_slug: resolveToolkitSlug(item),
     appName: typeof item.appName === 'string' ? item.appName : undefined,
     status: typeof item.status === 'string' ? item.status : undefined
   }))
