@@ -154,6 +154,20 @@ const sortOptions: Array<{ id: MailSortMode; label: string }> = [
   { id: 'sender', label: 'Sender' }
 ]
 
+function hasLabel(thread: MailThread, label: string) {
+  const normalized = label.toLowerCase()
+  return thread.labels.some(item => item.toLowerCase() === normalized)
+}
+
+function preferredViewForThreads(threads: MailThread[]): MailboxView {
+  if (threads.some(thread => hasLabel(thread, 'INBOX'))) return 'inbox'
+  if (threads.some(thread => thread.needsReply)) return 'needs-reply'
+  if (threads.some(thread => thread.waitingOnReply)) return 'follow-ups'
+  if (threads.some(thread => thread.category === 'receipt')) return 'receipts'
+  if (threads.some(thread => hasLabel(thread, 'SENT'))) return 'sent'
+  return 'needs-reply'
+}
+
 async function executeComposioBrokMailAction({
   action,
   threads,
@@ -486,13 +500,13 @@ export function BrokMailApp() {
     const matches = threads.filter(thread => {
       const matchesView =
         view === 'inbox'
-          ? thread.labels.includes('Inbox')
+          ? hasLabel(thread, 'INBOX')
           : view === 'needs-reply'
             ? thread.needsReply
             : view === 'follow-ups'
               ? thread.waitingOnReply
               : view === 'sent'
-                ? thread.labels.includes('Sent')
+                ? hasLabel(thread, 'SENT')
                 : view === 'newsletters'
                   ? thread.category === 'newsletter'
                   : view === 'receipts'
@@ -535,11 +549,11 @@ export function BrokMailApp() {
 
   const counts = useMemo(
     () => ({
-      inbox: threads.filter(thread => thread.labels.includes('Inbox')).length,
+      inbox: threads.filter(thread => hasLabel(thread, 'INBOX')).length,
       'needs-reply': threads.filter(thread => thread.needsReply).length,
       'follow-ups': threads.filter(thread => thread.waitingOnReply).length,
       drafts: messages.filter(message => message.draft).length,
-      sent: threads.filter(thread => thread.labels.includes('Sent')).length,
+      sent: threads.filter(thread => hasLabel(thread, 'SENT')).length,
       newsletters: threads.filter(thread => thread.category === 'newsletter')
         .length,
       receipts: threads.filter(thread => thread.category === 'receipt').length,
@@ -672,6 +686,7 @@ export function BrokMailApp() {
 
       setThreads(liveThreads)
       if (liveThreads[0]) setSelectedThreadId(liveThreads[0].id)
+      if (liveThreads.length) setView(preferredViewForThreads(liveThreads))
       setConnected(true)
       setConnectionMode('composio')
       setConnectionStatus(
@@ -681,6 +696,20 @@ export function BrokMailApp() {
       )
       if (liveThreads.length) {
         toast.success('Loaded live Gmail through Composio')
+        setMessages(current => {
+          if (current.some(message => message.id === 'gmail-live-ready')) {
+            return current
+          }
+
+          return [
+            ...current,
+            {
+              id: 'gmail-live-ready',
+              role: 'assistant',
+              content: `Gmail is live. I loaded ${liveThreads.length} real threads through Composio and selected the highest-signal view. Ask me to triage, summarize, draft, or prepare an approval-safe action.`
+            }
+          ]
+        })
       }
     } catch (error) {
       const message =
@@ -1891,9 +1920,13 @@ export function BrokMailApp() {
         <AgentPanel
           activity={activity}
           agentInput={agentInput}
+          calendarConnected={calendarConnected}
+          connected={connected}
+          connectionMode={connectionMode}
           isSharing={isSharing}
           isRunning={isRunning}
           messages={messages}
+          threadCount={threads.length}
           runAgent={runAgent}
           setAgentInput={setAgentInput}
           insertDraft={insertDraft}
@@ -2739,9 +2772,13 @@ function ThreadView({
 function AgentPanel({
   activity,
   agentInput,
+  calendarConnected,
+  connected,
+  connectionMode,
   isSharing,
   isRunning,
   messages,
+  threadCount,
   runAgent,
   setAgentInput,
   insertDraft,
@@ -2752,9 +2789,13 @@ function AgentPanel({
 }: {
   activity: ActivityStep[]
   agentInput: string
+  calendarConnected: boolean
+  connected: boolean
+  connectionMode: IntegrationConnectionMode
   isSharing: boolean
   isRunning: boolean
   messages: AgentMessage[]
+  threadCount: number
   runAgent: (prompt: string) => void
   setAgentInput: (value: string) => void
   insertDraft: (draft: DraftState) => void
@@ -2764,6 +2805,12 @@ function AgentPanel({
   onShare: () => void
 }) {
   const messageEndRef = useRef<HTMLDivElement | null>(null)
+  const runtimeLabel =
+    connected && connectionMode === 'composio'
+      ? 'Composio Gmail'
+      : connected
+        ? 'Live Gmail'
+        : 'Not connected'
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ block: 'end' })
@@ -2774,8 +2821,18 @@ function AgentPanel({
       <div className="border-b p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Bot className="size-5" />
-            <h2 className="font-semibold">BrokMail Agent</h2>
+            <span className="relative inline-flex size-8 items-center justify-center rounded-lg border border-border/70 bg-background shadow-sm">
+              <Bot className="size-4" />
+              {connected && (
+                <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
+              )}
+            </span>
+            <div>
+              <h2 className="font-semibold leading-none">BrokMail Agent</h2>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {isRunning ? 'Working in Pi runtime' : runtimeLabel}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="rounded-md">
@@ -2791,6 +2848,28 @@ function AgentPanel({
               <Share2 className="size-4" />
               {isSharing ? 'Sharing...' : 'Share'}
             </Button>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="rounded-lg border border-border/65 bg-background/72 px-2.5 py-2">
+            <p className="text-[10px] uppercase text-muted-foreground">Mail</p>
+            <p className="mt-1 truncate text-xs font-medium">
+              {connected ? `${threadCount} live threads` : 'Disconnected'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border/65 bg-background/72 px-2.5 py-2">
+            <p className="text-[10px] uppercase text-muted-foreground">
+              Calendar
+            </p>
+            <p className="mt-1 truncate text-xs font-medium">
+              {calendarConnected ? 'Connected' : 'Waiting'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border/65 bg-background/72 px-2.5 py-2">
+            <p className="text-[10px] uppercase text-muted-foreground">
+              Actions
+            </p>
+            <p className="mt-1 truncate text-xs font-medium">Approval gated</p>
           </div>
         </div>
         <div className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1">
@@ -2923,11 +3002,15 @@ function AgentPanel({
         ))}
         {isRunning && (
           <article className="flex justify-start">
-            <div className="flex max-w-[88%] items-center gap-2 rounded-md border border-border/70 bg-card/95 p-3 text-sm">
-              <span className="size-2 animate-pulse rounded-full bg-primary" />
-              <span className="text-muted-foreground">
-                Reading the live workspace...
-              </span>
+            <div className="max-w-[88%] rounded-md border border-border/70 bg-card/95 p-3 text-sm shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="size-2 animate-pulse rounded-full bg-primary" />
+                <span className="font-medium">BrokMail is working</span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Reading live Gmail and calendar context through Pi. No sample
+                mail is used.
+              </p>
             </div>
           </article>
         )}
