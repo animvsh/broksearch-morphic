@@ -8,7 +8,12 @@ import {
 } from '@/lib/brok/auth'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
-import { runSearchPipeline } from '@/lib/brok/search-pipeline'
+import {
+  buildSearchQueries,
+  classifyQuery,
+  resolveQuery,
+  runSearchPipeline
+} from '@/lib/brok/search-pipeline'
 import {
   checkUsageLimits,
   generateRequestId,
@@ -20,6 +25,48 @@ export const runtime = 'nodejs'
 
 function sseEvent(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+}
+
+function usagePayload(
+  searchResult: Awaited<ReturnType<typeof runSearchPipeline>>
+) {
+  return {
+    search_queries: searchResult.searchQueries,
+    prompt_tokens: searchResult.tokensUsed,
+    completion_tokens: Math.round(searchResult.answer.length / 4),
+    total_tokens:
+      searchResult.tokensUsed + Math.round(searchResult.answer.length / 4)
+  }
+}
+
+function completionPayload({
+  requestId,
+  model,
+  searchResult
+}: {
+  requestId: string
+  model: string
+  searchResult: Awaited<ReturnType<typeof runSearchPipeline>>
+}) {
+  return {
+    id: requestId,
+    object: 'search.completion',
+    model,
+    resolved_query: searchResult.resolvedQuery,
+    classification: searchResult.classification,
+    search_queries: searchResult.searchQueryList,
+    choices: [
+      {
+        message: {
+          role: 'assistant',
+          content: searchResult.answer
+        }
+      }
+    ],
+    citations: searchResult.citations,
+    follow_ups: searchResult.followUps,
+    usage: usagePayload(searchResult)
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -128,10 +175,28 @@ export async function POST(request: NextRequest) {
             controller.enqueue(encoder.encode(sseEvent(event, data)))
           }
 
+          const classification = classifyQuery(query)
+          const resolvedQuery = resolveQuery(query, classification)
+          const searchQueries = buildSearchQueries({
+            query,
+            classification,
+            depth,
+            limit: depth === 'deep' ? 5 : depth === 'lite' ? 1 : 3,
+            recencyDays: recency_days,
+            domains
+          })
+
           send('search.step', {
             id: requestId,
             message: 'Planning search query',
             status: 'running'
+          })
+          send('query_resolved', {
+            id: requestId,
+            query,
+            resolved_query: resolvedQuery,
+            classification,
+            search_queries: searchQueries
           })
 
           try {
@@ -139,6 +204,13 @@ export async function POST(request: NextRequest) {
               id: requestId,
               message: 'Fetching and ranking sources',
               status: 'running'
+            })
+            send('search_started', {
+              id: requestId,
+              depth,
+              recency_days,
+              domains: Array.isArray(domains) ? domains : [],
+              search_queries: searchQueries
             })
 
             const searchResult = await runSearchPipeline({
@@ -171,33 +243,49 @@ export async function POST(request: NextRequest) {
               status: 'success'
             })
 
+            searchResult.citations.forEach((citation, index) => {
+              send('source_found', {
+                id: requestId,
+                index: index + 1,
+                source: citation
+              })
+              send('source_read', {
+                id: requestId,
+                source_id: citation.id,
+                url: citation.url,
+                title: citation.title,
+                quality_score: citation.qualityScore
+              })
+              send('citation_added', {
+                id: requestId,
+                citation_id: citation.id,
+                marker: `[${index + 1}]`,
+                url: citation.url
+              })
+            })
+
+            send('answer_delta', {
+              id: requestId,
+              delta: searchResult.answer
+            })
+            send('follow_ups_generated', {
+              id: requestId,
+              follow_ups: searchResult.followUps
+            })
+
             send('search.step', {
               id: requestId,
               message: 'Answer ready',
               status: 'done',
               citations: searchResult.citations.length
             })
-            send('search.completion', {
+            send(
+              'search.completion',
+              completionPayload({ requestId, model, searchResult })
+            )
+            send('done', {
               id: requestId,
-              object: 'search.completion',
-              model,
-              choices: [
-                {
-                  message: {
-                    role: 'assistant',
-                    content: searchResult.answer
-                  }
-                }
-              ],
-              citations: searchResult.citations,
-              usage: {
-                search_queries: searchResult.searchQueries,
-                prompt_tokens: searchResult.tokensUsed,
-                completion_tokens: Math.round(searchResult.answer.length / 4),
-                total_tokens:
-                  searchResult.tokensUsed +
-                  Math.round(searchResult.answer.length / 4)
-              }
+              usage: usagePayload(searchResult)
             })
             controller.enqueue(encoder.encode('data: [DONE]\n\n'))
             controller.close()
@@ -282,27 +370,7 @@ export async function POST(request: NextRequest) {
     })
 
     return NextResponse.json(
-      {
-        id: requestId,
-        object: 'search.completion',
-        model,
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: searchResult.answer
-            }
-          }
-        ],
-        citations: searchResult.citations,
-        usage: {
-          search_queries: searchResult.searchQueries,
-          prompt_tokens: searchResult.tokensUsed,
-          completion_tokens: Math.round(searchResult.answer.length / 4),
-          total_tokens:
-            searchResult.tokensUsed + Math.round(searchResult.answer.length / 4)
-        }
-      },
+      completionPayload({ requestId, model, searchResult }),
       {
         headers: {
           'X-Brok-Request-Id': requestId

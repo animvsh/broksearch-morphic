@@ -3,8 +3,7 @@ import { parse } from 'node-html-parser'
 import {
   MINIMAX_API_KEY,
   MINIMAX_BASE_URL,
-  MINIMAX_CHAT_MODEL,
-  MINIMAX_MODEL
+  MINIMAX_CHAT_MODEL
 } from '@/lib/ai/minimax'
 import { searchWithMiniMaxWebSearch } from '@/lib/brok/minimax-web-search'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
@@ -16,13 +15,18 @@ export interface SearchResult {
   publisher?: string
   snippet: string
   retrievedAt: string
+  qualityScore?: number
 }
 
 export interface SearchResponse {
   answer: string
   citations: SearchResult[]
   searchQueries: number
+  searchQueryList: string[]
   tokensUsed: number
+  resolvedQuery: string
+  classification: QueryClassification
+  followUps: Array<{ label: string; query: string }>
 }
 
 export interface SearchRequest {
@@ -32,28 +36,60 @@ export interface SearchRequest {
   domains?: string[]
 }
 
+export type QuestionType =
+  | 'fresh/current'
+  | 'evergreen/explainer'
+  | 'comparison'
+  | 'recommendation'
+  | 'technical'
+  | 'academic'
+  | 'shopping-ish'
+  | 'local'
+  | 'news'
+  | 'code'
+  | 'opinion'
+
+export interface QueryClassification {
+  type: QuestionType
+  needsSearch: boolean
+  reason: string
+}
+
 const SEARCH_CONFIG = {
-  lite: { sources: 3, maxTokens: 8000 },
-  standard: { sources: 8, maxTokens: 16000 },
-  deep: { sources: 20, maxTokens: 32000 }
+  lite: { sources: 3, maxTokens: 8000, queries: 1 },
+  standard: { sources: 8, maxTokens: 16000, queries: 3 },
+  deep: { sources: 20, maxTokens: 32000, queries: 5 }
 }
 
 export async function runSearchPipeline(
   request: SearchRequest
 ): Promise<SearchResponse> {
   const config = SEARCH_CONFIG[request.depth]
+  const classification = classifyQuery(request.query)
+  const searchQueryList = buildSearchQueries({
+    query: request.query,
+    classification,
+    depth: request.depth,
+    limit: config.queries,
+    recencyDays: request.recencyDays,
+    domains: request.domains
+  })
+  const resolvedQuery = resolveQuery(request.query, classification)
 
   try {
     return await runMiniMaxWebSearch(
-      request.query,
+      resolvedQuery,
+      classification,
+      searchQueryList,
       config.sources,
-      config.maxTokens,
-      request.recencyDays
+      config.maxTokens
     )
   } catch (error) {
     console.warn('Falling back to HTML search pipeline:', error)
     return runHtmlSearchPipeline(
-      request.query,
+      resolvedQuery,
+      classification,
+      searchQueryList,
       config.sources,
       config.maxTokens
     )
@@ -61,182 +97,120 @@ export async function runSearchPipeline(
 }
 
 async function runMiniMaxWebSearch(
-  query: string,
+  resolvedQuery: string,
+  classification: QueryClassification,
+  searchQueryList: string[],
   numResults: number,
-  maxTokens: number,
-  recencyDays?: number
+  maxTokens: number
 ): Promise<SearchResponse> {
-  const searchQuery = recencyDays
-    ? `${query} within ${recencyDays} days`
-    : query
-  const webResults = await searchWithMiniMaxWebSearch(searchQuery, numResults)
-  const citations = webResults
-    .filter(result => result.link)
-    .slice(0, numResults)
-    .map((result, index): SearchResult => {
-      const url = result.link || ''
-      return {
-        id: `src_${index + 1}`,
-        title: result.title || 'Untitled',
-        url,
-        publisher: getHost(url),
-        snippet: [result.snippet, result.date ? `Date: ${result.date}` : '']
-          .filter(Boolean)
-          .join('\n'),
-        retrievedAt: new Date().toISOString()
-      }
-    })
+  const batches = await settleSearchBatches(
+    searchQueryList.map(searchQuery =>
+      searchWithMiniMaxWebSearch(searchQuery, numResults)
+    )
+  )
+  const citations = rankAndDedupeSources(
+    batches
+      .flat()
+      .filter(result => result.link)
+      .map((result): Omit<SearchResult, 'id' | 'qualityScore'> => {
+        const url = result.link || ''
+        return {
+          title: result.title || 'Untitled',
+          url,
+          publisher: getHost(url),
+          snippet: [result.snippet, result.date ? `Date: ${result.date}` : '']
+            .filter(Boolean)
+            .join('\n'),
+          retrievedAt: new Date().toISOString()
+        }
+      }),
+    resolvedQuery,
+    numResults
+  )
 
-  const answer = await synthesizeAnswerFromResults(query, citations, maxTokens)
+  const answer = await synthesizeAnswerFromResults(
+    resolvedQuery,
+    citations,
+    maxTokens,
+    classification
+  )
+  const followUps = generateFollowUps(resolvedQuery, classification, citations)
 
   return {
     answer,
     citations,
-    searchQueries: 1,
+    searchQueries: searchQueryList.length,
+    searchQueryList,
     tokensUsed: Math.round(
       (answer.length + JSON.stringify(citations).length) / 4
-    )
-  }
-}
-
-interface MiniMaxSearchResult {
-  id: string
-  title: string
-  url: string
-  publisher?: string
-  snippet: string
-  retrievedAt: string
-}
-
-interface MiniMaxWebSearchResponse {
-  results: MiniMaxSearchResult[]
-  answer: string
-  tokensUsed: number
-}
-
-async function runMiniMaxNativeSearch(
-  query: string,
-  numResults: number,
-  maxTokens: number,
-  recencyDays?: number
-): Promise<SearchResponse> {
-  if (!MINIMAX_API_KEY) {
-    throw new Error('Brok provider API key not configured')
-  }
-
-  const response = await fetch(`${MINIMAX_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${MINIMAX_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: MINIMAX_MODEL,
-      messages: [
-        {
-          role: 'user',
-          content: query
-        }
-      ],
-      tools: [
-        {
-          type: 'web_search',
-          web_search: {
-            top_n: numResults
-          }
-        }
-      ],
-      tool_choice: {
-        type: 'web_search',
-        web_search: {
-          top_n: numResults
-        }
-      },
-      max_tokens: maxTokens,
-      ...(recencyDays ? { metadata: { recency_days: recencyDays } } : {})
-    })
-  })
-
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Brok web search error: ${response.status} - ${error}`)
-  }
-
-  const data = await response.json()
-  const searchResults: MiniMaxSearchResult[] = []
-  let answer = ''
-
-  if (data.choices?.[0]?.message?.tool_calls) {
-    const toolCall = data.choices[0].message.tool_calls[0]
-    if (toolCall.function?.arguments) {
-      const parsed = JSON.parse(toolCall.function.arguments)
-      if (parsed.result?.web_pages) {
-        searchResults.push(
-          ...parsed.result.web_pages.map((page: any, index: number) => ({
-            id: `src_${index + 1}`,
-            title: page.title || 'Untitled',
-            url: page.url,
-            publisher: page.publisher,
-            snippet: page.description || page.snippet || '',
-            retrievedAt: new Date().toISOString()
-          }))
-        )
-      }
-      if (parsed.result?.answer) {
-        answer = parsed.result.answer
-      }
-    }
-  }
-
-  if (
-    searchResults.length === 0 &&
-    data.citations &&
-    Array.isArray(data.citations)
-  ) {
-    searchResults.push(
-      ...data.citations.map((cite: any, index: number) => ({
-        id: `src_${index + 1}`,
-        title: cite.title || 'Untitled',
-        url: cite.url,
-        publisher: cite.publisher,
-        snippet: cite.snippet || cite.description || '',
-        retrievedAt: new Date().toISOString()
-      }))
-    )
-  }
-
-  if (!answer && data.choices?.[0]?.message?.content) {
-    answer = data.choices[0].message.content
-  }
-
-  const tokensUsed =
-    data.usage?.total_tokens ||
-    Math.round((answer.length + JSON.stringify(searchResults).length) / 4)
-
-  return {
-    answer: answer || 'No answer generated.',
-    citations: searchResults.slice(0, numResults),
-    searchQueries: 1,
-    tokensUsed
+    ),
+    resolvedQuery,
+    classification,
+    followUps
   }
 }
 
 async function runHtmlSearchPipeline(
-  query: string,
+  resolvedQuery: string,
+  classification: QueryClassification,
+  searchQueryList: string[],
   numResults: number,
   maxTokens: number
 ): Promise<SearchResponse> {
-  const citations = await searchDuckDuckGo(query, numResults)
-  const answer = await synthesizeAnswerFromResults(query, citations, maxTokens)
+  const resultBatches = await settleSearchBatches(
+    searchQueryList.map(searchQuery =>
+      searchDuckDuckGo(searchQuery, numResults)
+    )
+  )
+  const citations = rankAndDedupeSources(
+    resultBatches.flat(),
+    resolvedQuery,
+    numResults
+  )
+  const answer = await synthesizeAnswerFromResults(
+    resolvedQuery,
+    citations,
+    maxTokens,
+    classification
+  )
+  const followUps = generateFollowUps(resolvedQuery, classification, citations)
 
   return {
     answer,
     citations,
-    searchQueries: 1,
+    searchQueries: searchQueryList.length,
+    searchQueryList,
     tokensUsed: Math.round(
       (answer.length + JSON.stringify(citations).length) / 4
-    )
+    ),
+    resolvedQuery,
+    classification,
+    followUps
   }
+}
+
+async function settleSearchBatches<T>(
+  searches: Array<Promise<T[]>>
+): Promise<T[][]> {
+  const results = await Promise.allSettled(searches)
+  const fulfilled = results
+    .filter((result): result is PromiseFulfilledResult<T[]> => {
+      if (result.status === 'rejected') {
+        console.warn('Search query failed:', result.reason)
+        return false
+      }
+      return true
+    })
+    .map(result => result.value)
+
+  if (fulfilled.length === 0) {
+    const firstError = results.find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected'
+    )
+    throw firstError?.reason ?? new Error('All search queries failed')
+  }
+
+  return fulfilled
 }
 
 async function searchDuckDuckGo(
@@ -324,7 +298,8 @@ function getHost(url: string): string | undefined {
 async function synthesizeAnswerFromResults(
   query: string,
   citations: SearchResult[],
-  maxTokens: number
+  maxTokens: number,
+  classification: QueryClassification
 ): Promise<string> {
   if (citations.length === 0) {
     return 'No search results were available.'
@@ -338,8 +313,8 @@ async function synthesizeAnswerFromResults(
 
   const context = citations
     .map(
-      citation =>
-        `Title: ${citation.title}\nURL: ${citation.url}\nSnippet: ${citation.snippet}`
+      (citation, index) =>
+        `[source_${index + 1}]\nTitle: ${citation.title}\nURL: ${citation.url}\nAuthority: ${citation.qualityScore ?? 0}/100\nSnippet: ${citation.snippet}`
     )
     .join('\n\n')
 
@@ -356,11 +331,11 @@ async function synthesizeAnswerFromResults(
         {
           role: 'system',
           content:
-            'Answer using only the provided search results. Be concise and mention uncertainty when the evidence is weak.'
+            'You are Brok, a Perplexity-style answer engine. Answer using only the provided search results. Start with the direct answer, then key points and details. Cite factual claims with [1], [2], etc. matching the source order. Mention uncertainty when evidence is weak. End naturally without generic "let me know" language.'
         },
         {
           role: 'user',
-          content: `Question: ${query}\n\nSearch results:\n${context}`
+          content: `Question: ${query}\nQuestion type: ${classification.type}\nSearch decision: ${classification.reason}\n\nSearch results:\n${context}`
         }
       ]
     })
@@ -376,4 +351,215 @@ async function synthesizeAnswerFromResults(
   return stripThinkingBlocks(
     data.choices?.[0]?.message?.content || 'No answer generated.'
   )
+}
+
+export function classifyQuery(query: string): QueryClassification {
+  const lower = query.toLowerCase()
+  const hasCurrentIntent =
+    /\b(latest|recent|today|now|current|news|202[5-9]|pricing|released|launch|compare)\b/.test(
+      lower
+    )
+  const type: QuestionType =
+    /\b(compare|versus|vs\.?|difference|better)\b/.test(lower)
+      ? 'comparison'
+      : /\b(opinion|think about|take on)\b/.test(lower)
+        ? 'opinion'
+        : /\b(code|debug|repo|typescript|api|endpoint)\b/.test(lower)
+          ? 'technical'
+          : /\b(best|recommend|should i|which)\b/.test(lower)
+            ? 'recommendation'
+            : /\b(news|latest|today|recent)\b/.test(lower)
+              ? 'news'
+              : /\b(price|pricing|cost|token|plan)\b/.test(lower)
+                ? 'fresh/current'
+                : /\b(explain|what is|how does|why)\b/.test(lower)
+                  ? 'evergreen/explainer'
+                  : 'fresh/current'
+
+  return {
+    type,
+    needsSearch: hasCurrentIntent || type !== 'opinion',
+    reason: hasCurrentIntent
+      ? 'The query asks for current or externally verifiable information.'
+      : 'Brok verifies informational answers with sources by default.'
+  }
+}
+
+export function resolveQuery(
+  query: string,
+  classification: QueryClassification
+): string {
+  const trimmed = query.trim().replace(/\s+/g, ' ')
+  if (classification.type === 'comparison' && !/\bcompare\b/i.test(trimmed)) {
+    return `Compare ${trimmed}`
+  }
+  return trimmed
+}
+
+export function buildSearchQueries({
+  query,
+  classification,
+  depth,
+  limit,
+  recencyDays,
+  domains
+}: {
+  query: string
+  classification: QueryClassification
+  depth: SearchRequest['depth']
+  limit: number
+  recencyDays?: number
+  domains?: string[]
+}): string[] {
+  const resolved = resolveQuery(query, classification)
+  const freshness = recencyDays ? ` within ${recencyDays} days` : ''
+  const domainHint = domains?.length ? ` site:${domains.join(' OR site:')}` : ''
+  const queries = [
+    `${resolved}${freshness}${domainHint}`,
+    `${resolved} official docs primary source${freshness}${domainHint}`,
+    `${resolved} analysis comparison${freshness}${domainHint}`,
+    `${resolved} latest updates${freshness}${domainHint}`,
+    `${resolved} examples implementation${freshness}${domainHint}`
+  ]
+
+  if (depth === 'lite') {
+    return [queries[0]]
+  }
+
+  return [...new Set(queries)].slice(0, limit)
+}
+
+export function rankAndDedupeSources(
+  sources: Array<Omit<SearchResult, 'id' | 'qualityScore'> | SearchResult>,
+  query: string,
+  limit: number
+): SearchResult[] {
+  const seen = new Set<string>()
+  return sources
+    .filter(source => {
+      const key = normalizeSourceKey(source.url)
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .map(source => ({
+      ...source,
+      qualityScore: scoreSource(source, query)
+    }))
+    .sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0))
+    .slice(0, limit)
+    .map((source, index) => ({
+      ...source,
+      id: `src_${index + 1}`
+    }))
+}
+
+function normalizeSourceKey(url: string) {
+  try {
+    const parsed = new URL(url)
+    parsed.hash = ''
+    parsed.search = ''
+    return parsed.toString().replace(/\/$/, '')
+  } catch {
+    return ''
+  }
+}
+
+function scoreSource(
+  source: Pick<SearchResult, 'title' | 'url' | 'publisher' | 'snippet'>,
+  query: string
+) {
+  const haystack = `${source.title} ${source.publisher ?? ''} ${source.snippet}`
+    .toLowerCase()
+    .replace(/[^\w\s.-]/g, ' ')
+  const queryTerms = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(term => term.length > 3)
+  const relevance = queryTerms.reduce(
+    (score, term) => score + (haystack.includes(term) ? 6 : 0),
+    0
+  )
+  const host = getHost(source.url) ?? source.publisher ?? ''
+  const authority = scoreAuthority(host)
+  const freshness =
+    /\b(2026|2025|today|yesterday|latest|updated|released)\b/i.test(
+      source.snippet
+    )
+      ? 12
+      : 0
+  const spamPenalty = /\b(best|top|coupon|casino|essay|generator)\b/i.test(host)
+    ? -20
+    : 0
+
+  return Math.max(
+    0,
+    Math.min(100, 20 + relevance + authority + freshness + spamPenalty)
+  )
+}
+
+function scoreAuthority(host: string) {
+  if (!host) return 0
+  if (/\b(gov|edu)\b/.test(host)) return 35
+  if (
+    /(^|\.)((docs|developer|platform|support)\.|github\.com|arxiv\.org|openai\.com|minimax\.io|anthropic\.com|google\.com|microsoft\.com|apple\.com)/i.test(
+      host
+    )
+  ) {
+    return 30
+  }
+  if (
+    /(reuters|associatedpress|apnews|bloomberg|ft\.com|wsj\.com|theverge|techcrunch)/i.test(
+      host
+    )
+  ) {
+    return 22
+  }
+  return 8
+}
+
+export function generateFollowUps(
+  query: string,
+  classification: QueryClassification,
+  citations: SearchResult[]
+): Array<{ label: string; query: string }> {
+  const sourceDomain = citations[0]?.publisher
+  const base = query.replace(/[?.!]+$/, '')
+  const suggestions = [
+    {
+      label: `Compare options for ${shortenLabel(base)}`,
+      query: `Compare the strongest options and tradeoffs for ${base}`
+    },
+    {
+      label: `Turn this into an implementation plan`,
+      query: `Create a step-by-step implementation plan for ${base}`
+    },
+    {
+      label: `What are the risks?`,
+      query: `What are the risks, edge cases, and failure modes for ${base}?`
+    },
+    {
+      label:
+        classification.type === 'technical'
+          ? 'Show the architecture'
+          : 'Find the latest updates',
+      query:
+        classification.type === 'technical'
+          ? `Show the technical architecture for ${base}`
+          : `Find the latest updates and primary sources for ${base}`
+    },
+    {
+      label: sourceDomain ? `Ask about ${sourceDomain}` : 'Go deeper',
+      query: sourceDomain
+        ? `What does ${sourceDomain} specifically say about ${base}?`
+        : `Go deeper on ${base} with more source detail`
+    }
+  ]
+
+  return suggestions.slice(0, 5)
+}
+
+function shortenLabel(text: string) {
+  const words = text.split(/\s+/).filter(Boolean)
+  return words.length > 7 ? `${words.slice(0, 7).join(' ')}...` : text
 }
