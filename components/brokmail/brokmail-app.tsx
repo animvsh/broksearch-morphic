@@ -12,11 +12,14 @@ import {
 import {
   AlertTriangle,
   Archive,
+  ArrowDownUp,
   Bot,
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Command,
   FileText,
+  Flame,
   Inbox,
   Mail,
   MailCheck,
@@ -108,6 +111,7 @@ type ActivityStep = {
 }
 
 type IntegrationConnectionMode = 'none' | 'google-oauth' | 'composio'
+type MailSortMode = 'priority' | 'newest' | 'sender'
 
 const viewLabels: Array<{
   id: MailboxView
@@ -142,6 +146,12 @@ const commandPrompts = [
   'Show follow-ups.',
   'Draft a reply to this thread.',
   'Show my next calendar events.'
+]
+
+const sortOptions: Array<{ id: MailSortMode; label: string }> = [
+  { id: 'priority', label: 'Priority' },
+  { id: 'newest', label: 'Newest' },
+  { id: 'sender', label: 'Sender' }
 ]
 
 async function executeComposioBrokMailAction({
@@ -218,6 +228,28 @@ function createId(prefix: string) {
 
 function delay(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
+}
+
+function scoreThreadPriority(thread: MailThread) {
+  return [
+    thread.unread ? 18 : 0,
+    thread.needsReply ? 30 : 0,
+    thread.waitingOnReply ? 22 : 0,
+    thread.important ? 18 : 0,
+    thread.starred ? 8 : 0,
+    thread.hasAttachments ? 4 : 0,
+    thread.category === 'receipt' ? 6 : 0,
+    thread.category === 'newsletter' ? -8 : 0,
+    Math.min(thread.actionItems.length * 5, 15),
+    Math.min(thread.openQuestions.length * 4, 12)
+  ].reduce((total, value) => total + value, 0)
+}
+
+function priorityLabel(score: number) {
+  if (score >= 58) return 'Critical'
+  if (score >= 36) return 'High'
+  if (score >= 18) return 'Medium'
+  return 'Low'
 }
 
 async function pollConnectionStatus(
@@ -436,6 +468,7 @@ export function BrokMailApp() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>()
   const [view, setView] = useState<MailboxView>('inbox')
   const [query, setQuery] = useState('')
+  const [sortMode, setSortMode] = useState<MailSortMode>('priority')
   const [connected, setConnected] = useState(false)
   const [connectionMode, setConnectionMode] =
     useState<IntegrationConnectionMode>('none')
@@ -474,6 +507,7 @@ export function BrokMailApp() {
   ])
   const googleAuthEnabled = isGoogleAuthEnabled()
   const deferredQuery = useDeferredValue(query)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const selectedThread = useMemo(
     () => threads.find(thread => thread.id === selectedThreadId) ?? threads[0],
@@ -490,7 +524,7 @@ export function BrokMailApp() {
   const filteredThreads = useMemo(() => {
     const normalizedQuery = deferredQuery.trim().toLowerCase()
 
-    return threads.filter(thread => {
+    const matches = threads.filter(thread => {
       const matchesView =
         view === 'inbox'
           ? thread.labels.includes('Inbox')
@@ -525,7 +559,20 @@ export function BrokMailApp() {
         .toLowerCase()
         .includes(normalizedQuery)
     })
-  }, [deferredQuery, threads, view])
+
+    return [...matches].sort((a, b) => {
+      if (sortMode === 'sender') {
+        return a.sender.localeCompare(b.sender)
+      }
+
+      if (sortMode === 'priority') {
+        const priorityDelta = scoreThreadPriority(b) - scoreThreadPriority(a)
+        if (priorityDelta !== 0) return priorityDelta
+      }
+
+      return Number(b.unread) - Number(a.unread)
+    })
+  }, [deferredQuery, sortMode, threads, view])
 
   const counts = useMemo(
     () => ({
@@ -545,6 +592,20 @@ export function BrokMailApp() {
   const listCount =
     view === 'calendar' ? calendarEvents.length : filteredThreads.length
   const listLabel = view === 'calendar' ? 'events' : 'conversations'
+  const inboxInsights = useMemo(() => {
+    const needsReply = threads.filter(thread => thread.needsReply)
+    const followUps = threads.filter(thread => thread.waitingOnReply)
+    const urgent = [...threads]
+      .sort((a, b) => scoreThreadPriority(b) - scoreThreadPriority(a))
+      .slice(0, 3)
+
+    return {
+      needsReply: needsReply.length,
+      followUps: followUps.length,
+      unread: threads.filter(thread => thread.unread).length,
+      urgent
+    }
+  }, [threads])
 
   useEffect(() => {
     void bootstrapGmail()
@@ -564,6 +625,44 @@ export function BrokMailApp() {
     // BrokMail bootstraps once on mount; refresh is user-driven afterwards.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    function handleKeydown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null
+      const isTyping =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable
+
+      if (event.key === '/' && !isTyping) {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+        return
+      }
+
+      if (isTyping) return
+
+      if (event.key.toLowerCase() === 'c') {
+        event.preventDefault()
+        setComposer('Hi,\n\n\n\nBest,\nAnimesh')
+        return
+      }
+
+      if (event.key.toLowerCase() === 'j') {
+        event.preventDefault()
+        selectAdjacentThread(1)
+        return
+      }
+
+      if (event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        selectAdjacentThread(-1)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeydown)
+    return () => window.removeEventListener('keydown', handleKeydown)
+  })
 
   async function loadGmailThreads(accessToken: string) {
     setIsSyncingMail(true)
@@ -619,6 +718,56 @@ export function BrokMailApp() {
     } finally {
       setIsSyncingCalendar(false)
     }
+  }
+
+  function selectAdjacentThread(direction: 1 | -1) {
+    if (filteredThreads.length === 0) return
+    const currentIndex = Math.max(
+      0,
+      filteredThreads.findIndex(thread => thread.id === selectedThread?.id)
+    )
+    const nextIndex =
+      (currentIndex + direction + filteredThreads.length) %
+      filteredThreads.length
+    setSelectedThreadId(filteredThreads[nextIndex]?.id)
+  }
+
+  function toggleThreadStar(threadId: string) {
+    setThreads(current =>
+      current.map(thread =>
+        thread.id === threadId
+          ? { ...thread, starred: !thread.starred, important: !thread.starred }
+          : thread
+      )
+    )
+  }
+
+  function markThreadDone(threadId: string) {
+    setThreads(current =>
+      current.map(thread =>
+        thread.id === threadId
+          ? {
+              ...thread,
+              unread: false,
+              needsReply: false,
+              waitingOnReply: false,
+              labels: thread.labels.filter(label => label !== 'Inbox')
+            }
+          : thread
+      )
+    )
+    toast.success('Thread cleared from the active queue')
+  }
+
+  function runPriorityBrief() {
+    const topSubjects = inboxInsights.urgent
+      .map(thread => `- ${thread.sender}: ${thread.subject}`)
+      .join('\n')
+    runAgent(
+      topSubjects
+        ? `Prioritize my inbox and tell me what to handle first:\n${topSubjects}`
+        : 'Prioritize my inbox and tell me what to handle first.'
+    )
   }
 
   async function startBrowserGoogleSync(
@@ -1702,8 +1851,10 @@ export function BrokMailApp() {
           calendarConnectionMode={calendarConnectionMode}
           calendarConnectionStatus={calendarConnectionStatus}
           counts={counts}
+          insights={inboxInsights}
           isRunning={isRunning}
           runAgent={runAgent}
+          runPriorityBrief={runPriorityBrief}
         />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col 2xl:flex-row">
@@ -1937,6 +2088,7 @@ export function BrokMailApp() {
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />
                 <Input
+                  ref={searchInputRef}
                   value={query}
                   onChange={event => setQuery(event.target.value)}
                   placeholder="Search mail/calendar or ask BrokMail..."
@@ -1947,7 +2099,26 @@ export function BrokMailApp() {
                 <span>
                   {listCount} {listLabel}
                 </span>
-                <span>AI sorted</span>
+                <span className="flex items-center gap-1">
+                  <Command className="size-3" /> Command ready
+                </span>
+              </div>
+              <div className="mt-3 flex items-center gap-2 overflow-x-auto">
+                <ArrowDownUp className="size-3.5 shrink-0 text-muted-foreground" />
+                {sortOptions.map(option => (
+                  <button
+                    key={option.id}
+                    className={cn(
+                      'h-7 shrink-0 rounded-md border px-2 text-xs transition-colors hover:bg-muted/70',
+                      sortMode === option.id
+                        ? 'dashboard-pill-active font-medium'
+                        : 'border-border/70 text-muted-foreground'
+                    )}
+                    onClick={() => setSortMode(option.id)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -1964,55 +2135,99 @@ export function BrokMailApp() {
               ) : view === 'drafts' ? (
                 <DraftList messages={messages} onInsert={insertDraft} />
               ) : filteredThreads.length > 0 ? (
-                filteredThreads.map(thread => (
-                  <button
-                    key={thread.id}
-                    className={cn(
-                      'block w-full border-b border-border/65 p-3 text-left transition-colors hover:bg-muted/70',
-                      selectedThread?.id === thread.id &&
-                        'dashboard-list-row-active'
-                    )}
-                    onClick={() => setSelectedThreadId(thread.id)}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p
-                            className={cn(
-                              'truncate text-sm',
-                              thread.unread && 'font-semibold'
-                            )}
-                          >
-                            {thread.sender}
-                          </p>
-                          {thread.starred && (
-                            <Star className="size-3.5 fill-amber-400 text-amber-500" />
-                          )}
-                          {thread.hasAttachments && (
-                            <Paperclip className="size-3.5 text-muted-foreground" />
-                          )}
-                        </div>
-                        <p className="mt-1 truncate text-sm font-medium">
-                          {thread.subject}
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {thread.receivedAt}
-                      </span>
-                    </div>
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                      {thread.snippet}
-                    </p>
-                    <div className="mt-2 flex items-center gap-2">
-                      <Badge
-                        variant={thread.needsReply ? 'default' : 'secondary'}
-                        className="max-w-full truncate rounded-md px-2 py-0 text-[11px]"
+                filteredThreads.map(thread => {
+                  const priorityScore = scoreThreadPriority(thread)
+                  return (
+                    <article
+                      key={thread.id}
+                      className={cn(
+                        'border-b border-border/65 transition-colors hover:bg-muted/70',
+                        selectedThread?.id === thread.id &&
+                          'dashboard-list-row-active'
+                      )}
+                    >
+                      <button
+                        className="block w-full p-3 text-left"
+                        onClick={() => setSelectedThreadId(thread.id)}
                       >
-                        AI: {thread.aiSummary}
-                      </Badge>
-                    </div>
-                  </button>
-                ))
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p
+                                className={cn(
+                                  'truncate text-sm',
+                                  thread.unread && 'font-semibold'
+                                )}
+                              >
+                                {thread.sender}
+                              </p>
+                              {thread.starred && (
+                                <Star className="size-3.5 fill-amber-400 text-amber-500" />
+                              )}
+                              {thread.hasAttachments && (
+                                <Paperclip className="size-3.5 text-muted-foreground" />
+                              )}
+                            </div>
+                            <p className="mt-1 truncate text-sm font-medium">
+                              {thread.subject}
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <span className="block text-xs text-muted-foreground">
+                              {thread.receivedAt}
+                            </span>
+                            <Badge
+                              variant={
+                                priorityScore >= 36 ? 'default' : 'secondary'
+                              }
+                              className="mt-1 rounded-md px-1.5 py-0 text-[10px]"
+                            >
+                              {priorityLabel(priorityScore)}
+                            </Badge>
+                          </div>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                          {thread.snippet}
+                        </p>
+                        <div className="mt-2 flex items-center gap-2">
+                          <Badge
+                            variant={
+                              thread.needsReply ? 'default' : 'secondary'
+                            }
+                            className="max-w-full truncate rounded-md px-2 py-0 text-[11px]"
+                          >
+                            AI: {thread.aiSummary}
+                          </Badge>
+                        </div>
+                      </button>
+                      <div className="flex items-center gap-1 px-3 pb-3">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1 px-2 text-xs"
+                          onClick={() => toggleThreadStar(thread.id)}
+                        >
+                          <Star
+                            className={cn(
+                              'size-3.5',
+                              thread.starred && 'fill-amber-400 text-amber-500'
+                            )}
+                          />
+                          Focus
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1 px-2 text-xs"
+                          onClick={() => markThreadDone(thread.id)}
+                        >
+                          <CheckCircle2 className="size-3.5" />
+                          Done
+                        </Button>
+                      </div>
+                    </article>
+                  )
+                })
               ) : (
                 <div className="flex h-full min-h-40 items-center justify-center p-5 text-center">
                   <div>
@@ -2063,6 +2278,8 @@ export function BrokMailApp() {
                 requestComposerSendApproval={requestComposerSendApproval}
                 gmailConnected={connected}
                 isSyncingMail={isSyncingMail}
+                onToggleStar={() => toggleThreadStar(selectedThread.id)}
+                onMarkDone={() => markThreadDone(selectedThread.id)}
               />
             ) : (
               <EmptyMailWorkspace
@@ -2101,8 +2318,10 @@ function BrokMailStatusBar({
   calendarConnectionMode,
   calendarConnectionStatus,
   counts,
+  insights,
   isRunning,
-  runAgent
+  runAgent,
+  runPriorityBrief
 }: {
   connected: boolean
   connectionMode: IntegrationConnectionMode
@@ -2111,8 +2330,15 @@ function BrokMailStatusBar({
   calendarConnectionMode: IntegrationConnectionMode
   calendarConnectionStatus: string
   counts: Record<MailboxView, number>
+  insights: {
+    needsReply: number
+    followUps: number
+    unread: number
+    urgent: MailThread[]
+  }
   isRunning: boolean
   runAgent: (prompt: string) => void
+  runPriorityBrief: () => void
 }) {
   return (
     <div className="dashboard-rail border-b px-3 py-2.5 sm:px-4">
@@ -2152,6 +2378,24 @@ function BrokMailStatusBar({
               {isRunning ? 'BrokMail is working...' : 'Ready for commands'}
             </p>
           </div>
+          <button
+            className="rounded-md border border-border/70 bg-background/65 px-3 py-2 text-left transition-colors hover:bg-muted/70"
+            onClick={runPriorityBrief}
+            disabled={isRunning}
+          >
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="flex items-center gap-1 font-medium">
+                <Flame className="size-3.5" />
+                Focus Brief
+              </span>
+              <span className="text-muted-foreground">
+                {insights.unread} unread
+              </span>
+            </div>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {insights.needsReply} replies · {insights.followUps} waiting
+            </p>
+          </button>
         </div>
 
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 xl:mx-0 xl:pb-0">
@@ -2182,7 +2426,9 @@ function ThreadView({
   saveComposerDraft,
   requestComposerSendApproval,
   gmailConnected,
-  isSyncingMail
+  isSyncingMail,
+  onToggleStar,
+  onMarkDone
 }: {
   thread: MailThread
   composer: string
@@ -2193,7 +2439,19 @@ function ThreadView({
   requestComposerSendApproval: () => void
   gmailConnected: boolean
   isSyncingMail: boolean
+  onToggleStar: () => void
+  onMarkDone: () => void
 }) {
+  const priorityScore = scoreThreadPriority(thread)
+  const composerStats = {
+    words: composer.trim() ? composer.trim().split(/\s+/).length : 0,
+    characters: composer.length
+  }
+  const hasQuestion = /\?/.test(composer)
+  const hasGreeting = /^(hi|hello|hey|thanks|thank you|good)/i.test(
+    composer.trim()
+  )
+
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       <div className="border-b px-3 py-3 sm:px-4">
@@ -2218,6 +2476,20 @@ function ThreadView({
               variant="outline"
               size="sm"
               className="flex-1 gap-2 sm:flex-none"
+              onClick={onToggleStar}
+            >
+              <Star
+                className={cn(
+                  'size-4',
+                  thread.starred && 'fill-amber-400 text-amber-500'
+                )}
+              />
+              Focus
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 gap-2 sm:flex-none"
               onClick={() => runAgent('Summarize this thread.')}
             >
               <Sparkles className="size-4" />
@@ -2231,10 +2503,36 @@ function ThreadView({
               <Reply className="size-4" />
               Draft
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden gap-2 lg:flex"
+              onClick={onMarkDone}
+            >
+              <CheckCircle2 className="size-4" />
+              Done
+            </Button>
           </div>
         </div>
 
-        <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr]">
+        <div className="mt-3 grid gap-3 xl:grid-cols-[0.8fr_1fr_1fr]">
+          <div className="dashboard-card p-3">
+            <div className="mb-2 flex items-center gap-2 text-xs font-medium">
+              <Flame className="size-3.5" />
+              Triage Score
+            </div>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-2xl font-semibold">{priorityScore}</p>
+                <p className="text-xs text-muted-foreground">
+                  {priorityLabel(priorityScore)} priority
+                </p>
+              </div>
+              <Badge variant={thread.needsReply ? 'default' : 'secondary'}>
+                {thread.needsReply ? 'Reply' : 'Monitor'}
+              </Badge>
+            </div>
+          </div>
           <div className="dashboard-card p-3">
             <div className="mb-2 flex items-center gap-2 text-xs font-medium">
               <Sparkles className="size-3.5" />
@@ -2315,6 +2613,31 @@ function ThreadView({
               placeholder="Draft or insert a reply..."
               className="min-h-36 resize-none"
             />
+            <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+              <div className="rounded-md border border-border/70 bg-background/60 px-2 py-1.5">
+                {composerStats.words} words · {composerStats.characters} chars
+              </div>
+              <div
+                className={cn(
+                  'rounded-md border px-2 py-1.5',
+                  hasGreeting
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                    : 'border-border/70 bg-background/60'
+                )}
+              >
+                {hasGreeting ? 'Human opener' : 'Add a warmer opener'}
+              </div>
+              <div
+                className={cn(
+                  'rounded-md border px-2 py-1.5',
+                  hasQuestion
+                    ? 'border-sky-200 bg-sky-50 text-sky-800'
+                    : 'border-border/70 bg-background/60'
+                )}
+              >
+                {hasQuestion ? 'Clear ask included' : 'No direct ask yet'}
+              </div>
+            </div>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
                 Tone: {brokMailTonePreference}
