@@ -5,6 +5,11 @@ import {
   SessionManager,
   SettingsManager
 } from '@earendil-works/pi-coding-agent'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+
+import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 type PiAgentMode = 'brokmail' | 'brokcode'
 
@@ -35,6 +40,81 @@ const DEFAULT_MODELS = {
   ],
   openai: ['gpt-4.1', 'gpt-4o', 'gpt-4.1-mini'],
   google: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash']
+}
+
+function getOpenAiCompatiblePiConfig() {
+  const baseUrl =
+    process.env.PI_AGENT_OPENAI_COMPATIBLE_BASE_URL ??
+    process.env.OPENAI_COMPATIBLE_API_BASE_URL
+  const apiKey =
+    process.env.PI_AGENT_OPENAI_COMPATIBLE_API_KEY ??
+    process.env.OPENAI_COMPATIBLE_API_KEY
+
+  if (!baseUrl?.trim() || !apiKey?.trim()) {
+    return null
+  }
+
+  return {
+    provider: process.env.PI_AGENT_PROVIDER ?? 'brok-pi',
+    model:
+      process.env.PI_AGENT_MODEL ??
+      process.env.BROK_PI_MODEL ??
+      process.env.OPENAI_COMPATIBLE_MODEL ??
+      process.env.MINIMAX_MODEL ??
+      'MiniMax-M2.7-highspeed',
+    baseUrl: baseUrl.trim()
+  }
+}
+
+function createOpenAiCompatibleModelsFile() {
+  const config = getOpenAiCompatiblePiConfig()
+  if (!config) return null
+
+  const dir = mkdtempSync(path.join(tmpdir(), 'brok-pi-models-'))
+  const filePath = path.join(dir, 'models.json')
+
+  writeFileSync(
+    filePath,
+    JSON.stringify(
+      {
+        providers: {
+          [config.provider]: {
+            baseUrl: config.baseUrl,
+            api: 'openai-completions',
+            apiKey: process.env.PI_AGENT_OPENAI_COMPATIBLE_API_KEY?.trim()
+              ? 'PI_AGENT_OPENAI_COMPATIBLE_API_KEY'
+              : 'OPENAI_COMPATIBLE_API_KEY',
+            authHeader: true,
+            compat: {
+              supportsDeveloperRole: false,
+              supportsReasoningEffort: false
+            },
+            models: [
+              {
+                id: config.model,
+                name: `Brok Pi (${config.model})`,
+                input: ['text'],
+                contextWindow: 204800,
+                maxTokens: 8192,
+                reasoning: false,
+                cost: {
+                  input: 0,
+                  output: 0,
+                  cacheRead: 0,
+                  cacheWrite: 0
+                }
+              }
+            ]
+          }
+        }
+      },
+      null,
+      2
+    ),
+    'utf8'
+  )
+
+  return { filePath, dir, ...config }
 }
 
 function configureAuthStorage() {
@@ -97,8 +177,23 @@ function selectModel({
 
 export function isPiAgentConfigured() {
   const authStorage = configureAuthStorage()
-  const modelRegistry = ModelRegistry.inMemory(authStorage)
-  return Boolean(selectModel({ modelRegistry }))
+  const custom = createOpenAiCompatibleModelsFile()
+  try {
+    const modelRegistry = custom
+      ? ModelRegistry.create(authStorage, custom.filePath)
+      : ModelRegistry.inMemory(authStorage)
+    return Boolean(
+      selectModel({
+        modelRegistry,
+        provider: custom?.provider,
+        model: custom?.model
+      })
+    )
+  } finally {
+    if (custom) {
+      rmSync(custom.dir, { recursive: true, force: true })
+    }
+  }
 }
 
 export async function runPiAgentPrompt({
@@ -111,10 +206,20 @@ export async function runPiAgentPrompt({
   noTools
 }: PiAgentRunInput): Promise<PiAgentRunResult> {
   const authStorage = configureAuthStorage()
-  const modelRegistry = ModelRegistry.inMemory(authStorage)
-  const selectedModel = selectModel({ modelRegistry, provider, model })
+  const custom = createOpenAiCompatibleModelsFile()
+  const modelRegistry = custom
+    ? ModelRegistry.create(authStorage, custom.filePath)
+    : ModelRegistry.inMemory(authStorage)
+  const selectedModel = selectModel({
+    modelRegistry,
+    provider: provider ?? custom?.provider,
+    model: model ?? custom?.model
+  })
 
   if (!selectedModel) {
+    if (custom) {
+      rmSync(custom.dir, { recursive: true, force: true })
+    }
     throw new Error(
       'Pi coding-agent is installed, but no Pi model is configured. Set PI_AGENT_PROVIDER and PI_AGENT_MODEL with a matching API key, or set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_GENERATIVE_AI_API_KEY.'
     )
@@ -158,7 +263,7 @@ export async function runPiAgentPrompt({
 
   try {
     await session.prompt(prompt)
-    const finalContent = content.trim()
+    const finalContent = stripThinkingBlocks(content).trim()
     if (!finalContent) {
       throw new Error('Pi coding-agent completed without assistant output.')
     }
@@ -173,5 +278,8 @@ export async function runPiAgentPrompt({
   } finally {
     unsubscribe()
     session.dispose()
+    if (custom) {
+      rmSync(custom.dir, { recursive: true, force: true })
+    }
   }
 }

@@ -654,6 +654,45 @@ export function BrokMailApp() {
     }
   }
 
+  async function loadComposioGmailThreads() {
+    setConnectionStatus('Loading live Gmail through Composio...')
+    try {
+      const response = await fetch('/api/brokmail/gmail/threads')
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error ?? 'Could not load Gmail threads through Composio.'
+        )
+      }
+
+      const liveThreads = Array.isArray(payload?.threads)
+        ? (payload.threads as MailThread[])
+        : []
+
+      setThreads(liveThreads)
+      if (liveThreads[0]) setSelectedThreadId(liveThreads[0].id)
+      setConnected(true)
+      setConnectionMode('composio')
+      setConnectionStatus(
+        liveThreads.length
+          ? `Composio Gmail connected (${liveThreads.length} live threads)`
+          : 'Composio Gmail connected, but no recent mail was returned.'
+      )
+      if (liveThreads.length) {
+        toast.success('Loaded live Gmail through Composio')
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Could not load Gmail threads through Composio.'
+      setThreads([])
+      setConnectionStatus(message)
+      toast.error(message)
+    }
+  }
+
   async function loadCalendarEvents(accessToken: string) {
     setIsSyncingCalendar(true)
     try {
@@ -820,11 +859,7 @@ export function BrokMailApp() {
       if (gmailStatus.connected) {
         setConnected(true)
         setConnectionMode('composio')
-        setConnectionStatus(
-          googleAuthEnabled
-            ? 'Gmail is connected through Composio. Load live inbox in this browser to read threads and create drafts.'
-            : 'Gmail is connected through Composio. Browser live inbox sync is disabled until Google auth is enabled for this deployment.'
-        )
+        await loadComposioGmailThreads()
       } else {
         setConnectionStatus(
           gmailStatus.message ||
@@ -905,11 +940,7 @@ export function BrokMailApp() {
         if (connectedThroughComposio) {
           setConnected(true)
           setConnectionMode('composio')
-          setConnectionStatus(
-            googleAuthEnabled
-              ? 'Gmail is connected through Composio. Load live inbox in this browser to read threads and create drafts.'
-              : 'Gmail is connected through Composio. Browser live inbox sync is disabled until Google auth is enabled for this deployment.'
-          )
+          await loadComposioGmailThreads()
           toast.success('Gmail connected through Composio')
           return
         }
@@ -1959,21 +1990,19 @@ export function BrokMailApp() {
                     <UserRoundCheck className="size-4" />
                     {isConnecting ? 'Connecting...' : 'Connect Gmail'}
                   </Button>
-                  {connectionMode === 'composio' &&
-                    !googleAccessToken &&
-                    googleAuthEnabled && (
-                      <Button
-                        size="sm"
-                        className="mt-2 h-8 w-full gap-2"
-                        onClick={() => {
-                          void startBrowserGoogleSync('gmail')
-                        }}
-                        disabled={isConnecting}
-                      >
-                        <MailCheck className="size-4" />
-                        Load Live Inbox
-                      </Button>
-                    )}
+                  {connectionMode === 'composio' && !googleAccessToken && (
+                    <Button
+                      size="sm"
+                      className="mt-2 h-8 w-full gap-2"
+                      onClick={() => {
+                        void loadComposioGmailThreads()
+                      }}
+                      disabled={isConnecting}
+                    >
+                      <MailCheck className="size-4" />
+                      Load Composio Inbox
+                    </Button>
+                  )}
                 </div>
                 <div className="dashboard-card p-3">
                   <div className="flex items-center justify-between gap-2">
@@ -2321,11 +2350,13 @@ export function BrokMailApp() {
                 connected={connected}
                 connectionStatus={connectionStatus}
                 connectGmail={connectGmail}
-                syncGmail={() => startBrowserGoogleSync('gmail')}
+                syncGmail={
+                  connectionMode === 'composio'
+                    ? loadComposioGmailThreads
+                    : () => startBrowserGoogleSync('gmail')
+                }
                 canSyncGmail={
-                  connectionMode === 'composio' &&
-                  !googleAccessToken &&
-                  googleAuthEnabled
+                  connectionMode === 'composio' && !googleAccessToken
                 }
                 isConnecting={isConnecting}
                 isSyncingMail={isSyncingMail}
