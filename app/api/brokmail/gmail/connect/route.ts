@@ -9,7 +9,7 @@ import {
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const DEFAULT_GMAIL_TOOLKIT_CANDIDATES = ['googlesuper', 'gmail']
+const DEFAULT_GMAIL_TOOLKIT_CANDIDATES = ['gmail', 'googlesuper']
 
 function resolveToolkitCandidates() {
   const configured = process.env.COMPOSIO_GMAIL_TOOLKIT_SLUGS?.trim()
