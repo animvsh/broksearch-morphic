@@ -7,6 +7,7 @@ import type {
 } from 'ai'
 
 import type { createComposioIntegrationTool } from '../tools/composio-integrations'
+import type { createDocumentArtifactTool } from '../tools/document-artifacts'
 import type { fetchTool } from '../tools/fetch'
 import type { createQuestionTool } from '../tools/question'
 import type { createSearchTool } from '../tools/search'
@@ -18,6 +19,7 @@ export type ResearcherTools = {
   fetch: typeof fetchTool
   askQuestion: ReturnType<typeof createQuestionTool>
   composioIntegrations: ReturnType<typeof createComposioIntegrationTool>
+  documentArtifacts: ReturnType<typeof createDocumentArtifactTool>
 } & ReturnType<typeof createTodoTools>
 
 // Type alias for the researcher agent using ToolLoopAgent
@@ -42,6 +44,9 @@ export type TodoWriteToolInvocation = UIToolInvocation<
 export type ComposioIntegrationsToolInvocation = UIToolInvocation<
   ResearcherTools['composioIntegrations']
 >
+export type DocumentArtifactsToolInvocation = UIToolInvocation<
+  ResearcherTools['documentArtifacts']
+>
 
 // Union type for all tool invocations
 export type ResearcherToolInvocation =
@@ -50,6 +55,7 @@ export type ResearcherToolInvocation =
   | QuestionToolInvocation
   | TodoWriteToolInvocation
   | ComposioIntegrationsToolInvocation
+  | DocumentArtifactsToolInvocation
 
 // Helper type to extract tool names
 export type ResearcherToolName = keyof ResearcherTools

@@ -4,6 +4,7 @@ import type { ResearcherTools } from '@/lib/types/agent'
 import { type Model } from '@/lib/types/models'
 
 import { createComposioIntegrationTool } from '../tools/composio-integrations'
+import { createDocumentArtifactTool } from '../tools/document-artifacts'
 import { fetchTool } from '../tools/fetch'
 import { createQuestionTool } from '../tools/question'
 import { createSearchTool } from '../tools/search'
@@ -70,13 +71,15 @@ export function createResearcher({
   modelConfig,
   parentTraceId,
   searchMode = 'deep',
-  userId
+  userId,
+  chatId
 }: {
   model: string
   modelConfig?: Model
   parentTraceId?: string
   searchMode?: SearchMode
   userId?: string
+  chatId?: string
 }) {
   try {
     const currentDate = new Date().toLocaleString()
@@ -85,6 +88,7 @@ export function createResearcher({
     const originalSearchTool = createSearchTool(model)
     const askQuestionTool = createQuestionTool(model)
     const composioIntegrationTool = createComposioIntegrationTool(userId)
+    const documentArtifactTool = createDocumentArtifactTool({ userId, chatId })
     const todoTools = createTodoTools()
 
     let systemPrompt: string
@@ -98,10 +102,15 @@ export function createResearcher({
       case 'search':
       case 'code':
         console.log(
-          `[Researcher] ${searchMode} mode: maxSteps=20, tools=[search, fetch, composioIntegrations]`
+          `[Researcher] ${searchMode} mode: maxSteps=20, tools=[search, fetch, composioIntegrations, documentArtifacts]`
         )
         systemPrompt = QUICK_MODE_PROMPT
-        activeToolsList = ['search', 'fetch', 'composioIntegrations']
+        activeToolsList = [
+          'search',
+          'fetch',
+          'composioIntegrations',
+          'documentArtifacts'
+        ]
         maxSteps = 20
         searchTool = wrapSearchToolForQuickMode(originalSearchTool)
         break
@@ -109,7 +118,13 @@ export function createResearcher({
       case 'deep':
       default:
         systemPrompt = getAdaptiveModePrompt()
-        activeToolsList = ['search', 'fetch', 'todoWrite', 'composioIntegrations']
+        activeToolsList = [
+          'search',
+          'fetch',
+          'todoWrite',
+          'composioIntegrations',
+          'documentArtifacts'
+        ]
         console.log(
           `[Researcher] Deep mode: maxSteps=50, tools=[${activeToolsList.join(', ')}]`
         )
@@ -124,6 +139,7 @@ export function createResearcher({
       fetch: fetchTool,
       askQuestion: askQuestionTool,
       composioIntegrations: composioIntegrationTool,
+      documentArtifacts: documentArtifactTool,
       ...todoTools
     } as ResearcherTools
 

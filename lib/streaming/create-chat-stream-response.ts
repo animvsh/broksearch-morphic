@@ -1,8 +1,4 @@
-import {
-  consumeStream,
-  convertToModelMessages,
-  pruneMessages
-} from 'ai'
+import { consumeStream, convertToModelMessages, pruneMessages } from 'ai'
 import { randomUUID } from 'crypto'
 import { Langfuse } from 'langfuse'
 
@@ -127,7 +123,8 @@ export async function createChatStreamResponse(
       modelConfig: model,
       parentTraceId,
       searchMode,
-      userId
+      userId,
+      chatId
     })
 
     // For OpenAI models, strip reasoning parts from UIMessages before conversion

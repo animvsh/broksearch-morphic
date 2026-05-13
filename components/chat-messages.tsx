@@ -59,7 +59,8 @@ export function ChatMessages({
     'tool-search',
     'tool-fetch',
     'tool-askQuestion',
-    'tool-composioIntegrations'
+    'tool-composioIntegrations',
+    'tool-documentArtifacts'
   ]
 
   // Clear cache during streaming to ensure accurate tool counts

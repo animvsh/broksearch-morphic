@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import {
   createConnectedAccountLink,
+  executeComposioTool,
   isComposioConfigured,
   isComposioConnectMode,
   listAuthConfigs,
@@ -13,7 +14,8 @@ const composioActionSchema = z.enum([
   'status',
   'list_connected_accounts',
   'list_auth_configs',
-  'create_connection_link'
+  'create_connection_link',
+  'execute_tool'
 ])
 
 const composioIntegrationInputSchema = z.object({
@@ -42,7 +44,25 @@ const composioIntegrationInputSchema = z.object({
     .max(100)
     .default(20)
     .optional()
-    .describe('Maximum number of rows to return for listing actions.')
+    .describe('Maximum number of rows to return for listing actions.'),
+  toolSlug: z
+    .string()
+    .optional()
+    .describe(
+      'Composio tool slug to execute, such as GMAIL_CREATE_EMAIL_DRAFT.'
+    ),
+  text: z
+    .string()
+    .optional()
+    .describe('Natural-language execution instruction for the Composio tool.'),
+  arguments: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Structured arguments for the Composio tool when known.'),
+  connectedAccountId: z
+    .string()
+    .optional()
+    .describe('Specific Composio connected account id to run the tool with.')
 })
 
 export function createComposioIntegrationTool(userId?: string) {
@@ -55,7 +75,11 @@ export function createComposioIntegrationTool(userId?: string) {
       toolkitSlug,
       authConfigId,
       redirectUrl,
-      limit = 20
+      limit = 20,
+      toolSlug,
+      text,
+      arguments: toolArguments,
+      connectedAccountId
     }) {
       const subjectUserId = userId || 'guest'
 
@@ -127,6 +151,66 @@ export function createComposioIntegrationTool(userId?: string) {
             action,
             authConfigs,
             authConfigCount: authConfigs.length
+          }
+          return
+        }
+
+        if (action === 'execute_tool') {
+          if (!userId) {
+            yield {
+              state: 'complete' as const,
+              success: false,
+              configured: true,
+              action,
+              message: 'Sign in to Brok before running connector actions.'
+            }
+            return
+          }
+
+          if (!toolSlug) {
+            yield {
+              state: 'complete' as const,
+              success: false,
+              configured: true,
+              action,
+              message:
+                'A Composio toolSlug is required to execute a connector action.'
+            }
+            return
+          }
+
+          let resolvedConnectedAccountId = connectedAccountId
+          if (!resolvedConnectedAccountId && toolkitSlug) {
+            const accounts = await listConnectedAccounts(
+              subjectUserId,
+              toolkitSlug,
+              10
+            )
+            resolvedConnectedAccountId = accounts.find(account => {
+              const status = account.status?.toLowerCase()
+              return (
+                !status || ['active', 'connected', 'enabled'].includes(status)
+              )
+            })?.id
+          }
+
+          const result = await executeComposioTool({
+            toolSlug,
+            userId: subjectUserId,
+            connectedAccountId: resolvedConnectedAccountId,
+            text,
+            arguments: toolArguments
+          })
+
+          yield {
+            state: 'complete' as const,
+            success: true,
+            configured: true,
+            action,
+            toolSlug,
+            connectedAccountId: resolvedConnectedAccountId || null,
+            message: `Executed Composio tool ${toolSlug}.`,
+            result
           }
           return
         }

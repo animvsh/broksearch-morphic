@@ -2,6 +2,7 @@ import type { ReasoningPart, TextPart } from '@ai-sdk/provider-utils'
 import type { InferUITool, UIMessage as AIMessage } from 'ai'
 
 import type { createComposioIntegrationTool } from '@/lib/tools/composio-integrations'
+import type { createDocumentArtifactTool } from '@/lib/tools/document-artifacts'
 import { fetchTool } from '@/lib/tools/fetch'
 import { askQuestionTool } from '@/lib/tools/question'
 import { searchTool } from '@/lib/tools/search'
@@ -33,6 +34,7 @@ export type UIDataTypes = {
 // Create todo tools instance for type inference
 const todoTools = createTodoTools()
 type ComposioIntegrationsTool = ReturnType<typeof createComposioIntegrationTool>
+type DocumentArtifactsTool = ReturnType<typeof createDocumentArtifactTool>
 
 export type UITools = {
   search: InferUITool<typeof searchTool>
@@ -40,6 +42,7 @@ export type UITools = {
   askQuestion: InferUITool<typeof askQuestionTool>
   todoWrite: InferUITool<typeof todoTools.todoWrite>
   composioIntegrations: InferUITool<ComposioIntegrationsTool>
+  documentArtifacts: InferUITool<DocumentArtifactsTool>
   // Dynamic tools will be added at runtime
   [key: string]: any
 }

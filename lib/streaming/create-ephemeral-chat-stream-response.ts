@@ -1,9 +1,5 @@
 import type { UIMessage } from 'ai'
-import {
-  consumeStream,
-  convertToModelMessages,
-  pruneMessages
-} from 'ai'
+import { consumeStream, convertToModelMessages, pruneMessages } from 'ai'
 import { randomUUID } from 'crypto'
 import { Langfuse } from 'langfuse'
 
@@ -88,7 +84,8 @@ export async function createEphemeralChatStreamResponse(
       model: `${model.providerId}:${model.id}`,
       modelConfig: model,
       parentTraceId,
-      searchMode
+      searchMode,
+      chatId
     })
 
     const result = await researchAgent.stream({

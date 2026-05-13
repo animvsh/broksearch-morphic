@@ -31,7 +31,12 @@ export async function GET(
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.png': 'image/png',
-    '.pdf': 'application/pdf'
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.html': 'text/html; charset=utf-8',
+    '.htm': 'text/html; charset=utf-8',
+    '.md': 'text/markdown; charset=utf-8',
+    '.txt': 'text/plain; charset=utf-8'
   }
 
   const contentType = contentTypes[ext] || 'application/octet-stream'
