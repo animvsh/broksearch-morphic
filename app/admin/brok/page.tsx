@@ -1,10 +1,12 @@
 import { getBrokStats } from '@/lib/actions/admin-brok'
+import { requirePageAuth } from '@/lib/auth/require-page-auth'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export const dynamic = 'force-dynamic'
 
 export default async function BrokAdminPage() {
+  await requirePageAuth('/admin/brok')
   const stats = await getBrokStats()
 
   return (

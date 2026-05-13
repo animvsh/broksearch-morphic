@@ -1,4 +1,5 @@
 import { getProviderRoutes, saveProviderRoute } from '@/lib/actions/admin-brok'
+import { requirePageAuth } from '@/lib/auth/require-page-auth'
 import { BROK_MODELS } from '@/lib/brok/models'
 
 import { Badge } from '@/components/ui/badge'
@@ -7,6 +8,7 @@ import { Button } from '@/components/ui/button'
 export const dynamic = 'force-dynamic'
 
 export default async function AdminProvidersPage() {
+  await requirePageAuth('/admin/brok/providers')
   let routes = await getProviderRoutes()
   if (!routes.length) {
     routes = Object.entries(BROK_MODELS).map(([brokModel, config], index) => ({

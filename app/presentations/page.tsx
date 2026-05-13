@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import { redirect } from 'next/navigation'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
 import { getPresentationsByUser } from '@/lib/db/actions/presentations'
@@ -17,6 +18,10 @@ const PRESENTATION_STYLES = new Set<PresentationStyle>([
 
 export default async function PresentationsPage() {
   const userId = await getCurrentUserId()
+  if (!userId) {
+    redirect(`/auth/login?redirectTo=${encodeURIComponent('/presentations')}`)
+  }
+
   const result = userId
     ? await getPresentationsByUser(userId, 50, 0)
     : { presentations: [] }

@@ -1,4 +1,5 @@
 import { getUsageForAdmin } from '@/lib/actions/admin-brok'
+import { requirePageAuth } from '@/lib/auth/require-page-auth'
 
 import { Badge } from '@/components/ui/badge'
 
@@ -9,6 +10,7 @@ export default async function AdminLogsPage({
 }: {
   searchParams: Promise<{ model?: string; endpoint?: string }>
 }) {
+  await requirePageAuth('/admin/brok/logs')
   const params = await searchParams
   const logs = await getUsageForAdmin({
     model: params.model,

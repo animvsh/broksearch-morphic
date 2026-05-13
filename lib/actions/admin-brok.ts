@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm'
 
+import { requireAdminAccess } from '@/lib/auth/admin'
 import { BROK_MODELS } from '@/lib/brok/models'
 import { db } from '@/lib/db'
 import {
@@ -197,7 +198,17 @@ function revalidateAdminPaths() {
   revalidatePath('/api-keys')
 }
 
+async function assertAdminAccess() {
+  const access = await requireAdminAccess()
+
+  if (!access.ok) {
+    throw new Error(access.error)
+  }
+}
+
 export async function getBrokStats() {
+  await assertAdminAccess()
+
   try {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -308,6 +319,8 @@ export async function getAllApiKeysForAdmin(): Promise<
     createdAt: Date
   }>
 > {
+  await assertAdminAccess()
+
   try {
     const keys = await db
       .select({
@@ -365,6 +378,8 @@ export async function getUsageForAdmin(filters: {
     createdAt: Date
   }>
 > {
+  await assertAdminAccess()
+
   try {
     const conditions = []
 
@@ -444,6 +459,8 @@ export async function getProviderRoutes(): Promise<
     isActive: boolean
   }>
 > {
+  await assertAdminAccess()
+
   try {
     await ensureProviderRoutesSeeded()
 
@@ -484,8 +501,13 @@ export async function updateProviderRoute(
     outputCostPerMillion?: string
   }
 ) {
+  await assertAdminAccess()
+
   try {
-    await db.update(providerRoutes).set(updates).where(eq(providerRoutes.id, id))
+    await db
+      .update(providerRoutes)
+      .set(updates)
+      .where(eq(providerRoutes.id, id))
   } catch (error) {
     if (!canUseDevDbFallback(error)) {
       throw error
@@ -496,6 +518,8 @@ export async function updateProviderRoute(
 }
 
 export async function saveProviderRoute(formData: FormData) {
+  await assertAdminAccess()
+
   const id = String(formData.get('id') ?? '')
   const priority = Number(formData.get('priority') ?? 1)
   const inputCostPerMillion = String(formData.get('inputCostPerMillion') ?? '0')
@@ -517,6 +541,8 @@ export async function saveProviderRoute(formData: FormData) {
 }
 
 export async function pauseAdminApiKey(keyId: string) {
+  await assertAdminAccess()
+
   try {
     await db
       .update(apiKeys)
@@ -532,6 +558,8 @@ export async function pauseAdminApiKey(keyId: string) {
 }
 
 export async function resumeAdminApiKey(keyId: string) {
+  await assertAdminAccess()
+
   try {
     await db
       .update(apiKeys)
@@ -547,6 +575,8 @@ export async function resumeAdminApiKey(keyId: string) {
 }
 
 export async function revokeAdminApiKey(keyId: string) {
+  await assertAdminAccess()
+
   try {
     await db
       .update(apiKeys)

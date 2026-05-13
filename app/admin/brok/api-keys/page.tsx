@@ -4,6 +4,7 @@ import {
   resumeAdminApiKey,
   revokeAdminApiKey
 } from '@/lib/actions/admin-brok'
+import { requirePageAuth } from '@/lib/auth/require-page-auth'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +12,8 @@ import { Button } from '@/components/ui/button'
 export const dynamic = 'force-dynamic'
 
 export default async function AdminApiKeysPage() {
+  await requirePageAuth('/admin/brok/api-keys')
+
   const keys = await getAllApiKeysForAdmin()
 
   return (

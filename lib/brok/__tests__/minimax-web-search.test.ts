@@ -1,15 +1,30 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-
-import { searchWithMiniMaxWebSearch } from '@/lib/brok/minimax-web-search'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('searchWithMiniMaxWebSearch', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
+  const originalEnv = { ...process.env }
+
+  beforeEach(() => {
+    vi.resetModules()
+    process.env = { ...originalEnv }
+    delete process.env.MINIMAX_CODING_PLAN_API_KEY
+    delete process.env.MINIMAX_API_KEY
     delete process.env.OPENAI_COMPATIBLE_API_KEY
   })
 
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.resetModules()
+    process.env = { ...originalEnv }
+  })
+
+  async function loadSearchWithMiniMaxWebSearch() {
+    const mod = await import('@/lib/brok/minimax-web-search')
+    return mod.searchWithMiniMaxWebSearch
+  }
+
   it('calls the direct MiniMax coding plan search endpoint with q', async () => {
     process.env.OPENAI_COMPATIBLE_API_KEY = 'test-key'
+    const searchWithMiniMaxWebSearch = await loadSearchWithMiniMaxWebSearch()
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -61,6 +76,7 @@ describe('searchWithMiniMaxWebSearch', () => {
 
   it('surfaces MiniMax search errors without mentioning MCP process failures', async () => {
     process.env.OPENAI_COMPATIBLE_API_KEY = 'test-key'
+    const searchWithMiniMaxWebSearch = await loadSearchWithMiniMaxWebSearch()
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
