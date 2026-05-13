@@ -3,23 +3,12 @@ import { createBrowserClient } from '@supabase/ssr'
 type BrokPublicEnv = {
   NEXT_PUBLIC_SUPABASE_URL?: string
   NEXT_PUBLIC_SUPABASE_ANON_KEY?: string
-  NEXT_PUBLIC_GOOGLE_AUTH_ENABLED?: string
 }
 
 declare global {
   interface Window {
     __BROK_PUBLIC_ENV__?: BrokPublicEnv
   }
-}
-
-export function isGoogleAuthEnabled() {
-  const runtimeEnv =
-    typeof window !== 'undefined' ? window.__BROK_PUBLIC_ENV__ : undefined
-
-  return (
-    process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true' ||
-    runtimeEnv?.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
-  )
 }
 
 function getPublicSupabaseConfig() {

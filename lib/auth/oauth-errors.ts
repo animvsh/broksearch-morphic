@@ -11,8 +11,8 @@ export function formatOAuthErrorMessage(error: unknown) {
 
   if (GOOGLE_PROVIDER_NOT_ENABLED_PATTERN.test(message)) {
     return [
-      'Google sign-in is not enabled for this Brok Supabase project yet.',
-      'Enable the Google provider in Supabase Auth, add the Google OAuth client ID and secret, and include this site in the allowed redirect URLs.'
+      'Google sign-in is not supported for this Brok deployment.',
+      'Use email/password for platform login. Gmail and Calendar integrations are handled through Composio after sign-in.'
     ].join(' ')
   }
 

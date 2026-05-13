@@ -286,9 +286,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
-            ? 'Composio is not configured. Connect Google in BrokMail or use live browser Google OAuth.'
-            : 'Composio is not configured and browser Google OAuth is disabled for this deployment.'
+          'Composio is not configured. BrokMail Google actions require Composio; platform Google OAuth is disabled.'
       },
       { status: 503 }
     )

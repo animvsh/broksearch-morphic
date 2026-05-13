@@ -4,9 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
-import { formatOAuthErrorMessage } from '@/lib/auth/oauth-errors'
 import { resolveSafeNextPath } from '@/lib/auth/redirect'
-import { createClient, isGoogleAuthEnabled } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils/index'
 
 import { Button } from '@/components/ui/button'
@@ -34,7 +33,6 @@ export function LoginForm({
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const safeRedirectTo = resolveSafeNextPath(redirectTo)
-  const googleAuthEnabled = isGoogleAuthEnabled()
   const signUpHref =
     safeRedirectTo === '/'
       ? '/auth/sign-up'
@@ -62,35 +60,6 @@ export function LoginForm({
     }
   }
 
-  const handleSocialLogin = async () => {
-    if (!googleAuthEnabled) {
-      setError(
-        formatOAuthErrorMessage(
-          new Error('Unsupported provider: provider is not enabled')
-        )
-      )
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${location.origin}/auth/oauth?next=${encodeURIComponent(safeRedirectTo)}`
-        }
-      })
-      if (error) throw error
-    } catch (error: unknown) {
-      setError(formatOAuthErrorMessage(error))
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   return (
     <div
       className={cn('flex flex-col items-center gap-6', className)}
@@ -106,36 +75,6 @@ export function LoginForm({
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
-            {googleAuthEnabled ? (
-              <Button
-                variant="outline"
-                type="button"
-                className="w-full"
-                onClick={handleSocialLogin}
-                disabled={isLoading}
-              >
-                Sign In with Google
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                type="button"
-                className="w-full"
-                disabled
-              >
-                Google sign-in unavailable
-              </Button>
-            )}
-
-            <div className="relative my-2">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-muted px-2 text-muted-foreground">Or</span>
-              </div>
-            </div>
-
             <form onSubmit={handleLogin} className="flex flex-col gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>

@@ -36,11 +36,9 @@ export async function GET() {
     return NextResponse.json({
       configured: false,
       connected: false,
-      provider: 'google-oauth',
+      provider: 'unavailable',
       message:
-        process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
-          ? 'Composio is not configured. Brok Calendar can still use browser Calendar live sync.'
-          : 'Composio is not configured and browser Calendar live sync is disabled for this deployment.'
+        'Composio is not configured. BrokMail Calendar uses Composio only; platform Google OAuth is disabled.'
     })
   }
 

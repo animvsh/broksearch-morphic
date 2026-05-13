@@ -26,7 +26,6 @@ describe('BrokMail Gmail routes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     delete process.env.COMPOSIO_GMAIL_TOOLKIT_SLUGS
-    delete process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED
     vi.mocked(isComposioConfigured).mockReturnValue(true)
     vi.mocked(isComposioConnectMode).mockReturnValue(false)
     vi.mocked(getCurrentUser).mockResolvedValue({
@@ -120,7 +119,7 @@ describe('BrokMail Gmail routes', () => {
     )
   })
 
-  it('does not advertise browser Gmail sync when Google auth is disabled', async () => {
+  it('requires Composio instead of browser Gmail OAuth when Composio is missing', async () => {
     vi.mocked(isComposioConfigured).mockReturnValue(false)
 
     const request = new Request(
@@ -143,10 +142,11 @@ describe('BrokMail Gmail routes', () => {
       connectionUrl: null,
       redirectUrl: 'https://brok.test/brokmail?gmail=connected'
     })
-    expect(body.message).toContain('Browser Google sync is disabled')
+    expect(body.message).toContain('Composio is not configured')
+    expect(body.message).toContain('platform Google OAuth is disabled')
   })
 
-  it('keeps browser Gmail sync fallback when Google auth is enabled', async () => {
+  it('does not return Google OAuth even when legacy env flag is set', async () => {
     process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED = 'true'
     vi.mocked(isComposioConfigured).mockReturnValue(false)
 
@@ -164,12 +164,13 @@ describe('BrokMail Gmail routes', () => {
     const response = await connectGmail(request as any)
     const body = await response.json()
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(503)
     expect(body).toMatchObject({
-      provider: 'google-oauth',
+      provider: 'unavailable',
       connectionUrl: null,
       redirectUrl: 'https://brok.test/brokmail?gmail=connected'
     })
-    expect(body.message).toContain('Use browser Gmail live sync')
+    expect(body.message).toContain('Composio is not configured')
+    delete process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED
   })
 })

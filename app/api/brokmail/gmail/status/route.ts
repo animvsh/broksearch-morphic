@@ -29,11 +29,9 @@ export async function GET() {
     return NextResponse.json({
       configured: false,
       connected: false,
-      provider: 'google-oauth',
+      provider: 'unavailable',
       message:
-        process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
-          ? 'Composio is not configured. BrokMail can still use browser Gmail live sync.'
-          : 'Composio is not configured and browser Gmail live sync is disabled for this deployment.'
+        'Composio is not configured. BrokMail Gmail uses Composio only; platform Google OAuth is disabled.'
     })
   }
 
@@ -81,7 +79,7 @@ export async function GET() {
       {
         configured: true,
         connected: false,
-        provider: 'google-oauth',
+        provider: 'unavailable',
         message:
           error instanceof Error
             ? error.message

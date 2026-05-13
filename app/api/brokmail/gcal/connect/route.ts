@@ -44,35 +44,18 @@ function resolveRequestOrigin(request: NextRequest) {
   return request.nextUrl.origin
 }
 
-function isBrowserGoogleSyncEnabled() {
-  return process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
-}
-
-function unavailableBrowserSyncMessage(prefix: string) {
-  return `${prefix} Browser Google sync is disabled for this deployment. Enable Composio Calendar or enable Google in Supabase Auth to connect Calendar.`
-}
-
 export async function POST(request: NextRequest) {
   const origin = resolveRequestOrigin(request)
   const redirectUrl = `${origin}/brokmail?gcal=connected`
 
   if (!isComposioConfigured()) {
-    if (isBrowserGoogleSyncEnabled()) {
-      return NextResponse.json({
-        provider: 'google-oauth',
-        connectionUrl: null,
-        redirectUrl,
-        message:
-          'Composio is not configured. Use browser Calendar live sync in BrokMail.'
-      })
-    }
-
     return NextResponse.json(
       {
         provider: 'unavailable',
         connectionUrl: null,
         redirectUrl,
-        message: unavailableBrowserSyncMessage('Composio is not configured.')
+        message:
+          'Composio is not configured. BrokMail Calendar requires a Composio Calendar auth config; platform Google OAuth is disabled.'
       },
       { status: 503 }
     )
@@ -129,33 +112,27 @@ export async function POST(request: NextRequest) {
         ? errors.join(' | ')
         : 'Could not create a Composio Google Calendar connection link.'
 
-    if (isBrowserGoogleSyncEnabled()) {
-      return NextResponse.json({
-        provider: 'google-oauth',
-        connectionUrl: null,
-        redirectUrl,
-        message
-      })
-    }
-
     return NextResponse.json(
       {
         provider: 'unavailable',
         connectionUrl: null,
         redirectUrl,
-        message: unavailableBrowserSyncMessage(message)
+        message: `${message} Platform Google OAuth is disabled; configure Composio Calendar instead.`
       },
       { status: 502 }
     )
   } catch (error) {
-    return NextResponse.json({
-      provider: 'google-oauth',
-      connectionUrl: null,
-      redirectUrl,
-      message:
-        error instanceof Error
-          ? error.message
-          : 'Could not create Composio Calendar connection link.'
-    })
+    return NextResponse.json(
+      {
+        provider: 'unavailable',
+        connectionUrl: null,
+        redirectUrl,
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Could not create Composio Calendar connection link.'
+      },
+      { status: 502 }
+    )
   }
 }

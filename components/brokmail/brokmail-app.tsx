@@ -40,26 +40,13 @@ import {
 import { toast } from 'sonner'
 
 import { createShareableChatFromTranscript } from '@/lib/actions/chat'
-import { formatOAuthErrorMessage } from '@/lib/auth/oauth-errors'
 import {
   AutomationRule,
   brokMailTonePreference,
   MailboxView,
   MailThread
 } from '@/lib/brokmail/data'
-import {
-  BrokCalendarEvent,
-  createCalendarEvent,
-  deleteCalendarEvent,
-  fetchCalendarEvents
-} from '@/lib/brokmail/google-calendar-client'
-import {
-  archiveGmailThread,
-  createGmailDraft,
-  fetchGmailThreads,
-  GMAIL_SUPER_OAUTH_SCOPES
-} from '@/lib/brokmail/google-gmail-client'
-import { createClient, isGoogleAuthEnabled } from '@/lib/supabase/client'
+import { BrokCalendarEvent } from '@/lib/brokmail/google-calendar-client'
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
@@ -110,7 +97,7 @@ type ActivityStep = {
   status: 'running' | 'done'
 }
 
-type IntegrationConnectionMode = 'none' | 'google-oauth' | 'composio'
+type IntegrationConnectionMode = 'none' | 'composio'
 type MailSortMode = 'priority' | 'newest' | 'sender'
 
 const viewLabels: Array<{
@@ -215,25 +202,6 @@ async function executeComposioBrokMailAction({
   }
 
   return body
-}
-
-function consumeBrokMailGoogleTokenFromHash() {
-  if (typeof window === 'undefined' || !window.location.hash) return null
-
-  const params = new URLSearchParams(window.location.hash.slice(1))
-  const token =
-    params.get('brokmail_google_token') || params.get('provider_token')
-
-  if (!token) return null
-
-  window.localStorage.setItem('brokmail_google_token', token)
-  window.history.replaceState(
-    null,
-    '',
-    `${window.location.pathname}${window.location.search}`
-  )
-
-  return token
 }
 
 function createId(prefix: string) {
@@ -456,9 +424,6 @@ export function BrokMailApp() {
   const [calendarConnectionStatus, setCalendarConnectionStatus] = useState(
     'Checking Google Calendar...'
   )
-  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(
-    null
-  )
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnectingCalendar, setIsConnectingCalendar] = useState(false)
   const [isSyncingMail, setIsSyncingMail] = useState(false)
@@ -475,10 +440,9 @@ export function BrokMailApp() {
       id: 'welcome',
       role: 'assistant',
       content:
-        'Connect Gmail or Google Calendar to start. Composio creates the connection; live mail and calendar actions run after this browser loads your Google session, so nothing is simulated.'
+        'Connect Gmail or Google Calendar through Composio to start. BrokMail uses live connected accounts and never uses platform Google OAuth or sample mail.'
     }
   ])
-  const googleAuthEnabled = isGoogleAuthEnabled()
   const deferredQuery = useDeferredValue(query)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -637,37 +601,6 @@ export function BrokMailApp() {
     return () => window.removeEventListener('keydown', handleKeydown)
   })
 
-  async function loadGmailThreads(accessToken: string) {
-    setIsSyncingMail(true)
-    try {
-      const liveThreads = await fetchGmailThreads(accessToken)
-      if (liveThreads.length > 0) {
-        setThreads(liveThreads)
-        setSelectedThreadId(liveThreads[0].id)
-        setConnected(true)
-        setConnectionMode('google-oauth')
-        setConnectionStatus(
-          `Live Gmail sync connected (${liveThreads.length} threads)`
-        )
-        toast.success('Loaded live Gmail inbox')
-        return
-      }
-
-      setThreads([])
-      setSelectedThreadId(undefined)
-      setConnectionStatus(
-        'Live Gmail sync connected, but no recent mail was returned.'
-      )
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Could not load Gmail threads.'
-      setConnectionStatus(message)
-      toast.error(message)
-    } finally {
-      setIsSyncingMail(false)
-    }
-  }
-
   async function loadComposioGmailThreads() {
     setConnectionStatus('Loading live Gmail through Composio...')
     try {
@@ -722,31 +655,6 @@ export function BrokMailApp() {
     }
   }
 
-  async function loadCalendarEvents(accessToken: string) {
-    setIsSyncingCalendar(true)
-    try {
-      const events = await fetchCalendarEvents(accessToken, 30)
-      setCalendarEvents(events)
-      if (!selectedCalendarEventId && events[0]) {
-        setSelectedCalendarEventId(events[0].id)
-      }
-      setCalendarConnected(true)
-      setCalendarConnectionMode('google-oauth')
-      setCalendarConnectionStatus(
-        `Google Calendar connected (${events.length} upcoming events)`
-      )
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Could not load Google Calendar events.'
-      setCalendarConnectionStatus(message)
-      toast.error(message)
-    } finally {
-      setIsSyncingCalendar(false)
-    }
-  }
-
   function selectAdjacentThread(direction: 1 | -1) {
     if (filteredThreads.length === 0) return
     const currentIndex = Math.max(
@@ -797,85 +705,15 @@ export function BrokMailApp() {
     )
   }
 
-  async function startBrowserGoogleSync(
-    kind: 'gmail' | 'calendar' | 'workspace'
-  ) {
-    const label =
-      kind === 'calendar'
-        ? 'Google Calendar'
-        : kind === 'gmail'
-          ? 'Gmail'
-          : 'Google Workspace'
-
-    if (kind !== 'calendar') {
-      setConnectionStatus(
-        `Opening ${label} live sync. Grant access so BrokMail can load real threads in this browser.`
-      )
-    }
-    if (kind !== 'gmail') {
-      setCalendarConnectionStatus(
-        `Opening ${label} live sync. Grant access so BrokMail can load and update live events in this browser.`
-      )
-    }
-
-    if (!googleAuthEnabled) {
-      throw new Error('Unsupported provider: provider is not enabled')
-    }
-
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/oauth?next=${encodeURIComponent('/brokmail')}`,
-        scopes: GMAIL_SUPER_OAUTH_SCOPES,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent'
-        }
-      }
-    })
-    if (error) throw error
-  }
-
   async function bootstrapGmail() {
-    const tokenFromRedirect = consumeBrokMailGoogleTokenFromHash()
-    if (tokenFromRedirect) {
-      setGoogleAccessToken(tokenFromRedirect)
-      setConnectionStatus('Loading live Gmail from Google authorization...')
-      setCalendarConnectionStatus(
-        'Loading live Google Calendar from Google authorization...'
+    window.localStorage.removeItem('brokmail_google_token')
+    if (window.location.hash) {
+      window.history.replaceState(
+        null,
+        '',
+        `${window.location.pathname}${window.location.search}`
       )
-      await Promise.all([
-        loadGmailThreads(tokenFromRedirect),
-        loadCalendarEvents(tokenFromRedirect)
-      ])
-      return
     }
-
-    const storedToken = window.localStorage.getItem('brokmail_google_token')
-    if (storedToken) {
-      setGoogleAccessToken(storedToken)
-      await Promise.all([
-        loadGmailThreads(storedToken),
-        loadCalendarEvents(storedToken)
-      ])
-      return
-    }
-
-    try {
-      const supabase = createClient()
-      const { data } = await supabase.auth.getSession()
-      const providerToken = data.session?.provider_token
-      if (providerToken) {
-        window.localStorage.setItem('brokmail_google_token', providerToken)
-        setGoogleAccessToken(providerToken)
-        await Promise.all([
-          loadGmailThreads(providerToken),
-          loadCalendarEvents(providerToken)
-        ])
-        return
-      }
-    } catch {}
 
     try {
       const [gmailResponse, gcalResponse] = await Promise.all([
@@ -892,9 +730,7 @@ export function BrokMailApp() {
       } else {
         setConnectionStatus(
           gmailStatus.message ||
-            (googleAuthEnabled
-              ? 'Connect Gmail through Composio, then load live inbox in this browser.'
-              : 'Connect Gmail through Composio. Browser live inbox sync is disabled until Google auth is enabled for this deployment.')
+            'Connect Gmail through Composio to load live inbox.'
         )
       }
 
@@ -902,16 +738,12 @@ export function BrokMailApp() {
         setCalendarConnected(true)
         setCalendarConnectionMode('composio')
         setCalendarConnectionStatus(
-          googleAuthEnabled
-            ? 'Google Calendar is connected through Composio. Load live calendar in this browser to read and update events.'
-            : 'Google Calendar is connected through Composio. Browser live calendar sync is disabled until Google auth is enabled for this deployment.'
+          'Google Calendar is connected through Composio. Approval-safe calendar actions are available through Composio.'
         )
       } else {
         setCalendarConnectionStatus(
           gcalStatus.message ||
-            (googleAuthEnabled
-              ? 'Connect Google Calendar through Composio, then load live calendar in this browser.'
-              : 'Connect Google Calendar through Composio. Browser live calendar sync is disabled until Google auth is enabled for this deployment.')
+            'Connect Google Calendar through Composio to use live calendar actions.'
         )
       }
     } catch {
@@ -975,17 +807,14 @@ export function BrokMailApp() {
         }
 
         setConnectionStatus(
-          googleAuthEnabled
-            ? 'Connection was not confirmed yet. Retry Composio or load live inbox in this browser.'
-            : 'Connection was not confirmed yet. Retry Composio after the Gmail account is connected.'
+          'Connection was not confirmed yet. Retry Composio after the Gmail account is connected.'
         )
         toast.error('Could not confirm Gmail connection yet')
         return
       }
-
-      await startBrowserGoogleSync('gmail')
     } catch (error) {
-      const message = formatOAuthErrorMessage(error)
+      const message =
+        error instanceof Error ? error.message : 'Could not connect Gmail.'
       setConnectionStatus(message)
       toast.error(message)
     } finally {
@@ -1041,26 +870,21 @@ export function BrokMailApp() {
           setCalendarConnected(true)
           setCalendarConnectionMode('composio')
           setCalendarConnectionStatus(
-            googleAuthEnabled
-              ? 'Google Calendar is connected through Composio. Load live calendar in this browser to read and update events.'
-              : 'Google Calendar is connected through Composio. Browser live calendar sync is disabled until Google auth is enabled for this deployment.'
+            'Google Calendar is connected through Composio. Approval-safe calendar actions are available through Composio.'
           )
           toast.success('Google Calendar connected through Composio')
           return
         }
 
         setCalendarConnectionStatus(
-          googleAuthEnabled
-            ? 'Connection was not confirmed yet. Retry Composio or load live calendar in this browser.'
-            : 'Connection was not confirmed yet. Retry Composio after Calendar is connected.'
+          'Connection was not confirmed yet. Retry Composio after Calendar is connected.'
         )
         toast.error('Could not confirm Google Calendar connection yet')
         return
       }
-
-      await startBrowserGoogleSync('calendar')
     } catch (error) {
-      const message = formatOAuthErrorMessage(error)
+      const message =
+        error instanceof Error ? error.message : 'Could not connect Calendar.'
       setCalendarConnectionStatus(message)
       toast.error(message)
     } finally {
@@ -1143,40 +967,13 @@ export function BrokMailApp() {
         lower.includes('next'))
     ) {
       setView('calendar')
-      updateActivity('Fetching your upcoming Google Calendar events...')
+      updateActivity('Checking Composio Calendar connection...')
       await wait(170)
 
-      if (!googleAccessToken) {
-        response = googleAuthEnabled
-          ? 'Google Calendar is connected through Composio, but this browser still needs live calendar sync before I can read or change events. Click Load Live Calendar and retry.'
-          : 'Google Calendar is connected through Composio, but browser live calendar sync is disabled until Google auth is enabled for this deployment.'
-      } else {
-        try {
-          const events = await fetchCalendarEvents(googleAccessToken, 12)
-          setCalendarEvents(events)
-          if (events[0]) setSelectedCalendarEventId(events[0].id)
-          setCalendarConnected(true)
-          setCalendarConnectionMode('google-oauth')
-          setCalendarConnectionStatus(
-            `Google Calendar connected (${events.length} upcoming events)`
-          )
-
-          response = events.length
-            ? [
-                'Upcoming events:',
-                ...events.map(
-                  event =>
-                    `- ${event.summary} (${formatCalendarTimestamp(event.startAt, event.isAllDay)}) [id: ${event.id}]`
-                )
-              ].join('\n')
-            : 'No upcoming events found in your primary Google Calendar.'
-        } catch (error) {
-          response =
-            error instanceof Error
-              ? `Calendar lookup failed: ${error.message}`
-              : 'Calendar lookup failed.'
-        }
-      }
+      response =
+        calendarConnectionMode === 'composio'
+          ? 'Google Calendar is connected through Composio. I can prepare approval-safe create and remove actions, but event listing is not exposed in this Composio route yet.'
+          : 'Connect Google Calendar through Composio before using live calendar actions.'
     } else if (
       /calendar|meeting|event|schedule/.test(lower) &&
       (lower.includes('add') ||
@@ -1187,9 +984,9 @@ export function BrokMailApp() {
       updateActivity('Parsing calendar command...')
       await wait(130)
 
-      if (!googleAccessToken && calendarConnectionMode !== 'composio') {
+      if (calendarConnectionMode !== 'composio') {
         response =
-          'I can only create live events after live calendar sync is active in this browser or Google Calendar is connected through Composio.'
+          'Connect Google Calendar through Composio before creating live events.'
       } else {
         const summary = parseEventTitle(command)
         const startAt = parseCalendarStartDate(command)
@@ -1229,17 +1026,11 @@ export function BrokMailApp() {
       updateActivity('Locating calendar event to remove...')
       await wait(140)
 
-      if (!googleAccessToken && calendarConnectionMode !== 'composio') {
+      if (calendarConnectionMode !== 'composio') {
         response =
-          'I can only remove live events after live calendar sync is active in this browser or Google Calendar is connected through Composio.'
+          'Connect Google Calendar through Composio before removing live events.'
       } else {
         let candidate = findCalendarEventToDelete(command, calendarEvents)
-
-        if (!candidate && googleAccessToken) {
-          const latestEvents = await fetchCalendarEvents(googleAccessToken, 20)
-          setCalendarEvents(latestEvents)
-          candidate = findCalendarEventToDelete(command, latestEvents)
-        }
 
         const explicitEventId = command.match(/\bid\s+([^\s]+)/i)?.[1]
 
@@ -1545,16 +1336,7 @@ export function BrokMailApp() {
       }
 
       try {
-        if (googleAccessToken) {
-          await Promise.all(
-            targetThreads.map(thread =>
-              archiveGmailThread({
-                accessToken: googleAccessToken,
-                thread
-              })
-            )
-          )
-        } else if (connectionMode === 'composio') {
+        if (connectionMode === 'composio') {
           await executeComposioBrokMailAction({
             action: 'archive_threads',
             threads: targetThreads,
@@ -1582,9 +1364,7 @@ export function BrokMailApp() {
             : thread
         )
       )
-      toast.success(
-        googleAccessToken ? 'Archived in Gmail' : 'Archived through Composio'
-      )
+      toast.success('Archived through Composio')
     }
 
     if (approval.action === 'send') {
@@ -1599,13 +1379,7 @@ export function BrokMailApp() {
       }
 
       try {
-        if (googleAccessToken) {
-          await createGmailDraft({
-            accessToken: googleAccessToken,
-            thread: targetThread,
-            body: draft.body
-          })
-        } else if (connectionMode === 'composio') {
+        if (connectionMode === 'composio') {
           await executeComposioBrokMailAction({
             action: 'create_draft',
             threads: [targetThread],
@@ -1626,11 +1400,7 @@ export function BrokMailApp() {
         )
         return
       }
-      toast.success(
-        googleAccessToken
-          ? 'Gmail draft created for approval'
-          : 'Composio created the Gmail draft'
-      )
+      toast.success('Composio created the Gmail draft')
     }
 
     if (approval.action === 'calendar_create') {
@@ -1640,28 +1410,7 @@ export function BrokMailApp() {
       }
 
       try {
-        if (googleAccessToken) {
-          const created = await createCalendarEvent({
-            accessToken: googleAccessToken,
-            summary: approval.calendarEvent.summary,
-            startAt: new Date(approval.calendarEvent.startAt),
-            endAt: new Date(
-              approval.calendarEvent.endAt ||
-                new Date(approval.calendarEvent.startAt).getTime() + 45 * 60_000
-            )
-          })
-          const updatedEvents = [...calendarEvents, created].sort((a, b) =>
-            a.startAt.localeCompare(b.startAt)
-          )
-          setCalendarEvents(updatedEvents)
-          setSelectedCalendarEventId(created.id)
-          setCalendarConnected(true)
-          setCalendarConnectionMode('google-oauth')
-          setCalendarConnectionStatus(
-            `Google Calendar connected (${updatedEvents.length} upcoming events)`
-          )
-          toast.success('Google Calendar event created')
-        } else if (calendarConnectionMode === 'composio') {
+        if (calendarConnectionMode === 'composio') {
           await executeComposioBrokMailAction({
             action: 'create_calendar_event',
             calendarEvent: approval.calendarEvent,
@@ -1690,18 +1439,7 @@ export function BrokMailApp() {
       }
 
       try {
-        if (googleAccessToken) {
-          await deleteCalendarEvent({
-            accessToken: googleAccessToken,
-            eventId: approval.calendarEvent.id
-          })
-          const updatedEvents = calendarEvents.filter(
-            event => event.id !== approval.calendarEvent?.id
-          )
-          setCalendarEvents(updatedEvents)
-          setSelectedCalendarEventId(updatedEvents[0]?.id || null)
-          toast.success('Google Calendar event removed')
-        } else if (calendarConnectionMode === 'composio') {
+        if (calendarConnectionMode === 'composio') {
           await executeComposioBrokMailAction({
             action: 'delete_calendar_event',
             calendarEvent: approval.calendarEvent,
@@ -1806,26 +1544,9 @@ export function BrokMailApp() {
     ])
   }
 
-  async function saveComposerDraft() {
+  function saveComposerDraft() {
     if (!composer.trim() || !selectedThread) return
-
-    if (!googleAccessToken) {
-      toast.info('Connect Gmail to save this as a live Gmail draft.')
-      return
-    }
-
-    try {
-      await createGmailDraft({
-        accessToken: googleAccessToken,
-        thread: selectedThread,
-        body: composer
-      })
-      toast.success('Saved as Gmail draft')
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Could not save Gmail draft.'
-      )
-    }
+    requestComposerSendApproval()
   }
 
   function rewriteComposer(style: 'shorter' | 'warmer' | 'direct') {
@@ -2003,11 +1724,7 @@ export function BrokMailApp() {
                       </p>
                     </div>
                     <Badge variant={connected ? 'default' : 'outline'}>
-                      {connectionMode === 'google-oauth'
-                        ? 'Live Sync'
-                        : connectionMode === 'composio'
-                          ? 'Composio'
-                          : 'Ready'}
+                      {modeLabel(connectionMode)}
                     </Badge>
                   </div>
                   <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
@@ -2023,7 +1740,7 @@ export function BrokMailApp() {
                     <UserRoundCheck className="size-4" />
                     {isConnecting ? 'Connecting...' : 'Connect Gmail'}
                   </Button>
-                  {connectionMode === 'composio' && !googleAccessToken && (
+                  {connectionMode === 'composio' && (
                     <Button
                       size="sm"
                       className="mt-2 h-8 w-full gap-2"
@@ -2046,11 +1763,7 @@ export function BrokMailApp() {
                       </p>
                     </div>
                     <Badge variant={calendarConnected ? 'default' : 'outline'}>
-                      {calendarConnectionMode === 'google-oauth'
-                        ? 'Live Sync'
-                        : calendarConnectionMode === 'composio'
-                          ? 'Composio'
-                          : 'Ready'}
+                      {modeLabel(calendarConnectionMode)}
                     </Badge>
                   </div>
                   <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
@@ -2068,21 +1781,6 @@ export function BrokMailApp() {
                       ? 'Connecting...'
                       : 'Connect Calendar'}
                   </Button>
-                  {calendarConnectionMode === 'composio' &&
-                    !googleAccessToken &&
-                    googleAuthEnabled && (
-                      <Button
-                        size="sm"
-                        className="mt-2 h-8 w-full gap-2"
-                        onClick={() => {
-                          void startBrowserGoogleSync('calendar')
-                        }}
-                        disabled={isConnectingCalendar}
-                      >
-                        <CalendarDays className="size-4" />
-                        Load Live Calendar
-                      </Button>
-                    )}
                 </div>
               </div>
             </div>
@@ -2102,14 +1800,6 @@ export function BrokMailApp() {
                   variant="outline"
                   className="h-9 flex-1 gap-2"
                   onClick={() => {
-                    if (
-                      connectionMode === 'composio' &&
-                      !googleAccessToken &&
-                      googleAuthEnabled
-                    ) {
-                      void startBrowserGoogleSync('gmail')
-                      return
-                    }
                     void connectGmail()
                   }}
                   disabled={isConnecting}
@@ -2117,26 +1807,14 @@ export function BrokMailApp() {
                   <UserRoundCheck className="size-4" />
                   {isConnecting
                     ? 'Connecting...'
-                    : googleAccessToken
-                      ? 'Inbox Live'
-                      : connectionMode === 'composio' && googleAuthEnabled
-                        ? 'Load Inbox'
-                        : connected
-                          ? 'Gmail Ready'
-                          : 'Connect Gmail'}
+                    : connected
+                      ? 'Gmail Ready'
+                      : 'Connect Gmail'}
                 </Button>
                 <Button
                   variant="outline"
                   className="h-9 flex-1 gap-2"
                   onClick={() => {
-                    if (
-                      calendarConnectionMode === 'composio' &&
-                      !googleAccessToken &&
-                      googleAuthEnabled
-                    ) {
-                      void startBrowserGoogleSync('calendar')
-                      return
-                    }
                     void connectCalendar()
                   }}
                   disabled={isConnectingCalendar}
@@ -2144,14 +1822,9 @@ export function BrokMailApp() {
                   <CalendarDays className="size-4" />
                   {isConnectingCalendar
                     ? 'Connecting...'
-                    : googleAccessToken
-                      ? 'Calendar Live'
-                      : calendarConnectionMode === 'composio' &&
-                          googleAuthEnabled
-                        ? 'Load Calendar'
-                        : calendarConnected
-                          ? 'Calendar Ready'
-                          : 'Connect Calendar'}
+                    : calendarConnected
+                      ? 'Calendar Ready'
+                      : 'Connect Calendar'}
                 </Button>
               </div>
               <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
@@ -2356,12 +2029,6 @@ export function BrokMailApp() {
                 isSyncing={isSyncingCalendar}
                 isConnecting={isConnectingCalendar}
                 connectCalendar={connectCalendar}
-                syncCalendar={() => startBrowserGoogleSync('calendar')}
-                canSyncCalendar={
-                  calendarConnectionMode === 'composio' &&
-                  !googleAccessToken &&
-                  googleAuthEnabled
-                }
                 runAgent={runAgent}
               />
             ) : selectedThread ? (
@@ -2383,14 +2050,8 @@ export function BrokMailApp() {
                 connected={connected}
                 connectionStatus={connectionStatus}
                 connectGmail={connectGmail}
-                syncGmail={
-                  connectionMode === 'composio'
-                    ? loadComposioGmailThreads
-                    : () => startBrowserGoogleSync('gmail')
-                }
-                canSyncGmail={
-                  connectionMode === 'composio' && !googleAccessToken
-                }
+                syncGmail={loadComposioGmailThreads}
+                canSyncGmail={connectionMode === 'composio'}
                 isConnecting={isConnecting}
                 isSyncingMail={isSyncingMail}
                 runAgent={runAgent}
@@ -2404,7 +2065,6 @@ export function BrokMailApp() {
 }
 
 function modeLabel(mode: IntegrationConnectionMode) {
-  if (mode === 'google-oauth') return 'Live Sync'
   if (mode === 'composio') return 'Composio'
   return 'Ready'
 }
@@ -3100,8 +2760,6 @@ function CalendarWorkspace({
   isSyncing,
   isConnecting,
   connectCalendar,
-  syncCalendar,
-  canSyncCalendar,
   runAgent
 }: {
   events: BrokCalendarEvent[]
@@ -3112,8 +2770,6 @@ function CalendarWorkspace({
   isSyncing: boolean
   isConnecting: boolean
   connectCalendar: () => Promise<void>
-  syncCalendar: () => Promise<void>
-  canSyncCalendar: boolean
   runAgent: (prompt: string) => void
 }) {
   return (
@@ -3125,11 +2781,7 @@ function CalendarWorkspace({
               <CalendarDays className="size-3.5" />
               <span>Brok Calendar</span>
               <Badge variant={connected ? 'default' : 'outline'}>
-                {connectionMode === 'google-oauth'
-                  ? 'Live Sync'
-                  : connectionMode === 'composio'
-                    ? 'Composio'
-                    : 'Ready'}
+                {modeLabel(connectionMode)}
               </Badge>
               {isSyncing && <span>Syncing...</span>}
             </div>
@@ -3151,20 +2803,6 @@ function CalendarWorkspace({
               <UserRoundCheck className="size-4" />
               {isConnecting ? 'Connecting...' : 'Connect Calendar'}
             </Button>
-            {canSyncCalendar && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 gap-2 sm:flex-none"
-                onClick={() => {
-                  void syncCalendar()
-                }}
-                disabled={isConnecting}
-              >
-                <CalendarDays className="size-4" />
-                Load Live Calendar
-              </Button>
-            )}
             <Button
               size="sm"
               className="flex-1 gap-2 sm:flex-none"

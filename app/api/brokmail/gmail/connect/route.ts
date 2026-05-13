@@ -37,35 +37,18 @@ function resolveRequestOrigin(request: NextRequest) {
   return request.nextUrl.origin
 }
 
-function isBrowserGoogleSyncEnabled() {
-  return process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === 'true'
-}
-
-function unavailableBrowserSyncMessage(prefix: string) {
-  return `${prefix} Browser Google sync is disabled for this deployment. Enable Composio Gmail or enable Google in Supabase Auth to connect Gmail.`
-}
-
 export async function POST(request: NextRequest) {
   const origin = resolveRequestOrigin(request)
   const redirectUrl = `${origin}/brokmail?gmail=connected`
 
   if (!isComposioConfigured()) {
-    if (isBrowserGoogleSyncEnabled()) {
-      return NextResponse.json({
-        provider: 'google-oauth',
-        connectionUrl: null,
-        redirectUrl,
-        message:
-          'Composio is not configured. Use browser Gmail live sync in BrokMail.'
-      })
-    }
-
     return NextResponse.json(
       {
         provider: 'unavailable',
         connectionUrl: null,
         redirectUrl,
-        message: unavailableBrowserSyncMessage('Composio is not configured.')
+        message:
+          'Composio is not configured. BrokMail Gmail requires a Composio Gmail auth config; platform Google OAuth is disabled.'
       },
       { status: 503 }
     )
@@ -121,33 +104,27 @@ export async function POST(request: NextRequest) {
         ? errors.join(' | ')
         : 'Composio did not return a Gmail connection URL.'
 
-    if (isBrowserGoogleSyncEnabled()) {
-      return NextResponse.json({
-        provider: 'google-oauth',
-        connectionUrl: null,
-        redirectUrl,
-        message: `${message} Browser Gmail live sync is still available in BrokMail.`
-      })
-    }
-
     return NextResponse.json(
       {
         provider: 'unavailable',
         connectionUrl: null,
         redirectUrl,
-        message: unavailableBrowserSyncMessage(message)
+        message: `${message} Platform Google OAuth is disabled; configure Composio Gmail instead.`
       },
       { status: 502 }
     )
   } catch (error) {
-    return NextResponse.json({
-      provider: 'google-oauth',
-      connectionUrl: null,
-      redirectUrl,
-      message:
-        error instanceof Error
-          ? error.message
-          : 'Could not create Composio Gmail connection link.'
-    })
+    return NextResponse.json(
+      {
+        provider: 'unavailable',
+        connectionUrl: null,
+        redirectUrl,
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Could not create Composio Gmail connection link.'
+      },
+      { status: 502 }
+    )
   }
 }
