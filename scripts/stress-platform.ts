@@ -2,11 +2,7 @@ import { eq } from 'drizzle-orm'
 import { chromium } from 'playwright'
 
 import { ensureWorkspaceForUser } from '../lib/actions/api-keys'
-import {
-  generateApiKey,
-  getKeyPrefix,
-  hashApiKey
-} from '../lib/api-key'
+import { generateApiKey, getKeyPrefix, hashApiKey } from '../lib/api-key'
 import { db } from '../lib/db'
 import {
   createOrUpdateOutline,
@@ -19,9 +15,20 @@ import { exportToPptx } from '../lib/presentations/export/pptx'
 import type { SlideContent } from '../lib/presentations/theme-utils'
 import { getThemeById } from '../lib/presentations/theme-utils'
 
+import {
+  createApiKeyViaSupabaseRest,
+  createPresentationFlowViaSupabaseRest,
+  createUsageEventViaSupabaseRest,
+  ensureWorkspaceForUserViaSupabaseRest,
+  updateApiKeyStatusViaSupabaseRest
+} from './supabase-rest-seed'
+
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3001'
 const stressUserId =
   process.env.ANONYMOUS_USER_ID || '00000000-0000-0000-0000-000000000000'
+let useSupabaseRestSeed = false
+let seededStressPresentationId: string | null = null
+let seededStressSlideIds: string[] = []
 
 async function expectJson(
   response: Response,
@@ -39,6 +46,53 @@ async function expectJson(
 }
 
 async function createStressKeys() {
+  if (process.env.SMOKE_SEED_TOKEN) {
+    const response = await fetch(`${baseUrl}/api/admin/brok/smoke-seed`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.SMOKE_SEED_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        kind: 'stress',
+        userId: stressUserId
+      })
+    })
+    const body = await response.json().catch(() => null)
+
+    if (response.ok && typeof body?.mainKey === 'string') {
+      seededStressPresentationId = body.presentationId ?? null
+      seededStressSlideIds = Array.isArray(body.slideIds) ? body.slideIds : []
+
+      return {
+        workspaceId: body.workspaceId as string,
+        mainKey: body.mainKey as string,
+        lowRpmKey: body.lowRpmKey as string,
+        dailyLimitedKey: body.dailyLimitedKey as string,
+        pausedKey: body.pausedKey as string,
+        revokedKey: body.revokedKey as string
+      }
+    }
+
+    console.warn(
+      `stress seed endpoint unavailable (${response.status}); falling back to local seeding`
+    )
+  }
+
+  try {
+    return await createStressKeysWithDrizzle()
+  } catch (error) {
+    console.warn(
+      `stress DB seed unavailable, using Supabase REST fallback: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+    useSupabaseRestSeed = true
+    return createStressKeysWithSupabaseRest()
+  }
+}
+
+async function createStressKeysWithDrizzle() {
   const workspace = await ensureWorkspaceForUser(stressUserId)
 
   const mainKey = await createStressKey(workspace.id, {
@@ -122,6 +176,116 @@ async function createStressKeys() {
     pausedKey: pausedKey.key,
     revokedKey: revokedKey.key
   }
+}
+
+async function createStressKeysWithSupabaseRest() {
+  const workspace = await ensureWorkspaceForUserViaSupabaseRest(stressUserId)
+
+  const mainKey = await createStressKeyViaSupabaseRest(workspace.id, {
+    name: 'Stress Main Key',
+    environment: 'test',
+    scopes: ['chat:write', 'search:write', 'code:write', 'usage:read'],
+    allowedModels: [],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0
+  })
+
+  const lowRpmKey = await createStressKeyViaSupabaseRest(workspace.id, {
+    name: 'Stress Low RPM Key',
+    environment: 'test',
+    scopes: ['chat:write', 'usage:read'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 1,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0
+  })
+
+  const dailyLimitedKey = await createStressKeyViaSupabaseRest(workspace.id, {
+    name: 'Stress Daily Limited Key',
+    environment: 'test',
+    scopes: ['chat:write'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 1,
+    monthlyBudgetCents: 0
+  })
+  await createUsageEventViaSupabaseRest({
+    request_id: `stress_daily_${Date.now()}`,
+    workspace_id: workspace.id,
+    user_id: stressUserId,
+    api_key_id: dailyLimitedKey.id,
+    endpoint: 'chat',
+    model: 'brok-lite',
+    provider: 'Brok',
+    input_tokens: 1,
+    output_tokens: 1,
+    provider_cost_usd: '0',
+    billed_usd: '0',
+    latency_ms: 1,
+    status: 'success'
+  })
+
+  const pausedKey = await createStressKeyViaSupabaseRest(workspace.id, {
+    name: 'Stress Paused Key',
+    environment: 'test',
+    scopes: ['chat:write'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0
+  })
+  await updateApiKeyStatusViaSupabaseRest(pausedKey.id, 'paused')
+
+  const revokedKey = await createStressKeyViaSupabaseRest(workspace.id, {
+    name: 'Stress Revoked Key',
+    environment: 'test',
+    scopes: ['chat:write'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0
+  })
+  await updateApiKeyStatusViaSupabaseRest(revokedKey.id, 'revoked')
+
+  return {
+    workspaceId: workspace.id,
+    mainKey: mainKey.key,
+    lowRpmKey: lowRpmKey.key,
+    dailyLimitedKey: dailyLimitedKey.key,
+    pausedKey: pausedKey.key,
+    revokedKey: revokedKey.key
+  }
+}
+
+async function createStressKeyViaSupabaseRest(
+  workspaceId: string,
+  input: {
+    name: string
+    environment: 'test' | 'live'
+    scopes: string[]
+    allowedModels: string[]
+    rpmLimit: number
+    dailyRequestLimit: number
+    monthlyBudgetCents: number
+  }
+) {
+  const rawKey = generateApiKey(input.environment)
+  const created = await createApiKeyViaSupabaseRest({
+    workspace_id: workspaceId,
+    user_id: stressUserId,
+    name: input.name,
+    key_prefix: getKeyPrefix(rawKey),
+    key_hash: hashApiKey(rawKey),
+    environment: input.environment,
+    scopes: input.scopes,
+    allowed_models: input.allowedModels,
+    rpm_limit: input.rpmLimit,
+    daily_request_limit: input.dailyRequestLimit,
+    monthly_budget_cents: input.monthlyBudgetCents
+  })
+
+  return { ...created, key: rawKey }
 }
 
 async function createStressKey(
@@ -338,6 +502,81 @@ async function runApiStress(
 }
 
 async function runPresentationFlow() {
+  if (seededStressPresentationId) {
+    console.log('stress presentation ok seed endpoint CRUD + slide persistence')
+    console.log('stress presentation ok seed endpoint share + present setup')
+
+    const theme = getThemeById('minimal_light')
+    if (!theme) {
+      throw new Error('missing minimal_light theme')
+    }
+
+    const exportBuffer = await exportToPptx({
+      title: 'Stress Test Deck',
+      theme,
+      slides: [
+        {
+          id: seededStressSlideIds[0] ?? 'seeded-slide-0',
+          layout: 'title',
+          heading: 'Intro',
+          bullets: ['Point A', 'Point B']
+        },
+        {
+          id: seededStressSlideIds[1] ?? 'seeded-slide-1',
+          layout: 'text',
+          heading: 'Next Steps',
+          bullets: ['Point C', 'Point D']
+        }
+      ] satisfies SlideContent[]
+    })
+
+    if (exportBuffer.byteLength < 1000) {
+      throw new Error('pptx export looked too small to be valid')
+    }
+    console.log('stress presentation ok export')
+
+    return seededStressPresentationId
+  }
+
+  if (useSupabaseRestSeed) {
+    const seeded = await createPresentationFlowViaSupabaseRest({
+      userId: stressUserId
+    })
+    console.log('stress presentation ok REST CRUD + slide persistence')
+    console.log('stress presentation ok REST share + present setup')
+
+    const theme = getThemeById('minimal_light')
+    if (!theme) {
+      throw new Error('missing minimal_light theme')
+    }
+
+    const exportBuffer = await exportToPptx({
+      title: 'Stress Test Deck',
+      theme,
+      slides: [
+        {
+          id: seeded.slides[0].id,
+          layout: 'title',
+          heading: 'Intro',
+          bullets: ['Point A', 'Point B']
+        },
+        {
+          id: seeded.slides[1].id,
+          layout: 'text',
+          heading: 'Next Steps',
+          bullets: ['Point C', 'Point D']
+        }
+      ] satisfies SlideContent[]
+    })
+
+    if (exportBuffer.byteLength < 1000) {
+      throw new Error('pptx export looked too small to be valid')
+    }
+    console.log('stress presentation ok export')
+
+    return seeded.presentation.id
+  }
+
   const presentation = await createPresentation({
     title: 'Stress Test Deck',
     userId: stressUserId,

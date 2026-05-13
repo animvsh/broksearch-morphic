@@ -1,13 +1,14 @@
 import { chromium } from 'playwright'
 
 import { ensureWorkspaceForUser } from '../lib/actions/api-keys'
-import {
-  generateApiKey,
-  getKeyPrefix,
-  hashApiKey
-} from '../lib/api-key'
+import { generateApiKey, getKeyPrefix, hashApiKey } from '../lib/api-key'
 import { db } from '../lib/db'
 import { apiKeys } from '../lib/db/schema'
+
+import {
+  createApiKeyViaSupabaseRest,
+  ensureWorkspaceForUserViaSupabaseRest
+} from './supabase-rest-seed'
 
 type UiCheck = {
   path: string
@@ -145,24 +146,76 @@ const apiChecks: ApiCheck[] = [
 ]
 
 async function createSmokeTestKey() {
-  const workspace = await ensureWorkspaceForUser(smokeUserId)
+  if (process.env.SMOKE_SEED_TOKEN) {
+    const response = await fetch(`${baseUrl}/api/admin/brok/smoke-seed`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.SMOKE_SEED_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        kind: 'smoke',
+        userId: smokeUserId
+      })
+    })
+    const body = await response.json().catch(() => null)
+
+    if (response.ok && typeof body?.apiKey === 'string') {
+      return {
+        workspaceId: body.workspaceId as string,
+        apiKey: body.apiKey as string,
+        dbBacked: true
+      }
+    }
+
+    console.warn(
+      `smoke seed endpoint unavailable (${response.status}); falling back to local seeding`
+    )
+  }
+
   const rawKey = generateApiKey('test')
 
-  await db.insert(apiKeys).values({
-    workspaceId: workspace.id,
-    userId: smokeUserId,
-    name: 'Smoke Test Key',
-    keyPrefix: getKeyPrefix(rawKey),
-    keyHash: hashApiKey(rawKey),
-    environment: 'test',
-    scopes: ['chat:write', 'search:write', 'usage:read'],
-    allowedModels: [],
-    rpmLimit: 60,
-    dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
-  })
+  try {
+    const workspace = await ensureWorkspaceForUser(smokeUserId)
 
-  return { workspaceId: workspace.id, apiKey: rawKey, dbBacked: true }
+    await db.insert(apiKeys).values({
+      workspaceId: workspace.id,
+      userId: smokeUserId,
+      name: 'Smoke Test Key',
+      keyPrefix: getKeyPrefix(rawKey),
+      keyHash: hashApiKey(rawKey),
+      environment: 'test',
+      scopes: ['chat:write', 'search:write', 'usage:read'],
+      allowedModels: [],
+      rpmLimit: 60,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: 0
+    })
+
+    return { workspaceId: workspace.id, apiKey: rawKey, dbBacked: true }
+  } catch (error) {
+    console.warn(
+      `smoke DB seed unavailable, using Supabase REST fallback: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+    const workspace = await ensureWorkspaceForUserViaSupabaseRest(smokeUserId)
+    await createApiKeyViaSupabaseRest({
+      workspace_id: workspace.id,
+      user_id: smokeUserId,
+      name: 'Smoke Test Key',
+      key_prefix: getKeyPrefix(rawKey),
+      key_hash: hashApiKey(rawKey),
+      environment: 'test',
+      scopes: ['chat:write', 'search:write', 'usage:read'],
+      allowed_models: [],
+      rpm_limit: 60,
+      daily_request_limit: 5000,
+      monthly_budget_cents: 0
+    })
+
+    return { workspaceId: workspace.id, apiKey: rawKey, dbBacked: false }
+  }
 }
 
 async function runUiChecks(apiKeyName?: string, dbBacked = true) {
