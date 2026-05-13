@@ -20,7 +20,6 @@ export const maxDuration = 300
 
 export async function POST(req: Request) {
   const startTime = performance.now()
-  const abortSignal = req.signal
 
   // Reset counters for new request (development only)
   if (process.env.ENABLE_PERF_LOGGING === 'true') {
@@ -147,7 +146,7 @@ export async function POST(req: Request) {
       ? await createEphemeralChatStreamResponse({
           messages: Array.isArray(messages) ? messages : [],
           model: selectedModel,
-          abortSignal,
+          abortSignal: undefined,
           searchMode,
           chatId
         })
@@ -158,7 +157,7 @@ export async function POST(req: Request) {
           userId: userId, // userId is guaranteed to be non-null after authentication check above
           trigger,
           messageId,
-          abortSignal,
+          abortSignal: undefined,
           isNewChat,
           searchMode
         })

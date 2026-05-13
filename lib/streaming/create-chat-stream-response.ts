@@ -196,7 +196,12 @@ export async function createChatStreamResponse(
       onFinish: async ({ responseMessage, isAborted }) => {
         try {
           perfTime('researchAgent.stream completed', llmStart)
-          if (isAborted || !responseMessage) return
+          if (!responseMessage) return
+          if (isAborted) {
+            console.warn(
+              `Chat stream for ${chatId} was disconnected by the client; persisting completed server result.`
+            )
+          }
 
           // Persist stream results to database
           await persistStreamResults(

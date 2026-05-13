@@ -356,7 +356,6 @@ function createExecutionStream({
   auth,
   requestId,
   startTime,
-  request,
   command,
   model,
   messages,
@@ -371,7 +370,6 @@ function createExecutionStream({
   auth: SuccessfulAuth
   requestId: string
   startTime: number
-  request: NextRequest
   command: string
   model: string
   messages: OpenAiMessage[]
@@ -384,12 +382,28 @@ function createExecutionStream({
   requirePi: boolean
 }) {
   const encoder = new TextEncoder()
+  let clientOpen = true
 
   return new Response(
     new ReadableStream({
       async start(controller) {
         const send = (event: string, payload: unknown) => {
-          controller.enqueue(encoder.encode(formatSseEvent(event, payload)))
+          if (!clientOpen) return
+
+          try {
+            controller.enqueue(encoder.encode(formatSseEvent(event, payload)))
+          } catch {
+            clientOpen = false
+          }
+        }
+        const close = () => {
+          if (!clientOpen) return
+
+          try {
+            controller.close()
+          } catch {
+            clientOpen = false
+          }
         }
 
         try {
@@ -430,7 +444,7 @@ function createExecutionStream({
                 usage: null,
                 status: 'success'
               })
-              controller.close()
+              close()
               return
             } catch (error) {
               piFailure =
@@ -450,7 +464,7 @@ function createExecutionStream({
                   errorCode: piFailure
                 })
                 send('error', { message: piFailure })
-                controller.close()
+                close()
                 return
               }
             }
@@ -531,7 +545,7 @@ function createExecutionStream({
                 usage,
                 status: 'success'
               })
-              controller.close()
+              close()
               return
             }
 
@@ -553,7 +567,7 @@ function createExecutionStream({
                 errorCode: opencodeFailure ?? 'brokcode_cloud_error'
               })
               send('error', { message: opencodeFailure })
-              controller.close()
+              close()
               return
             }
           } else if (requireOpenCode) {
@@ -570,7 +584,7 @@ function createExecutionStream({
               errorCode: 'brokcode_cloud_not_configured'
             })
             send('error', { message })
-            controller.close()
+            close()
             return
           }
 
@@ -618,7 +632,7 @@ function createExecutionStream({
             usage,
             status: 'success'
           })
-          controller.close()
+          close()
         } catch (error) {
           await recordCodeExecutionUsage({
             auth,
@@ -639,8 +653,11 @@ function createExecutionStream({
                 ? error.message
                 : 'BrokCode Cloud execution failed.'
           })
-          controller.close()
+          close()
         }
+      },
+      cancel() {
+        clientOpen = false
       }
     }),
     {
@@ -838,7 +855,6 @@ export async function POST(request: NextRequest) {
       auth: authResult,
       requestId,
       startTime,
-      request,
       command,
       model,
       messages,
