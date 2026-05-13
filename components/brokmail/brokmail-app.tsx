@@ -1,6 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition
+} from 'react'
 
 import {
   AlertTriangle,
@@ -128,6 +135,13 @@ const quickPrompts = [
   'Show follow-ups.',
   'Archive newsletters older than 30 days.',
   'Whenever I get a receipt, label it expenses.'
+]
+
+const commandPrompts = [
+  'What needs my attention today?',
+  'Show follow-ups.',
+  'Draft a reply to this thread.',
+  'Show my next calendar events.'
 ]
 
 async function executeComposioBrokMailAction({
@@ -452,6 +466,7 @@ export function BrokMailApp() {
     }
   ])
   const googleAuthEnabled = isGoogleAuthEnabled()
+  const deferredQuery = useDeferredValue(query)
 
   const selectedThread = useMemo(
     () => threads.find(thread => thread.id === selectedThreadId) ?? threads[0],
@@ -466,7 +481,7 @@ export function BrokMailApp() {
   )
 
   const filteredThreads = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
+    const normalizedQuery = deferredQuery.trim().toLowerCase()
 
     return threads.filter(thread => {
       const matchesView =
@@ -503,7 +518,7 @@ export function BrokMailApp() {
         .toLowerCase()
         .includes(normalizedQuery)
     })
-  }, [query, threads, view])
+  }, [deferredQuery, threads, view])
 
   const counts = useMemo(
     () => ({
@@ -1667,363 +1682,482 @@ export function BrokMailApp() {
         />
       </aside>
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col 2xl:flex-row">
-        <aside className="dashboard-rail hidden w-52 shrink-0 border-r 2xl:flex 2xl:flex-col">
-          <div className="border-b p-3">
-            <Button
-              className="h-9 w-full gap-2"
-              onClick={() => setComposer('Hi,\n\n\n\nBest,\nAnimesh')}
-            >
-              <PenLine className="size-4" />
-              Compose
-            </Button>
-          </div>
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <BrokMailStatusBar
+          connected={connected}
+          connectionMode={connectionMode}
+          connectionStatus={connectionStatus}
+          calendarConnected={calendarConnected}
+          calendarConnectionMode={calendarConnectionMode}
+          calendarConnectionStatus={calendarConnectionStatus}
+          counts={counts}
+          isRunning={isRunning}
+          runAgent={runAgent}
+        />
 
-          <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-            {viewLabels.map(item => {
-              const Icon = item.icon
-              return (
-                <button
-                  key={item.id}
-                  className={cn(
-                    'flex h-9 w-full items-center justify-between rounded-md px-2 text-sm transition-colors hover:bg-muted/70',
-                    view === item.id && 'dashboard-pill-active font-medium'
-                  )}
-                  onClick={() => setView(item.id)}
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <Icon className="size-4 shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {counts[item.id]}
-                  </span>
-                </button>
-              )
-            })}
-          </nav>
-
-          <div className="border-t p-3">
-            <div className="space-y-3">
-              <div className="dashboard-card p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-medium">Gmail</p>
-                    <p className="text-xs text-muted-foreground">
-                      {connected ? 'Connected' : 'Not connected'}
-                    </p>
-                  </div>
-                  <Badge variant={connected ? 'default' : 'outline'}>
-                    {connectionMode === 'google-oauth'
-                      ? 'Live Sync'
-                      : connectionMode === 'composio'
-                        ? 'Composio'
-                        : 'Ready'}
-                  </Badge>
-                </div>
-                <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
-                  {connectionStatus}
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 h-8 w-full gap-2"
-                  onClick={connectGmail}
-                  disabled={isConnecting}
-                >
-                  <UserRoundCheck className="size-4" />
-                  {isConnecting ? 'Connecting...' : 'Connect Gmail'}
-                </Button>
-                {connectionMode === 'composio' &&
-                  !googleAccessToken &&
-                  googleAuthEnabled && (
-                    <Button
-                      size="sm"
-                      className="mt-2 h-8 w-full gap-2"
-                      onClick={() => {
-                        void startBrowserGoogleSync('gmail')
-                      }}
-                      disabled={isConnecting}
-                    >
-                      <MailCheck className="size-4" />
-                      Load Live Inbox
-                    </Button>
-                  )}
-              </div>
-              <div className="dashboard-card p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-medium">Google Calendar</p>
-                    <p className="text-xs text-muted-foreground">
-                      {calendarConnected ? 'Connected' : 'Not connected'}
-                    </p>
-                  </div>
-                  <Badge variant={calendarConnected ? 'default' : 'outline'}>
-                    {calendarConnectionMode === 'google-oauth'
-                      ? 'Live Sync'
-                      : calendarConnectionMode === 'composio'
-                        ? 'Composio'
-                        : 'Ready'}
-                  </Badge>
-                </div>
-                <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
-                  {calendarConnectionStatus}
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 h-8 w-full gap-2"
-                  onClick={connectCalendar}
-                  disabled={isConnectingCalendar}
-                >
-                  <CalendarDays className="size-4" />
-                  {isConnectingCalendar ? 'Connecting...' : 'Connect Calendar'}
-                </Button>
-                {calendarConnectionMode === 'composio' &&
-                  !googleAccessToken &&
-                  googleAuthEnabled && (
-                    <Button
-                      size="sm"
-                      className="mt-2 h-8 w-full gap-2"
-                      onClick={() => {
-                        void startBrowserGoogleSync('calendar')
-                      }}
-                      disabled={isConnectingCalendar}
-                    >
-                      <CalendarDays className="size-4" />
-                      Load Live Calendar
-                    </Button>
-                  )}
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        <div className="dashboard-rail border-b px-3 py-3 2xl:hidden">
-          <div className="flex flex-col gap-3">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col 2xl:flex-row">
+          <aside className="dashboard-rail hidden w-52 shrink-0 border-r 2xl:flex 2xl:flex-col">
+            <div className="border-b p-3">
               <Button
-                className="h-9 flex-1 gap-2"
+                className="h-9 w-full gap-2"
                 onClick={() => setComposer('Hi,\n\n\n\nBest,\nAnimesh')}
               >
                 <PenLine className="size-4" />
                 Compose
               </Button>
-              <Button
-                variant="outline"
-                className="h-9 flex-1 gap-2"
-                onClick={() => {
-                  if (
-                    connectionMode === 'composio' &&
-                    !googleAccessToken &&
-                    googleAuthEnabled
-                  ) {
-                    void startBrowserGoogleSync('gmail')
-                    return
-                  }
-                  void connectGmail()
-                }}
-                disabled={isConnecting}
-              >
-                <UserRoundCheck className="size-4" />
-                {isConnecting
-                  ? 'Connecting...'
-                  : googleAccessToken
-                    ? 'Inbox Live'
-                    : connectionMode === 'composio' && googleAuthEnabled
-                      ? 'Load Inbox'
-                      : connected
-                        ? 'Gmail Ready'
-                        : 'Connect Gmail'}
-              </Button>
-              <Button
-                variant="outline"
-                className="h-9 flex-1 gap-2"
-                onClick={() => {
-                  if (
-                    calendarConnectionMode === 'composio' &&
-                    !googleAccessToken &&
-                    googleAuthEnabled
-                  ) {
-                    void startBrowserGoogleSync('calendar')
-                    return
-                  }
-                  void connectCalendar()
-                }}
-                disabled={isConnectingCalendar}
-              >
-                <CalendarDays className="size-4" />
-                {isConnectingCalendar
-                  ? 'Connecting...'
-                  : googleAccessToken
-                    ? 'Calendar Live'
-                    : calendarConnectionMode === 'composio' && googleAuthEnabled
-                      ? 'Load Calendar'
-                      : calendarConnected
-                        ? 'Calendar Ready'
-                        : 'Connect Calendar'}
-              </Button>
             </div>
-            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+
+            <nav className="flex-1 space-y-1 overflow-y-auto p-2">
               {viewLabels.map(item => {
                 const Icon = item.icon
                 return (
                   <button
                     key={item.id}
                     className={cn(
-                      'flex h-9 shrink-0 items-center gap-2 rounded-md border border-border/70 bg-card/88 px-3 text-sm transition-colors hover:bg-muted/70',
-                      view === item.id
-                        ? 'dashboard-pill-active font-medium'
-                        : 'text-muted-foreground'
+                      'flex h-9 w-full items-center justify-between rounded-md px-2 text-sm transition-colors hover:bg-muted/70',
+                      view === item.id && 'dashboard-pill-active font-medium'
                     )}
                     onClick={() => setView(item.id)}
                   >
-                    <Icon className="size-4" />
-                    <span>{item.label}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Icon className="size-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </span>
                     <span className="text-xs text-muted-foreground">
                       {counts[item.id]}
                     </span>
                   </button>
                 )
               })}
-            </div>
-          </div>
-        </div>
+            </nav>
 
-        <div className="flex max-h-[34dvh] w-full shrink-0 flex-col border-b 2xl:max-h-none 2xl:w-[360px] 2xl:border-b-0 2xl:border-r">
-          <div className="border-b p-3">
-            <div className="flex items-center gap-2">
-              <Search className="size-4 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={event => setQuery(event.target.value)}
-                placeholder="Search mail/calendar or ask BrokMail..."
-                className="h-9 min-w-0"
-              />
-            </div>
-            <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-              <span>
-                {listCount} {listLabel}
-              </span>
-              <span>AI sorted</span>
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {view === 'automations' ? (
-              <AutomationList rules={automationRules} />
-            ) : view === 'calendar' ? (
-              <CalendarEventList
-                events={calendarEvents}
-                selectedEventId={selectedCalendarEvent?.id || null}
-                isSyncing={isSyncingCalendar}
-                onSelect={eventId => setSelectedCalendarEventId(eventId)}
-              />
-            ) : view === 'drafts' ? (
-              <DraftList messages={messages} onInsert={insertDraft} />
-            ) : (
-              filteredThreads.map(thread => (
-                <button
-                  key={thread.id}
-                  className={cn(
-                    'block w-full border-b border-border/65 p-3 text-left transition-colors hover:bg-muted/70',
-                    selectedThread?.id === thread.id &&
-                      'dashboard-list-row-active'
-                  )}
-                  onClick={() => setSelectedThreadId(thread.id)}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p
-                          className={cn(
-                            'truncate text-sm',
-                            thread.unread && 'font-semibold'
-                          )}
-                        >
-                          {thread.sender}
-                        </p>
-                        {thread.starred && (
-                          <Star className="size-3.5 fill-amber-400 text-amber-500" />
-                        )}
-                        {thread.hasAttachments && (
-                          <Paperclip className="size-3.5 text-muted-foreground" />
-                        )}
-                      </div>
-                      <p className="mt-1 truncate text-sm font-medium">
-                        {thread.subject}
+            <div className="border-t p-3">
+              <div className="space-y-3">
+                <div className="dashboard-card p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-medium">Gmail</p>
+                      <p className="text-xs text-muted-foreground">
+                        {connected ? 'Connected' : 'Not connected'}
                       </p>
                     </div>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {thread.receivedAt}
-                    </span>
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                    {thread.snippet}
-                  </p>
-                  <div className="mt-2 flex items-center gap-2">
-                    <Badge
-                      variant={thread.needsReply ? 'default' : 'secondary'}
-                      className="max-w-full truncate rounded-md px-2 py-0 text-[11px]"
-                    >
-                      AI: {thread.aiSummary}
+                    <Badge variant={connected ? 'default' : 'outline'}>
+                      {connectionMode === 'google-oauth'
+                        ? 'Live Sync'
+                        : connectionMode === 'composio'
+                          ? 'Composio'
+                          : 'Ready'}
                     </Badge>
                   </div>
-                </button>
-              ))
+                  <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
+                    {connectionStatus}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 h-8 w-full gap-2"
+                    onClick={connectGmail}
+                    disabled={isConnecting}
+                  >
+                    <UserRoundCheck className="size-4" />
+                    {isConnecting ? 'Connecting...' : 'Connect Gmail'}
+                  </Button>
+                  {connectionMode === 'composio' &&
+                    !googleAccessToken &&
+                    googleAuthEnabled && (
+                      <Button
+                        size="sm"
+                        className="mt-2 h-8 w-full gap-2"
+                        onClick={() => {
+                          void startBrowserGoogleSync('gmail')
+                        }}
+                        disabled={isConnecting}
+                      >
+                        <MailCheck className="size-4" />
+                        Load Live Inbox
+                      </Button>
+                    )}
+                </div>
+                <div className="dashboard-card p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-medium">Google Calendar</p>
+                      <p className="text-xs text-muted-foreground">
+                        {calendarConnected ? 'Connected' : 'Not connected'}
+                      </p>
+                    </div>
+                    <Badge variant={calendarConnected ? 'default' : 'outline'}>
+                      {calendarConnectionMode === 'google-oauth'
+                        ? 'Live Sync'
+                        : calendarConnectionMode === 'composio'
+                          ? 'Composio'
+                          : 'Ready'}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
+                    {calendarConnectionStatus}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 h-8 w-full gap-2"
+                    onClick={connectCalendar}
+                    disabled={isConnectingCalendar}
+                  >
+                    <CalendarDays className="size-4" />
+                    {isConnectingCalendar
+                      ? 'Connecting...'
+                      : 'Connect Calendar'}
+                  </Button>
+                  {calendarConnectionMode === 'composio' &&
+                    !googleAccessToken &&
+                    googleAuthEnabled && (
+                      <Button
+                        size="sm"
+                        className="mt-2 h-8 w-full gap-2"
+                        onClick={() => {
+                          void startBrowserGoogleSync('calendar')
+                        }}
+                        disabled={isConnectingCalendar}
+                      >
+                        <CalendarDays className="size-4" />
+                        Load Live Calendar
+                      </Button>
+                    )}
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <div className="dashboard-rail border-b px-3 py-3 2xl:hidden">
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Button
+                  className="h-9 flex-1 gap-2"
+                  onClick={() => setComposer('Hi,\n\n\n\nBest,\nAnimesh')}
+                >
+                  <PenLine className="size-4" />
+                  Compose
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-9 flex-1 gap-2"
+                  onClick={() => {
+                    if (
+                      connectionMode === 'composio' &&
+                      !googleAccessToken &&
+                      googleAuthEnabled
+                    ) {
+                      void startBrowserGoogleSync('gmail')
+                      return
+                    }
+                    void connectGmail()
+                  }}
+                  disabled={isConnecting}
+                >
+                  <UserRoundCheck className="size-4" />
+                  {isConnecting
+                    ? 'Connecting...'
+                    : googleAccessToken
+                      ? 'Inbox Live'
+                      : connectionMode === 'composio' && googleAuthEnabled
+                        ? 'Load Inbox'
+                        : connected
+                          ? 'Gmail Ready'
+                          : 'Connect Gmail'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-9 flex-1 gap-2"
+                  onClick={() => {
+                    if (
+                      calendarConnectionMode === 'composio' &&
+                      !googleAccessToken &&
+                      googleAuthEnabled
+                    ) {
+                      void startBrowserGoogleSync('calendar')
+                      return
+                    }
+                    void connectCalendar()
+                  }}
+                  disabled={isConnectingCalendar}
+                >
+                  <CalendarDays className="size-4" />
+                  {isConnectingCalendar
+                    ? 'Connecting...'
+                    : googleAccessToken
+                      ? 'Calendar Live'
+                      : calendarConnectionMode === 'composio' &&
+                          googleAuthEnabled
+                        ? 'Load Calendar'
+                        : calendarConnected
+                          ? 'Calendar Ready'
+                          : 'Connect Calendar'}
+                </Button>
+              </div>
+              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                {viewLabels.map(item => {
+                  const Icon = item.icon
+                  return (
+                    <button
+                      key={item.id}
+                      className={cn(
+                        'flex h-9 shrink-0 items-center gap-2 rounded-md border border-border/70 bg-card/88 px-3 text-sm transition-colors hover:bg-muted/70',
+                        view === item.id
+                          ? 'dashboard-pill-active font-medium'
+                          : 'text-muted-foreground'
+                      )}
+                      onClick={() => setView(item.id)}
+                    >
+                      <Icon className="size-4" />
+                      <span>{item.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {counts[item.id]}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex max-h-[34dvh] w-full shrink-0 flex-col border-b 2xl:max-h-none 2xl:w-[360px] 2xl:border-b-0 2xl:border-r">
+            <div className="border-b p-3">
+              <div className="flex items-center gap-2">
+                <Search className="size-4 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={event => setQuery(event.target.value)}
+                  placeholder="Search mail/calendar or ask BrokMail..."
+                  className="h-9 min-w-0"
+                />
+              </div>
+              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  {listCount} {listLabel}
+                </span>
+                <span>AI sorted</span>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {view === 'automations' ? (
+                <AutomationList rules={automationRules} />
+              ) : view === 'calendar' ? (
+                <CalendarEventList
+                  events={calendarEvents}
+                  selectedEventId={selectedCalendarEvent?.id || null}
+                  isSyncing={isSyncingCalendar}
+                  onSelect={eventId => setSelectedCalendarEventId(eventId)}
+                />
+              ) : view === 'drafts' ? (
+                <DraftList messages={messages} onInsert={insertDraft} />
+              ) : filteredThreads.length > 0 ? (
+                filteredThreads.map(thread => (
+                  <button
+                    key={thread.id}
+                    className={cn(
+                      'block w-full border-b border-border/65 p-3 text-left transition-colors hover:bg-muted/70',
+                      selectedThread?.id === thread.id &&
+                        'dashboard-list-row-active'
+                    )}
+                    onClick={() => setSelectedThreadId(thread.id)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p
+                            className={cn(
+                              'truncate text-sm',
+                              thread.unread && 'font-semibold'
+                            )}
+                          >
+                            {thread.sender}
+                          </p>
+                          {thread.starred && (
+                            <Star className="size-3.5 fill-amber-400 text-amber-500" />
+                          )}
+                          {thread.hasAttachments && (
+                            <Paperclip className="size-3.5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <p className="mt-1 truncate text-sm font-medium">
+                          {thread.subject}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {thread.receivedAt}
+                      </span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                      {thread.snippet}
+                    </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <Badge
+                        variant={thread.needsReply ? 'default' : 'secondary'}
+                        className="max-w-full truncate rounded-md px-2 py-0 text-[11px]"
+                      >
+                        AI: {thread.aiSummary}
+                      </Badge>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="flex h-full min-h-40 items-center justify-center p-5 text-center">
+                  <div>
+                    <Search className="mx-auto mb-3 size-5 text-muted-foreground" />
+                    <p className="text-sm font-medium">
+                      {query.trim()
+                        ? 'No conversations match this search.'
+                        : 'No live inbox threads loaded yet.'}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {query.trim()
+                        ? 'Try a sender, subject, label, or ask BrokMail directly.'
+                        : 'Connect Gmail to pull real threads into this workspace.'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+            {view === 'calendar' ? (
+              <CalendarWorkspace
+                events={calendarEvents}
+                selectedEvent={selectedCalendarEvent}
+                connectionMode={calendarConnectionMode}
+                connectionStatus={calendarConnectionStatus}
+                connected={calendarConnected}
+                isSyncing={isSyncingCalendar}
+                isConnecting={isConnectingCalendar}
+                connectCalendar={connectCalendar}
+                syncCalendar={() => startBrowserGoogleSync('calendar')}
+                canSyncCalendar={
+                  calendarConnectionMode === 'composio' &&
+                  !googleAccessToken &&
+                  googleAuthEnabled
+                }
+                runAgent={runAgent}
+              />
+            ) : selectedThread ? (
+              <ThreadView
+                thread={selectedThread}
+                composer={composer}
+                setComposer={setComposer}
+                runAgent={runAgent}
+                rewriteComposer={rewriteComposer}
+                saveComposerDraft={saveComposerDraft}
+                requestComposerSendApproval={requestComposerSendApproval}
+                gmailConnected={connected}
+                isSyncingMail={isSyncingMail}
+              />
+            ) : (
+              <EmptyMailWorkspace
+                connected={connected}
+                connectionStatus={connectionStatus}
+                connectGmail={connectGmail}
+                syncGmail={() => startBrowserGoogleSync('gmail')}
+                canSyncGmail={
+                  connectionMode === 'composio' &&
+                  !googleAccessToken &&
+                  googleAuthEnabled
+                }
+                isConnecting={isConnecting}
+                isSyncingMail={isSyncingMail}
+                runAgent={runAgent}
+              />
             )}
           </div>
         </div>
-
-        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-          {view === 'calendar' ? (
-            <CalendarWorkspace
-              events={calendarEvents}
-              selectedEvent={selectedCalendarEvent}
-              connectionMode={calendarConnectionMode}
-              connectionStatus={calendarConnectionStatus}
-              connected={calendarConnected}
-              isSyncing={isSyncingCalendar}
-              isConnecting={isConnectingCalendar}
-              connectCalendar={connectCalendar}
-              syncCalendar={() => startBrowserGoogleSync('calendar')}
-              canSyncCalendar={
-                calendarConnectionMode === 'composio' &&
-                !googleAccessToken &&
-                googleAuthEnabled
-              }
-              runAgent={runAgent}
-            />
-          ) : selectedThread ? (
-            <ThreadView
-              thread={selectedThread}
-              composer={composer}
-              setComposer={setComposer}
-              runAgent={runAgent}
-              rewriteComposer={rewriteComposer}
-              saveComposerDraft={saveComposerDraft}
-              requestComposerSendApproval={requestComposerSendApproval}
-              gmailConnected={connected}
-              isSyncingMail={isSyncingMail}
-            />
-          ) : (
-            <EmptyMailWorkspace
-              connected={connected}
-              connectionStatus={connectionStatus}
-              connectGmail={connectGmail}
-              syncGmail={() => startBrowserGoogleSync('gmail')}
-              canSyncGmail={
-                connectionMode === 'composio' &&
-                !googleAccessToken &&
-                googleAuthEnabled
-              }
-              isConnecting={isConnecting}
-              isSyncingMail={isSyncingMail}
-              runAgent={runAgent}
-            />
-          )}
-        </div>
       </section>
+    </div>
+  )
+}
+
+function modeLabel(mode: IntegrationConnectionMode) {
+  if (mode === 'google-oauth') return 'Live Sync'
+  if (mode === 'composio') return 'Composio'
+  return 'Ready'
+}
+
+function BrokMailStatusBar({
+  connected,
+  connectionMode,
+  connectionStatus,
+  calendarConnected,
+  calendarConnectionMode,
+  calendarConnectionStatus,
+  counts,
+  isRunning,
+  runAgent
+}: {
+  connected: boolean
+  connectionMode: IntegrationConnectionMode
+  connectionStatus: string
+  calendarConnected: boolean
+  calendarConnectionMode: IntegrationConnectionMode
+  calendarConnectionStatus: string
+  counts: Record<MailboxView, number>
+  isRunning: boolean
+  runAgent: (prompt: string) => void
+}) {
+  return (
+    <div className="dashboard-rail border-b px-3 py-2.5 sm:px-4">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-3 xl:flex xl:items-center">
+          <div className="min-w-0 rounded-md border border-border/70 bg-background/65 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium">Inbox</span>
+              <Badge variant={connected ? 'default' : 'outline'}>
+                {modeLabel(connectionMode)}
+              </Badge>
+            </div>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {connectionStatus}
+            </p>
+          </div>
+          <div className="min-w-0 rounded-md border border-border/70 bg-background/65 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium">Calendar</span>
+              <Badge variant={calendarConnected ? 'default' : 'outline'}>
+                {modeLabel(calendarConnectionMode)}
+              </Badge>
+            </div>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {calendarConnectionStatus}
+            </p>
+          </div>
+          <div className="rounded-md border border-border/70 bg-background/65 px-3 py-2">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="font-medium">Queue</span>
+              <span className="text-muted-foreground">
+                {counts['needs-reply']} replies · {counts['follow-ups']}{' '}
+                follow-ups
+              </span>
+            </div>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {isRunning ? 'BrokMail is working...' : 'Ready for commands'}
+            </p>
+          </div>
+        </div>
+
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 xl:mx-0 xl:pb-0">
+          {commandPrompts.map(prompt => (
+            <Button
+              key={prompt}
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0"
+              onClick={() => runAgent(prompt)}
+              disabled={isRunning}
+            >
+              {prompt}
+            </Button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -2229,6 +2363,12 @@ function AgentPanel({
   handledApprovalIds: string[]
   onShare: () => void
 }) {
+  const messageEndRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    messageEndRef.current?.scrollIntoView({ block: 'end' })
+  }, [activity.length, messages.length])
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b p-3 sm:p-4">
@@ -2381,6 +2521,17 @@ function AgentPanel({
             </div>
           </article>
         ))}
+        {isRunning && (
+          <article className="flex justify-start">
+            <div className="flex max-w-[88%] items-center gap-2 rounded-md border border-border/70 bg-card/95 p-3 text-sm">
+              <span className="size-2 animate-pulse rounded-full bg-primary" />
+              <span className="text-muted-foreground">
+                Reading the live workspace...
+              </span>
+            </div>
+          </article>
+        )}
+        <div ref={messageEndRef} />
       </div>
 
       <div className="border-t p-3 sm:p-4">
