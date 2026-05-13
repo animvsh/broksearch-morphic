@@ -412,7 +412,16 @@ function detectIntegrationConnectIntent(command: string): string | null {
     }
   }
 
-  return null
+  const genericMatch = normalized.match(
+    /\b(?:connect|authorize|oauth|link|login|sign in)\s+(?:my\s+|the\s+|to\s+|with\s+)?([a-z0-9][a-z0-9 _-]{1,40})\b/i
+  )
+  const candidate = genericMatch?.[1]
+    ?.replace(/\b(account|app|integration|provider|toolkit|please|pls)\b/g, '')
+    .trim()
+    .replace(/[\s_]+/g, '')
+    .replace(/[^a-z0-9-]/g, '')
+
+  return candidate && candidate.length >= 2 ? candidate : null
 }
 
 function isValidBrokApiKey(value: string) {

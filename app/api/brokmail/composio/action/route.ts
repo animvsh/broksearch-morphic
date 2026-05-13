@@ -31,6 +31,12 @@ type BrokMailComposioCalendarEvent = {
   endAt?: string
 }
 
+type BrokMailApprovalArtifact = {
+  id?: string
+  action?: string
+  approved?: boolean
+}
+
 const DEFAULT_GMAIL_TOOLKITS = ['gmail', 'googlesuper']
 const CALENDAR_TOOLKITS = [
   'googlecalendar',
@@ -146,6 +152,32 @@ function normalizeCalendarEvent(
     startAt: typeof value.startAt === 'string' ? value.startAt : undefined,
     endAt: typeof value.endAt === 'string' ? value.endAt : undefined
   }
+}
+
+function normalizeApprovalArtifact(
+  value: unknown
+): BrokMailApprovalArtifact | null {
+  if (!isRecord(value)) return null
+  return {
+    id: typeof value.id === 'string' ? value.id : undefined,
+    action: typeof value.action === 'string' ? value.action : undefined,
+    approved: value.approved === true
+  }
+}
+
+function validateApprovalArtifact(
+  action: BrokMailComposioAction,
+  value: BrokMailApprovalArtifact | null
+) {
+  if (!value?.id?.trim() || value.approved !== true) {
+    return 'BrokMail requires an explicit approval artifact before running this Google action.'
+  }
+
+  if (value.action !== action) {
+    return 'BrokMail approval artifact does not match the requested Google action.'
+  }
+
+  return null
 }
 
 async function findConnectedAccountId(
@@ -287,6 +319,12 @@ export async function POST(request: NextRequest) {
   const draftBody =
     typeof body.draftBody === 'string' ? body.draftBody : undefined
   const calendarEvent = normalizeCalendarEvent(body.calendarEvent)
+  const approval = normalizeApprovalArtifact(body.approval)
+  const approvalError = validateApprovalArtifact(action, approval)
+  if (approvalError) {
+    return NextResponse.json({ error: approvalError }, { status: 403 })
+  }
+
   const text = buildActionText({ action, threads, draftBody, calendarEvent })
   const connectedAccountId = await findConnectedAccountId(user.id, action)
 
@@ -316,6 +354,11 @@ export async function POST(request: NextRequest) {
         action,
         toolSlug,
         connectedAccountId,
+        approval: {
+          id: approval?.id,
+          action: approval?.action,
+          approved: true
+        },
         result
       })
     } catch (error) {

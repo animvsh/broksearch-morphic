@@ -148,7 +148,8 @@ async function executeComposioBrokMailAction({
   action,
   threads,
   draftBody,
-  calendarEvent
+  calendarEvent,
+  approval
 }: {
   action:
     | 'create_draft'
@@ -158,6 +159,7 @@ async function executeComposioBrokMailAction({
   threads?: MailThread[]
   draftBody?: string
   calendarEvent?: ApprovalState['calendarEvent']
+  approval: Pick<ApprovalState, 'id'>
 }) {
   const response = await fetch('/api/brokmail/composio/action', {
     method: 'POST',
@@ -172,7 +174,12 @@ async function executeComposioBrokMailAction({
         subject: thread.subject
       })),
       draftBody,
-      calendarEvent
+      calendarEvent,
+      approval: {
+        id: approval.id,
+        action,
+        approved: true
+      }
     })
   })
 
@@ -1306,7 +1313,8 @@ export function BrokMailApp() {
         } else if (connectionMode === 'composio') {
           await executeComposioBrokMailAction({
             action: 'archive_threads',
-            threads: targetThreads
+            threads: targetThreads,
+            approval
           })
         } else {
           toast.error(
@@ -1357,7 +1365,8 @@ export function BrokMailApp() {
           await executeComposioBrokMailAction({
             action: 'create_draft',
             threads: [targetThread],
-            draftBody: draft.body
+            draftBody: draft.body,
+            approval
           })
         } else {
           toast.error(
@@ -1411,7 +1420,8 @@ export function BrokMailApp() {
         } else if (calendarConnectionMode === 'composio') {
           await executeComposioBrokMailAction({
             action: 'create_calendar_event',
-            calendarEvent: approval.calendarEvent
+            calendarEvent: approval.calendarEvent,
+            approval
           })
           setCalendarConnected(true)
           toast.success('Composio created the Google Calendar event')
@@ -1450,7 +1460,8 @@ export function BrokMailApp() {
         } else if (calendarConnectionMode === 'composio') {
           await executeComposioBrokMailAction({
             action: 'delete_calendar_event',
-            calendarEvent: approval.calendarEvent
+            calendarEvent: approval.calendarEvent,
+            approval
           })
           toast.success('Composio removed the Google Calendar event')
         } else {
