@@ -1,11 +1,18 @@
+import { formatOAuthErrorMessage } from '@/lib/auth/oauth-errors'
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default async function Page({
   searchParams
 }: {
-  searchParams: Promise<{ error: string }>
+  searchParams: Promise<{
+    error?: string
+    error_code?: string
+    msg?: string
+  }>
 }) {
   const params = await searchParams
+  const rawError = params?.msg || params?.error || params?.error_code
 
   return (
     <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
@@ -18,9 +25,9 @@ export default async function Page({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {params?.error ? (
+              {rawError ? (
                 <p className="text-sm text-muted-foreground">
-                  Code error: {params.error}
+                  {formatOAuthErrorMessage(rawError)}
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">

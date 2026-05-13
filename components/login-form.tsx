@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
+import { formatOAuthErrorMessage } from '@/lib/auth/oauth-errors'
 import { resolveSafeNextPath } from '@/lib/auth/redirect'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils/index'
@@ -74,9 +75,7 @@ export function LoginForm({
       })
       if (error) throw error
     } catch (error: unknown) {
-      setError(
-        error instanceof Error ? error.message : 'An OAuth error occurred'
-      )
+      setError(formatOAuthErrorMessage(error))
     } finally {
       setIsLoading(false)
     }

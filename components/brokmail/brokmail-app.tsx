@@ -30,6 +30,7 @@ import {
 import { toast } from 'sonner'
 
 import { createShareableChatFromTranscript } from '@/lib/actions/chat'
+import { formatOAuthErrorMessage } from '@/lib/auth/oauth-errors'
 import {
   AutomationRule,
   brokMailTonePreference,
@@ -777,8 +778,7 @@ export function BrokMailApp() {
 
       await startBrowserGoogleSync('gmail')
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Could not start Gmail sync.'
+      const message = formatOAuthErrorMessage(error)
       setConnectionStatus(message)
       toast.error(message)
     } finally {
@@ -849,10 +849,7 @@ export function BrokMailApp() {
 
       await startBrowserGoogleSync('calendar')
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Could not start Google Calendar sync.'
+      const message = formatOAuthErrorMessage(error)
       setCalendarConnectionStatus(message)
       toast.error(message)
     } finally {
