@@ -9,6 +9,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid
 } from 'drizzle-orm/pg-core'
 
@@ -150,10 +151,42 @@ export const providerRoutes = pgTable(
   })
 )
 
+// BrokCode saved runtime keys
+export const brokCodeRuntimeKeys = pgTable(
+  'brokcode_runtime_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    apiKeyId: uuid('api_key_id').references(() => apiKeys.id),
+    keyName: text('key_name').notNull(),
+    keyPrefix: text('key_prefix').notNull(),
+    encryptedKey: text('encrypted_key').notNull(),
+    environment: environmentEnum('environment').notNull(),
+    scopes: jsonb('scopes').default([]).notNull(),
+    defaultSessionId: text('default_session_id').default('default').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    lastValidatedAt: timestamp('last_validated_at').defaultNow().notNull()
+  },
+  table => ({
+    workspaceUserUniqueIdx: uniqueIndex(
+      'brokcode_runtime_keys_workspace_user_unique_idx'
+    ).on(table.workspaceId, table.userId),
+    workspaceIdx: index('brokcode_runtime_keys_workspace_idx').on(
+      table.workspaceId
+    ),
+    userIdx: index('brokcode_runtime_keys_user_idx').on(table.userId)
+  })
+)
+
 // Relations
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
   apiKeys: many(apiKeys),
-  usageEvents: many(usageEvents)
+  usageEvents: many(usageEvents),
+  brokCodeRuntimeKeys: many(brokCodeRuntimeKeys)
 }))
 
 export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
@@ -163,3 +196,17 @@ export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
   }),
   usageEvents: many(usageEvents)
 }))
+
+export const brokCodeRuntimeKeysRelations = relations(
+  brokCodeRuntimeKeys,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [brokCodeRuntimeKeys.workspaceId],
+      references: [workspaces.id]
+    }),
+    apiKey: one(apiKeys, {
+      fields: [brokCodeRuntimeKeys.apiKeyId],
+      references: [apiKeys.id]
+    })
+  })
+)

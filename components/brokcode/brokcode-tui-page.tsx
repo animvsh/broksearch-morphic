@@ -54,7 +54,8 @@ const coreCommands = [
   '/securityscan process',
   '/github',
   '/skills',
-  '/compat'
+  '/compat',
+  '/key brok_sk_...'
 ]
 
 const envVars = [
@@ -62,7 +63,11 @@ const envVars = [
   ['BROK_BASE_URL', 'Brok API endpoint, ending in /api/v1 or /v1.'],
   ['BROK_SYNC_URL', 'Web app origin used for Cloud/TUI session sync.'],
   ['BROKCODE_SESSION_ID', 'Shared session name shown in Cloud and TUI.'],
-  ['BROK_MODEL', 'Optional model override. Defaults to brok-code.']
+  ['BROK_MODEL', 'Optional model override. Defaults to brok-code.'],
+  [
+    'BROKCODE_CONFIG_PATH',
+    'Optional local config path. Defaults to ~/.brokcode/config.json.'
+  ]
 ]
 
 const compatibilitySteps = [

@@ -192,6 +192,18 @@ type PreviewHealth = {
 const BROK_KEY_STORAGE = 'brok_code_api_key'
 const BROK_SESSION_STORAGE = 'brok_code_session_id'
 
+type SavedBrokCodeKey = {
+  id: string
+  name: string
+  prefix: string
+  environment: 'test' | 'live'
+  scopes: string[]
+  defaultSessionId: string
+  updatedAt: string
+  lastValidatedAt: string
+  apiKey?: string
+}
+
 const accentStyles = {
   cyan: 'border-cyan-300 bg-cyan-50 text-cyan-950 dark:border-cyan-900 dark:bg-cyan-950 dark:text-cyan-50',
   emerald:
@@ -676,6 +688,8 @@ export function BrokCodeApp({
     useState<BrokCodeRuntime>('not_connected')
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [apiKey, setApiKey] = useState<string | null>(null)
+  const [savedRuntimeKey, setSavedRuntimeKey] =
+    useState<SavedBrokCodeKey | null>(null)
   const [apiKeyError, setApiKeyError] = useState<string | null>(null)
   const [models, setModels] = useState<BrokModel[]>([])
   const [selectedModel, setSelectedModel] = useState('brok-code')
@@ -774,40 +788,62 @@ export function BrokCodeApp({
         }
       } catch {}
 
-      const savedKey = localStorage.getItem(BROK_KEY_STORAGE)
       const savedSessionId = getStoredSessionId()
       setSyncSessionId(savedSessionId)
 
-      if (!savedKey || cancelled) {
-        if (!cancelled) setRuntimeBootstrapped(true)
-        return
+      const legacySavedKey = localStorage.getItem(BROK_KEY_STORAGE)
+      if (legacySavedKey && isValidBrokApiKey(legacySavedKey)) {
+        try {
+          const saveResponse = await fetch('/api/brokcode/key', {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${legacySavedKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ defaultSessionId: savedSessionId })
+          })
+          if (saveResponse.ok) {
+            localStorage.removeItem(BROK_KEY_STORAGE)
+          }
+        } catch {}
       }
 
-      if (isValidBrokApiKey(savedKey)) {
-        setApiKeyInput(savedKey)
-        try {
-          const response = await fetch('/api/brokcode/account', {
-            headers: { Authorization: `Bearer ${savedKey}` }
-          })
-          if (!response.ok) {
-            const body = await response.json().catch(() => null)
-            localStorage.removeItem(BROK_KEY_STORAGE)
-            setApiKeyError(
-              body?.error?.message ??
-                'Saved key does not belong to this Brok account.'
-            )
-            setApiKeyInput('')
-          } else {
-            setApiKey(savedKey)
-          }
-        } catch {
-          localStorage.removeItem(BROK_KEY_STORAGE)
-          setApiKeyError('Could not validate saved Brok account key.')
+      if (cancelled) return
+
+      try {
+        const response = await fetch('/api/brokcode/key?reveal=true', {
+          headers: legacySavedKey
+            ? { Authorization: `Bearer ${legacySavedKey}` }
+            : {}
+        })
+        const body = await response.json().catch(() => null)
+        if (response.ok && body?.key?.apiKey) {
+          const savedKey = body.key as SavedBrokCodeKey
+          setSavedRuntimeKey(savedKey)
+          setApiKey(savedKey.apiKey ?? null)
           setApiKeyInput('')
+          if (savedKey.defaultSessionId) {
+            setSyncSessionId(savedKey.defaultSessionId)
+            localStorage.setItem(
+              BROK_SESSION_STORAGE,
+              savedKey.defaultSessionId
+            )
+          }
+        } else if (legacySavedKey && isValidBrokApiKey(legacySavedKey)) {
+          const accountResponse = await fetch('/api/brokcode/account', {
+            headers: { Authorization: `Bearer ${legacySavedKey}` }
+          })
+          if (!accountResponse.ok) {
+            setApiKeyError(
+              body?.error?.message ?? 'Saved key could not be restored.'
+            )
+          } else {
+            setApiKey(legacySavedKey)
+          }
         }
-      } else {
-        setApiKeyError('Saved key is not a Brok key. Use a brok_sk_ key.')
-      }
+      } catch {}
+
+      localStorage.removeItem(BROK_KEY_STORAGE)
       if (!cancelled) setRuntimeBootstrapped(true)
     }
 
@@ -1292,15 +1328,51 @@ export function BrokCodeApp({
       return
     }
 
-    localStorage.setItem(BROK_KEY_STORAGE, trimmed)
+    try {
+      const saveResponse = await fetch('/api/brokcode/key', {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${trimmed}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ defaultSessionId: syncSessionId })
+      })
+      const savedBody = await saveResponse.json().catch(() => null)
+      if (!saveResponse.ok) {
+        setApiKeyError(
+          savedBody?.error?.message ??
+            'Validated key, but could not store it in BrokCode key vault.'
+        )
+        return
+      }
+      setSavedRuntimeKey((savedBody?.key as SavedBrokCodeKey) ?? null)
+    } catch {
+      setApiKeyError(
+        'Validated key, but could not store it in BrokCode key vault.'
+      )
+      return
+    }
+
+    localStorage.removeItem(BROK_KEY_STORAGE)
     setApiKey(trimmed)
+    setApiKeyInput('')
     setApiKeyError(null)
     setRuntimeError(null)
   }
 
-  function clearApiKey() {
+  async function clearApiKey() {
+    const keyToUse = apiKey
     localStorage.removeItem(BROK_KEY_STORAGE)
+    if (keyToUse) {
+      try {
+        await fetch('/api/brokcode/key', {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${keyToUse}` }
+        })
+      } catch {}
+    }
     setApiKey(null)
+    setSavedRuntimeKey(null)
     setActiveRuntime('not_connected')
     setApiKeyInput('')
     setApiKeyError(null)
@@ -1313,6 +1385,16 @@ export function BrokCodeApp({
       syncSessionId.trim().replace(/[^a-zA-Z0-9._:-]/g, '-') || 'default'
     setSyncSessionId(normalized)
     localStorage.setItem(BROK_SESSION_STORAGE, normalized)
+    if (apiKey) {
+      void fetch('/api/brokcode/key', {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ defaultSessionId: normalized })
+      })
+    }
     if (apiKey) {
       void refreshSyncedSessions(apiKey)
     }
@@ -2423,7 +2505,7 @@ export function BrokCodeApp({
                       <Label htmlFor="brok-code-key" className="text-xs">
                         Brok account API key
                         <span className="ml-1 font-normal text-muted-foreground">
-                          optional for CLI/TUI
+                          encrypted key vault
                         </span>
                       </Label>
                       <div className="mt-1 flex items-center gap-2">
@@ -2468,7 +2550,7 @@ export function BrokCodeApp({
                       size="sm"
                       className="h-9"
                       onClick={clearApiKey}
-                      disabled={!apiKeyInput}
+                      disabled={!apiKeyInput && !savedRuntimeKey && !apiKey}
                     >
                       Clear
                     </Button>
@@ -2491,9 +2573,18 @@ export function BrokCodeApp({
                     </div>
                     <p className="mt-1 text-muted-foreground">
                       {maskedKey
-                        ? `Using ${maskedKey}`
+                        ? savedRuntimeKey
+                          ? `Using saved ${savedRuntimeKey.name} (${savedRuntimeKey.prefix})`
+                          : `Using ${maskedKey}`
                         : `Using signed-in account (${accountEmail})`}
                     </p>
+                    {savedRuntimeKey && (
+                      <p className="mt-1 text-muted-foreground">
+                        Stored for session {savedRuntimeKey.defaultSessionId} ·{' '}
+                        {savedRuntimeKey.environment} ·{' '}
+                        {savedRuntimeKey.scopes.join(', ') || 'no scopes'}
+                      </p>
+                    )}
                     {usageLoading ? (
                       <p className="mt-1 text-muted-foreground">
                         Refreshing usage...

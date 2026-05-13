@@ -1,21 +1,47 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import path from 'node:path'
 import { stdin as input, stdout as output } from 'node:process'
 import { createInterface } from 'node:readline/promises'
 
-const apiKey = process.env.BROK_API_KEY
-const baseUrl = (process.env.BROK_BASE_URL || 'https://api.brok.ai/v1').replace(
-  /\/$/,
-  ''
-)
+const configPath =
+  process.env.BROKCODE_CONFIG_PATH ||
+  path.join(homedir(), '.brokcode', 'config.json')
+
+function readConfig() {
+  try {
+    return JSON.parse(readFileSync(configPath, 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
+function writeConfig(next) {
+  mkdirSync(path.dirname(configPath), { recursive: true })
+  writeFileSync(configPath, JSON.stringify(next, null, 2), {
+    mode: 0o600
+  })
+}
+
+const storedConfig = readConfig()
+let apiKey = process.env.BROK_API_KEY || storedConfig.apiKey
+const baseUrl = (
+  process.env.BROK_BASE_URL ||
+  storedConfig.baseUrl ||
+  'https://api.brok.ai/v1'
+).replace(/\/$/, '')
 const syncBaseUrl = (
   process.env.BROK_SYNC_URL ||
   process.env.BROKCODE_SYNC_URL ||
+  storedConfig.syncUrl ||
   baseUrl.replace(/\/v1$/, '')
 ).replace(/\/$/, '')
-const sessionId = process.env.BROKCODE_SESSION_ID || 'default'
-const model = process.env.BROK_MODEL || 'brok-code'
+const sessionId =
+  process.env.BROKCODE_SESSION_ID || storedConfig.sessionId || 'default'
+const model = process.env.BROK_MODEL || storedConfig.model || 'brok-code'
 const legacyRuntimeName = ['open', 'code'].join('')
 const legacyRuntimeEnvKey = `BROKCODE_REQUIRE_${legacyRuntimeName.toUpperCase()}`
 const requireCloudRuntime =
@@ -48,9 +74,10 @@ const requireCloudRuntimeField = `require_${legacyRuntimeName}`
 
 function assertBrokKey() {
   if (!apiKey) {
-    throw new Error(
-      'BROK_API_KEY is required. Other provider keys are ignored.'
+    output.write(
+      `${colors.yellow}No Brok API key configured. Use /key brok_sk_... to save one to ${configPath}, or set BROK_API_KEY.${colors.reset}\n`
     )
+    return false
   }
 
   if (!apiKey.startsWith('brok_sk_')) {
@@ -58,6 +85,8 @@ function assertBrokKey() {
       'Brok Code only accepts Brok API keys that start with brok_sk_.'
     )
   }
+
+  return true
 }
 
 function box(lines) {
@@ -108,6 +137,7 @@ function printHelp() {
   /github                      Explain GitHub-connected mode
   /skills                      Show Agent Skills setup
   /compat                      Print agent-tool compatibility env vars
+  /key <brok_sk_...>           Save a Brok API key to ${configPath}
   /model                       Show active model and endpoint
   /clear                       Clear the screen
   /exit                        Quit
@@ -123,6 +153,8 @@ function getSyncEndpoint(session = sessionId) {
 }
 
 async function syncEvent({ role, content, type = 'message', metadata }) {
+  if (!apiKey) return
+
   try {
     const response = await fetch(getSyncEndpoint(''), {
       method: 'POST',
@@ -156,6 +188,13 @@ async function syncEvent({ role, content, type = 'message', metadata }) {
 }
 
 async function showSync() {
+  if (!apiKey) {
+    output.write(
+      `${colors.red}Save a Brok API key first with /key.${colors.reset}\n`
+    )
+    return
+  }
+
   const response = await fetch(getSyncEndpoint(), {
     headers: {
       Authorization: `Bearer ${apiKey}`
@@ -197,6 +236,13 @@ async function showSync() {
 }
 
 async function showUsage(period = 'day') {
+  if (!apiKey) {
+    output.write(
+      `${colors.red}Save a Brok API key first with /key.${colors.reset}\n`
+    )
+    return
+  }
+
   const response = await fetch(
     `${baseUrl}/usage?period=${encodeURIComponent(period)}`,
     {
@@ -311,6 +357,28 @@ async function handleCommand(raw) {
     )
     return
   }
+  if (name === '/key') {
+    const nextKey = args[0]?.trim()
+    if (!nextKey?.startsWith('brok_sk_')) {
+      output.write(`${colors.red}Usage: /key brok_sk_...${colors.reset}\n`)
+      return
+    }
+
+    apiKey = nextKey
+    writeConfig({
+      ...storedConfig,
+      apiKey: nextKey,
+      baseUrl,
+      syncUrl: syncBaseUrl,
+      sessionId,
+      model,
+      updatedAt: new Date().toISOString()
+    })
+    output.write(
+      `${colors.green}Saved Brok API key to ${configPath}.${colors.reset}\n`
+    )
+    return
+  }
   if (name === '/sync') return showSync()
   if (name === '/session') {
     output.write(
@@ -367,6 +435,13 @@ export ANTHROPIC_MODEL="${model}"
 }
 
 async function sendChat(content) {
+  if (!apiKey) {
+    output.write(
+      `${colors.red}Save a Brok API key first with /key.${colors.reset}\n`
+    )
+    return
+  }
+
   messages.push({ role: 'user', content })
   await syncEvent({
     role: 'user',
@@ -471,17 +546,19 @@ async function sendChat(content) {
 }
 
 async function main() {
-  assertBrokKey()
+  const hasKey = assertBrokKey()
   printBanner()
-  await syncEvent({
-    role: 'system',
-    content: `Terminal TUI connected from ${process.cwd()}`,
-    type: 'session_start',
-    metadata: {
-      model,
-      baseUrl
-    }
-  })
+  if (hasKey) {
+    await syncEvent({
+      role: 'system',
+      content: `Terminal TUI connected from ${process.cwd()}`,
+      type: 'session_start',
+      metadata: {
+        model,
+        baseUrl
+      }
+    })
+  }
 
   const rl = createInterface({ input, output })
 
