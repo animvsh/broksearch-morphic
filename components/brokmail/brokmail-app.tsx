@@ -49,7 +49,7 @@ import {
   fetchGmailThreads,
   GMAIL_SUPER_OAUTH_SCOPES
 } from '@/lib/brokmail/google-gmail-client'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, isGoogleAuthEnabled } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
@@ -617,6 +617,10 @@ export function BrokMailApp() {
       setCalendarConnectionStatus(
         `Opening ${label} live sync. Grant access so BrokMail can load and update live events in this browser.`
       )
+    }
+
+    if (!isGoogleAuthEnabled()) {
+      throw new Error('Unsupported provider: provider is not enabled')
     }
 
     const supabase = createClient()

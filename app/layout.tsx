@@ -61,6 +61,7 @@ export default async function RootLayout({
   let user = null
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const googleAuthEnabled = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED
 
   if (supabaseUrl && supabaseAnonKey) {
     const supabase = await createClient()
@@ -74,7 +75,8 @@ export default async function RootLayout({
     supabaseUrl && supabaseAnonKey
       ? `window.__BROK_PUBLIC_ENV__=${JSON.stringify({
           NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseAnonKey
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseAnonKey,
+          NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: googleAuthEnabled
         }).replace(/</g, '\\u003c')};`
       : null
 

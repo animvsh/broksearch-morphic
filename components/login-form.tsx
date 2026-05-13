@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 
 import { formatOAuthErrorMessage } from '@/lib/auth/oauth-errors'
 import { resolveSafeNextPath } from '@/lib/auth/redirect'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, isGoogleAuthEnabled } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils/index'
 
 import { Button } from '@/components/ui/button'
@@ -34,6 +34,7 @@ export function LoginForm({
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const safeRedirectTo = resolveSafeNextPath(redirectTo)
+  const googleAuthEnabled = isGoogleAuthEnabled()
   const signUpHref =
     safeRedirectTo === '/'
       ? '/auth/sign-up'
@@ -62,6 +63,15 @@ export function LoginForm({
   }
 
   const handleSocialLogin = async () => {
+    if (!googleAuthEnabled) {
+      setError(
+        formatOAuthErrorMessage(
+          new Error('Unsupported provider: provider is not enabled')
+        )
+      )
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
@@ -96,15 +106,27 @@ export function LoginForm({
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
-            <Button
-              variant="outline"
-              type="button"
-              className="w-full"
-              onClick={handleSocialLogin}
-              disabled={isLoading}
-            >
-              Sign In with Google
-            </Button>
+            {googleAuthEnabled ? (
+              <Button
+                variant="outline"
+                type="button"
+                className="w-full"
+                onClick={handleSocialLogin}
+                disabled={isLoading}
+              >
+                Sign In with Google
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                type="button"
+                className="w-full"
+                onClick={handleSocialLogin}
+                disabled={isLoading}
+              >
+                Google sign-in needs setup
+              </Button>
+            )}
 
             <div className="relative my-2">
               <div className="absolute inset-0 flex items-center">
