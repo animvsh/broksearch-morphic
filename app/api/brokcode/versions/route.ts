@@ -46,7 +46,9 @@ export async function POST(request: NextRequest) {
   const summary =
     typeof body?.summary === 'string' ? body.summary.trim() : undefined
   const runtime =
-    body?.runtime === 'opencode' || body?.runtime === 'brok'
+    body?.runtime === 'pi' ||
+    body?.runtime === 'opencode' ||
+    body?.runtime === 'brok'
       ? body.runtime
       : 'not_connected'
   const status = body?.status === 'error' ? 'error' : 'done'
@@ -64,7 +66,8 @@ export async function POST(request: NextRequest) {
   }
 
   const version = await createBrokCodeVersion({
-    sessionId: typeof body?.session_id === 'string' ? body.session_id : 'default',
+    sessionId:
+      typeof body?.session_id === 'string' ? body.session_id : 'default',
     workspaceId: authResult.workspace.id,
     userId: authResult.apiKey.userId,
     command,

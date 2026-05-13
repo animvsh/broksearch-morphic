@@ -94,7 +94,7 @@ type BrokUsage = {
   billed_usd: number
 }
 
-type BrokCodeRuntime = 'opencode' | 'brok' | 'not_connected'
+type BrokCodeRuntime = 'pi' | 'opencode' | 'brok' | 'not_connected'
 type GithubConnectionStatus = 'checking' | 'connected' | 'ready' | 'unavailable'
 type PreviewHealthStatus = 'idle' | 'checking' | 'online' | 'offline'
 
@@ -117,6 +117,20 @@ type ExecutionRun = {
   note?: string
   previewUrl?: string | null
   steps: ExecutionStep[]
+}
+
+function getRuntimeLabel(runtime: BrokCodeRuntime) {
+  if (runtime === 'pi') return 'Pi coding-agent'
+  if (runtime === 'opencode') return 'brokcode-cloud'
+  if (runtime === 'brok') return 'Brok API runtime'
+  return 'Waiting for runtime'
+}
+
+function getRuntimeTool(runtime: BrokCodeRuntime) {
+  if (runtime === 'pi') return 'pi-coding-agent'
+  if (runtime === 'opencode') return 'brokcode-cloud'
+  if (runtime === 'brok') return 'brok-api'
+  return 'not-connected'
 }
 
 type SyncedBrokCodeEvent = {
@@ -291,12 +305,7 @@ function createRuntimeSubagents(runs: ExecutionRun[]): BrokCodeSubagent[] {
     return {
       id: run.id,
       name: `Run ${index + 1}`,
-      role:
-        run.runtime === 'opencode'
-          ? 'brokcode-cloud'
-          : run.runtime === 'brok'
-            ? 'Brok API runtime'
-            : 'Waiting for runtime',
+      role: getRuntimeLabel(run.runtime),
       status,
       accent: accents[index % accents.length],
       progress,
@@ -305,11 +314,7 @@ function createRuntimeSubagents(runs: ExecutionRun[]): BrokCodeSubagent[] {
         : run.command,
       branch: 'Runtime reported branch unavailable',
       files: run.previewUrl ? [run.previewUrl] : ['No file changes reported'],
-      tools: [
-        run.runtime === 'opencode' ? 'brokcode-cloud' : 'brok-api',
-        'SSE',
-        'usage-metering'
-      ],
+      tools: [getRuntimeTool(run.runtime), 'SSE', 'usage-metering'],
       events: run.steps.map(step => ({
         time: new Date(run.startedAt).toLocaleTimeString(),
         label: `${step.label} - ${step.status}`,
@@ -361,7 +366,7 @@ const executionStepTemplate: ExecutionStep[] = [
 const runStreamingHints = [
   'Understanding your command',
   'Planning subagents',
-  'Executing in brokcode-cloud',
+  'Executing in Pi coding-agent',
   'Collecting runtime output',
   'Preparing final response'
 ]
@@ -583,8 +588,7 @@ async function readBrokCodeExecutionStream(
     }
 
     if (eventType === 'delta') {
-      const content =
-        typeof payload.content === 'string' ? payload.content : ''
+      const content = typeof payload.content === 'string' ? payload.content : ''
       if (content) {
         accumulated += content
         onEvent({ type: 'delta', content, accumulated })
@@ -604,7 +608,7 @@ async function readBrokCodeExecutionStream(
       const message =
         typeof payload.message === 'string'
           ? payload.message
-          : 'BrokCode Cloud execution failed.'
+          : 'Pi coding-agent execution failed.'
       throw new Error(message)
     }
   }
@@ -628,6 +632,7 @@ async function readBrokCodeExecutionStream(
   return {
     runtime:
       result?.runtime === 'opencode' ||
+      result?.runtime === 'pi' ||
       result?.runtime === 'brok' ||
       result?.runtime === 'not_connected'
         ? result.runtime
@@ -636,7 +641,7 @@ async function readBrokCodeExecutionStream(
     content:
       accumulated.trim() ||
       (typeof result?.content === 'string' ? result.content.trim() : '') ||
-      'BrokCode Cloud completed the run but returned no text output.',
+      'Pi coding-agent completed the run but returned no text output.',
     usage: result?.usage,
     preview_url:
       typeof result?.preview_url === 'string' ? result.preview_url : null,
@@ -1091,7 +1096,7 @@ export function BrokCodeApp({
     return {
       id: createId('run'),
       command,
-      runtime: hasLiveRuntime ? 'opencode' : 'not_connected',
+      runtime: hasLiveRuntime ? 'pi' : 'not_connected',
       status: 'running',
       startedAt: Date.now(),
       steps: executionStepTemplate.map(step => ({
@@ -1174,53 +1179,56 @@ export function BrokCodeApp({
     loadPreviewTarget(previewInput)
   }
 
-  const checkPreviewHealth = useCallback(async (target = previewUrl) => {
-    const normalized = normalizePreviewUrl(target)
-    if (!normalized || isBrokCodeWorkspaceUrl(normalized)) {
-      setPreviewHealth({
-        status: 'offline',
-        message: 'Choose a generated app URL, not Brok Code itself.'
-      })
-      return
-    }
+  const checkPreviewHealth = useCallback(
+    async (target = previewUrl) => {
+      const normalized = normalizePreviewUrl(target)
+      if (!normalized || isBrokCodeWorkspaceUrl(normalized)) {
+        setPreviewHealth({
+          status: 'offline',
+          message: 'Choose a generated app URL, not Brok Code itself.'
+        })
+        return
+      }
 
-    setPreviewHealth(current => ({
-      ...current,
-      status: 'checking',
-      message: 'Checking preview server...'
-    }))
+      setPreviewHealth(current => ({
+        ...current,
+        status: 'checking',
+        message: 'Checking preview server...'
+      }))
 
-    try {
-      const response = await fetch(
-        `/api/brokcode/preview/status?${new URLSearchParams({
-          url: normalized
-        })}`,
-        { cache: 'no-store' }
-      )
-      const body = await response.json().catch(() => null)
+      try {
+        const response = await fetch(
+          `/api/brokcode/preview/status?${new URLSearchParams({
+            url: normalized
+          })}`,
+          { cache: 'no-store' }
+        )
+        const body = await response.json().catch(() => null)
 
-      setPreviewHealth({
-        status: body?.ok ? 'online' : 'offline',
-        message:
-          typeof body?.message === 'string'
-            ? body.message
-            : body?.ok
-              ? 'Preview server is reachable.'
-              : 'Preview server is not reachable yet.',
-        checkedAt:
-          typeof body?.checkedAt === 'string'
-            ? body.checkedAt
-            : new Date().toISOString(),
-        httpStatus: typeof body?.status === 'number' ? body.status : undefined
-      })
-    } catch {
-      setPreviewHealth({
-        status: 'offline',
-        message: 'Preview health check failed.',
-        checkedAt: new Date().toISOString()
-      })
-    }
-  }, [previewUrl])
+        setPreviewHealth({
+          status: body?.ok ? 'online' : 'offline',
+          message:
+            typeof body?.message === 'string'
+              ? body.message
+              : body?.ok
+                ? 'Preview server is reachable.'
+                : 'Preview server is not reachable yet.',
+          checkedAt:
+            typeof body?.checkedAt === 'string'
+              ? body.checkedAt
+              : new Date().toISOString(),
+          httpStatus: typeof body?.status === 'number' ? body.status : undefined
+        })
+      } catch {
+        setPreviewHealth({
+          status: 'offline',
+          message: 'Preview health check failed.',
+          checkedAt: new Date().toISOString()
+        })
+      }
+    },
+    [previewUrl]
+  )
 
   function reloadPreview() {
     setPreviewFrameKey(value => value + 1)
@@ -1926,12 +1934,12 @@ export function BrokCodeApp({
       {
         id: createId('system'),
         role: 'system',
-        content: 'Starting a real BrokCode Cloud run...'
+        content: 'Starting a real Pi coding-agent run...'
       },
       {
         id: assistantMessageId,
         role: 'assistant',
-        content: 'Connecting to brokcode-cloud runtime...'
+        content: 'Connecting to Pi coding-agent runtime...'
       }
     ])
     setRuntimeError(null)
@@ -1970,7 +1978,7 @@ export function BrokCodeApp({
         run.id,
         'execute',
         'running',
-        'Sending command to brokcode-cloud runtime.'
+        'Sending command to Pi coding-agent runtime.'
       )
 
       const response = await fetch('/api/brokcode/execute', {
@@ -1985,7 +1993,7 @@ export function BrokCodeApp({
           command: trimmed,
           model: selectedModel,
           stream: true,
-          require_opencode: true,
+          require_pi: true,
           messages: [
             { role: 'system', content: buildCommandPrompt(trimmed) },
             { role: 'user', content: trimmed }
@@ -2045,9 +2053,7 @@ export function BrokCodeApp({
         run.id,
         'execute',
         'done',
-        runtime === 'opencode'
-          ? 'Completed with brokcode-cloud runtime.'
-          : 'Completed with Brok runtime.'
+        `Completed with ${getRuntimeLabel(runtime)}.`
       )
       updateExecutionStep(
         run.id,
@@ -2067,9 +2073,7 @@ export function BrokCodeApp({
         note:
           typeof body?.note === 'string'
             ? body.note
-            : runtime === 'opencode'
-              ? 'brokcode-cloud runtime active.'
-              : 'Brok runtime active.',
+            : `${getRuntimeLabel(runtime)} active.`,
         previewUrl: discoveredPreviewUrl
       })
 
@@ -2086,9 +2090,7 @@ export function BrokCodeApp({
           message.id === assistantMessageId
             ? {
                 ...message,
-                content: `Live (${selectedModel} via ${
-                  runtime === 'opencode' ? 'brokcode-cloud' : 'Brok'
-                })\n\n${assistantContent}`,
+                content: `Live (${selectedModel} via ${getRuntimeLabel(runtime)})\n\n${assistantContent}`,
                 actions
               }
             : message
@@ -2419,10 +2421,10 @@ export function BrokCodeApp({
                   <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_150px] sm:items-end">
                     <div>
                       <Label htmlFor="brok-code-key" className="text-xs">
-                      Brok account API key
-                      <span className="ml-1 font-normal text-muted-foreground">
-                        optional for CLI/TUI
-                      </span>
+                        Brok account API key
+                        <span className="ml-1 font-normal text-muted-foreground">
+                          optional for CLI/TUI
+                        </span>
                       </Label>
                       <div className="mt-1 flex items-center gap-2">
                         <KeyRound className="size-4 text-muted-foreground" />
@@ -2703,7 +2705,7 @@ export function BrokCodeApp({
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm font-semibold">
-                        brokcode-cloud Runtime Workspace
+                        Pi coding-agent Runtime Workspace
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Watch execution lanes and live browser preview.
@@ -2711,11 +2713,9 @@ export function BrokCodeApp({
                     </div>
                     <Badge variant="outline" className="w-fit rounded-md">
                       Runtime:{' '}
-                      {activeRuntime === 'opencode'
-                        ? 'brokcode-cloud'
-                        : activeRuntime === 'brok'
-                          ? 'Brok'
-                          : 'Not connected'}
+                      {activeRuntime === 'not_connected'
+                        ? 'Not connected'
+                        : getRuntimeLabel(activeRuntime)}
                     </Badge>
                   </div>
 
@@ -2933,11 +2933,9 @@ export function BrokCodeApp({
                   </p>
                 </div>
                 <Badge variant="outline" className="rounded-md">
-                  {activeRuntime === 'opencode'
-                    ? 'brokcode-cloud'
-                    : activeRuntime === 'brok'
-                      ? 'Brok'
-                      : 'Not connected'}
+                  {activeRuntime === 'not_connected'
+                    ? 'Not connected'
+                    : getRuntimeLabel(activeRuntime)}
                 </Badge>
               </div>
               <TabsList className="mt-3 h-9 w-full justify-start rounded-md">
@@ -3091,7 +3089,10 @@ function SyncedSessionPanel({
           </div>
           <div className="mt-3 space-y-2">
             {events.map(event => (
-              <div key={event.id} className="rounded-md border bg-muted/20 p-2 transition-colors hover:bg-muted/30">
+              <div
+                key={event.id}
+                className="rounded-md border bg-muted/20 p-2 transition-colors hover:bg-muted/30"
+              >
                 <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                   <span>
                     {event.source === 'tui' ? 'Terminal' : 'Cloud'} ·{' '}
@@ -3232,9 +3233,7 @@ function ChatBubble({
           isUser && 'bg-primary text-primary-foreground',
           isSystem &&
             'border-dashed bg-muted/30 py-2 text-xs text-muted-foreground',
-          !isUser &&
-            !isSystem &&
-            'bg-background'
+          !isUser && !isSystem && 'bg-background'
         )}
       >
         {!isUser && !isSystem && (
@@ -3346,7 +3345,10 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
   return (
     <div className="space-y-3">
       {runs.slice(0, 4).map(run => (
-        <div key={run.id} className="rounded-md border bg-muted/10 p-3 shadow-[0_14px_36px_-30px_rgba(15,23,42,0.45)]">
+        <div
+          key={run.id}
+          className="rounded-md border bg-muted/10 p-3 shadow-[0_14px_36px_-30px_rgba(15,23,42,0.45)]"
+        >
           <div className="mb-2 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{run.command}</p>
@@ -3360,14 +3362,16 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
               </p>
             </div>
             <Badge
-              variant={run.runtime === 'opencode' ? 'default' : 'outline'}
+              variant={
+                run.runtime === 'opencode' || run.runtime === 'pi'
+                  ? 'default'
+                  : 'outline'
+              }
               className="rounded-md"
             >
-              {run.runtime === 'opencode'
-                ? 'brokcode-cloud'
-                : run.runtime === 'brok'
-                  ? 'Brok'
-                  : 'Not connected'}
+              {run.runtime === 'not_connected'
+                ? 'Not connected'
+                : getRuntimeLabel(run.runtime)}
             </Badge>
           </div>
 

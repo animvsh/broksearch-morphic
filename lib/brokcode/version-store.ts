@@ -8,7 +8,7 @@ export type BrokCodeVersion = {
   userId?: string
   command: string
   summary: string
-  runtime: 'opencode' | 'brok' | 'not_connected'
+  runtime: 'pi' | 'opencode' | 'brok' | 'not_connected'
   status: 'done' | 'error'
   previewUrl?: string | null
   branch?: string | null
@@ -26,7 +26,8 @@ let writeQueue: Promise<unknown> = Promise.resolve()
 
 function getVersionsFilePath() {
   return path.join(
-    process.env.BROKCODE_SYNC_DIR ?? path.join(process.cwd(), '.brokcode', 'sync'),
+    process.env.BROKCODE_SYNC_DIR ??
+      path.join(process.cwd(), '.brokcode', 'sync'),
     'versions.json'
   )
 }
@@ -42,7 +43,10 @@ function sanitizeSessionId(value: unknown) {
     return 'default'
   }
 
-  return value.trim().replace(/[^a-zA-Z0-9._:-]/g, '-').slice(0, 80)
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9._:-]/g, '-')
+    .slice(0, 80)
 }
 
 function truncate(value: unknown, limit: number, fallback = '') {

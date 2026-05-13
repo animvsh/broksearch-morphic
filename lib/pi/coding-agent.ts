@@ -1,0 +1,177 @@
+import {
+  AuthStorage,
+  createAgentSession,
+  ModelRegistry,
+  SessionManager,
+  SettingsManager
+} from '@earendil-works/pi-coding-agent'
+
+type PiAgentMode = 'brokmail' | 'brokcode'
+
+export type PiAgentRunInput = {
+  mode: PiAgentMode
+  prompt: string
+  cwd?: string
+  provider?: string
+  model?: string
+  tools?: string[]
+  noTools?: 'all' | 'builtin'
+}
+
+export type PiAgentRunResult = {
+  content: string
+  provider: string
+  model: string
+  sessionId: string
+  events: number
+}
+
+const DEFAULT_MODELS = {
+  anthropic: [
+    'claude-sonnet-4-5',
+    'claude-4-sonnet-20250514',
+    'claude-3-7-sonnet-20250219',
+    'claude-3-5-sonnet-20241022'
+  ],
+  openai: ['gpt-4.1', 'gpt-4o', 'gpt-4.1-mini'],
+  google: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash']
+}
+
+function configureAuthStorage() {
+  const authStorage = AuthStorage.inMemory()
+
+  const providerKeys: Array<[string, string | undefined]> = [
+    ['anthropic', process.env.PI_AGENT_ANTHROPIC_API_KEY],
+    ['anthropic', process.env.ANTHROPIC_API_KEY],
+    ['openai', process.env.PI_AGENT_OPENAI_API_KEY],
+    ['openai', process.env.OPENAI_API_KEY],
+    ['google', process.env.PI_AGENT_GOOGLE_API_KEY],
+    ['google', process.env.GOOGLE_GENERATIVE_AI_API_KEY]
+  ]
+
+  for (const [provider, key] of providerKeys) {
+    if (key?.trim()) {
+      authStorage.setRuntimeApiKey(provider, key.trim())
+    }
+  }
+
+  return authStorage
+}
+
+function selectModel({
+  modelRegistry,
+  provider,
+  model
+}: {
+  modelRegistry: ModelRegistry
+  provider?: string
+  model?: string
+}) {
+  const configuredProvider = provider ?? process.env.PI_AGENT_PROVIDER
+  const configuredModel = model ?? process.env.PI_AGENT_MODEL
+
+  if (configuredProvider && configuredModel) {
+    const selected = modelRegistry.find(configuredProvider, configuredModel)
+    if (selected && modelRegistry.hasConfiguredAuth(selected)) {
+      return selected
+    }
+  }
+
+  const preferredProviders = configuredProvider
+    ? [configuredProvider]
+    : ['anthropic', 'openai', 'google']
+
+  for (const candidateProvider of preferredProviders) {
+    const modelIds =
+      DEFAULT_MODELS[candidateProvider as keyof typeof DEFAULT_MODELS] ?? []
+    for (const modelId of modelIds) {
+      const selected = modelRegistry.find(candidateProvider, modelId)
+      if (selected && modelRegistry.hasConfiguredAuth(selected)) {
+        return selected
+      }
+    }
+  }
+
+  return modelRegistry.getAvailable()[0]
+}
+
+export function isPiAgentConfigured() {
+  const authStorage = configureAuthStorage()
+  const modelRegistry = ModelRegistry.inMemory(authStorage)
+  return Boolean(selectModel({ modelRegistry }))
+}
+
+export async function runPiAgentPrompt({
+  mode,
+  prompt,
+  cwd = process.cwd(),
+  provider,
+  model,
+  tools,
+  noTools
+}: PiAgentRunInput): Promise<PiAgentRunResult> {
+  const authStorage = configureAuthStorage()
+  const modelRegistry = ModelRegistry.inMemory(authStorage)
+  const selectedModel = selectModel({ modelRegistry, provider, model })
+
+  if (!selectedModel) {
+    throw new Error(
+      'Pi coding-agent is installed, but no Pi model is configured. Set PI_AGENT_PROVIDER and PI_AGENT_MODEL with a matching API key, or set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_GENERATIVE_AI_API_KEY.'
+    )
+  }
+
+  const { session } = await createAgentSession({
+    cwd,
+    model: selectedModel,
+    thinkingLevel: 'off',
+    authStorage,
+    modelRegistry,
+    sessionManager: SessionManager.inMemory(cwd),
+    settingsManager: SettingsManager.inMemory({
+      compaction: { enabled: false },
+      retry: { enabled: true, maxRetries: 1 }
+    }),
+    tools,
+    noTools:
+      noTools ??
+      (mode === 'brokmail'
+        ? 'all'
+        : tools && tools.length > 0
+          ? undefined
+          : 'builtin')
+  })
+
+  let content = ''
+  let eventCount = 0
+
+  const unsubscribe = session.subscribe((event: any) => {
+    eventCount += 1
+
+    if (
+      event?.type === 'message_update' &&
+      event?.assistantMessageEvent?.type === 'text_delta' &&
+      typeof event.assistantMessageEvent.delta === 'string'
+    ) {
+      content += event.assistantMessageEvent.delta
+    }
+  })
+
+  try {
+    await session.prompt(prompt)
+    const finalContent = content.trim()
+    if (!finalContent) {
+      throw new Error('Pi coding-agent completed without assistant output.')
+    }
+
+    return {
+      content: finalContent,
+      provider: selectedModel.provider,
+      model: selectedModel.id,
+      sessionId: session.sessionId,
+      events: eventCount
+    }
+  } finally {
+    unsubscribe()
+    session.dispose()
+  }
+}

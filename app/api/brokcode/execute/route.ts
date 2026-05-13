@@ -20,6 +20,7 @@ import {
   isDeepSecSecurityScanCommand,
   runDeepSecSecurityScan
 } from '@/lib/brokcode/security-scan'
+import { runPiAgentPrompt } from '@/lib/pi/coding-agent'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 export const runtime = 'nodejs'
@@ -46,7 +47,10 @@ function buildOpenCodeEndpoint(rawBase: string) {
   return `${base}/v1/chat/completions`
 }
 
-function isSelfBrokApiEndpoint(rawBase: string | undefined, requestUrl: string) {
+function isSelfBrokApiEndpoint(
+  rawBase: string | undefined,
+  requestUrl: string
+) {
   if (!rawBase) return false
 
   try {
@@ -317,13 +321,35 @@ function buildDefaultMessages(command: string): OpenAiMessage[] {
     {
       role: 'system',
       content:
-        'You are Brok Code powered by OpenCode runtime. Be execution-focused, safe, and concise. When building an AI app or AI feature, default to Brok API as the AI layer unless the user explicitly requests another provider. Use Brok API compatible env names and model routing first. For risky writes, require explicit approval.'
+        'You are Brok Code powered by Pi coding-agent. Be execution-focused, safe, and concise. When building an AI app or AI feature, default to Brok API as the AI layer unless the user explicitly requests another provider. Use Brok API compatible env names and model routing first. For risky writes, require explicit approval.'
     },
     {
       role: 'user',
       content: command
     }
   ]
+}
+
+function buildPiPrompt(messages: OpenAiMessage[]) {
+  return messages
+    .map(message => `${message.role.toUpperCase()}:\n${message.content}`)
+    .join('\n\n')
+}
+
+function getPiTools() {
+  const configured = process.env.BROKCODE_PI_TOOLS?.trim()
+  if (configured) {
+    return configured
+      .split(',')
+      .map(tool => tool.trim())
+      .filter(Boolean)
+  }
+
+  const tools = ['read', 'grep', 'find', 'ls', 'bash']
+  if (process.env.BROKCODE_PI_ALLOW_MUTATION === 'true') {
+    tools.push('edit', 'write')
+  }
+  return tools
 }
 
 function createExecutionStream({
@@ -338,7 +364,9 @@ function createExecutionStream({
   xApiKey,
   opencodeBase,
   opencodeApiKey,
-  requireOpenCode
+  requireOpenCode,
+  preferPi,
+  requirePi
 }: {
   auth: SuccessfulAuth
   requestId: string
@@ -352,6 +380,8 @@ function createExecutionStream({
   opencodeBase?: string
   opencodeApiKey?: string | null
   requireOpenCode: boolean
+  preferPi: boolean
+  requirePi: boolean
 }) {
   const encoder = new TextEncoder()
 
@@ -367,7 +397,64 @@ function createExecutionStream({
             message: 'Planning BrokCode Cloud execution.'
           })
 
+          let piFailure: string | null = null
           let opencodeFailure: string | null = null
+
+          if (preferPi || requirePi) {
+            try {
+              send('status', {
+                message: 'Running Pi coding-agent runtime.'
+              })
+              const result = await runPiAgentPrompt({
+                mode: 'brokcode',
+                prompt: buildPiPrompt(messages),
+                tools: getPiTools()
+              })
+              send('delta', { content: result.content })
+              send('result', {
+                runtime: 'pi',
+                model: result.model,
+                content: result.content,
+                usage: null,
+                preview_url: extractPreviewUrl(`${command}\n${result.content}`),
+                note: `Executed through Pi coding-agent (${result.provider}).`
+              })
+              await recordCodeExecutionUsage({
+                auth,
+                requestId,
+                startTime,
+                model: result.model,
+                provider: 'Pi',
+                messages,
+                content: result.content,
+                usage: null,
+                status: 'success'
+              })
+              controller.close()
+              return
+            } catch (error) {
+              piFailure =
+                error instanceof Error
+                  ? error.message
+                  : 'Pi coding-agent runtime failed.'
+
+              if (requirePi) {
+                await recordCodeExecutionUsage({
+                  auth,
+                  requestId,
+                  startTime,
+                  model,
+                  provider: 'Pi',
+                  messages,
+                  status: 'error',
+                  errorCode: piFailure
+                })
+                send('error', { message: piFailure })
+                controller.close()
+                return
+              }
+            }
+          }
 
           if (opencodeBase) {
             send('status', {
@@ -488,9 +575,10 @@ function createExecutionStream({
           }
 
           send('status', {
-            message: opencodeFailure
-              ? `${opencodeFailure} Falling back to Brok runtime.`
-              : 'Streaming from Brok runtime.'
+            message:
+              piFailure || opencodeFailure
+                ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} Falling back to Brok runtime.`
+                : 'Streaming from Brok runtime.'
           })
 
           let content = ''
@@ -514,9 +602,10 @@ function createExecutionStream({
                 : 'Brok runtime completed the run but returned no text output.',
             usage,
             preview_url: extractPreviewUrl(`${command}\n${content}`),
-            note: opencodeFailure
-              ? `${opencodeFailure} Routed through Brok runtime.`
-              : 'Routed through Brok runtime.'
+            note:
+              piFailure || opencodeFailure
+                ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} Routed through Brok runtime.`
+                : 'Routed through Brok runtime.'
           })
           await recordCodeExecutionUsage({
             auth,
@@ -540,7 +629,9 @@ function createExecutionStream({
             messages,
             status: 'error',
             errorCode:
-              error instanceof Error ? error.message : 'brokcode_execution_failed'
+              error instanceof Error
+                ? error.message
+                : 'brokcode_execution_failed'
           })
           send('error', {
             message:
@@ -684,11 +775,40 @@ export async function POST(request: NextRequest) {
   const opencodeBase = selfBrokApiEndpoint ? undefined : configuredOpenCodeBase
   const opencodeApiKey =
     process.env.BROKCODE_OPENCODE_API_KEY ?? extractBearerToken(request)
+  const preferPi =
+    body?.prefer_pi !== false && process.env.BROKCODE_PREFER_PI !== 'false'
+  const requirePi =
+    body?.require_pi === true || process.env.BROKCODE_REQUIRE_PI === 'true'
   const requireOpenCode =
+    !preferPi &&
     !selfBrokApiEndpoint &&
     (body?.require_opencode === true ||
       process.env.BROKCODE_REQUIRE_OPENCODE === 'true')
+  let piFailure: string | null = null
   let opencodeFailure: string | null = null
+
+  if (requirePi && !preferPi) {
+    await recordCodeExecutionUsage({
+      auth: authResult,
+      requestId,
+      startTime,
+      model,
+      provider: 'Pi',
+      messages,
+      status: 'error',
+      errorCode: 'pi_runtime_not_preferred'
+    })
+    return NextResponse.json(
+      {
+        error: {
+          type: 'runtime_error',
+          message:
+            'Pi runtime is required but BROKCODE_PREFER_PI is disabled for this deployment.'
+        }
+      },
+      { status: 503 }
+    )
+  }
 
   if (requireOpenCode && !opencodeBase) {
     await recordCodeExecutionUsage({
@@ -726,8 +846,69 @@ export async function POST(request: NextRequest) {
       xApiKey,
       opencodeBase,
       opencodeApiKey,
-      requireOpenCode
+      requireOpenCode,
+      preferPi,
+      requirePi
     })
+  }
+
+  if (preferPi || requirePi) {
+    try {
+      const result = await runPiAgentPrompt({
+        mode: 'brokcode',
+        prompt: buildPiPrompt(messages),
+        tools: getPiTools()
+      })
+
+      await recordCodeExecutionUsage({
+        auth: authResult,
+        requestId,
+        startTime,
+        model: result.model,
+        provider: 'Pi',
+        messages,
+        content: result.content,
+        usage: null,
+        status: 'success'
+      })
+
+      return NextResponse.json({
+        runtime: 'pi',
+        model: result.model,
+        content: result.content,
+        usage: null,
+        preview_url: extractPreviewUrl(`${command}\n${result.content}`),
+        note: `Executed through Pi coding-agent (${result.provider}).`
+      })
+    } catch (error) {
+      piFailure =
+        error instanceof Error
+          ? error.message
+          : 'Pi coding-agent runtime failed.'
+
+      if (requirePi) {
+        await recordCodeExecutionUsage({
+          auth: authResult,
+          requestId,
+          startTime,
+          model,
+          provider: 'Pi',
+          messages,
+          status: 'error',
+          errorCode: piFailure
+        })
+
+        return NextResponse.json(
+          {
+            error: {
+              type: 'runtime_error',
+              message: piFailure
+            }
+          },
+          { status: 503 }
+        )
+      }
+    }
   }
 
   if (opencodeBase) {
@@ -866,8 +1047,9 @@ export async function POST(request: NextRequest) {
         : 'Brok runtime completed the run but returned no text output.',
     usage,
     preview_url: extractPreviewUrl(`${command}\n${content}`),
-    note: opencodeFailure
-      ? `${opencodeFailure} Routed through Brok runtime.`
-      : 'Routed through Brok runtime.'
+    note:
+      piFailure || opencodeFailure
+        ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} Routed through Brok runtime.`
+        : 'Routed through Brok runtime.'
   })
 }

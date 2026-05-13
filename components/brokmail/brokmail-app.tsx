@@ -284,47 +284,6 @@ async function pollConnectionStatus(
   return false
 }
 
-function makeDraft(thread: MailThread, instruction: string): DraftState {
-  const asksForPricing = /pricing|price|pilot/i.test(instruction)
-  const asksSigned = /signed|contract|version|resend/i.test(instruction)
-  const asksConfirm = /confirm|topic|project/i.test(instruction)
-  const firstName = thread.sender.split(/\s+/)[0] || thread.sender
-
-  let body = `Hi ${firstName},\n\nThanks for the note. I will review this and follow up shortly.\n\nBest,\nAnimesh`
-
-  if (asksSigned) {
-    body = `Hi ${firstName},\n\nThanks for sending this over. Could you please resend the final signed version when you have it?\n\nBest,\nAnimesh`
-  } else if (asksForPricing) {
-    body = `Hi ${firstName},\n\nThanks for reaching out. I am interested in learning more. Could you send over the pricing details before we move forward?\n\nBest,\nAnimesh`
-  } else if (asksConfirm) {
-    body = `Hi ${firstName},\n\nConfirming this works for me. Please let me know if you need anything else from my side.\n\nBest,\nAnimesh`
-  } else if (thread.waitingOnReply) {
-    body = `Hi ${firstName},\n\nJust checking in on this. Would love to hear your thoughts when you have a chance.\n\nBest,\nAnimesh`
-  }
-
-  return {
-    subject: `Re: ${thread.subject}`,
-    body,
-    threadId: thread.id
-  }
-}
-
-function summarizeThread(thread: MailThread) {
-  return [
-    `Summary: ${thread.aiSummary}`,
-    `People involved: ${thread.sender} and Animesh.`,
-    thread.actionItems.length
-      ? `Action items: ${thread.actionItems.join('; ')}.`
-      : 'Action items: no reply needed right now.',
-    thread.openQuestions.length
-      ? `Open questions: ${thread.openQuestions.join('; ')}.`
-      : 'Open questions: none detected.',
-    thread.needsReply
-      ? 'Suggested next step: draft a concise reply for review.'
-      : 'Suggested next step: no action unless you want to archive or label it.'
-  ].join('\n')
-}
-
 function formatCalendarTimestamp(value: string, isAllDay: boolean) {
   if (isAllDay) {
     const date = new Date(`${value}T00:00:00`)
@@ -1063,6 +1022,35 @@ export function BrokMailApp() {
     )
   }
 
+  async function askPiBrokMailAgent(command: string) {
+    const response = await fetch('/api/brokmail/pi-agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: command,
+        threads,
+        calendarEvents,
+        selectedThreadId: selectedThread?.id ?? null,
+        selectedEventId: selectedCalendarEvent?.id ?? null
+      })
+    })
+
+    const payload = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(
+        payload?.error ??
+          'Pi-powered BrokMail assistant is not available right now.'
+      )
+    }
+
+    const content = typeof payload?.content === 'string' ? payload.content : ''
+    if (!content.trim()) {
+      throw new Error('Pi-powered BrokMail assistant returned no content.')
+    }
+
+    return content.trim()
+  }
+
   async function runAgent(prompt: string) {
     const command = prompt.trim()
     if (!command || isRunning) return
@@ -1244,43 +1232,40 @@ export function BrokMailApp() {
       updateActivity('Scanning unread, important, and recent threads...')
       await wait(160)
       updateActivity(
-        'Classifying needs reply, waiting-on, and low-priority mail...'
+        'Asking Pi to classify needs reply, waiting-on, and low-priority mail...'
       )
       await wait(160)
-      response = hasMail
-        ? [
-            'Here is the inbox brief:',
-            '',
-            'Needs reply:',
-            ...threads
-              .filter(thread => thread.needsReply)
-              .map(thread => `- ${thread.sender}: ${thread.aiSummary}`),
-            '',
-            'Follow up:',
-            ...threads
-              .filter(thread => thread.waitingOnReply)
-              .map(thread => `- ${thread.sender}: ${thread.aiSummary}`),
-            '',
-            'Can ignore:',
-            `- ${threads.filter(thread => thread.category === 'newsletter').length} newsletter`,
-            `- ${threads.filter(thread => thread.category === 'receipt').length} receipt already ready for Expenses`
-          ].join('\n')
-        : 'Connect Gmail first so I can triage your live inbox. I will not use demo mail data.'
+      if (!hasMail) {
+        response =
+          'Connect Gmail first so I can triage your live inbox. I will not use demo mail data.'
+      } else {
+        try {
+          response = await askPiBrokMailAgent(command)
+        } catch (error) {
+          response =
+            error instanceof Error
+              ? error.message
+              : 'Pi-powered triage failed. No placeholder triage was generated.'
+        }
+      }
     } else if (lower.includes('follow')) {
       updateActivity('Checking sent conversations without a recent reply...')
       await wait(170)
       const followUps = threads.filter(thread => thread.waitingOnReply)
       if (followUps[0]) setSelectedThreadId(followUps[0].id)
-      response = !hasMail
-        ? 'Connect Gmail first so I can scan your real sent mail for follow-ups.'
-        : followUps.length
-          ? followUps
-              .map(
-                thread =>
-                  `${thread.sender}: ${thread.aiSummary}\nSuggested action: ${thread.actionItems[0]}.`
-              )
-              .join('\n\n')
-          : 'No follow-ups are waiting right now.'
+      if (!hasMail) {
+        response =
+          'Connect Gmail first so I can scan your real sent mail for follow-ups.'
+      } else {
+        try {
+          response = await askPiBrokMailAgent(command)
+        } catch (error) {
+          response =
+            error instanceof Error
+              ? error.message
+              : 'Pi-powered follow-up scan failed. No placeholder follow-up list was generated.'
+        }
+      }
     } else if (lower.includes('archive') || lower.includes('newsletter')) {
       updateActivity('Searching newsletter-like emails older than 30 days...')
       await wait(150)
@@ -1348,18 +1333,34 @@ export function BrokMailApp() {
         setSelectedThreadId(match.id)
         updateActivity('Reading the best matching thread...')
         await wait(140)
-        updateActivity('Summarizing context and drafting a safe reply...')
+        updateActivity(
+          'Asking Pi to summarize context and draft a safe reply...'
+        )
         await wait(180)
-        draft = makeDraft(match, command)
-        setComposer(draft.body)
-        response = `${match.sender} - ${match.subject}\nFound because it mentions the contract and has ${match.hasAttachments ? 'an attachment' : 'matching context'}.\n\n${summarizeThread(match)}\n\nI also drafted the reply for review.`
-        approval = {
-          id: createId('approval'),
-          title: 'Create Gmail Draft?',
-          description:
-            'This creates a Gmail draft in the current live thread. It does not send email.',
-          action: 'send',
-          targetThreadIds: [match.id]
+        try {
+          const draftBody = await askPiBrokMailAgent(
+            `${command}\n\nDraft a reply for this matched thread. Return only the draft body.`
+          )
+          draft = {
+            subject: `Re: ${match.subject}`,
+            body: draftBody,
+            threadId: match.id
+          }
+          setComposer(draft.body)
+          response = `${match.sender} - ${match.subject}\nFound because it mentions the contract and has ${match.hasAttachments ? 'an attachment' : 'matching context'}.\n\nPi drafted the reply for review.`
+          approval = {
+            id: createId('approval'),
+            title: 'Create Gmail Draft?',
+            description:
+              'This creates a Gmail draft in the current live thread. It does not send email.',
+            action: 'send',
+            targetThreadIds: [match.id]
+          }
+        } catch (error) {
+          response =
+            error instanceof Error
+              ? error.message
+              : 'Pi-powered drafting failed. No placeholder draft was generated.'
         }
       }
     } else if (
@@ -1381,36 +1382,70 @@ export function BrokMailApp() {
         setSelectedThreadId(match.id)
         updateActivity('Opening the most relevant thread...')
         await wait(120)
-        response = `${match.sender} - ${match.subject}\nFound because it mentions the contract and has ${match.hasAttachments ? 'an attachment' : 'matching context'}.\n\n${summarizeThread(match)}`
+        try {
+          const piSummary = await askPiBrokMailAgent(
+            `${command}\n\nExplain why this matched thread is relevant and summarize the next action.`
+          )
+          response = `${match.sender} - ${match.subject}\nFound because it mentions the contract and has ${match.hasAttachments ? 'an attachment' : 'matching context'}.\n\n${piSummary}`
+        } catch (error) {
+          response =
+            error instanceof Error
+              ? error.message
+              : 'Pi-powered search summary failed. No placeholder summary was generated.'
+        }
       }
     } else if (lower.includes('draft') || lower.includes('reply')) {
       updateActivity('Reading the selected thread before drafting...')
       await wait(150)
-      updateActivity('Writing a concise reply in your saved tone...')
+      updateActivity('Asking Pi to write a concise reply in your saved tone...')
       await wait(180)
       if (!selectedThread) {
         response =
           'Connect Gmail and select a live thread before drafting. I always read the real thread before writing.'
       } else {
-        draft = makeDraft(selectedThread, command)
-        setComposer(draft.body)
-        response =
-          'I drafted a reply from the selected thread. Review it below before sending or saving.'
-        approval = {
-          id: createId('approval'),
-          title: 'Create Gmail Draft?',
-          description:
-            'This creates a Gmail draft in the selected live thread. It does not send email.',
-          action: 'send',
-          targetThreadIds: [selectedThread.id]
+        try {
+          const draftBody = await askPiBrokMailAgent(
+            `${command}\n\nDraft a reply for the selected thread. Return only the draft body.`
+          )
+          draft = {
+            subject: `Re: ${selectedThread.subject}`,
+            body: draftBody,
+            threadId: selectedThread.id
+          }
+          setComposer(draft.body)
+          response =
+            'Pi drafted a reply from the selected thread. Review it below before sending or saving.'
+          approval = {
+            id: createId('approval'),
+            title: 'Create Gmail Draft?',
+            description:
+              'This creates a Gmail draft in the selected live thread. It does not send email.',
+            action: 'send',
+            targetThreadIds: [selectedThread.id]
+          }
+        } catch (error) {
+          response =
+            error instanceof Error
+              ? error.message
+              : 'Pi-powered drafting failed. No placeholder draft was generated.'
         }
       }
     } else {
-      updateActivity('Reading the selected thread...')
+      updateActivity('Reading the selected thread with Pi...')
       await wait(150)
-      response = selectedThread
-        ? summarizeThread(selectedThread)
-        : 'Connect Gmail first or select a live thread so I can summarize real email context.'
+      if (!selectedThread) {
+        response =
+          'Connect Gmail first or select a live thread so I can summarize real email context.'
+      } else {
+        try {
+          response = await askPiBrokMailAgent(command)
+        } catch (error) {
+          response =
+            error instanceof Error
+              ? error.message
+              : 'Pi-powered thread summary failed. No placeholder summary was generated.'
+        }
+      }
     }
 
     finishActivity()

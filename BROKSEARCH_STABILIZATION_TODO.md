@@ -19,6 +19,7 @@ Last updated: 2026-05-13
 - [x] Enforce Brok API key validation for BrokCode (`brok_sk_` only).
 - [x] Enforce signed-in Brok account + API key ownership checks on BrokCode APIs.
 - [x] Ensure generic "connect X" prompts in BrokCode chat open Composio flow for that integration.
+- [x] Make BrokCode execute through Pi coding-agent as the primary runtime, with explicit failure instead of placeholder output when Pi is required.
 - [ ] Verify GitHub connect -> repo context -> PR open flow end-to-end with real credentials.
 - [ ] Verify BrokCode cloud and TUI sync end-to-end with same `BROKCODE_SESSION_ID`.
 
@@ -35,6 +36,7 @@ Last updated: 2026-05-13
 - [x] Add `/brokmail` product surface and initial UX shell.
 - [ ] Complete real Gmail OAuth + Composio mailbox wiring (no mock data).
 - [ ] Complete real Google Calendar Composio wiring for BrokMail calendar actions.
+- [x] Route BrokMail chat, triage, summaries, and draft generation through Pi coding-agent instead of local demo heuristics.
 - [ ] Verify chat-to-mail actions (search, summarize, draft, approval-gated send) against real tool calls.
 - [x] Verify approvals and safety constraints for risky actions.
 
@@ -62,3 +64,4 @@ Last updated: 2026-05-13
 - Production stress passed for chat/search APIs, BrokCode execution, usage/rate-limit enforcement, presentation CRUD/export, and protected UI routes.
 - Production browser walkthrough confirmed `/brokmail` redirects to login for signed-out users instead of 404 and the disabled Google-login state no longer triggers the unsupported-provider error.
 - Gmail and Google Calendar Composio auth configs are configured in production, but true signed-in OAuth completion still requires a real user session and provider popup completion.
+- Local verification after Pi integration passed `bun lint`, `bun typecheck`, targeted BrokMail/Composio tests, and `bun run build`.

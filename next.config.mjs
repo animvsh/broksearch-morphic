@@ -3,6 +3,10 @@ import path from 'node:path'
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
+  serverExternalPackages: [
+    '@earendil-works/pi-ai',
+    '@earendil-works/pi-coding-agent'
+  ],
   turbopack: {
     root: path.resolve()
   },
