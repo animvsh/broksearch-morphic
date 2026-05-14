@@ -1,4 +1,11 @@
-import { Bot, FolderKanban, GitBranch, Mail, Presentation, Search } from 'lucide-react'
+import {
+  Bot,
+  FolderKanban,
+  GitBranch,
+  Mail,
+  Presentation,
+  Search
+} from 'lucide-react'
 
 import { WorkspaceHubPage } from '@/components/workspace-hub-page'
 

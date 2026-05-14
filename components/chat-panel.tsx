@@ -458,6 +458,7 @@ export function ChatPanel({
                   className="shrink-0 size-8 rounded-lg group md:size-10"
                   type="button"
                   disabled={isLoading}
+                  aria-label="Start new chat"
                 >
                   <MessageCirclePlus className="size-4 group-hover:rotate-12 transition-all" />
                 </Button>
@@ -477,6 +478,7 @@ export function ChatPanel({
                   !hasAvailableModels
                 }
                 onClick={isLoading ? stop : undefined}
+                aria-label={isLoading ? 'Stop response' : 'Send message'}
                 title={
                   hasAvailableModels
                     ? undefined

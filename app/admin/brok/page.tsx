@@ -10,7 +10,7 @@ export default async function BrokAdminPage() {
   const stats = await getBrokStats()
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-4 pb-8 sm:px-6 lg:px-8">
       <div>
         <h1 className="text-3xl font-bold">Brok API</h1>
         <p className="text-muted-foreground">Overview of Brok API platform</p>

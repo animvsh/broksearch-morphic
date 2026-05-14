@@ -92,9 +92,7 @@ describe('selectModel', () => {
   it('uses the selected Brok chat model in cloud mode', async () => {
     const result = await selectModel({
       searchMode: 'quick',
-      cookieStore: createCookieStore(
-        'openai-compatible:MiniMax-M2.7-highspeed'
-      )
+      cookieStore: createCookieStore('openai-compatible:MiniMax-M2.7-highspeed')
     })
 
     expect(result).toEqual({

@@ -101,7 +101,8 @@ export async function POST(request: NextRequest) {
       : undefined
 
   const session = await appendBrokCodeSessionEvent({
-    sessionId: typeof body?.session_id === 'string' ? body.session_id : 'default',
+    sessionId:
+      typeof body?.session_id === 'string' ? body.session_id : 'default',
     source,
     role,
     type: typeof body?.type === 'string' ? body.type : 'message',

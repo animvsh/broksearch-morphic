@@ -315,10 +315,7 @@ export async function createShareableChatFromTranscript(
       parts: [{ type: 'text', text: content }]
     }
 
-    await dbActions.upsertMessage(
-      message,
-      userId
-    )
+    await dbActions.upsertMessage(message, userId)
     savedCount += 1
   }
 
@@ -329,10 +326,7 @@ export async function createShareableChatFromTranscript(
       role: 'assistant',
       parts: [{ type: 'text', text: 'Shared from Brok Code.' }]
     }
-    await dbActions.upsertMessage(
-      fallbackMessage,
-      userId
-    )
+    await dbActions.upsertMessage(fallbackMessage, userId)
   }
 
   const updatedChat = await dbActions.updateChatVisibility(

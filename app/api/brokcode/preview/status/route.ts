@@ -21,10 +21,15 @@ function isLocalPreviewHost(hostname: string) {
   )
 }
 
+function canCheckLocalPreviewHost() {
+  if (process.env.BROKCODE_ALLOW_PRIVATE_PREVIEW === 'true') return true
+  return process.env.NODE_ENV !== 'production'
+}
+
 function isAllowedPreviewUrl(url: URL) {
   if (!['http:', 'https:'].includes(url.protocol)) return false
   if (url.pathname.startsWith('/brokcode')) return false
-  if (isLocalPreviewHost(url.hostname)) return true
+  if (isLocalPreviewHost(url.hostname)) return canCheckLocalPreviewHost()
   return resolveAllowedOrigins().has(url.origin)
 }
 

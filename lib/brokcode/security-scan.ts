@@ -61,7 +61,10 @@ export function parseDeepSecArgs(command: string, phase: DeepSecPhase) {
   const normalized = command.toLowerCase()
   const args = [phase] as string[]
 
-  if (phase === 'process' && /\b(diff|pr|pull request|changed files)\b/.test(normalized)) {
+  if (
+    phase === 'process' &&
+    /\b(diff|pr|pull request|changed files)\b/.test(normalized)
+  ) {
     args.push('--diff')
   }
 
@@ -196,7 +199,9 @@ function buildDeepSecEnv({
 
   if (baseUrl) {
     const normalized = baseUrl.replace(/\/$/, '')
-    env.OPENAI_BASE_URL = normalized.endsWith('/v1') ? normalized : `${normalized}/v1`
+    env.OPENAI_BASE_URL = normalized.endsWith('/v1')
+      ? normalized
+      : `${normalized}/v1`
     env.ANTHROPIC_BASE_URL = normalized.replace(/\/v1$/, '')
   }
 
@@ -307,7 +312,13 @@ export async function runDeepSecSecurityScan({
   }
 
   if (phase !== 'setup') {
-    commands.push(await runPnpm(['deepsec', ...parseDeepSecArgs(command, phase)], deepsecDir, env))
+    commands.push(
+      await runPnpm(
+        ['deepsec', ...parseDeepSecArgs(command, phase)],
+        deepsecDir,
+        env
+      )
+    )
   }
 
   const ok = commands.every(commandResult => commandResult.exitCode === 0)

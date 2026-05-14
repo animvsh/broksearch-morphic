@@ -3,10 +3,7 @@
     {
       "id": "smoke-sync-2",
       "title": "BrokCode smoke-sync-2",
-      "sources": [
-        "cloud",
-        "tui"
-      ],
+      "sources": ["cloud", "tui"],
       "createdAt": "2026-05-10T09:57:19.234Z",
       "updatedAt": "2026-05-10T22:51:13.767Z",
       "events": [
@@ -141,9 +138,7 @@
     {
       "id": "default",
       "title": "BrokCode default",
-      "sources": [
-        "cloud"
-      ],
+      "sources": ["cloud"],
       "createdAt": "2026-05-10T22:11:56.603Z",
       "updatedAt": "2026-05-10T22:12:43.368Z",
       "events": [
@@ -217,9 +212,7 @@
     {
       "id": "qa-smoke-final",
       "title": "BrokCode qa-smoke-final",
-      "sources": [
-        "tui"
-      ],
+      "sources": ["tui"],
       "createdAt": "2026-05-10T20:04:50.803Z",
       "updatedAt": "2026-05-10T20:04:54.117Z",
       "events": [
@@ -267,9 +260,7 @@
     {
       "id": "qa-smoke",
       "title": "BrokCode qa-smoke",
-      "sources": [
-        "tui"
-      ],
+      "sources": ["tui"],
       "createdAt": "2026-05-10T19:52:23.038Z",
       "updatedAt": "2026-05-10T19:52:23.038Z",
       "events": [
@@ -291,9 +282,7 @@
     {
       "id": "ai-default-smoke",
       "title": "BrokCode ai-default-smoke",
-      "sources": [
-        "tui"
-      ],
+      "sources": ["tui"],
       "createdAt": "2026-05-10T10:00:16.513Z",
       "updatedAt": "2026-05-10T10:00:16.513Z",
       "events": [
@@ -315,9 +304,7 @@
     {
       "id": "smoke-sync",
       "title": "BrokCode smoke-sync",
-      "sources": [
-        "tui"
-      ],
+      "sources": ["tui"],
       "createdAt": "2026-05-10T09:56:44.105Z",
       "updatedAt": "2026-05-10T09:56:44.105Z",
       "events": [

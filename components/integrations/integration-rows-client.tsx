@@ -443,21 +443,21 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
 
   return (
     <div className="space-y-3">
-      <div className="hidden overflow-hidden rounded-md border md:block">
-        <table className="w-full table-fixed text-sm">
+      <div className="hidden overflow-x-auto rounded-md border md:block">
+        <table className="w-full min-w-[920px] table-fixed text-sm">
           <thead>
             <tr className="border-b bg-muted/40">
-              <th className="w-[34%] px-3 py-2 text-left font-medium">App</th>
-              <th className="w-[18%] px-3 py-2 text-left font-medium">
+              <th className="w-[30%] px-3 py-2 text-left font-medium">App</th>
+              <th className="w-[16%] px-3 py-2 text-left font-medium">
                 Toolkit
               </th>
-              <th className="w-[14%] px-3 py-2 text-left font-medium">
+              <th className="w-[12%] px-3 py-2 text-left font-medium">
                 Configs
               </th>
-              <th className="w-[14%] px-3 py-2 text-left font-medium">
+              <th className="w-[12%] px-3 py-2 text-left font-medium">
                 Accounts
               </th>
-              <th className="w-[20%] px-3 py-2 text-left font-medium">
+              <th className="w-[30%] px-3 py-2 text-left font-medium">
                 Action
               </th>
             </tr>

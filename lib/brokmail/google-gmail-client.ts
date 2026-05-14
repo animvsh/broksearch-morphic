@@ -176,7 +176,8 @@ function toMailThread(gmailThread: GmailThread): MailThread | null {
   const sender = parseSender(getHeader(lastMessage, 'From'))
   const subject = getHeader(lastMessage, 'Subject') || '(no subject)'
   const labels = new Set(lastMessage.labelIds ?? [])
-  const textBody = findTextPart(lastMessage.payload) || lastMessage.snippet || ''
+  const textBody =
+    findTextPart(lastMessage.payload) || lastMessage.snippet || ''
   const category = inferCategory(lastMessage)
   const unread = labels.has('UNREAD')
   const inInbox = labels.has('INBOX')
@@ -239,10 +240,7 @@ function toMailThread(gmailThread: GmailThread): MailThread | null {
 export async function fetchGmailThreads(accessToken: string) {
   const list = await gmailFetch<{
     messages?: Array<{ id: string; threadId: string }>
-  }>(
-    accessToken,
-    'messages?maxResults=16&q=in:anywhere newer_than:90d'
-  )
+  }>(accessToken, 'messages?maxResults=16&q=in:anywhere newer_than:90d')
 
   const threadIds = [
     ...new Set((list.messages ?? []).map(message => message.threadId))
@@ -298,7 +296,9 @@ export async function createGmailDraft({
     method: 'POST',
     body: JSON.stringify({
       message: {
-        ...(thread.providerThreadId ? { threadId: thread.providerThreadId } : {}),
+        ...(thread.providerThreadId
+          ? { threadId: thread.providerThreadId }
+          : {}),
         raw
       }
     })

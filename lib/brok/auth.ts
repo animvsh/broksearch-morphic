@@ -111,7 +111,20 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
     return { success: false, error: 'workspace_inactive', status: 403 }
   }
 
+  await updateApiKeyLastUsedAt(keyRecord.id)
+
   return { success: true, apiKey: keyRecord, workspace }
+}
+
+async function updateApiKeyLastUsedAt(apiKeyId: string) {
+  try {
+    await db
+      .update(apiKeys)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(apiKeys.id, apiKeyId))
+  } catch (error) {
+    console.error('Failed to update API key last-used timestamp:', error)
+  }
 }
 
 function canUseLocalAuthFallback() {

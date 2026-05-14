@@ -50,7 +50,10 @@ function withDefaultModel(
   }
 }
 
-function mergeModels(primaryModels: Model[], secondaryModels: Model[]): Model[] {
+function mergeModels(
+  primaryModels: Model[],
+  secondaryModels: Model[]
+): Model[] {
   const seen = new Set<string>()
   const merged: Model[] = []
 

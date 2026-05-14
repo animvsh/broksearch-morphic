@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       ? 'deep'
       : body.mode === 'quick' || body.mode === 'lite'
         ? 'lite'
-        : body.depth || 'standard'
+        : body.depth || body.search_depth || 'standard'
 
   const forwarded = new NextRequest(
     new URL('/api/v1/search/completions', request.url),

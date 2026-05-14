@@ -35,10 +35,7 @@ const emptyData = (): LocalPresentationData => ({
 })
 
 function dateReviver(key: string, value: unknown) {
-  if (
-    typeof value === 'string' &&
-    ['createdAt', 'updatedAt'].includes(key)
-  ) {
+  if (typeof value === 'string' && ['createdAt', 'updatedAt'].includes(key)) {
     return new Date(value)
   }
 
@@ -174,8 +171,7 @@ export const localPresentationStore = {
   ): Promise<Presentation | null> {
     return updateStore(data => {
       const index = data.presentations.findIndex(
-        presentation =>
-          presentation.id === id && presentation.userId === userId
+        presentation => presentation.id === id && presentation.userId === userId
       )
       if (index === -1) return null
 
@@ -249,11 +245,14 @@ export const localPresentationStore = {
     })
   },
 
-  async getOutline(presentationId: string): Promise<PresentationOutline | null> {
+  async getOutline(
+    presentationId: string
+  ): Promise<PresentationOutline | null> {
     const data = await readStore()
     return (
-      data.outlines.find(outline => outline.presentationId === presentationId) ??
-      null
+      data.outlines.find(
+        outline => outline.presentationId === presentationId
+      ) ?? null
     )
   },
 
@@ -262,7 +261,9 @@ export const localPresentationStore = {
     status: OutlineStatus
   ): Promise<void> {
     await updateStore(data => {
-      const outline = data.outlines.find(item => item.presentationId === presentationId)
+      const outline = data.outlines.find(
+        item => item.presentationId === presentationId
+      )
       if (outline) {
         outline.status = status
         outline.updatedAt = now()
@@ -320,7 +321,9 @@ export const localPresentationStore = {
           slideIndexes.has(slide.slideIndex)
       )
 
-      const presentation = data.presentations.find(item => item.id === presentationId)
+      const presentation = data.presentations.find(
+        item => item.id === presentationId
+      )
       if (presentation) {
         presentation.slideCount = slides.length
         presentation.status = 'ready'
@@ -360,7 +363,8 @@ export const localPresentationStore = {
       data.slides[slideIndex] = {
         ...data.slides[slideIndex],
         ...updates,
-        speakerNotes: updates.speakerNotes ?? data.slides[slideIndex].speakerNotes,
+        speakerNotes:
+          updates.speakerNotes ?? data.slides[slideIndex].speakerNotes,
         updatedAt: now()
       }
       presentation.updatedAt = now()
@@ -385,7 +389,8 @@ export const localPresentationStore = {
 
       for (const update of updates) {
         const index = data.slides.findIndex(
-          slide => slide.id === update.id && slide.presentationId === presentationId
+          slide =>
+            slide.id === update.id && slide.presentationId === presentationId
         )
         if (index === -1) continue
 
@@ -398,7 +403,9 @@ export const localPresentationStore = {
         updatedSlides.push(data.slides[index])
       }
 
-      const presentation = data.presentations.find(item => item.id === presentationId)
+      const presentation = data.presentations.find(
+        item => item.id === presentationId
+      )
       if (presentation) presentation.updatedAt = timestamp
 
       return updatedSlides
@@ -526,8 +533,9 @@ export const localPresentationStore = {
   ): Promise<Presentation | null> {
     const data = await readStore()
     return (
-      data.presentations.find(presentation => presentation.shareId === shareId) ??
-      null
+      data.presentations.find(
+        presentation => presentation.shareId === shareId
+      ) ?? null
     )
   },
 

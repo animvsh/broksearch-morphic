@@ -23,6 +23,12 @@ export function AppChrome({
   const pathname = usePathname()
   const isAuthRoute = pathname?.startsWith('/auth')
   const isDocsRoute = pathname?.startsWith('/docs')
+  const usesPageScroll =
+    isDocsRoute ||
+    pathname === '/playground' ||
+    pathname?.startsWith('/admin') ||
+    pathname?.startsWith('/brokcode') ||
+    pathname?.startsWith('/brokmail')
 
   if (isAuthRoute) {
     return (
@@ -41,7 +47,9 @@ export function AppChrome({
         <main
           className={cn(
             'flex min-h-0 min-w-0 flex-1',
-            isDocsRoute ? 'overflow-y-auto pt-16 md:pt-20' : 'overflow-hidden'
+            usesPageScroll
+              ? 'overflow-y-auto pt-16 md:pt-20'
+              : 'overflow-hidden'
           )}
         >
           <ArtifactRoot>{children}</ArtifactRoot>

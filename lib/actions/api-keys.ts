@@ -127,7 +127,40 @@ export async function listApiKeys(workspaceId: string) {
   }))
 }
 
+async function requireOwnedApiKey(keyId: string) {
+  const user = await getRequiredBrokAccountUser()
+  if (!user) {
+    throw new Error('Sign in to your Brok account before managing API keys.')
+  }
+
+  const [key] = await db
+    .select()
+    .from(apiKeys)
+    .where(eq(apiKeys.id, keyId))
+    .limit(1)
+
+  if (!key || key.userId !== user.id) {
+    throw new Error('This API key does not belong to your Brok account.')
+  }
+
+  const [workspace] = await db
+    .select()
+    .from(workspaces)
+    .where(eq(workspaces.id, key.workspaceId))
+    .limit(1)
+
+  if (!workspace || workspace.ownerUserId !== user.id) {
+    throw new Error(
+      'This API key workspace does not belong to your Brok account.'
+    )
+  }
+
+  return key
+}
+
 export async function revokeApiKey(keyId: string) {
+  await requireOwnedApiKey(keyId)
+
   await db
     .update(apiKeys)
     .set({ status: 'revoked', revokedAt: new Date() })
@@ -137,6 +170,8 @@ export async function revokeApiKey(keyId: string) {
 }
 
 export async function pauseApiKey(keyId: string) {
+  await requireOwnedApiKey(keyId)
+
   await db
     .update(apiKeys)
     .set({ status: 'paused' })
@@ -146,6 +181,8 @@ export async function pauseApiKey(keyId: string) {
 }
 
 export async function resumeApiKey(keyId: string) {
+  await requireOwnedApiKey(keyId)
+
   await db
     .update(apiKeys)
     .set({ status: 'active' })

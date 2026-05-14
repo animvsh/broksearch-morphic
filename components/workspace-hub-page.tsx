@@ -41,36 +41,36 @@ export function WorkspaceHubPage({
       <div className="mx-auto w-full max-w-7xl space-y-7 px-4 pb-14 pt-7 sm:space-y-8 sm:px-6 lg:px-8">
         <div className="dashboard-panel flex flex-col gap-5 p-5 sm:p-7">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge
-                variant="secondary"
-                className="rounded-md border border-border/70 bg-background/80 text-foreground/70"
-              >
-                {badge}
-              </Badge>
-              <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/84 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
-                <Sparkles className="size-3.5 text-primary" />
-                Enterprise workspace
-              </span>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant="secondary"
+                  className="rounded-md border border-border/70 bg-background/80 text-foreground/70"
+                >
+                  {badge}
+                </Badge>
+                <span className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/84 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
+                  <Sparkles className="size-3.5 text-primary" />
+                  Enterprise workspace
+                </span>
+              </div>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground/92 sm:text-3xl">
+                {title}
+              </h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground/90 sm:text-base">
+                {subtitle}
+              </p>
             </div>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground/92 sm:text-3xl">
-              {title}
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground/90 sm:text-base">
-              {subtitle}
-            </p>
-          </div>
-          <Button
-            asChild
-            variant="outline"
-            className="group gap-2 self-start rounded-lg border border-border/70 bg-background/82 text-foreground/80 shadow-sm transition-all duration-150 hover:border-border/85 hover:bg-background/94 hover:text-foreground/92 hover:shadow-md sm:self-auto"
-          >
-            <Link href="/">
-              Open Search
-              <ArrowRight className="size-4" />
-            </Link>
-          </Button>
+            <Button
+              asChild
+              variant="outline"
+              className="group gap-2 self-start rounded-lg border border-border/70 bg-background/82 text-foreground/80 shadow-sm transition-all duration-150 hover:border-border/85 hover:bg-background/94 hover:text-foreground/92 hover:shadow-md sm:self-auto"
+            >
+              <Link href="/">
+                Open Search
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
           </div>
 
           <div className="grid gap-2 border-t border-border/65 pt-4 sm:grid-cols-3">

@@ -25,7 +25,11 @@ type GoogleCalendarEvent = {
   }
 }
 
-function calendarFetch<T>(accessToken: string, path: string, init?: RequestInit) {
+function calendarFetch<T>(
+  accessToken: string,
+  path: string,
+  init?: RequestInit
+) {
   return fetch(`https://www.googleapis.com/calendar/v3/${path}`, {
     ...init,
     headers: {
@@ -37,7 +41,8 @@ function calendarFetch<T>(accessToken: string, path: string, init?: RequestInit)
     const body = await response.json().catch(() => null)
     if (!response.ok) {
       const message =
-        body?.error?.message || `Calendar request failed with ${response.status}`
+        body?.error?.message ||
+        `Calendar request failed with ${response.status}`
       throw new Error(message)
     }
     return body as T

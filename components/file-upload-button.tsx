@@ -79,6 +79,7 @@ export function FileUploadButton({
         size="icon"
         className="size-9 rounded-full border-zinc-200 bg-white text-zinc-600 shadow-xs hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950"
         type="button"
+        aria-label="Upload files"
         onClick={() => inputRef.current?.click()}
       >
         <Paperclip size={18} />

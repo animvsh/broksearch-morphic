@@ -35,7 +35,8 @@ let writeQueue: Promise<unknown> = Promise.resolve()
 
 function getSyncFilePath() {
   return path.join(
-    process.env.BROKCODE_SYNC_DIR ?? path.join(process.cwd(), '.brokcode', 'sync'),
+    process.env.BROKCODE_SYNC_DIR ??
+      path.join(process.cwd(), '.brokcode', 'sync'),
     'sessions.json'
   )
 }
@@ -51,7 +52,10 @@ function sanitizeSessionId(value: unknown) {
     return 'default'
   }
 
-  return value.trim().replace(/[^a-zA-Z0-9._:-]/g, '-').slice(0, 80)
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9._:-]/g, '-')
+    .slice(0, 80)
 }
 
 function sanitizeTitle(value: unknown, fallback: string) {

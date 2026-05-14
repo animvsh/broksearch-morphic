@@ -129,7 +129,8 @@ async function resolveRailwayTarget({
 
     const byName = projects.find(
       project =>
-        project.name.toLowerCase() === DEFAULT_RAILWAY_PROJECT_NAME.toLowerCase()
+        project.name.toLowerCase() ===
+        DEFAULT_RAILWAY_PROJECT_NAME.toLowerCase()
     )
     const pickedProject = byName ?? projects[0]
     targetProjectId = pickedProject.id
@@ -165,7 +166,9 @@ async function resolveRailwayTarget({
     project?: {
       id: string
       name: string
-      environments?: { edges?: Array<{ node?: RailwayNode | null } | null> | null }
+      environments?: {
+        edges?: Array<{ node?: RailwayNode | null } | null> | null
+      }
       services?: { edges?: Array<{ node?: RailwayNode | null } | null> | null }
     } | null
   }>(projectDetailsQuery, { projectId: targetProjectId }, token)
@@ -197,7 +200,8 @@ async function resolveRailwayTarget({
   }
 
   const pickedEnvironment =
-    (environmentId && environments.find(environment => environment.id === environmentId)) ||
+    (environmentId &&
+      environments.find(environment => environment.id === environmentId)) ||
     environments.find(
       environment =>
         environment.name.toLowerCase() ===
@@ -209,7 +213,8 @@ async function resolveRailwayTarget({
     (serviceId && services.find(service => service.id === serviceId)) ||
     services.find(
       service =>
-        service.name.toLowerCase() === DEFAULT_RAILWAY_SERVICE_NAME.toLowerCase()
+        service.name.toLowerCase() ===
+        DEFAULT_RAILWAY_SERVICE_NAME.toLowerCase()
     ) ||
     services[0]
 

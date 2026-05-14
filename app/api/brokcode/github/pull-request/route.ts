@@ -85,10 +85,13 @@ async function createPullRequestWithGhCli(params: {
   )
   const pullUrl = urlMatch?.[0] ?? null
   const numberMatch = pullUrl?.match(/\/pull\/(\d+)$/)
-  const pullNumber = numberMatch?.[1] ? Number.parseInt(numberMatch[1], 10) : null
+  const pullNumber = numberMatch?.[1]
+    ? Number.parseInt(numberMatch[1], 10)
+    : null
 
   return {
-    number: pullNumber !== null && Number.isFinite(pullNumber) ? pullNumber : null,
+    number:
+      pullNumber !== null && Number.isFinite(pullNumber) ? pullNumber : null,
     url: pullUrl,
     title: params.title,
     state: 'open'
@@ -205,22 +208,25 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const response = await fetch(`https://api.github.com/repos/${repository}/pulls`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${githubToken}`,
-      'X-GitHub-Api-Version': '2022-11-28',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      title,
-      body: prBody || undefined,
-      base,
-      head,
-      draft
-    })
-  })
+  const response = await fetch(
+    `https://api.github.com/repos/${repository}/pulls`,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${githubToken}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        title,
+        body: prBody || undefined,
+        base,
+        head,
+        draft
+      })
+    }
+  )
 
   const payload = (await response.json().catch(() => null)) as
     | GithubPullRequestResponse
@@ -233,7 +239,9 @@ export async function POST(request: NextRequest) {
         error: {
           type: 'github_error',
           message:
-            payload && 'message' in payload && typeof payload.message === 'string'
+            payload &&
+            'message' in payload &&
+            typeof payload.message === 'string'
               ? payload.message
               : `GitHub PR creation failed (${response.status}).`
         }

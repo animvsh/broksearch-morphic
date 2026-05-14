@@ -69,6 +69,20 @@ function completionPayload({
   }
 }
 
+function rateLimitHeaders(rateLimit: {
+  limit: number
+  current: number
+  resetAt: number
+}) {
+  return {
+    'X-RateLimit-Limit': String(rateLimit.limit),
+    'X-RateLimit-Remaining': String(
+      Math.max(rateLimit.limit - rateLimit.current, 0)
+    ),
+    'X-RateLimit-Reset': String(rateLimit.resetAt)
+  }
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
   const requestId = generateRequestId()
@@ -94,11 +108,11 @@ export async function POST(request: NextRequest) {
   const {
     query,
     model = 'brok-search',
-    depth = 'standard',
     stream = true,
     recency_days,
     domains
   } = body
+  const depth = body.depth ?? body.search_depth ?? 'standard'
 
   if (!query) {
     return NextResponse.json(
@@ -161,9 +175,18 @@ export async function POST(request: NextRequest) {
           )
         }
       },
-      { status: 429 }
+      { status: 429, headers: rateLimitHeaders(rateLimit) }
     )
   }
+
+  await recordRateLimitEvent(
+    auth.apiKey.id,
+    auth.workspace.id,
+    'rpm',
+    rateLimit.limit,
+    rateLimit.current + 1,
+    false
+  )
 
   if (stream) {
     const encoder = new TextEncoder()
@@ -329,7 +352,11 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'text/event-stream; charset=utf-8',
           'Cache-Control': 'no-cache, no-transform',
           Connection: 'keep-alive',
-          'X-Brok-Request-Id': requestId
+          'X-Brok-Request-Id': requestId,
+          ...rateLimitHeaders({
+            ...rateLimit,
+            current: rateLimit.current + 1
+          })
         }
       }
     )
@@ -373,7 +400,11 @@ export async function POST(request: NextRequest) {
       completionPayload({ requestId, model, searchResult }),
       {
         headers: {
-          'X-Brok-Request-Id': requestId
+          'X-Brok-Request-Id': requestId,
+          ...rateLimitHeaders({
+            ...rateLimit,
+            current: rateLimit.current + 1
+          })
         }
       }
     )

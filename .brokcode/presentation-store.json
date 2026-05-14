@@ -68,11 +68,7 @@
         {
           "title": "Key Point 3",
           "layout_type": "bullet",
-          "bullets": [
-            "Context",
-            "Evidence",
-            "Recommendation"
-          ]
+          "bullets": ["Context", "Evidence", "Recommendation"]
         }
       ],
       "status": "ready",
@@ -289,11 +285,7 @@
       "title": "Key Point 3",
       "layoutType": "text",
       "contentJson": {
-        "bullets": [
-          "Context",
-          "Evidence",
-          "Recommendation"
-        ],
+        "bullets": ["Context", "Evidence", "Recommendation"],
         "subtitle": null,
         "background": null,
         "imageUrl": null,

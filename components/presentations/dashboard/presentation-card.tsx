@@ -159,18 +159,29 @@ export function PresentationCard({
                 <ArrowRight className="ml-2 size-3.5" />
               </Link>
             </Button>
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="clicky-control rounded-xl border-zinc-200 bg-white/80"
-              disabled={presentation.status !== 'ready'}
-            >
-              <Link href={`/presentations/${presentation.id}/present`}>
+            {presentation.status === 'ready' ? (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="clicky-control rounded-xl border-zinc-200 bg-white/80"
+              >
+                <Link href={`/presentations/${presentation.id}/present`}>
+                  <Play className="mr-1.5 size-3.5" />
+                  Present
+                </Link>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="clicky-control rounded-xl border-zinc-200 bg-white/80"
+                disabled
+              >
                 <Play className="mr-1.5 size-3.5" />
                 Present
-              </Link>
-            </Button>
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"

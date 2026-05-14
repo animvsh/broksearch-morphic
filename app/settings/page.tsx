@@ -1,4 +1,11 @@
-import { KeyRound, LifeBuoy, Mail, SlidersHorizontal, Sparkles, Users } from 'lucide-react'
+import {
+  KeyRound,
+  LifeBuoy,
+  Mail,
+  SlidersHorizontal,
+  Sparkles,
+  Users
+} from 'lucide-react'
 
 import { WorkspaceHubPage } from '@/components/workspace-hub-page'
 

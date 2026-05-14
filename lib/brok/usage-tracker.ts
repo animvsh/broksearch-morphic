@@ -255,9 +255,7 @@ export async function checkUsageLimits({
           )
         )
 
-      const workspaceSpentCents = dollarsToCents(
-        monthlyForWorkspace?.billedUsd
-      )
+      const workspaceSpentCents = dollarsToCents(monthlyForWorkspace?.billedUsd)
       if (workspaceSpentCents >= workspaceBudgetCents) {
         return {
           allowed: false,

@@ -62,7 +62,8 @@ async function initializeRedisClient() {
 
   // Otherwise, try to use local Redis (for Docker/SearXNG usage)
   try {
-    const localRedisUrl = process.env.LOCAL_REDIS_URL || 'redis://localhost:6379'
+    const localRedisUrl =
+      process.env.LOCAL_REDIS_URL || 'redis://localhost:6379'
     const client = createClient({ url: localRedisUrl })
     await client.connect()
     redisClient = client

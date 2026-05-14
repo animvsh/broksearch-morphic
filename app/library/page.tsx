@@ -1,4 +1,11 @@
-import { BookMarked, FileCode2, Inbox, Search, Shapes, WandSparkles } from 'lucide-react'
+import {
+  BookMarked,
+  FileCode2,
+  Inbox,
+  Search,
+  Shapes,
+  WandSparkles
+} from 'lucide-react'
 
 import { WorkspaceHubPage } from '@/components/workspace-hub-page'
 

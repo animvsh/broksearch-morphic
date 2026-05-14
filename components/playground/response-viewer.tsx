@@ -36,19 +36,19 @@ export function ResponseViewer({
             <div className="rounded-md border bg-muted/20 px-2 py-1.5">
               <span>Prompt</span>{' '}
               <span className="font-medium text-foreground">
-              {response.usage.prompt_tokens}
+                {response.usage.prompt_tokens}
               </span>
             </div>
             <div className="rounded-md border bg-muted/20 px-2 py-1.5">
               <span>Completion</span>{' '}
               <span className="font-medium text-foreground">
-              {response.usage.completion_tokens}
+                {response.usage.completion_tokens}
               </span>
             </div>
             <div className="rounded-md border bg-muted/20 px-2 py-1.5">
               <span>Total</span>{' '}
               <span className="font-medium text-foreground">
-              {response.usage.total_tokens}
+                {response.usage.total_tokens}
               </span>
             </div>
           </div>

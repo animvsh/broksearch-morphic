@@ -21,7 +21,7 @@ export default function PlaygroundPage() {
   ]
 
   return (
-    <div className="dashboard-shell flex h-[100dvh] min-h-0 flex-col overflow-hidden pt-12">
+    <div className="dashboard-shell flex min-h-full flex-col">
       <div className="dashboard-panel mx-3 mt-3 shrink-0 px-4 py-3 sm:mx-4">
         <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
           <div className="min-w-0">
@@ -57,7 +57,7 @@ export default function PlaygroundPage() {
           </div>
         </div>
       </div>
-      <div className="min-h-0 flex-1 px-3 pb-3 sm:px-4 sm:pb-4">
+      <div className="min-h-[640px] flex-1 px-3 pb-3 sm:px-4 sm:pb-4">
         <ChatPlayground />
       </div>
     </div>

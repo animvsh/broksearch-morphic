@@ -17,7 +17,9 @@ function parseRepositoryFromRemote(remoteUrl: string) {
   const normalized = remoteUrl.trim()
   if (!normalized) return null
 
-  const sshMatch = normalized.match(/^git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/i)
+  const sshMatch = normalized.match(
+    /^git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/i
+  )
   if (sshMatch?.[1]) {
     return sshMatch[1]
   }

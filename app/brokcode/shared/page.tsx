@@ -23,8 +23,7 @@ function decodePortableSharePayload(data: string | undefined) {
 
   try {
     const normalized = data.replace(/-/g, '+').replace(/_/g, '/')
-    const padded =
-      normalized + '='.repeat((4 - (normalized.length % 4)) % 4)
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4)
     const json = Buffer.from(padded, 'base64').toString('utf8')
     const parsed = JSON.parse(json) as {
       title?: unknown
