@@ -40,11 +40,11 @@ import { IconBlinkingLogo } from './ui/icons'
 export default function AppSidebar() {
   const pathname = usePathname()
   const navButtonClass =
-    'group/sidebar relative h-9 rounded-lg border border-transparent px-2 text-[13px] font-medium text-zinc-600 transition-colors duration-100 hover:border-zinc-200 hover:bg-white hover:text-zinc-950 data-[active=true]:border-zinc-300 data-[active=true]:bg-white data-[active=true]:text-zinc-950 data-[active=true]:shadow-sm'
+    'group/sidebar relative h-9 rounded-lg border border-transparent px-2 text-[13px] font-medium text-zinc-600 transition-all duration-150 hover:border-zinc-200/80 hover:bg-white/88 hover:text-zinc-950 data-[active=true]:border-zinc-300/80 data-[active=true]:bg-white data-[active=true]:text-zinc-950 data-[active=true]:shadow-[0_12px_30px_-26px_rgba(24,24,27,0.42)]'
   const subButtonClass =
-    'group/subnav rounded-lg border border-transparent px-2 text-zinc-500 transition-colors duration-100 hover:border-zinc-200 hover:bg-white hover:text-zinc-950 data-[active=true]:border-zinc-300 data-[active=true]:bg-white data-[active=true]:text-zinc-950'
+    'group/subnav rounded-lg border border-transparent px-2 text-zinc-500 transition-all duration-150 hover:border-zinc-200/80 hover:bg-white/88 hover:text-zinc-950 data-[active=true]:border-zinc-300/80 data-[active=true]:bg-white data-[active=true]:text-zinc-950'
   const iconShellClass =
-    'flex size-7 items-center justify-center rounded-lg border border-transparent text-zinc-400 transition-colors duration-100 group-data-[active=true]/sidebar:bg-zinc-900 group-data-[active=true]/sidebar:text-white group-hover/sidebar:bg-zinc-100 group-hover/sidebar:text-zinc-900'
+    'flex size-7 items-center justify-center rounded-lg border border-transparent text-zinc-400 transition-all duration-150 group-data-[active=true]/sidebar:bg-zinc-950 group-data-[active=true]/sidebar:text-white group-hover/sidebar:bg-zinc-100 group-hover/sidebar:text-zinc-900'
   const subIconShellClass =
     'flex size-6 items-center justify-center rounded-lg border border-transparent text-zinc-400 transition-colors duration-100 group-data-[active=true]/subnav:bg-zinc-900 group-data-[active=true]/subnav:text-white group-hover/subnav:bg-zinc-100 group-hover/subnav:text-zinc-900'
   const isActive = (href: string) =>
@@ -59,9 +59,9 @@ export default function AppSidebar() {
       side="left"
       variant="sidebar"
       collapsible="icon"
-      className="border-r border-zinc-200 bg-zinc-50 text-zinc-950 shadow-none"
+      className="border-r border-zinc-200/80 bg-zinc-50/92 text-zinc-950 shadow-none backdrop-blur-xl"
     >
-      <SidebarHeader className="flex flex-row items-center justify-between border-b border-zinc-200 bg-white">
+      <SidebarHeader className="flex flex-row items-center justify-between border-b border-zinc-200/80 bg-white/88 backdrop-blur-xl">
         <Link href="/" className="flex items-center gap-2 px-2 py-3">
           <span className="brand-mark rounded-full p-1.5">
             <IconBlinkingLogo className={cn('size-5')} />

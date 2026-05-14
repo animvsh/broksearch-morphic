@@ -48,7 +48,7 @@ export function AppChrome({
         <Header user={user} />
         <main
           className={cn(
-            'flex min-h-0 min-w-0 flex-1',
+            'flex min-h-0 min-w-0 flex-1 bg-[linear-gradient(180deg,#fbfbfc_0%,#f5f6f8_100%)]',
             usesPageScroll ? 'overflow-y-auto' : 'overflow-hidden'
           )}
         >

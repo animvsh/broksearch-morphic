@@ -148,7 +148,7 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
   return (
     <CollapsibleMessage role="user">
       <div
-        className="flex-1 break-words w-full group outline-hidden relative"
+        className="group relative w-full flex-1 break-words rounded-lg border border-zinc-200/70 bg-white/82 px-3 py-2.5 shadow-[0_12px_34px_-30px_rgba(15,23,42,0.45)] outline-hidden backdrop-blur-sm"
         tabIndex={0}
       >
         {isEditing ? (
@@ -179,7 +179,7 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
               <div
                 ref={contentRef}
                 className={cn(
-                  'whitespace-pre-wrap',
+                  'whitespace-pre-wrap text-[15px] leading-7 text-zinc-900',
                   !isExpanded && 'line-clamp-3'
                 )}
               >
@@ -193,7 +193,7 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
                 {uploadedFiles.map(filename => (
                   <div
                     key={filename}
-                    className="inline-flex max-w-full items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1.5 text-sm text-muted-foreground"
+                    className="inline-flex max-w-full items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50/75 px-2.5 py-1.5 text-sm text-zinc-500"
                   >
                     <FileText className="size-4 shrink-0" />
                     <span className="truncate">{filename}</span>
@@ -220,7 +220,7 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
             )}
             <div
               className={cn(
-                'absolute -top-1 -right-1 flex items-center gap-0.5 p-0.5 transition-opacity bg-background rounded-full shadow-sm border',
+                'absolute -right-1 -top-1 flex items-center gap-0.5 rounded-full border border-zinc-200 bg-white p-0.5 shadow-sm transition-opacity',
                 'opacity-0',
                 'max-md:group-focus-within:opacity-100',
                 'md:group-hover:opacity-100'

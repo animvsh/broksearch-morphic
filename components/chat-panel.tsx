@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Clock3,
   MessageCirclePlus,
+  Sparkles,
   Square
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -333,6 +334,19 @@ export function ChatPanel({
       {uploadedFiles.length > 0 && (
         <UploadedFileList files={uploadedFiles} onRemove={handleFileRemove} />
       )}
+      {messages.length === 0 && (
+        <div className="mx-auto mb-5 flex w-full max-w-3xl flex-col items-center text-center">
+          <div className="brand-mark brand-halo mb-3 size-11 rounded-full">
+            <IconBlinkingLogo className="size-6" />
+          </div>
+          <h1 className="text-balance text-2xl font-semibold tracking-normal text-zinc-950 sm:text-3xl">
+            What are we working on?
+          </h1>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500">
+            Ask a question, drop a file, or start a search.
+          </p>
+        </div>
+      )}
       <form
         onSubmit={e => {
           if (!hasAvailableModels && !canSubmitWithoutModel) {
@@ -504,12 +518,12 @@ export function ChatPanel({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 rounded-lg px-2.5 text-xs"
+                  className="h-8 rounded-lg border-zinc-200 bg-white/75 px-2.5 text-xs shadow-none hover:bg-white"
                   onClick={() => void startDeepResearch()}
                   disabled={isLoading}
                   title="Run this as background deep research"
                 >
-                  <Clock3 className="size-3.5 md:mr-1" />
+                  <Sparkles className="size-3.5 md:mr-1" />
                   <span className="hidden md:inline">Research</span>
                 </Button>
               )}
