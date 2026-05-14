@@ -465,6 +465,7 @@ async function sendChat(content) {
       model,
       stream: true,
       [requireCloudRuntimeField]: requireCloudRuntime,
+      prefer_pi: !requireCloudRuntime,
       max_tokens: 1200,
       messages
     })

@@ -3,7 +3,6 @@ import {
   FileCode2,
   Inbox,
   Search,
-  Shapes,
   WandSparkles
 } from 'lucide-react'
 
@@ -33,13 +32,6 @@ const actions = [
       'Store subagent plans, branch templates, and rollout patterns for repeated delivery.'
   },
   {
-    href: '/presentations',
-    label: 'Deck Templates',
-    icon: Shapes,
-    description:
-      'Start from reusable outlines, themes, and export presets for predictable quality.'
-  },
-  {
     href: '/playground',
     label: 'Prompt Lab',
     icon: WandSparkles,
@@ -59,7 +51,7 @@ export default function LibraryPage() {
   return (
     <WorkspaceHubPage
       title="Library"
-      subtitle="A reusable layer for templates, prior runs, docs, and repeatable workflows across Brok Search, BrokMail, Brok Code, and Presentations."
+      subtitle="A reusable layer for templates, prior runs, docs, and repeatable workflows across Brok Search, BrokMail, and Brok Code."
       badge="Knowledge Layer"
       actions={actions}
     />

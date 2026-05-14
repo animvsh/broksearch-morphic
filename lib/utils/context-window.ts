@@ -51,6 +51,7 @@ const SAFETY_BUFFER_RATIO = 0.1
 
 // Cache for tiktoken encoders
 const encoderCache = new Map<string, any>()
+const TIKTOKEN_MIN_TEXT_LENGTH = 32000
 
 // Mapping of our model IDs to tiktoken encoding names
 // js-tiktoken supports 'cl100k_base' (for GPT-4), 'p50k_base', 'r50k_base'
@@ -135,6 +136,13 @@ function extractTextContent(content: ModelMessage['content']): string {
   return ''
 }
 
+function estimateTokenCountFast(content: ModelMessage['content']): number {
+  const text = extractTextContent(content)
+  if (!text) return 0
+
+  return Math.ceil(text.length / 4) + 4
+}
+
 /**
  * Get or create encoder for a model
  */
@@ -170,6 +178,10 @@ function estimateTokenCount(
 ): number {
   const text = extractTextContent(content)
   if (!text) return 0
+
+  if (text.length < TIKTOKEN_MIN_TEXT_LENGTH) {
+    return estimateTokenCountFast(content)
+  }
 
   // Try to use tiktoken for accurate counting
   if (modelId) {
@@ -310,6 +322,19 @@ export function shouldTruncateMessages(
   if (!messages || messages.length === 0) return false
 
   const maxTokens = getMaxAllowedTokens(model)
+  const fastTotalTokens = messages.reduce(
+    (sum, msg) => sum + estimateTokenCountFast(msg.content),
+    0
+  )
+
+  if (fastTotalTokens <= maxTokens * 0.75) {
+    return false
+  }
+
+  if (fastTotalTokens > maxTokens * 1.25) {
+    return true
+  }
+
   const totalTokens = messages.reduce(
     (sum, msg) => sum + estimateTokenCount(msg.content, model.id),
     0

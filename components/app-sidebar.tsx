@@ -13,7 +13,6 @@ import {
   PanelLeft,
   PlugZap,
   Plus,
-  Presentation,
   Search,
   TerminalSquare
 } from 'lucide-react'
@@ -206,21 +205,6 @@ export default function AppSidebar() {
                   <TerminalSquare className="size-4" />
                 </span>
                 <span className="flex-1">TUI</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="Slides"
-              className={navButtonClass}
-              isActive={isActive('/presentations')}
-            >
-              <Link href="/presentations" className="flex items-center gap-2">
-                <span className={iconShellClass}>
-                  <Presentation className="size-4" />
-                </span>
-                <span className="flex-1">Slides</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

@@ -3,10 +3,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   apiKeyHasScope,
   forbiddenScopeResponse,
-  unauthorizedResponse,
-  verifyRequestAuth
+  unauthorizedResponse
 } from '@/lib/brok/auth'
-import { enforceBrokCodeAccountOwnership } from '@/lib/brokcode/account-guard'
+import {
+  enforceBrokCodeAccountOwnership,
+  verifyBrokCodeRequestAuth
+} from '@/lib/brokcode/account-guard'
 
 export const runtime = 'nodejs'
 
@@ -312,7 +314,7 @@ async function triggerRailwayDeployment({
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await verifyRequestAuth(request)
+  const { authResult } = await verifyBrokCodeRequestAuth(request)
   if (!authResult.success) {
     return unauthorizedResponse(authResult)
   }

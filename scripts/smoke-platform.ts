@@ -36,7 +36,6 @@ const uiChecks: UiCheck[] = [
 ]
 
 const protectedUiChecks: ProtectedUiCheck[] = [
-  { path: '/presentations' },
   { path: '/admin/brok' },
   { path: '/brokcode' },
   { path: '/brokmail' },

@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { eq } from 'drizzle-orm'
-import { randomUUID, timingSafeEqual } from 'node:crypto'
+import { timingSafeEqual } from 'node:crypto'
 
 import { ensureWorkspaceForUser } from '@/lib/actions/api-keys'
 import { generateApiKey, getKeyPrefix, hashApiKey } from '@/lib/api-key'
 import { db } from '@/lib/db'
-import {
-  createOrUpdateOutline,
-  createPresentation,
-  createSlides,
-  setPresentationShare
-} from '@/lib/db/actions/presentations'
 import { apiKeys, usageEvents } from '@/lib/db/schema'
 
 export const runtime = 'nodejs'
@@ -163,47 +157,6 @@ async function seedStress(userId: string) {
     .set({ status: 'revoked', revokedAt: new Date() })
     .where(eq(apiKeys.id, revokedKey.id))
 
-  const presentation = await createPresentation({
-    title: 'Stress Test Deck',
-    userId,
-    description: 'Stress verification deck',
-    language: 'en',
-    style: 'professional',
-    slideCount: 2,
-    themeId: 'minimal_light'
-  })
-  await createOrUpdateOutline({
-    presentationId: presentation.id,
-    outlineJson: [
-      { title: 'Intro', bullets: ['Point A', 'Point B'] },
-      { title: 'Next Steps', bullets: ['Point C', 'Point D'] }
-    ],
-    status: 'ready'
-  })
-  const slides = await createSlides({
-    presentationId: presentation.id,
-    slides: [
-      {
-        slideIndex: 0,
-        title: 'Intro',
-        layoutType: 'title',
-        contentJson: {
-          bullets: ['Point A', 'Point B'],
-          subtitle: 'Smoke verification'
-        }
-      },
-      {
-        slideIndex: 1,
-        title: 'Next Steps',
-        layoutType: 'text',
-        contentJson: {
-          bullets: ['Point C', 'Point D']
-        }
-      }
-    ]
-  })
-  const share = await setPresentationShare(presentation.id, userId, true)
-
   return {
     kind: 'stress' as const,
     workspaceId: workspace.id,
@@ -211,10 +164,7 @@ async function seedStress(userId: string) {
     lowRpmKey: lowRpmKey.key,
     dailyLimitedKey: dailyLimitedKey.key,
     pausedKey: pausedKey.key,
-    revokedKey: revokedKey.key,
-    presentationId: presentation.id,
-    slideIds: slides.map(slide => slide.id),
-    shareId: share?.shareId ?? `seed_${randomUUID()}`
+    revokedKey: revokedKey.key
   }
 }
 

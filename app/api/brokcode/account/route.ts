@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { unauthorizedResponse, verifyRequestAuth } from '@/lib/brok/auth'
+import { unauthorizedResponse } from '@/lib/brok/auth'
 import {
   enforceBrokCodeAccountOwnership,
-  getRequiredBrokAccountUser
+  getRequiredBrokAccountUser,
+  verifyBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 
 export const runtime = 'nodejs'
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const authResult = await verifyRequestAuth(request)
+  const { authResult } = await verifyBrokCodeRequestAuth(request)
   if (!authResult.success) {
     return unauthorizedResponse(authResult)
   }

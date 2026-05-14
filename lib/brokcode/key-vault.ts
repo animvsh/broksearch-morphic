@@ -97,6 +97,12 @@ export function serializeRuntimeKey(
   }
 }
 
+export function decryptRuntimeKey(
+  row: typeof brokCodeRuntimeKeys.$inferSelect
+) {
+  return decryptSecret(row.encryptedKey)
+}
+
 export async function getSavedBrokCodeRuntimeKey({
   workspaceId,
   userId
@@ -183,6 +189,23 @@ export async function deleteBrokCodeRuntimeKey({
     .where(
       and(
         eq(brokCodeRuntimeKeys.workspaceId, workspaceId),
+        eq(brokCodeRuntimeKeys.userId, userId)
+      )
+    )
+}
+
+export async function deleteBrokCodeRuntimeKeyById({
+  id,
+  userId
+}: {
+  id: string
+  userId: string
+}) {
+  await db
+    .delete(brokCodeRuntimeKeys)
+    .where(
+      and(
+        eq(brokCodeRuntimeKeys.id, id),
         eq(brokCodeRuntimeKeys.userId, userId)
       )
     )

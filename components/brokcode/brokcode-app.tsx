@@ -819,16 +819,15 @@ export function BrokCodeApp({
       if (cancelled) return
 
       try {
-        const response = await fetch('/api/brokcode/key?reveal=true', {
+        const response = await fetch('/api/brokcode/key', {
           headers: legacySavedKey
             ? { Authorization: `Bearer ${legacySavedKey}` }
             : {}
         })
         const body = await response.json().catch(() => null)
-        if (response.ok && body?.key?.apiKey) {
+        if (response.ok && body?.key) {
           const savedKey = body.key as SavedBrokCodeKey
           setSavedRuntimeKey(savedKey)
-          setApiKey(savedKey.apiKey ?? null)
           setApiKeyInput('')
           if (savedKey.defaultSessionId) {
             setSyncSessionId(savedKey.defaultSessionId)
@@ -876,10 +875,17 @@ export function BrokCodeApp({
     [syncSessionId, syncedSessions]
   )
 
-  const hasLiveKey = Boolean(apiKey && isValidBrokApiKey(apiKey))
+  const hasLiveKey = Boolean(
+    (apiKey && isValidBrokApiKey(apiKey)) || savedRuntimeKey
+  )
   const hasAccountRuntime = Boolean(accountEmail)
   const hasLiveRuntime = hasLiveKey
-  const maskedKey = hasLiveKey && apiKey ? maskBrokApiKey(apiKey) : null
+  const maskedKey =
+    apiKey && isValidBrokApiKey(apiKey)
+      ? maskBrokApiKey(apiKey)
+      : savedRuntimeKey
+        ? `${savedRuntimeKey.prefix}...`
+        : null
   const codeModels =
     models.length > 0
       ? models
@@ -924,7 +930,7 @@ export function BrokCodeApp({
 
   const refreshSyncedSessions = useCallback(
     async (key = apiKey) => {
-      if (!key || !isValidBrokApiKey(key)) {
+      if (key && !isValidBrokApiKey(key)) {
         setSyncedSessions([])
         return
       }
@@ -962,7 +968,7 @@ export function BrokCodeApp({
 
   const refreshVersions = useCallback(
     async (key = apiKey) => {
-      if (!key || !isValidBrokApiKey(key)) {
+      if (key && !isValidBrokApiKey(key)) {
         setVersions([])
         return
       }
@@ -998,7 +1004,7 @@ export function BrokCodeApp({
 
   const refreshRepoContext = useCallback(
     async (key = apiKey) => {
-      if (!key || !isValidBrokApiKey(key)) {
+      if (key && !isValidBrokApiKey(key)) {
         setRepoContext(null)
         setGithubRepository('')
         return
@@ -1059,7 +1065,7 @@ export function BrokCodeApp({
   }, [refreshGithubStatus])
 
   useEffect(() => {
-    if (!apiKey) {
+    if (!hasLiveKey) {
       setUsage(null)
       setSyncedSessions([])
       setVersions([])
@@ -1067,26 +1073,36 @@ export function BrokCodeApp({
       return
     }
 
-    void refreshUsage(apiKey)
+    if (apiKey) {
+      void refreshUsage(apiKey)
+    } else {
+      setUsage(null)
+    }
     void refreshSyncedSessions(apiKey)
     void refreshVersions(apiKey)
     void refreshRepoContext(apiKey)
-  }, [apiKey, refreshRepoContext, refreshSyncedSessions, refreshVersions])
+  }, [
+    apiKey,
+    hasLiveKey,
+    refreshRepoContext,
+    refreshSyncedSessions,
+    refreshVersions
+  ])
 
   useEffect(() => {
-    if (!apiKey || !isValidBrokApiKey(apiKey)) return
+    if (!hasLiveKey || (apiKey && !isValidBrokApiKey(apiKey))) return
     void refreshVersions(apiKey)
-  }, [apiKey, refreshVersions, syncSessionId])
+  }, [apiKey, hasLiveKey, refreshVersions, syncSessionId])
 
   useEffect(() => {
-    if (!apiKey || !isValidBrokApiKey(apiKey)) return
+    if (!hasLiveKey || (apiKey && !isValidBrokApiKey(apiKey))) return
 
     const timer = window.setInterval(() => {
       void refreshSyncedSessions(apiKey)
     }, 5000)
 
     return () => window.clearInterval(timer)
-  }, [apiKey, refreshSyncedSessions])
+  }, [apiKey, hasLiveKey, refreshSyncedSessions])
 
   async function appendSyncEvent({
     role,
@@ -1099,7 +1115,7 @@ export function BrokCodeApp({
     type: string
     metadata?: Record<string, unknown>
   }) {
-    if (!hasLiveKey || !apiKey) return
+    if (!hasLiveKey) return
 
     try {
       const response = await fetch('/api/brokcode/sessions', {
@@ -1369,14 +1385,12 @@ export function BrokCodeApp({
   async function clearApiKey() {
     const keyToUse = apiKey
     localStorage.removeItem(BROK_KEY_STORAGE)
-    if (keyToUse) {
-      try {
-        await fetch('/api/brokcode/key', {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${keyToUse}` }
-        })
-      } catch {}
-    }
+    try {
+      await fetch('/api/brokcode/key', {
+        method: 'DELETE',
+        headers: keyToUse ? { Authorization: `Bearer ${keyToUse}` } : {}
+      })
+    } catch {}
     setApiKey(null)
     setSavedRuntimeKey(null)
     setActiveRuntime('not_connected')
@@ -1468,7 +1482,7 @@ export function BrokCodeApp({
     previewUrl?: string | null
     prUrl?: string | null
   }) {
-    if (!hasLiveKey || !apiKey) return null
+    if (!hasLiveKey) return null
 
     try {
       const response = await fetch('/api/brokcode/versions', {
@@ -1575,7 +1589,7 @@ export function BrokCodeApp({
   }
 
   async function deployBrokCodeCloud() {
-    if (!hasLiveKey || !apiKey) {
+    if (!hasLiveKey) {
       setRuntimeError('Set a valid Brok API key before deploying.')
       return
     }
@@ -1587,7 +1601,7 @@ export function BrokCodeApp({
       const response = await fetch('/api/brokcode/deploy', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          ...getAuthHeaders(apiKey),
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({})
@@ -1829,7 +1843,7 @@ export function BrokCodeApp({
   }
 
   async function submitPullRequest() {
-    if (!hasLiveKey || !apiKey) {
+    if (!hasLiveKey) {
       setRuntimeError('Set a valid Brok API key before opening a PR.')
       return
     }
@@ -1996,7 +2010,7 @@ export function BrokCodeApp({
       return
     }
 
-    if (!hasLiveKey || !apiKey) {
+    if (!hasLiveKey) {
       setRuntimeError('Add a Brok API key before starting a real run.')
       setMessages(current => [
         ...current,
@@ -2022,12 +2036,12 @@ export function BrokCodeApp({
       {
         id: createId('system'),
         role: 'system',
-        content: 'Starting a real Pi coding-agent run...'
+        content: 'Starting a real BrokCode run...'
       },
       {
         id: assistantMessageId,
         role: 'assistant',
-        content: 'Connecting to Pi coding-agent runtime...'
+        content: 'Connecting to BrokCode runtime...'
       }
     ])
     setRuntimeError(null)
@@ -2066,13 +2080,13 @@ export function BrokCodeApp({
         run.id,
         'execute',
         'running',
-        'Sending command to Pi coding-agent runtime.'
+        'Sending command to BrokCode runtime.'
       )
 
       const response = await fetch('/api/brokcode/execute', {
         method: 'POST',
         headers: {
-          ...(hasLiveKey && apiKey
+          ...(apiKey && isValidBrokApiKey(apiKey)
             ? { Authorization: `Bearer ${apiKey}` }
             : {}),
           'Content-Type': 'application/json'
@@ -2081,7 +2095,7 @@ export function BrokCodeApp({
           command: trimmed,
           model: selectedModel,
           stream: true,
-          require_pi: true,
+          prefer_pi: true,
           messages: [
             { role: 'system', content: buildCommandPrompt(trimmed) },
             { role: 'user', content: trimmed }

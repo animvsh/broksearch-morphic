@@ -5,6 +5,7 @@ import { unauthorizedResponse, verifyRequestAuth } from '@/lib/brok/auth'
 import { enforceBrokCodeAccountOwnership } from '@/lib/brokcode/account-guard'
 import {
   deleteBrokCodeRuntimeKey,
+  deleteBrokCodeRuntimeKeyById,
   getLatestSavedBrokCodeRuntimeKeyForUser,
   getSavedBrokCodeRuntimeKey,
   saveBrokCodeRuntimeKey,
@@ -90,7 +91,19 @@ export async function PUT(request: NextRequest) {
   const rawKey = getRawBearerKey(request)
   const authResult = await verifyRequestAuth(request)
   if (!authResult.success) {
-    return unauthorizedResponse(authResult)
+    if (authResult.error !== 'missing_authorization') {
+      return unauthorizedResponse(authResult)
+    }
+
+    const row = await getLatestSavedBrokCodeRuntimeKeyForUser(signedIn.user.id)
+    if (row) {
+      await deleteBrokCodeRuntimeKeyById({
+        id: row.id,
+        userId: signedIn.user.id
+      })
+    }
+
+    return jsonNoStore({ ok: true })
   }
 
   const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)

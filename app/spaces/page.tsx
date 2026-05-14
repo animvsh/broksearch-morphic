@@ -1,11 +1,4 @@
-import {
-  Bot,
-  FolderKanban,
-  GitBranch,
-  Mail,
-  Presentation,
-  Search
-} from 'lucide-react'
+import { Bot, FolderKanban, GitBranch, Mail, Search } from 'lucide-react'
 
 import { WorkspaceHubPage } from '@/components/workspace-hub-page'
 
@@ -31,13 +24,6 @@ const actions = [
     icon: Bot,
     description:
       'Operate coding runs with visible subagent lanes, browser preview, and command history.'
-  },
-  {
-    href: '/presentations',
-    label: 'Story Space',
-    icon: Presentation,
-    description:
-      'Keep drafts, generated outlines, and final exports grouped under one narrative track.'
   },
   {
     href: '/admin/brok',

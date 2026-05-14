@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto'
-
 type WorkspaceRow = {
   id: string
   name: string
@@ -23,27 +21,6 @@ type ApiKeyInsert = {
 type ApiKeyRow = ApiKeyInsert & {
   id: string
   status: 'active' | 'paused' | 'revoked'
-}
-
-type PresentationRow = {
-  id: string
-  title: string
-  user_id: string
-  description: string | null
-  theme_id: string | null
-  language: string
-  style: string | null
-  slide_count: number
-  is_public: boolean
-}
-
-type PresentationSlideRow = {
-  id: string
-  presentation_id: string
-  slide_index: number
-  title: string
-  layout_type: string
-  content_json: Record<string, any>
 }
 
 function getSupabaseConfig() {
@@ -162,99 +139,4 @@ export async function createUsageEventViaSupabaseRest(input: {
     method: 'POST',
     body: JSON.stringify(input)
   })
-}
-
-export async function createPresentationFlowViaSupabaseRest(input: {
-  userId: string
-}) {
-  const [presentation] = await supabaseRest<PresentationRow[]>(
-    'presentations',
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        title: 'Stress Test Deck',
-        user_id: input.userId,
-        description: 'Stress verification deck',
-        language: 'en',
-        style: 'professional',
-        slide_count: 2,
-        theme_id: 'minimal_light',
-        status: 'ready'
-      })
-    }
-  )
-
-  await supabaseRest('presentation_outlines', {
-    method: 'POST',
-    body: JSON.stringify({
-      presentation_id: presentation.id,
-      outline_json: [
-        {
-          title: 'Intro',
-          bullets: ['Point A', 'Point B']
-        },
-        {
-          title: 'Next Steps',
-          bullets: ['Point C', 'Point D']
-        }
-      ],
-      status: 'ready'
-    })
-  })
-
-  const slides = await supabaseRest<PresentationSlideRow[]>(
-    'presentation_slides',
-    {
-      method: 'POST',
-      body: JSON.stringify([
-        {
-          presentation_id: presentation.id,
-          slide_index: 0,
-          title: 'Intro',
-          layout_type: 'title',
-          content_json: {
-            bullets: ['Point A', 'Point B'],
-            subtitle: 'Smoke verification'
-          }
-        },
-        {
-          presentation_id: presentation.id,
-          slide_index: 1,
-          title: 'Next Steps',
-          layout_type: 'text',
-          content_json: {
-            bullets: ['Point C', 'Point D']
-          }
-        }
-      ])
-    }
-  )
-
-  const shareId = `shr_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`
-  await supabaseRest(`presentations?id=eq.${presentation.id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      is_public: true,
-      share_id: shareId,
-      updated_at: new Date().toISOString()
-    })
-  })
-
-  return {
-    presentation: {
-      id: presentation.id,
-      title: presentation.title
-    },
-    slides: slides.map(slide => ({
-      id: slide.id,
-      title: slide.title,
-      slideIndex: slide.slide_index,
-      layoutType: slide.layout_type,
-      contentJson: slide.content_json
-    })),
-    share: {
-      shareId,
-      shareUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/presentations/${presentation.id}/present`
-    }
-  }
 }

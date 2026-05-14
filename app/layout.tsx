@@ -22,7 +22,7 @@ const fontSans = FontSans({
 
 const title = 'brok'
 const description =
-  'Enterprise AI workspace for search, mail, code, presentations, and governed tool workflows.'
+  'Enterprise AI workspace for search, mail, code, and governed tool workflows.'
 const metadataBaseUrl =
   process.env.NEXT_PUBLIC_APP_URL ||
   process.env.NEXT_PUBLIC_BASE_URL ||

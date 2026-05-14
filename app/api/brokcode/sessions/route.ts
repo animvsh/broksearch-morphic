@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { unauthorizedResponse, verifyRequestAuth } from '@/lib/brok/auth'
-import { enforceBrokCodeAccountOwnership } from '@/lib/brokcode/account-guard'
+import { unauthorizedResponse } from '@/lib/brok/auth'
+import {
+  enforceBrokCodeAccountOwnership,
+  verifyBrokCodeRequestAuth
+} from '@/lib/brokcode/account-guard'
 import {
   appendBrokCodeSessionEvent,
   BrokCodeSessionRole,
@@ -49,7 +52,7 @@ function jsonNoStore(body: unknown, init?: ResponseInit) {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyRequestAuth(request)
+  const { authResult } = await verifyBrokCodeRequestAuth(request)
   if (!authResult.success) {
     return unauthorizedResponse(authResult)
   }
@@ -71,7 +74,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await verifyRequestAuth(request)
+  const { authResult } = await verifyBrokCodeRequestAuth(request)
   if (!authResult.success) {
     return unauthorizedResponse(authResult)
   }

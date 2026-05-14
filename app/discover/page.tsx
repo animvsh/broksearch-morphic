@@ -1,11 +1,4 @@
-import {
-  Bot,
-  LayoutDashboard,
-  Mail,
-  Search,
-  Sparkles,
-  Workflow
-} from 'lucide-react'
+import { Bot, Mail, Search, Sparkles, Workflow } from 'lucide-react'
 
 import { WorkspaceHubPage } from '@/components/workspace-hub-page'
 
@@ -33,13 +26,6 @@ const actions = [
     description:
       'Use chat + subagents + runtime preview to build and ship repository changes.',
     metric: 'Agentic'
-  },
-  {
-    href: '/presentations',
-    label: 'Presentations',
-    icon: LayoutDashboard,
-    description:
-      'Create, edit, stream, and export slide decks with model-assisted workflows.'
   },
   {
     href: '/library',

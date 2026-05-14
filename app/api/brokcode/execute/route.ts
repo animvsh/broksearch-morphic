@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { getCurrentUser } from '@/lib/auth/get-current-user'
 import {
   apiKeyHasScope,
   AuthResult,
@@ -16,6 +17,10 @@ import {
   usageLimitResponse
 } from '@/lib/brok/usage-tracker'
 import { enforceBrokCodeAccountOwnership } from '@/lib/brokcode/account-guard'
+import {
+  decryptRuntimeKey,
+  getLatestSavedBrokCodeRuntimeKeyForUser
+} from '@/lib/brokcode/key-vault'
 import {
   isDeepSecSecurityScanCommand,
   runDeepSecSecurityScan
@@ -821,10 +826,29 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const authorization = request.headers.get('authorization')
+  let authorization = request.headers.get('authorization')
   const xApiKey = request.headers.get('x-api-key')
-  const inboundApiKey = xApiKey ?? extractBearerToken(request)
-  const authResult = await verifyRequestAuth(request)
+  let inboundApiKey = xApiKey ?? extractBearerToken(request)
+  let authRequest: Request = request
+
+  if (!authorization && !xApiKey) {
+    const user = await getCurrentUser()
+    if (user) {
+      const savedKey = await getLatestSavedBrokCodeRuntimeKeyForUser(user.id)
+      if (savedKey) {
+        inboundApiKey = decryptRuntimeKey(savedKey)
+        authorization = `Bearer ${inboundApiKey}`
+        const headers = new Headers(request.headers)
+        headers.set('authorization', authorization)
+        authRequest = new Request(request.url, {
+          method: request.method,
+          headers
+        })
+      }
+    }
+  }
+
+  const authResult = await verifyRequestAuth(authRequest)
 
   if (!authResult.success) {
     return unauthorizedResponse(authResult)
@@ -918,8 +942,7 @@ export async function POST(request: NextRequest) {
     request.url
   )
   const opencodeBase = selfBrokApiEndpoint ? undefined : configuredOpenCodeBase
-  const opencodeApiKey =
-    process.env.BROKCODE_OPENCODE_API_KEY ?? extractBearerToken(request)
+  const opencodeApiKey = process.env.BROKCODE_OPENCODE_API_KEY ?? inboundApiKey
   const preferPi =
     body?.prefer_pi !== false && process.env.BROKCODE_PREFER_PI !== 'false'
   const requirePi =

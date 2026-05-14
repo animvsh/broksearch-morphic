@@ -5,8 +5,11 @@ import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
-import { unauthorizedResponse, verifyRequestAuth } from '@/lib/brok/auth'
-import { enforceBrokCodeAccountOwnership } from '@/lib/brokcode/account-guard'
+import { unauthorizedResponse } from '@/lib/brok/auth'
+import {
+  enforceBrokCodeAccountOwnership,
+  verifyBrokCodeRequestAuth
+} from '@/lib/brokcode/account-guard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -93,7 +96,7 @@ function jsonNoStore(body: unknown, init?: ResponseInit) {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyRequestAuth(request)
+  const { authResult } = await verifyBrokCodeRequestAuth(request)
   if (!authResult.success) {
     return unauthorizedResponse(authResult)
   }

@@ -4,20 +4,10 @@ import { chromium } from 'playwright'
 import { ensureWorkspaceForUser } from '../lib/actions/api-keys'
 import { generateApiKey, getKeyPrefix, hashApiKey } from '../lib/api-key'
 import { db } from '../lib/db'
-import {
-  createOrUpdateOutline,
-  createPresentation,
-  createSlides,
-  setPresentationShare
-} from '../lib/db/actions/presentations'
 import { apiKeys, usageEvents } from '../lib/db/schema'
-import { exportToPptx } from '../lib/presentations/export/pptx'
-import type { SlideContent } from '../lib/presentations/theme-utils'
-import { getThemeById } from '../lib/presentations/theme-utils'
 
 import {
   createApiKeyViaSupabaseRest,
-  createPresentationFlowViaSupabaseRest,
   createUsageEventViaSupabaseRest,
   ensureWorkspaceForUserViaSupabaseRest,
   updateApiKeyStatusViaSupabaseRest
@@ -27,8 +17,6 @@ const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3001'
 const stressUserId =
   process.env.ANONYMOUS_USER_ID || '00000000-0000-0000-0000-000000000000'
 let useSupabaseRestSeed = false
-let seededStressPresentationId: string | null = null
-let seededStressSlideIds: string[] = []
 
 async function expectJson(
   response: Response,
@@ -61,9 +49,6 @@ async function createStressKeys() {
     const body = await response.json().catch(() => null)
 
     if (response.ok && typeof body?.mainKey === 'string') {
-      seededStressPresentationId = body.presentationId ?? null
-      seededStressSlideIds = Array.isArray(body.slideIds) ? body.slideIds : []
-
       return {
         workspaceId: body.workspaceId as string,
         mainKey: body.mainKey as string,
@@ -501,182 +486,7 @@ async function runApiStress(
   console.log('stress api ok rate limit enforcement')
 }
 
-async function runPresentationFlow() {
-  if (seededStressPresentationId) {
-    console.log('stress presentation ok seed endpoint CRUD + slide persistence')
-    console.log('stress presentation ok seed endpoint share + present setup')
-
-    const theme = getThemeById('minimal_light')
-    if (!theme) {
-      throw new Error('missing minimal_light theme')
-    }
-
-    const exportBuffer = await exportToPptx({
-      title: 'Stress Test Deck',
-      theme,
-      slides: [
-        {
-          id: seededStressSlideIds[0] ?? 'seeded-slide-0',
-          layout: 'title',
-          heading: 'Intro',
-          bullets: ['Point A', 'Point B']
-        },
-        {
-          id: seededStressSlideIds[1] ?? 'seeded-slide-1',
-          layout: 'text',
-          heading: 'Next Steps',
-          bullets: ['Point C', 'Point D']
-        }
-      ] satisfies SlideContent[]
-    })
-
-    if (exportBuffer.byteLength < 1000) {
-      throw new Error('pptx export looked too small to be valid')
-    }
-    console.log('stress presentation ok export')
-
-    return seededStressPresentationId
-  }
-
-  if (useSupabaseRestSeed) {
-    const seeded = await createPresentationFlowViaSupabaseRest({
-      userId: stressUserId
-    })
-    console.log('stress presentation ok REST CRUD + slide persistence')
-    console.log('stress presentation ok REST share + present setup')
-
-    const theme = getThemeById('minimal_light')
-    if (!theme) {
-      throw new Error('missing minimal_light theme')
-    }
-
-    const exportBuffer = await exportToPptx({
-      title: 'Stress Test Deck',
-      theme,
-      slides: [
-        {
-          id: seeded.slides[0].id,
-          layout: 'title',
-          heading: 'Intro',
-          bullets: ['Point A', 'Point B']
-        },
-        {
-          id: seeded.slides[1].id,
-          layout: 'text',
-          heading: 'Next Steps',
-          bullets: ['Point C', 'Point D']
-        }
-      ] satisfies SlideContent[]
-    })
-
-    if (exportBuffer.byteLength < 1000) {
-      throw new Error('pptx export looked too small to be valid')
-    }
-    console.log('stress presentation ok export')
-
-    return seeded.presentation.id
-  }
-
-  const presentation = await createPresentation({
-    title: 'Stress Test Deck',
-    userId: stressUserId,
-    description: 'Stress verification deck',
-    language: 'en',
-    style: 'professional',
-    slideCount: 2,
-    themeId: 'minimal_light'
-  })
-
-  await createOrUpdateOutline({
-    presentationId: presentation.id,
-    outlineJson: [
-      {
-        title: 'Intro',
-        bullets: ['Point A', 'Point B']
-      },
-      {
-        title: 'Next Steps',
-        bullets: ['Point C', 'Point D']
-      }
-    ],
-    status: 'ready'
-  })
-
-  const persistedSlides = await createSlides({
-    presentationId: presentation.id,
-    slides: [
-      {
-        slideIndex: 0,
-        title: 'Intro',
-        layoutType: 'title',
-        contentJson: {
-          bullets: ['Point A', 'Point B'],
-          subtitle: 'Smoke verification'
-        }
-      },
-      {
-        slideIndex: 1,
-        title: 'Next Steps',
-        layoutType: 'text',
-        contentJson: {
-          bullets: ['Point C', 'Point D']
-        }
-      }
-    ]
-  })
-
-  if (persistedSlides.length !== 2) {
-    throw new Error('presentation did not persist manual slides')
-  }
-  console.log('stress presentation ok CRUD + slide persistence')
-
-  const share = await setPresentationShare(presentation.id, stressUserId, true)
-  if (!share?.shareUrl) {
-    throw new Error('share action did not return a public URL')
-  }
-
-  const presentResponse = await fetch(
-    `${baseUrl}/api/presentations/${presentation.id}/present`
-  )
-  const presentBody = await expectJson(presentResponse, 200)
-  if (!Array.isArray(presentBody.slides) || presentBody.slides.length !== 2) {
-    throw new Error('present route did not return slides')
-  }
-  console.log('stress presentation ok share + present')
-
-  const theme = getThemeById('minimal_light')
-  if (!theme) {
-    throw new Error('missing minimal_light theme')
-  }
-
-  const exportBuffer = await exportToPptx({
-    title: 'Stress Test Deck',
-    theme,
-    slides: [
-      {
-        id: persistedSlides[0].id,
-        layout: 'title',
-        heading: 'Intro',
-        bullets: ['Point A', 'Point B']
-      },
-      {
-        id: persistedSlides[1].id,
-        layout: 'text',
-        heading: 'Next Steps',
-        bullets: ['Point C', 'Point D']
-      }
-    ] satisfies SlideContent[]
-  })
-
-  if (exportBuffer.byteLength < 1000) {
-    throw new Error('pptx export looked too small to be valid')
-  }
-  console.log('stress presentation ok export')
-
-  return presentation.id
-}
-
-async function runBrowserChecks(presentationId: string) {
+async function runBrowserChecks() {
   const browser = await chromium.launch({ headless: true })
   const page = await browser.newPage()
   const pageErrors: string[] = []
@@ -690,9 +500,6 @@ async function runBrowserChecks(presentationId: string) {
       '/admin/brok',
       '/admin/brok/logs',
       '/admin/brok/providers'
-    ]
-    const checks = [
-      { path: `/presentations/${presentationId}/present`, text: 'Intro' }
     ]
 
     for (const path of protectedChecks) {
@@ -713,34 +520,6 @@ async function runBrowserChecks(presentationId: string) {
 
       console.log(`stress ui protected ok ${path}`)
     }
-
-    for (const check of checks) {
-      pageErrors.length = 0
-      const response = await page.goto(`${baseUrl}${check.path}`, {
-        waitUntil: 'networkidle'
-      })
-
-      if (!response || !response.ok()) {
-        throw new Error(
-          `${check.path} expected 200, got ${response?.status() ?? 'no response'}`
-        )
-      }
-
-      const bodyText = (await page.locator('body').innerText()).replace(
-        /\s+/g,
-        ' '
-      )
-
-      if (!bodyText.includes(check.text)) {
-        throw new Error(`${check.path} missing text "${check.text}"`)
-      }
-
-      if (pageErrors.length > 0) {
-        throw new Error(`${check.path} page errors: ${pageErrors.join('; ')}`)
-      }
-
-      console.log(`stress ui ok ${check.path}`)
-    }
   } finally {
     await browser.close()
   }
@@ -752,8 +531,7 @@ async function main() {
   console.log(`stress workspace ${keys.workspaceId}`)
 
   await runApiStress(keys)
-  const presentationId = await runPresentationFlow()
-  await runBrowserChecks(presentationId)
+  await runBrowserChecks()
 
   console.log('stress ok')
   process.exit(0)

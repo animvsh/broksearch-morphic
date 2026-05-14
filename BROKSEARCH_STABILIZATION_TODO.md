@@ -61,7 +61,7 @@ Last updated: 2026-05-13
 - Production URL: `https://brok-production.up.railway.app`
 - Railway deployment verified: `63d0f4a0-47f0-442e-b2c5-9f3a930261e0`
 - Production smoke passed after auth and integration changes.
-- Production stress passed for chat/search APIs, BrokCode execution, usage/rate-limit enforcement, presentation CRUD/export, and protected UI routes.
+- Production stress passed for chat/search APIs, BrokCode execution, usage/rate-limit enforcement, and protected UI routes.
 - Production browser walkthrough confirmed `/brokmail` redirects to login for signed-out users instead of 404 and the disabled Google-login state no longer triggers the unsupported-provider error.
 - Gmail and Google Calendar Composio auth configs are configured in production, but true signed-in OAuth completion still requires a real user session and provider popup completion.
 - Local verification after Pi integration passed `bun lint`, `bun typecheck`, targeted BrokMail/Composio tests, and `bun run build`.

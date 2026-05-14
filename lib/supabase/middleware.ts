@@ -51,8 +51,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/api') ||
     pathname.startsWith('/docs') ||
     pathname.startsWith('/search') ||
-    pathname.startsWith('/share') ||
-    /^\/presentations\/[^/]+\/present$/.test(pathname)
+    pathname.startsWith('/share')
 
   // Redirect to login if the user is not authenticated and the path is not public
   if (!user && !isPublicPath) {
