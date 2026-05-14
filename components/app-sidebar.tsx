@@ -11,6 +11,7 @@ import {
   FlaskConical,
   Mail,
   PanelLeft,
+  PenLine,
   PlugZap,
   Plus,
   Search,
@@ -181,7 +182,7 @@ export default function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              tooltip="Playground"
+              tooltip="BrokCode API"
               className={navButtonClass}
               isActive={isActive('/playground')}
             >
@@ -189,7 +190,22 @@ export default function AppSidebar() {
                 <span className={iconShellClass}>
                   <FlaskConical className="size-4" />
                 </span>
-                <span className="flex-1">Playground</span>
+                <span className="flex-1">BrokCode API</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Tools"
+              className={navButtonClass}
+              isActive={isActive('/tools')}
+            >
+              <Link href="/tools" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <PenLine className="size-4" />
+                </span>
+                <span className="flex-1">Tools</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

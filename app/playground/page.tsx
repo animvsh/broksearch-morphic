@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import {
@@ -11,6 +12,12 @@ import {
 import { Button } from '@/components/ui/button'
 
 import { ChatPlayground } from '@/components/playground/chat-playground'
+
+export const metadata: Metadata = {
+  title: 'BrokCode API',
+  description:
+    'Test the BrokCode API with streaming chat, model routing, API keys, and OpenAI-compatible integration snippets.'
+}
 
 export default function PlaygroundPage() {
   const docLinks = [
@@ -30,10 +37,10 @@ export default function PlaygroundPage() {
               Streaming sandbox
               <Sparkles className="size-3.5 text-primary" />
             </div>
-            <h1 className="text-xl font-semibold">Brok Playground</h1>
+            <h1 className="text-xl font-semibold">BrokCode API</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              Test chat, streaming, model routing, and copy-ready integration
-              snippets from one clean workspace.
+              Test streaming chat, model routing, API keys, and copy-ready
+              OpenAI-compatible snippets from one clean workspace.
             </p>
           </div>
           <div className="-mx-1 flex flex-wrap gap-2 px-1 pb-1 2xl:mx-0 2xl:pb-0">

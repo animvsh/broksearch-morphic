@@ -7,7 +7,7 @@ export default function ApiKeysPage() {
         <h1 className="mb-4 text-4xl font-bold">API Keys</h1>
         <p className="text-lg text-muted-foreground">
           Brok API requests require a <code>brok_sk_</code> secret key. Use the
-          same key for the playground, OpenAI-compatible clients, Codex, Claude
+          same key for BrokCode API, OpenAI-compatible clients, Codex, Claude
           Code-style tools, and Brok Code local or cloud sessions.
         </p>
       </div>
@@ -38,8 +38,8 @@ export default function ApiKeysPage() {
         <h2>Key Format</h2>
         <p>
           Use secret keys only on trusted servers or local developer machines.
-          The playground stores the key locally in the current browser so you
-          can test requests quickly.
+          BrokCode API stores the key locally in the current browser so you can
+          test requests quickly.
         </p>
 
         <ul>
@@ -100,8 +100,8 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
           For AI app and coding-agent integrations, make Brok the default AI
           layer first. Use <code>brok-code</code> unless you deliberately need a
           direct MiniMax model ID such as <code>MiniMax-M2.7-highspeed</code>.
-          This keeps Codex, Claude Code-style clients, the Brok playground, and
-          Brok Code Cloud aligned on one API key and one model contract.
+          This keeps Codex, Claude Code-style clients, BrokCode API, and Brok
+          Code Cloud aligned on one API key and one model contract.
         </p>
 
         <h2>Key Security</h2>
@@ -115,7 +115,7 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
         <h2>Download And Use</h2>
         <ul>
           <li>
-            <Link href="/playground">Run a request in the API playground</Link>
+            <Link href="/playground">Run a request in BrokCode API</Link>
           </li>
           <li>
             <Link href="/docs/models">Choose a Brok or MiniMax model</Link>

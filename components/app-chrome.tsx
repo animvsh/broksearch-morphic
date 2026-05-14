@@ -27,6 +27,7 @@ export function AppChrome({
   const usesPageScroll =
     isDocsRoute ||
     pathname === '/playground' ||
+    pathname?.startsWith('/tools') ||
     pathname?.startsWith('/admin') ||
     pathname?.startsWith('/brokcode') ||
     pathname?.startsWith('/brokmail')

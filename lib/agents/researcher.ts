@@ -32,10 +32,12 @@ function wrapSearchToolForQuickMode<
         throw new Error('Search tool execute function is not defined')
       }
 
-      // Force optimized type for quick mode
+      // Keep quick-mode search bounded and fast while still web-backed.
       const modifiedParams = {
         ...params,
-        type: 'optimized' as const
+        type: 'optimized' as const,
+        search_depth: 'basic' as const,
+        max_results: 10
       }
 
       // Execute the original tool and pass through all yielded values
@@ -101,11 +103,16 @@ export function createResearcher({
     switch (searchMode) {
       case 'quick':
         console.log(
-          `[Researcher] quick mode: maxSteps=6, tools=[composioIntegrations, documentArtifacts]`
+          `[Researcher] quick mode: maxSteps=6, tools=[search, composioIntegrations, documentArtifacts]`
         )
         systemPrompt = FAST_CHAT_PROMPT
-        activeToolsList = ['composioIntegrations', 'documentArtifacts']
+        activeToolsList = [
+          'search',
+          'composioIntegrations',
+          'documentArtifacts'
+        ]
         maxSteps = 6
+        searchTool = wrapSearchToolForQuickMode(originalSearchTool)
         break
 
       case 'search':

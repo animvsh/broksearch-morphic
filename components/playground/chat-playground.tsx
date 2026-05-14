@@ -272,7 +272,7 @@ export function ChatPlayground() {
             )}
             {!apiKeyError && (
               <p className="mt-2 text-xs text-muted-foreground">
-                Stored locally in this browser for quick playground retries.
+                Stored locally in this browser for quick BrokCode API retries.
               </p>
             )}
           </section>

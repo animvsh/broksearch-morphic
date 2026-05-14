@@ -1,6 +1,7 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 
-import { Link2 } from 'lucide-react'
+import { CheckCircle2, Link2, PlugZap, ShieldAlert } from 'lucide-react'
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import {
@@ -24,6 +25,12 @@ import {
 } from '@/components/integrations/integration-rows-client'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Integrations | Brok',
+  description:
+    'Connect Gmail, Google Workspace, GitHub, Linear, and other Composio integrations to Brok agents.'
+}
 
 function formatToolkitName(slug: string) {
   return slug
@@ -307,96 +314,117 @@ export default async function IntegrationsPage() {
   const unavailable = rows.filter(row => row.status === 'unavailable').length
   const providerLabel = connectMode ? 'Composio Connect MCP' : 'Composio API'
 
+  const statCards = [
+    {
+      label: 'Connected',
+      value: connected,
+      icon: CheckCircle2,
+      detail: 'Accounts ready for agent actions'
+    },
+    {
+      label: 'Ready',
+      value: ready,
+      icon: PlugZap,
+      detail: 'Auth configs waiting for approval'
+    },
+    {
+      label: 'Needs config',
+      value: unavailable,
+      icon: ShieldAlert,
+      detail: 'Toolkits missing Composio setup'
+    }
+  ]
+
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
-      <div className="border-b px-4 py-3">
-        <h1 className="text-xl font-semibold">Integrations</h1>
-        <p className="text-sm text-muted-foreground">
-          Live Composio connections available to Brok agents
-        </p>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Composio Overview</CardTitle>
-              <CardDescription>
-                {providerLabel} - {connected} connected - {ready} ready
-                {unavailable > 0 ? ` - ${unavailable} unavailable` : ''}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {!configured ? (
-                <p className="text-sm text-muted-foreground">
-                  Add COMPOSIO_API_KEY for backend auth configs or
-                  COMPOSIO_CONNECT_KEY for Connect MCP mode, then reload this
-                  page.
-                </p>
-              ) : error ? (
-                <p className="text-sm text-rose-600 dark:text-rose-400">
-                  {error}
-                </p>
-              ) : connectMode ? (
-                <p className="text-sm text-muted-foreground">
-                  Connect mode is enabled. The page opens provider approval in a
-                  popup and polls Composio until the account becomes active.
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Backend mode is enabled. Rows marked ready have an auth config
-                  and can create a Composio connection link.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">
-                Available Integrations
-              </CardTitle>
-              <CardDescription>
-                Featured configured toolkits appear first, followed by every
-                toolkit returned by Composio.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {!configured ? (
-                <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                  Add COMPOSIO_API_KEY (backend) or COMPOSIO_CONNECT_KEY (MCP)
-                  in your environment, then reload this page to list
-                  integrations.
-                </div>
-              ) : rows.length === 0 ? (
-                <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                  No Composio integrations found yet.
-                </div>
-              ) : (
-                <IntegrationRowsClient rows={rows} />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">How Brok Uses This</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <p className="text-sm text-muted-foreground">
-                Brok agents can inspect connection status and create OAuth links
-                through Composio from chat and agent runs. Product tools only
-                execute actions after their own approval-safe runtime is
-                connected.
-              </p>
-              <p className="mt-2 inline-flex items-center gap-2 text-xs text-muted-foreground">
+    <div className="dashboard-shell min-h-full w-full p-3 sm:p-4">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+        <section className="dashboard-panel px-4 py-4 sm:px-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-xs text-muted-foreground">
                 <Link2 className="size-3.5" />
-                Integration tooling is available via the composioIntegrations
-                tool in agent mode.
+                {providerLabel}
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                Integrations
+              </h1>
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                Connect the accounts Brok agents can read, draft against, and
+                operate with approval.
               </p>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3 lg:w-[520px]">
+              {statCards.map(card => {
+                const Icon = card.icon
+                return (
+                  <div
+                    key={card.label}
+                    className="rounded-lg border border-border/70 bg-background/75 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {card.label}
+                      </span>
+                      <Icon className="size-4 text-muted-foreground" />
+                    </div>
+                    <p className="mt-1 text-2xl font-semibold">{card.value}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {card.detail}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </section>
+
+        <Card className="border-border/70 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Available Integrations</CardTitle>
+            <CardDescription>
+              Featured configured toolkits appear first, followed by every
+              toolkit returned by Composio.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {!configured ? (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                Add COMPOSIO_API_KEY for backend auth configs or
+                COMPOSIO_CONNECT_KEY for Connect MCP mode, then reload this
+                page.
+              </div>
+            ) : error ? (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+                {error}
+              </div>
+            ) : rows.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                No Composio integrations found yet.
+              </div>
+            ) : (
+              <IntegrationRowsClient rows={rows} />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/70 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Runtime Behavior</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <p className="text-sm text-muted-foreground">
+              {connectMode
+                ? 'Connect mode opens provider approval in a popup and polls Composio until the account becomes active.'
+                : 'Backend mode uses configured auth configs to create Composio connection links.'}{' '}
+              Product tools still require their own approval-safe runtime before
+              sending, deleting, or mutating external data.
+            </p>
+            <p className="mt-2 inline-flex items-center gap-2 text-xs text-muted-foreground">
+              <Link2 className="size-3.5" />
+              Agent access is exposed through the composioIntegrations tool.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

@@ -2829,377 +2829,390 @@ export function BrokCodeApp({
           </div>
 
           <div className="border-t bg-white/96 p-2">
-            <Tabs defaultValue="run">
-              <TabsList className="h-9 w-full justify-start rounded-lg bg-zinc-100/80">
-                <TabsTrigger value="run" className="gap-1.5 rounded-sm">
-                  <Activity className="size-4" />
-                  Run
-                </TabsTrigger>
-                <TabsTrigger value="agents" className="gap-1.5 rounded-sm">
-                  <Bot className="size-4" />
-                  Agents
-                </TabsTrigger>
-                <TabsTrigger value="history" className="gap-1.5 rounded-sm">
-                  <Clock3 className="size-4" />
-                  History
-                </TabsTrigger>
-                <TabsTrigger value="setup" className="gap-1.5 rounded-sm">
-                  <KeyRound className="size-4" />
-                  Setup
-                </TabsTrigger>
-              </TabsList>
+            <details className="group rounded-lg border border-border/70 bg-background/80">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-medium">
+                <span>Runtime details, setup, and history</span>
+                <MoreHorizontal className="size-4 text-muted-foreground" />
+              </summary>
+              <div className="border-t p-2">
+                <Tabs defaultValue="run">
+                  <TabsList className="h-9 w-full justify-start rounded-lg bg-zinc-100/80">
+                    <TabsTrigger value="run" className="gap-1.5 rounded-sm">
+                      <Activity className="size-4" />
+                      Run
+                    </TabsTrigger>
+                    <TabsTrigger value="agents" className="gap-1.5 rounded-sm">
+                      <Bot className="size-4" />
+                      Agents
+                    </TabsTrigger>
+                    <TabsTrigger value="history" className="gap-1.5 rounded-sm">
+                      <Clock3 className="size-4" />
+                      History
+                    </TabsTrigger>
+                    <TabsTrigger value="setup" className="gap-1.5 rounded-sm">
+                      <KeyRound className="size-4" />
+                      Setup
+                    </TabsTrigger>
+                  </TabsList>
 
-              <TabsContent
-                value="run"
-                className="mt-3 max-h-[300px] overflow-y-auto"
-              >
-                <ExecutionVisualizer runs={executionRuns} />
-                <div className="mt-3">
-                  <SyncedSessionPanel
-                    session={activeSyncSession}
-                    sessionId={syncSessionId}
-                    loading={syncLoading}
-                    onRefresh={() => {
-                      void refreshSyncedSessions()
-                    }}
-                  />
-                </div>
-              </TabsContent>
-
-              <TabsContent
-                value="agents"
-                className="mt-3 max-h-[300px] overflow-y-auto"
-              >
-                <div className="grid gap-2">
-                  {runtimeAgents.map(agent => (
-                    <SubagentCard
-                      key={agent.id}
-                      agent={agent}
-                      livePulse={livePulse}
-                      selected={agent.id === selectedAgent?.id}
-                      onSelect={() => setSelectedId(agent.id)}
-                    />
-                  ))}
-                </div>
-                {runtimeAgents.length === 0 && (
-                  <p className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
-                    No real subagent events reported yet.
-                  </p>
-                )}
-                {selectedAgent && (
-                  <div className="mt-3">
-                    <SubagentDetail
-                      agent={selectedAgent}
-                      livePulse={livePulse}
-                      onFocus={focusAgent}
-                    />
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent
-                value="history"
-                className="mt-3 max-h-[300px] overflow-y-auto"
-              >
-                <VersionHistoryPanel
-                  versions={versions}
-                  loading={versionsLoading}
-                  onRefresh={() => {
-                    if (apiKey) {
-                      void refreshVersions(apiKey)
-                    }
-                  }}
-                />
-              </TabsContent>
-
-              <TabsContent
-                value="setup"
-                className="mt-3 max-h-[340px] overflow-y-auto rounded-md border bg-muted/20 p-3"
-              >
-                <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px] xl:items-end">
-                  <div>
-                    <Label htmlFor="brok-code-key" className="text-xs">
-                      Brok account API key
-                      <span className="ml-1 font-normal text-muted-foreground">
-                        encrypted key vault
-                      </span>
-                    </Label>
-                    <div className="mt-1 flex items-center gap-2">
-                      <KeyRound className="size-4 text-muted-foreground" />
-                      <Input
-                        id="brok-code-key"
-                        value={apiKeyInput}
-                        onChange={event => {
-                          setApiKeyInput(event.target.value)
-                          if (apiKeyError) setApiKeyError(null)
-                        }}
-                        placeholder="brok_sk_live_..."
-                        className="h-9"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs">Model</Label>
-                    <Select
-                      value={selectedModel}
-                      onValueChange={setSelectedModel}
-                    >
-                      <SelectTrigger className="mt-1 h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {codeModels.map(model => (
-                          <SelectItem key={model.id} value={model.id}>
-                            {model.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <Button size="sm" className="h-9" onClick={saveApiKey}>
-                    Save Key
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9"
-                    onClick={clearApiKey}
-                    disabled={!apiKeyInput && !savedRuntimeKey && !apiKey}
+                  <TabsContent
+                    value="run"
+                    className="mt-3 max-h-[300px] overflow-y-auto"
                   >
-                    Clear
-                  </Button>
-                </div>
-                <div className="mt-3 rounded-md border bg-background px-3 py-2 text-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium">Runtime</p>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-6"
-                      disabled={!hasLiveKey || !apiKey || usageLoading}
-                      onClick={() => {
-                        if (apiKey) void refreshUsage(apiKey)
-                      }}
-                    >
-                      <RefreshCcw className="size-3.5" />
-                      <span className="sr-only">Refresh usage</span>
-                    </Button>
-                  </div>
-                  <p className="mt-1 text-muted-foreground">
-                    {maskedKey
-                      ? savedRuntimeKey
-                        ? `Using saved ${savedRuntimeKey.name} (${savedRuntimeKey.prefix})`
-                        : `Using ${maskedKey}`
-                      : `Using signed-in account (${accountEmail})`}
-                  </p>
-                  {savedRuntimeKey && (
-                    <p className="mt-1 text-muted-foreground">
-                      Stored for session {savedRuntimeKey.defaultSessionId} ·{' '}
-                      {savedRuntimeKey.environment} ·{' '}
-                      {savedRuntimeKey.scopes.join(', ') || 'no scopes'}
-                    </p>
-                  )}
-                  {usageLoading ? (
-                    <p className="mt-1 text-muted-foreground">
-                      Refreshing usage...
-                    </p>
-                  ) : usage ? (
-                    <p className="mt-1 text-muted-foreground">
-                      {usage.requests} req,{' '}
-                      {usage.input_tokens + usage.output_tokens} tokens, $
-                      {usage.billed_usd.toFixed(4)}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-muted-foreground">
-                      Usage unavailable
-                    </p>
-                  )}
-                </div>
-                <div className="mt-3 rounded-md border bg-background p-3">
-                  <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-                    <div>
-                      <Label htmlFor="brok-code-session" className="text-xs">
-                        Shared Cloud/TUI Session
-                      </Label>
-                      <Input
-                        id="brok-code-session"
-                        value={syncSessionId}
-                        onChange={event => setSyncSessionId(event.target.value)}
-                        onBlur={saveSyncSessionId}
-                        placeholder="default"
-                        className="mt-1 h-9"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 gap-2"
-                        onClick={saveSyncSessionId}
-                      >
-                        <Globe className="size-4" />
-                        Save
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 gap-2"
-                        disabled={!hasLiveKey || syncLoading}
-                        onClick={() => {
+                    <ExecutionVisualizer runs={executionRuns} />
+                    <div className="mt-3">
+                      <SyncedSessionPanel
+                        session={activeSyncSession}
+                        sessionId={syncSessionId}
+                        loading={syncLoading}
+                        onRefresh={() => {
                           void refreshSyncedSessions()
                         }}
-                      >
-                        <RefreshCcw
-                          className={cn(
-                            'size-4',
-                            syncLoading && 'animate-spin'
-                          )}
+                      />
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent
+                    value="agents"
+                    className="mt-3 max-h-[300px] overflow-y-auto"
+                  >
+                    <div className="grid gap-2">
+                      {runtimeAgents.map(agent => (
+                        <SubagentCard
+                          key={agent.id}
+                          agent={agent}
+                          livePulse={livePulse}
+                          selected={agent.id === selectedAgent?.id}
+                          onSelect={() => setSelectedId(agent.id)}
                         />
-                        Sync
+                      ))}
+                    </div>
+                    {runtimeAgents.length === 0 && (
+                      <p className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
+                        No real subagent events reported yet.
+                      </p>
+                    )}
+                    {selectedAgent && (
+                      <div className="mt-3">
+                        <SubagentDetail
+                          agent={selectedAgent}
+                          livePulse={livePulse}
+                          onFocus={focusAgent}
+                        />
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent
+                    value="history"
+                    className="mt-3 max-h-[300px] overflow-y-auto"
+                  >
+                    <VersionHistoryPanel
+                      versions={versions}
+                      loading={versionsLoading}
+                      onRefresh={() => {
+                        if (apiKey) {
+                          void refreshVersions(apiKey)
+                        }
+                      }}
+                    />
+                  </TabsContent>
+
+                  <TabsContent
+                    value="setup"
+                    className="mt-3 max-h-[340px] overflow-y-auto rounded-md border bg-muted/20 p-3"
+                  >
+                    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px] xl:items-end">
+                      <div>
+                        <Label htmlFor="brok-code-key" className="text-xs">
+                          Brok account API key
+                          <span className="ml-1 font-normal text-muted-foreground">
+                            encrypted key vault
+                          </span>
+                        </Label>
+                        <div className="mt-1 flex items-center gap-2">
+                          <KeyRound className="size-4 text-muted-foreground" />
+                          <Input
+                            id="brok-code-key"
+                            value={apiKeyInput}
+                            onChange={event => {
+                              setApiKeyInput(event.target.value)
+                              if (apiKeyError) setApiKeyError(null)
+                            }}
+                            placeholder="brok_sk_live_..."
+                            className="h-9"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Model</Label>
+                        <Select
+                          value={selectedModel}
+                          onValueChange={setSelectedModel}
+                        >
+                          <SelectTrigger className="mt-1 h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {codeModels.map(model => (
+                              <SelectItem key={model.id} value={model.id}>
+                                {model.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <Button size="sm" className="h-9" onClick={saveApiKey}>
+                        Save Key
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9"
+                        onClick={clearApiKey}
+                        disabled={!apiKeyInput && !savedRuntimeKey && !apiKey}
+                      >
+                        Clear
                       </Button>
                     </div>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Use the same value in terminal with{' '}
-                    <code>BROKCODE_SESSION_ID={syncSessionId}</code>.
-                  </p>
-                  {syncError && (
-                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                      {syncError}
-                    </p>
-                  )}
-                  {githubMessage && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {githubMessage}
-                    </p>
-                  )}
-                </div>
-                <div className="mt-3 rounded-md border bg-background p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-xs font-medium">
-                        GitHub PR Repository
+                    <div className="mt-3 rounded-md border bg-background px-3 py-2 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium">Runtime</p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-6"
+                          disabled={!hasLiveKey || !apiKey || usageLoading}
+                          onClick={() => {
+                            if (apiKey) void refreshUsage(apiKey)
+                          }}
+                        >
+                          <RefreshCcw className="size-3.5" />
+                          <span className="sr-only">Refresh usage</span>
+                        </Button>
+                      </div>
+                      <p className="mt-1 text-muted-foreground">
+                        {maskedKey
+                          ? savedRuntimeKey
+                            ? `Using saved ${savedRuntimeKey.name} (${savedRuntimeKey.prefix})`
+                            : `Using ${maskedKey}`
+                          : `Using signed-in account (${accountEmail})`}
                       </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Used by Open PR so Brok Code can publish directly.
+                      {savedRuntimeKey && (
+                        <p className="mt-1 text-muted-foreground">
+                          Stored for session {savedRuntimeKey.defaultSessionId}{' '}
+                          · {savedRuntimeKey.environment} ·{' '}
+                          {savedRuntimeKey.scopes.join(', ') || 'no scopes'}
+                        </p>
+                      )}
+                      {usageLoading ? (
+                        <p className="mt-1 text-muted-foreground">
+                          Refreshing usage...
+                        </p>
+                      ) : usage ? (
+                        <p className="mt-1 text-muted-foreground">
+                          {usage.requests} req,{' '}
+                          {usage.input_tokens + usage.output_tokens} tokens, $
+                          {usage.billed_usd.toFixed(4)}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-muted-foreground">
+                          Usage unavailable
+                        </p>
+                      )}
+                    </div>
+                    <div className="mt-3 rounded-md border bg-background p-3">
+                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+                        <div>
+                          <Label
+                            htmlFor="brok-code-session"
+                            className="text-xs"
+                          >
+                            Shared Cloud/TUI Session
+                          </Label>
+                          <Input
+                            id="brok-code-session"
+                            value={syncSessionId}
+                            onChange={event =>
+                              setSyncSessionId(event.target.value)
+                            }
+                            onBlur={saveSyncSessionId}
+                            placeholder="default"
+                            className="mt-1 h-9"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 gap-2"
+                            onClick={saveSyncSessionId}
+                          >
+                            <Globe className="size-4" />
+                            Save
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 gap-2"
+                            disabled={!hasLiveKey || syncLoading}
+                            onClick={() => {
+                              void refreshSyncedSessions()
+                            }}
+                          >
+                            <RefreshCcw
+                              className={cn(
+                                'size-4',
+                                syncLoading && 'animate-spin'
+                              )}
+                            />
+                            Sync
+                          </Button>
+                        </div>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Use the same value in terminal with{' '}
+                        <code>BROKCODE_SESSION_ID={syncSessionId}</code>.
                       </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1 px-2 text-xs"
-                      disabled={!hasLiveKey}
-                      onClick={() => {
-                        if (apiKey) {
-                          void refreshRepoContext(apiKey)
-                        }
-                      }}
-                    >
-                      <RefreshCcw className="size-3.5" />
-                      Detect
-                    </Button>
-                  </div>
-                  <div className="mt-3 grid gap-2 xl:grid-cols-3">
-                    <div className="xl:col-span-2">
-                      <Label htmlFor="brok-github-repo" className="text-xs">
-                        Repository
-                      </Label>
-                      <Input
-                        id="brok-github-repo"
-                        value={githubRepository}
-                        onChange={event =>
-                          setGithubRepository(event.target.value)
-                        }
-                        placeholder="owner/repo"
-                        className="mt-1 h-9"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="brok-github-base" className="text-xs">
-                        Base
-                      </Label>
-                      <Input
-                        id="brok-github-base"
-                        value={githubBaseBranch}
-                        onChange={event =>
-                          setGithubBaseBranch(event.target.value)
-                        }
-                        placeholder="main"
-                        className="mt-1 h-9"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <Label htmlFor="brok-github-head" className="text-xs">
-                      Head Branch
-                    </Label>
-                    <Input
-                      id="brok-github-head"
-                      value={githubHeadBranch}
-                      onChange={event =>
-                        setGithubHeadBranch(event.target.value)
-                      }
-                      placeholder="feature/my-branch"
-                      className="mt-1 h-9"
-                    />
-                  </div>
-                  {repoContext?.remoteUrl && (
-                    <p className="mt-2 truncate text-xs text-muted-foreground">
-                      Remote: {repoContext.remoteUrl}
-                    </p>
-                  )}
-                  {repoContext?.commitSha && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      HEAD: {repoContext.commitSha.slice(0, 10)}
-                    </p>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-9 gap-2"
-                      onClick={() => {
-                        void submitPullRequest()
-                      }}
-                      disabled={
-                        !hasLiveKey ||
-                        isSubmittingPr ||
-                        githubStatus !== 'connected'
-                      }
-                    >
-                      {isSubmittingPr ? (
-                        <RefreshCcw className="size-4 animate-spin" />
-                      ) : (
-                        <Rocket className="size-4" />
+                      {syncError && (
+                        <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                          {syncError}
+                        </p>
                       )}
-                      {isSubmittingPr ? 'Opening PR...' : 'Open PR'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="h-9 gap-2"
-                      onClick={() => {
-                        void deployBrokCodeCloud()
-                      }}
-                      disabled={!hasLiveKey || isDeploying}
-                    >
-                      {isDeploying ? (
-                        <RefreshCcw className="size-4 animate-spin" />
-                      ) : (
-                        <Rocket className="size-4" />
+                      {githubMessage && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {githubMessage}
+                        </p>
                       )}
-                      {isDeploying ? 'Deploying...' : '1-Click Deploy'}
-                    </Button>
-                  </div>
-                </div>
-                {(apiKeyError || runtimeError) && (
-                  <p className="mt-3 text-xs text-rose-600 dark:text-rose-400">
-                    {apiKeyError ?? runtimeError}
-                  </p>
-                )}
-              </TabsContent>
-            </Tabs>
+                    </div>
+                    <div className="mt-3 rounded-md border bg-background p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-medium">
+                            GitHub PR Repository
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Used by Open PR so Brok Code can publish directly.
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1 px-2 text-xs"
+                          disabled={!hasLiveKey}
+                          onClick={() => {
+                            if (apiKey) {
+                              void refreshRepoContext(apiKey)
+                            }
+                          }}
+                        >
+                          <RefreshCcw className="size-3.5" />
+                          Detect
+                        </Button>
+                      </div>
+                      <div className="mt-3 grid gap-2 xl:grid-cols-3">
+                        <div className="xl:col-span-2">
+                          <Label htmlFor="brok-github-repo" className="text-xs">
+                            Repository
+                          </Label>
+                          <Input
+                            id="brok-github-repo"
+                            value={githubRepository}
+                            onChange={event =>
+                              setGithubRepository(event.target.value)
+                            }
+                            placeholder="owner/repo"
+                            className="mt-1 h-9"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="brok-github-base" className="text-xs">
+                            Base
+                          </Label>
+                          <Input
+                            id="brok-github-base"
+                            value={githubBaseBranch}
+                            onChange={event =>
+                              setGithubBaseBranch(event.target.value)
+                            }
+                            placeholder="main"
+                            className="mt-1 h-9"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <Label htmlFor="brok-github-head" className="text-xs">
+                          Head Branch
+                        </Label>
+                        <Input
+                          id="brok-github-head"
+                          value={githubHeadBranch}
+                          onChange={event =>
+                            setGithubHeadBranch(event.target.value)
+                          }
+                          placeholder="feature/my-branch"
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                      {repoContext?.remoteUrl && (
+                        <p className="mt-2 truncate text-xs text-muted-foreground">
+                          Remote: {repoContext.remoteUrl}
+                        </p>
+                      )}
+                      {repoContext?.commitSha && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          HEAD: {repoContext.commitSha.slice(0, 10)}
+                        </p>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-2"
+                          onClick={() => {
+                            void submitPullRequest()
+                          }}
+                          disabled={
+                            !hasLiveKey ||
+                            isSubmittingPr ||
+                            githubStatus !== 'connected'
+                          }
+                        >
+                          {isSubmittingPr ? (
+                            <RefreshCcw className="size-4 animate-spin" />
+                          ) : (
+                            <Rocket className="size-4" />
+                          )}
+                          {isSubmittingPr ? 'Opening PR...' : 'Open PR'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-9 gap-2"
+                          onClick={() => {
+                            void deployBrokCodeCloud()
+                          }}
+                          disabled={!hasLiveKey || isDeploying}
+                        >
+                          {isDeploying ? (
+                            <RefreshCcw className="size-4 animate-spin" />
+                          ) : (
+                            <Rocket className="size-4" />
+                          )}
+                          {isDeploying ? 'Deploying...' : '1-Click Deploy'}
+                        </Button>
+                      </div>
+                    </div>
+                    {(apiKeyError || runtimeError) && (
+                      <p className="mt-3 text-xs text-rose-600 dark:text-rose-400">
+                        {apiKeyError ?? runtimeError}
+                      </p>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </div>
+            </details>
           </div>
         </aside>
       </main>

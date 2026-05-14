@@ -136,13 +136,6 @@ const quickPrompts = [
   'Create receipt rule'
 ]
 
-const commandPrompts = [
-  'Triage inbox',
-  'Follow-ups',
-  'Draft reply',
-  'Show calendar'
-]
-
 const sortOptions: Array<{ id: MailSortMode; label: string }> = [
   { id: 'priority', label: 'Priority' },
   { id: 'newest', label: 'Newest' },
@@ -464,6 +457,7 @@ export function BrokMailApp() {
   const [activity, setActivity] = useState<ActivityStep[]>([])
   const [handledApprovalIds, setHandledApprovalIds] = useState<string[]>([])
   const [agentInput, setAgentInput] = useState('')
+  const [agentOpen, setAgentOpen] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
   const [composer, setComposer] = useState('')
   const [messages, setMessages] = useState<AgentMessage[]>([
@@ -1702,31 +1696,54 @@ export function BrokMailApp() {
   }
 
   return (
-    <div className="dashboard-shell brokmail-shell flex h-full w-full flex-col overflow-hidden bg-background text-foreground lg:flex-row">
-      <aside className="dashboard-rail flex min-h-[46dvh] max-h-[52dvh] shrink-0 flex-col border-b bg-card/55 lg:max-h-none lg:min-h-0 lg:w-[392px] lg:border-b-0 lg:border-r 2xl:w-[424px]">
-        <AgentPanel
-          activity={activity}
-          agentInput={agentInput}
-          calendarConnected={calendarConnected}
-          connected={connected}
-          connectionMode={connectionMode}
-          isSharing={isSharing}
-          isRunning={isRunning}
-          messages={messages}
-          threadCount={threads.length}
-          runAgent={runAgent}
-          setAgentInput={setAgentInput}
-          insertDraft={insertDraft}
-          approveAction={approveAction}
-          cancelAction={cancelAction}
-          handledApprovalIds={handledApprovalIds}
-          onShare={() => {
-            startShareTransition(() => {
-              void shareBrokMailChat()
-            })
-          }}
-        />
-      </aside>
+    <div className="dashboard-shell brokmail-shell flex h-full w-full overflow-hidden bg-background text-foreground">
+      {agentOpen ? (
+        <div
+          className="fixed inset-0 z-50 bg-zinc-950/20 backdrop-blur-[1px]"
+          onClick={() => setAgentOpen(false)}
+        >
+          <aside
+            className="absolute bottom-3 left-3 top-3 flex w-[min(440px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b px-3 py-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Bot className="size-4" />
+                BrokMail Agent
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAgentOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
+            <AgentPanel
+              activity={activity}
+              agentInput={agentInput}
+              calendarConnected={calendarConnected}
+              connected={connected}
+              connectionMode={connectionMode}
+              isSharing={isSharing}
+              isRunning={isRunning}
+              messages={messages}
+              threadCount={threads.length}
+              runAgent={runAgent}
+              setAgentInput={setAgentInput}
+              insertDraft={insertDraft}
+              approveAction={approveAction}
+              cancelAction={cancelAction}
+              handledApprovalIds={handledApprovalIds}
+              onShare={() => {
+                startShareTransition(() => {
+                  void shareBrokMailChat()
+                })
+              }}
+            />
+          </aside>
+        </div>
+      ) : null}
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background/80">
         <BrokMailStatusBar
@@ -1739,7 +1756,7 @@ export function BrokMailApp() {
           counts={counts}
           insights={inboxInsights}
           isRunning={isRunning}
-          runAgent={runAgent}
+          onOpenAgent={() => setAgentOpen(true)}
           runPriorityBrief={runPriorityBrief}
         />
 
@@ -2122,7 +2139,7 @@ function BrokMailStatusBar({
   counts,
   insights,
   isRunning,
-  runAgent,
+  onOpenAgent,
   runPriorityBrief
 }: {
   connected: boolean
@@ -2139,13 +2156,19 @@ function BrokMailStatusBar({
     urgent: MailThread[]
   }
   isRunning: boolean
-  runAgent: (prompt: string) => void
+  onOpenAgent: () => void
   runPriorityBrief: () => void
 }) {
   return (
     <div className="dashboard-rail border-b bg-card/35 px-3 py-2 sm:px-4">
       <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="mr-1 hidden min-w-0 sm:block">
+            <p className="truncate text-sm font-semibold">BrokMail</p>
+            <p className="truncate text-xs text-muted-foreground">
+              Inbox, drafts, and calendar actions
+            </p>
+          </div>
           <Badge
             variant={connected ? 'default' : 'outline'}
             className="h-7 gap-1.5 rounded-md"
@@ -2175,18 +2198,15 @@ function BrokMailStatusBar({
         </div>
 
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 xl:mx-0 xl:pb-0">
-          {commandPrompts.map(prompt => (
-            <Button
-              key={prompt}
-              variant="outline"
-              size="sm"
-              className="h-7 shrink-0 rounded-md px-2.5 text-xs"
-              onClick={() => runAgent(prompt)}
-              disabled={isRunning}
-            >
-              {prompt}
-            </Button>
-          ))}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 gap-2 rounded-md px-3 text-xs"
+            onClick={onOpenAgent}
+          >
+            <Bot className="size-3.5" />
+            Ask BrokMail
+          </Button>
         </div>
       </div>
       <div className="mt-1 hidden min-w-0 gap-3 text-[11px] text-muted-foreground lg:flex">

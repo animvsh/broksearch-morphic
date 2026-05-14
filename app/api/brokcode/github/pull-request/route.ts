@@ -9,6 +9,7 @@ import {
   verifyBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 import {
+  executeComposioTool,
   isComposioConfigured,
   listConnectedAccounts
 } from '@/lib/integrations/composio'
@@ -19,10 +20,16 @@ const execFileAsync = promisify(execFile)
 
 type GithubPullRequestResponse = {
   html_url?: string
+  url?: string
   number?: number
   title?: string
   state?: string
 }
+
+const DEFAULT_COMPOSIO_PULL_REQUEST_TOOLS = [
+  'GITHUB_CREATE_A_PULL_REQUEST',
+  'GITHUB_CREATE_PULL_REQUEST'
+]
 
 function sanitizeRepository(value: unknown) {
   if (typeof value !== 'string') return null
@@ -44,6 +51,126 @@ function jsonNoStore(body: unknown, init?: ResponseInit) {
   const response = NextResponse.json(body, init)
   response.headers.set('Cache-Control', 'no-store')
   return response
+}
+
+function parseComposioToolSlugs() {
+  const raw = process.env.COMPOSIO_GITHUB_CREATE_PULL_REQUEST_TOOL_SLUGS?.trim()
+  if (!raw) return DEFAULT_COMPOSIO_PULL_REQUEST_TOOLS
+
+  return raw
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean)
+}
+
+function asRecord(value: unknown) {
+  return value && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function findPullRequestPayload(
+  payload: unknown
+): GithubPullRequestResponse | null {
+  const root = asRecord(payload)
+  if (!root) return null
+
+  const data = asRecord(root.data)
+  const nestedData = asRecord(data?.data)
+  const candidates = [
+    root,
+    data,
+    asRecord(root.result),
+    asRecord(root.output),
+    nestedData,
+    asRecord(data?.pull_request),
+    asRecord(data?.pullRequest),
+    asRecord(nestedData?.pull_request),
+    asRecord(nestedData?.pullRequest)
+  ].filter(Boolean) as Record<string, unknown>[]
+
+  for (const candidate of candidates) {
+    const url =
+      typeof candidate.html_url === 'string'
+        ? candidate.html_url
+        : typeof candidate.url === 'string'
+          ? candidate.url
+          : null
+    const number =
+      typeof candidate.number === 'number'
+        ? candidate.number
+        : typeof candidate.pull_number === 'number'
+          ? candidate.pull_number
+          : null
+
+    if (url || number) {
+      return {
+        html_url: url ?? undefined,
+        url: url ?? undefined,
+        number: number ?? undefined,
+        title:
+          typeof candidate.title === 'string' ? candidate.title : undefined,
+        state: typeof candidate.state === 'string' ? candidate.state : undefined
+      }
+    }
+  }
+
+  return null
+}
+
+async function createPullRequestWithComposio(params: {
+  userId: string
+  connectedAccountId?: string
+  repository: string
+  title: string
+  body: string
+  base: string
+  head: string
+  draft: boolean
+}) {
+  const [owner, repo] = params.repository.split('/')
+  const failures: string[] = []
+
+  for (const toolSlug of parseComposioToolSlugs()) {
+    try {
+      const payload = await executeComposioTool({
+        toolSlug,
+        userId: params.userId,
+        connectedAccountId: params.connectedAccountId,
+        arguments: {
+          owner,
+          repo,
+          title: params.title,
+          body: params.body || undefined,
+          base: params.base,
+          head: params.head,
+          draft: params.draft,
+          maintainer_can_modify: true
+        }
+      })
+      const pullRequestPayload = findPullRequestPayload(payload)
+
+      return {
+        number: pullRequestPayload?.number ?? null,
+        url: pullRequestPayload?.html_url ?? pullRequestPayload?.url ?? null,
+        title: pullRequestPayload?.title ?? params.title,
+        state: pullRequestPayload?.state ?? 'open',
+        toolSlug
+      }
+    } catch (error) {
+      failures.push(
+        `${toolSlug}: ${
+          error instanceof Error ? error.message : 'Composio tool failed.'
+        }`
+      )
+    }
+  }
+
+  throw new Error(
+    failures.length
+      ? failures.join(' | ')
+      : 'No Composio GitHub pull request tool slug is configured.'
+  )
 }
 
 async function createPullRequestWithGhCli(params: {
@@ -131,6 +258,8 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  let composioFailure: string | null = null
+
   if (isComposioConfigured()) {
     try {
       const accounts = await listConnectedAccounts(
@@ -138,12 +267,12 @@ export async function POST(request: NextRequest) {
         'github',
         20
       )
-      const connected = accounts.some(account => {
+      const connectedAccount = accounts.find(account => {
         const status = account.status?.toLowerCase()
         return !status || ['active', 'connected', 'enabled'].includes(status)
       })
 
-      if (!connected) {
+      if (!connectedAccount) {
         return jsonNoStore(
           {
             error: {
@@ -155,19 +284,36 @@ export async function POST(request: NextRequest) {
           { status: 412 }
         )
       }
+
+      const pullRequest = await createPullRequestWithComposio({
+        userId: authResult.apiKey.userId,
+        connectedAccountId: connectedAccount.id,
+        repository,
+        title,
+        body: prBody,
+        base,
+        head,
+        draft
+      })
+
+      return jsonNoStore({
+        pullRequest: {
+          number: pullRequest.number,
+          url: pullRequest.url,
+          title: pullRequest.title,
+          state: pullRequest.state,
+          repository,
+          base,
+          head,
+          provider: 'composio',
+          toolSlug: pullRequest.toolSlug
+        }
+      })
     } catch (error) {
-      return jsonNoStore(
-        {
-          error: {
-            type: 'integration_error',
-            message:
-              error instanceof Error
-                ? error.message
-                : 'Could not verify GitHub integration state.'
-          }
-        },
-        { status: 502 }
-      )
+      composioFailure =
+        error instanceof Error
+          ? error.message
+          : 'Could not create a GitHub pull request through Composio.'
     }
   }
 
@@ -192,7 +338,9 @@ export async function POST(request: NextRequest) {
           ...pullRequest,
           repository,
           base,
-          head
+          head,
+          provider: 'gh-cli',
+          composioWarning: composioFailure
         }
       })
     } catch (error) {
@@ -202,8 +350,12 @@ export async function POST(request: NextRequest) {
             type: 'configuration_error',
             message:
               error instanceof Error
-                ? `GitHub PR submission is not configured. Set BROKCODE_GITHUB_TOKEN or sign in with gh CLI. ${error.message}`
-                : 'GitHub PR submission is not configured. Set BROKCODE_GITHUB_TOKEN or sign in with gh CLI.'
+                ? `GitHub PR submission is not configured. Composio failed${
+                    composioFailure ? `: ${composioFailure}` : ''
+                  }. Set BROKCODE_GITHUB_TOKEN or sign in with gh CLI. ${error.message}`
+                : `GitHub PR submission is not configured. Composio failed${
+                    composioFailure ? `: ${composioFailure}` : ''
+                  }. Set BROKCODE_GITHUB_TOKEN or sign in with gh CLI.`
           }
         },
         { status: 503 }
@@ -268,7 +420,9 @@ export async function POST(request: NextRequest) {
       state: pullRequestPayload?.state ?? 'open',
       repository,
       base,
-      head
+      head,
+      provider: 'github-token',
+      composioWarning: composioFailure
     }
   })
 }

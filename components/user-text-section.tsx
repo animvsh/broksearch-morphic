@@ -1,9 +1,16 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import TextareaAutosize from 'react-textarea-autosize'
 
-import { Check, ChevronDown, ChevronUp, Copy, Pencil } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  FileText,
+  Pencil
+} from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
@@ -17,13 +24,35 @@ interface UserTextSectionProps {
   onUpdateMessage?: (messageId: string, newContent: string) => Promise<void>
 }
 
+function getVisibleUserContent(content: string) {
+  const uploadedFiles: string[] = []
+  const visibleContent = content
+    .replace(
+      /<uploaded_file\s+name=(["'])(.*?)\1[^>]*>[\s\S]*?<\/uploaded_file>/gi,
+      (_match, _quote, filename) => {
+        if (typeof filename === 'string' && filename.trim()) {
+          uploadedFiles.push(filename.trim())
+        }
+        return ''
+      }
+    )
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  return { visibleContent, uploadedFiles }
+}
+
 export const UserTextSection: React.FC<UserTextSectionProps> = ({
   content,
   messageId,
   onUpdateMessage
 }) => {
+  const { visibleContent, uploadedFiles } = useMemo(
+    () => getVisibleUserContent(content),
+    [content]
+  )
   const [isEditing, setIsEditing] = useState(false)
-  const [editedContent, setEditedContent] = useState(content)
+  const [editedContent, setEditedContent] = useState(visibleContent)
   const [isComposing, setIsComposing] = useState(false)
   const [enterDisabled, setEnterDisabled] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -47,7 +76,10 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
 
   const handleCopyClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation()
-    const copiedToClipboard = await safeCopyTextToClipboard(content)
+    const copyContent =
+      visibleContent ||
+      uploadedFiles.map(filename => `Attached file: ${filename}`).join('\n')
+    const copiedToClipboard = await safeCopyTextToClipboard(copyContent)
     if (copiedToClipboard) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
@@ -58,7 +90,7 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
 
   const handleEditClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation()
-    setEditedContent(content)
+    setEditedContent(visibleContent)
     setIsEditing(true)
   }
 
@@ -109,6 +141,10 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
     }, 300)
   }
 
+  if (!visibleContent && uploadedFiles.length === 0) {
+    return null
+  }
+
   return (
     <CollapsibleMessage role="user">
       <div
@@ -139,16 +175,33 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
           </div>
         ) : (
           <div className="relative">
-            <div
-              ref={contentRef}
-              className={cn(
-                'whitespace-pre-wrap',
-                !isExpanded && 'line-clamp-3'
-              )}
-            >
-              {content}
-            </div>
-            {(isClamped || isExpanded) && (
+            {visibleContent ? (
+              <div
+                ref={contentRef}
+                className={cn(
+                  'whitespace-pre-wrap',
+                  !isExpanded && 'line-clamp-3'
+                )}
+              >
+                {visibleContent}
+              </div>
+            ) : null}
+            {uploadedFiles.length > 0 ? (
+              <div
+                className={cn('flex flex-wrap gap-2', visibleContent && 'mt-2')}
+              >
+                {uploadedFiles.map(filename => (
+                  <div
+                    key={filename}
+                    className="inline-flex max-w-full items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1.5 text-sm text-muted-foreground"
+                  >
+                    <FileText className="size-4 shrink-0" />
+                    <span className="truncate">{filename}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {visibleContent && (isClamped || isExpanded) && (
               <button
                 type="button"
                 className="text-xs text-muted-foreground hover:text-foreground mt-1"
@@ -192,6 +245,7 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
                 className="rounded-full size-7"
                 onMouseDown={e => e.preventDefault()}
                 onClick={handleEditClick}
+                disabled={!visibleContent}
               >
                 <Pencil className="size-3.5" />
               </Button>

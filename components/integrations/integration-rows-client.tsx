@@ -442,60 +442,8 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="hidden overflow-x-auto rounded-md border md:block">
-        <table className="w-full min-w-[920px] table-fixed text-sm">
-          <thead>
-            <tr className="border-b bg-muted/40">
-              <th className="w-[30%] px-3 py-2 text-left font-medium">App</th>
-              <th className="w-[16%] px-3 py-2 text-left font-medium">
-                Toolkit
-              </th>
-              <th className="w-[12%] px-3 py-2 text-left font-medium">
-                Configs
-              </th>
-              <th className="w-[12%] px-3 py-2 text-left font-medium">
-                Accounts
-              </th>
-              <th className="w-[30%] px-3 py-2 text-left font-medium">
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {tableRows.map(row => {
-              const current = rowsBySlug.get(row.slug) || row
-
-              return (
-                <tr
-                  key={row.slug}
-                  className={cn(
-                    'border-b align-top last:border-b-0',
-                    current.featured ? 'bg-muted/20' : ''
-                  )}
-                >
-                  <td className="px-3 py-3">{renderRowSummary(current)}</td>
-                  <td className="px-3 py-3">
-                    <span className="break-all font-mono text-xs text-muted-foreground">
-                      {current.slug}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3">{current.authConfigCount}</td>
-                  <td className="px-3 py-3">{current.connectedCount}</td>
-                  <td className="px-3 py-3">
-                    <div className="flex flex-col gap-3">
-                      {renderStatus(current)}
-                      {renderActions(current)}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="grid gap-3 md:hidden">
+    <div className="grid gap-3 md:grid-cols-2">
+      <div className="contents">
         {tableRows.map(row => {
           const current = rowsBySlug.get(row.slug) || row
 
@@ -503,24 +451,24 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
             <div
               key={current.slug}
               className={cn(
-                'rounded-md border p-3',
-                current.featured ? 'bg-muted/20' : ''
+                'rounded-xl border border-border/70 bg-background/80 p-3 shadow-sm transition-colors hover:bg-muted/25',
+                current.featured ? 'ring-1 ring-primary/10' : ''
               )}
             >
               <div className="flex items-start justify-between gap-3">
                 {renderRowSummary(current)}
                 {renderStatus(current)}
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-md bg-muted/50 p-2">
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <div className="rounded-md bg-muted/40 p-2">
                   <div className="text-muted-foreground">Toolkit</div>
                   <div className="mt-1 break-all font-mono">{current.slug}</div>
                 </div>
-                <div className="rounded-md bg-muted/50 p-2">
+                <div className="rounded-md bg-muted/40 p-2">
                   <div className="text-muted-foreground">Configs</div>
                   <div className="mt-1">{current.authConfigCount}</div>
                 </div>
-                <div className="rounded-md bg-muted/50 p-2">
+                <div className="rounded-md bg-muted/40 p-2">
                   <div className="text-muted-foreground">Accounts</div>
                   <div className="mt-1">{current.connectedCount}</div>
                 </div>
