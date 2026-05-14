@@ -1,7 +1,5 @@
 import type { SearchResultItem, SearchResults } from '@/lib/types'
 import type { UIMessage } from '@/lib/types/ai'
-import { displayUrlName } from '@/lib/utils/domain'
-
 /**
  * Validate if a string is a valid URL
  */
@@ -66,8 +64,8 @@ export function extractCitationMapsFromMessages(
 }
 
 /**
- * Process citations in content, replacing [number](#toolCallId) with [domain](url)
- * Display text uses domain name instead of number (e.g., [google](url))
+ * Process citations in content, replacing [number](#toolCallId) with [number](url).
+ * If metadata is missing, keep the visible citation number instead of deleting it.
  */
 export function processCitations(
   content: string,
@@ -77,7 +75,7 @@ export function processCitations(
     return content || ''
   }
 
-  // Replace [number](#toolCallId) with [domain](actual-url)
+  // Replace [number](#toolCallId) with [number](actual-url)
   // Also handle cases with spaces: [ number ]
   return content.replace(
     /\[\s*(\d+)\s*\]\(#([^)]+)\)/g,
@@ -86,25 +84,22 @@ export function processCitations(
 
       // Validate citation number bounds
       if (isNaN(citationNum) || citationNum < 1 || citationNum > 100) {
-        return '' // Return empty string for invalid citation numbers
+        return `[${num}]`
       }
 
       // Get the citation map for this toolCallId
       const citationMap = citationMaps[toolCallId]
       if (!citationMap) {
-        return '' // Return empty string if no citation map found
+        return `[${citationNum}]`
       }
 
       const citation = citationMap[citationNum]
       if (!citation || !isValidUrl(citation.url)) {
-        return '' // Return empty string for invalid citations
+        return `[${citationNum}]`
       }
 
-      // Extract domain name from URL (removes TLD and subdomain)
-      const domainName = displayUrlName(citation.url)
-
       // Encode URI to prevent injection attacks
-      return `[${domainName}](${encodeURI(citation.url)})`
+      return `[${citationNum}](${encodeURI(citation.url)})`
     }
   )
 }

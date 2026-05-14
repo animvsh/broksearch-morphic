@@ -12,6 +12,13 @@ const SIMPLE_CHAT_PATTERNS = [
 
 const URL_PATTERN = /\bhttps?:\/\/\S+|\bwww\.\S+/i
 
+export function isSimpleUtilityText(text: string) {
+  const normalized = text.trim()
+  if (!normalized || URL_PATTERN.test(normalized)) return false
+
+  return SIMPLE_CHAT_PATTERNS.some(pattern => pattern.test(normalized))
+}
+
 export function shouldUseQuickReplyForMessage(
   message: Pick<UIMessage, 'parts' | 'role'> | null | undefined
 ) {
@@ -30,7 +37,7 @@ export function shouldUseQuickReplyForMessage(
 
   if (hasNonTextContext) return false
 
-  return SIMPLE_CHAT_PATTERNS.some(pattern => pattern.test(text))
+  return isSimpleUtilityText(text)
 }
 
 export function createSimpleUtilityReply(text: string) {

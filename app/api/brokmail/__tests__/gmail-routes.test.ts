@@ -222,4 +222,28 @@ describe('BrokMail Gmail routes', () => {
       })
     )
   })
+
+  it('does not mask unavailable Calendar list tools as an empty success', async () => {
+    vi.mocked(listConnectedAccounts).mockResolvedValue([
+      {
+        id: 'acct_calendar',
+        status: 'active',
+        toolkit_slug: 'googlecalendar'
+      }
+    ] as any)
+    vi.mocked(executeComposioTool).mockRejectedValue(
+      new Error('Tool not found')
+    )
+
+    const response = await getCalendarEvents()
+    const body = await response.json()
+
+    expect(response.status).toBe(502)
+    expect(body.error).toContain('Could not list Google Calendar events')
+    expect(body.attemptedTools).toEqual([
+      'GOOGLECALENDAR_LIST_EVENTS',
+      'GOOGLE_CALENDAR_LIST_EVENTS'
+    ])
+    expect(executeComposioTool).toHaveBeenCalledTimes(2)
+  })
 })

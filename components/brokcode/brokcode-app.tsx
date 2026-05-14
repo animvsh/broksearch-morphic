@@ -209,7 +209,6 @@ type SavedBrokCodeKey = {
   defaultSessionId: string
   updatedAt: string
   lastValidatedAt: string
-  apiKey?: string
 }
 
 const accentStyles = {

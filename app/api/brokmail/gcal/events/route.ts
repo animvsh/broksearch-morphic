@@ -23,9 +23,7 @@ const DEFAULT_GCAL_TOOLKITS = [
 
 const DEFAULT_EVENT_TOOL_SLUGS = [
   'GOOGLECALENDAR_LIST_EVENTS',
-  'GOOGLE_CALENDAR_LIST_EVENTS',
-  'GOOGLECALENDAR_FIND_EVENT',
-  'GOOGLE_CALENDAR_FIND_EVENT'
+  'GOOGLE_CALENDAR_LIST_EVENTS'
 ]
 
 function resolveCalendarToolkits() {
@@ -203,8 +201,10 @@ export async function GET() {
   return NextResponse.json(
     {
       error:
-        errors.at(-1) ??
-        'Composio Google Calendar tools did not return events for this account.'
+        errors.length > 0
+          ? `Could not list Google Calendar events through Composio. ${errors.join(' | ')}`
+          : 'Composio Google Calendar list tools did not return events for this account.',
+      attemptedTools: resolveEventToolSlugs()
     },
     { status: 502 }
   )

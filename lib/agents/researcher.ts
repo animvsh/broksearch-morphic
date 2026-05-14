@@ -103,7 +103,7 @@ export function createResearcher({
         console.log(
           `[Researcher] quick mode: maxSteps=6, tools=[composioIntegrations, documentArtifacts]`
         )
-        systemPrompt = QUICK_MODE_PROMPT
+        systemPrompt = FAST_CHAT_PROMPT
         activeToolsList = ['composioIntegrations', 'documentArtifacts']
         maxSteps = 6
         break
@@ -112,7 +112,7 @@ export function createResearcher({
         console.log(
           `[Researcher] search mode: maxSteps=12, tools=[search, fetch, composioIntegrations, documentArtifacts]`
         )
-        systemPrompt = FAST_CHAT_PROMPT
+        systemPrompt = QUICK_MODE_PROMPT
         activeToolsList = [
           'search',
           'fetch',

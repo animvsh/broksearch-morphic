@@ -19,6 +19,7 @@ import { UploadedFile } from '@/lib/types'
 import type { UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
 import type { ModelSelectorData } from '@/lib/types/model-selector'
 import { cn } from '@/lib/utils'
+import { isSimpleUtilityText } from '@/lib/utils/chat-routing'
 
 import { useTypewriterCycle } from '@/hooks/use-typewriter-cycle'
 
@@ -113,6 +114,8 @@ export function ChatPanel({
   )
   const hasAvailableModels =
     isCloudDeployment || modelSelectorData?.hasAvailableModels !== false
+  const canSubmitWithoutModel =
+    input.trim().length > 0 && isSimpleUtilityText(input)
   const { displayText: loadingTagline } = useTypewriterCycle(LOADING_TAGLINES, {
     firstDuration: 1200,
     itemDuration: 1300,
@@ -281,7 +284,7 @@ export function ChatPanel({
       )}
       <form
         onSubmit={e => {
-          if (!hasAvailableModels) {
+          if (!hasAvailableModels && !canSubmitWithoutModel) {
             e.preventDefault()
             toast.error('No enabled model is available')
             return
@@ -475,12 +478,12 @@ export function ChatPanel({
                     input.trim().length === 0 &&
                     !hasUploadedFiles) ||
                   hasUploadingFiles ||
-                  !hasAvailableModels
+                  (!hasAvailableModels && !canSubmitWithoutModel)
                 }
                 onClick={isLoading ? stop : undefined}
                 aria-label={isLoading ? 'Stop response' : 'Send message'}
                 title={
-                  hasAvailableModels
+                  hasAvailableModels || canSubmitWithoutModel
                     ? undefined
                     : 'No enabled model is available'
                 }

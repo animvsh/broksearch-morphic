@@ -3,11 +3,15 @@ import { describe, expect, it } from 'vitest'
 import {
   getLatestUserMessage,
   getSimpleUtilityReplyForMessage,
+  isSimpleUtilityText,
   shouldUseQuickReplyForMessage
 } from '../chat-routing'
 
 describe('chat routing', () => {
   it('routes tiny utility messages to quick replies', () => {
+    expect(isSimpleUtilityText('test')).toBe(true)
+    expect(isSimpleUtilityText('test internet speed providers')).toBe(false)
+
     expect(
       shouldUseQuickReplyForMessage({
         role: 'user',

@@ -104,6 +104,18 @@ export async function POST(req: Request) {
     )
       ? 'quick'
       : requestedSearchMode
+    const simpleReply = getSimpleUtilityReplyForMessage(currentUserMessage)
+    if (simpleReply && trigger === 'submit-message') {
+      return createSimpleChatStreamResponse({
+        chatId,
+        isNewChat,
+        message: currentUserMessage,
+        modelId: 'brok-utility',
+        searchMode,
+        text: simpleReply,
+        userId
+      })
+    }
 
     const selectedModel = await selectModel({ searchMode, cookieStore })
 
@@ -150,19 +162,6 @@ export async function POST(req: Request) {
         const adaptiveLimitResponse = await checkAndEnforceAdaptiveLimit(userId)
         if (adaptiveLimitResponse) return adaptiveLimitResponse
       }
-    }
-
-    const simpleReply = getSimpleUtilityReplyForMessage(currentUserMessage)
-    if (simpleReply && trigger === 'submit-message') {
-      return createSimpleChatStreamResponse({
-        chatId,
-        isNewChat,
-        message: currentUserMessage,
-        modelId: selectedModel.name,
-        searchMode,
-        text: simpleReply,
-        userId
-      })
     }
 
     const streamStart = performance.now()

@@ -59,11 +59,7 @@ export async function GET(request: NextRequest) {
 
     const row = await getLatestSavedBrokCodeRuntimeKeyForUser(signedIn.user.id)
     return jsonNoStore({
-      key: row
-        ? serializeRuntimeKey(row, {
-            reveal: request.nextUrl.searchParams.get('reveal') === 'true'
-          })
-        : null
+      key: row ? serializeRuntimeKey(row) : null
     })
   }
 
@@ -76,11 +72,7 @@ export async function GET(request: NextRequest) {
   })
 
   return jsonNoStore({
-    key: row
-      ? serializeRuntimeKey(row, {
-          reveal: request.nextUrl.searchParams.get('reveal') === 'true'
-        })
-      : null
+    key: row ? serializeRuntimeKey(row) : null
   })
 }
 

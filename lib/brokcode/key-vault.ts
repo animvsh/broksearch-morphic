@@ -78,8 +78,7 @@ function normalizeSessionId(value: unknown) {
 }
 
 export function serializeRuntimeKey(
-  row: typeof brokCodeRuntimeKeys.$inferSelect,
-  options: { reveal?: boolean } = {}
+  row: typeof brokCodeRuntimeKeys.$inferSelect
 ) {
   return {
     id: row.id,
@@ -92,8 +91,7 @@ export function serializeRuntimeKey(
     defaultSessionId: row.defaultSessionId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    lastValidatedAt: row.lastValidatedAt,
-    apiKey: options.reveal ? decryptSecret(row.encryptedKey) : undefined
+    lastValidatedAt: row.lastValidatedAt
   }
 }
 

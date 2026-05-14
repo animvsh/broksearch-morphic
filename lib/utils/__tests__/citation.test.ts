@@ -25,12 +25,12 @@ describe('processCitations', () => {
     } as Record<number, SearchResultItem>
   }
 
-  it('converts numbered citations to domain names', () => {
+  it('keeps numbered citations while linking to source URLs', () => {
     const content = 'Check out [1](#toolCall1) and [2](#toolCall1)'
     const result = processCitations(content, mockCitationMaps)
 
     expect(result).toBe(
-      'Check out [google](https://www.google.com) and [github](https://docs.github.com)'
+      'Check out [1](https://www.google.com) and [2](https://docs.github.com)'
     )
   })
 
@@ -38,7 +38,7 @@ describe('processCitations', () => {
     const content = 'See [ 1 ](#toolCall1) for details'
     const result = processCitations(content, mockCitationMaps)
 
-    expect(result).toBe('See [google](https://www.google.com) for details')
+    expect(result).toBe('See [1](https://www.google.com) for details')
   })
 
   it('handles multiple citations from same domain', () => {
@@ -61,25 +61,25 @@ describe('processCitations', () => {
     const result = processCitations(content, citationMaps)
 
     expect(result).toBe(
-      'Try [google](https://www.google.com/search) or [google](https://www.google.com/maps)'
+      'Try [1](https://www.google.com/search) or [2](https://www.google.com/maps)'
     )
   })
 
-  it('returns empty string for invalid citation numbers', () => {
+  it('keeps visible citation text for invalid citation numbers', () => {
     const content = 'Invalid [999](#toolCall1) citation'
     const result = processCitations(content, mockCitationMaps)
 
-    expect(result).toBe('Invalid  citation')
+    expect(result).toBe('Invalid [999] citation')
   })
 
-  it('returns empty string for missing toolCallId', () => {
+  it('keeps visible citation text for missing toolCallId', () => {
     const content = 'Missing [1](#nonExistentTool) tool'
     const result = processCitations(content, mockCitationMaps)
 
-    expect(result).toBe('Missing  tool')
+    expect(result).toBe('Missing [1] tool')
   })
 
-  it('returns empty string for invalid URLs', () => {
+  it('keeps visible citation text for invalid URLs', () => {
     const citationMaps = {
       toolCall1: {
         1: {
@@ -93,7 +93,7 @@ describe('processCitations', () => {
     const content = 'Check [1](#toolCall1) here'
     const result = processCitations(content, citationMaps)
 
-    expect(result).toBe('Check  here')
+    expect(result).toBe('Check [1] here')
   })
 
   it('handles content with no citations', () => {
@@ -130,7 +130,7 @@ describe('processCitations', () => {
     const content = 'See [1](#toolCall1)'
     const result = processCitations(content, citationMaps)
 
-    expect(result).toContain('example')
+    expect(result).toContain('[1]')
     expect(result).toContain('https://example.com/page?param=value&other=test')
   })
 
@@ -141,11 +141,9 @@ describe('processCitations', () => {
 
     const result = processCitations(content, mockCitationMaps)
 
-    expect(result).toContain('[google](https://www.google.com)')
-    expect(result).toContain('[github](https://docs.github.com)')
-    expect(result).toContain(
-      '[stackoverflow](https://stackoverflow.com/questions/123)'
-    )
+    expect(result).toContain('[1](https://www.google.com)')
+    expect(result).toContain('[2](https://docs.github.com)')
+    expect(result).toContain('[3](https://stackoverflow.com/questions/123)')
   })
 
   it('handles citation numbers at edge cases', () => {
@@ -153,8 +151,8 @@ describe('processCitations', () => {
       'Edge cases: [0](#toolCall1) [101](#toolCall1) [-1](#toolCall1)'
     const result = processCitations(content, mockCitationMaps)
 
-    // 0 and 101 are out of bounds (1-100), so they're replaced with empty string
+    // 0 and 101 are out of bounds (1-100), so they're kept as visible text.
     // -1 doesn't match the regex pattern \d+, so it remains unchanged
-    expect(result).toBe('Edge cases:   [-1](#toolCall1)')
+    expect(result).toBe('Edge cases: [0] [101] [-1](#toolCall1)')
   })
 })
