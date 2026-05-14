@@ -89,6 +89,10 @@ export const usageEvents = pgTable(
     endpoint: endpointEnum('endpoint').notNull(),
     model: text('model').notNull(),
     provider: text('provider').notNull(),
+    surface: text('surface').default('api').notNull(),
+    runtime: text('runtime'),
+    source: text('source'),
+    sessionId: text('session_id'),
     inputTokens: integer('input_tokens').default(0),
     outputTokens: integer('output_tokens').default(0),
     cachedTokens: integer('cached_tokens').default(0),
@@ -103,11 +107,15 @@ export const usageEvents = pgTable(
     latencyMs: integer('latency_ms').default(0),
     status: text('status').default('success').notNull(),
     errorCode: text('error_code'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at').defaultNow().notNull()
   },
   table => ({
     workspaceIdx: index('usage_events_workspace_idx').on(table.workspaceId),
     apiKeyIdx: index('usage_events_api_key_idx').on(table.apiKeyId),
+    surfaceIdx: index('usage_events_surface_idx').on(table.surface),
+    sourceIdx: index('usage_events_source_idx').on(table.source),
+    sessionIdx: index('usage_events_session_idx').on(table.sessionId),
     createdAtIdx: index('usage_events_created_at_idx').on(table.createdAt)
   })
 )

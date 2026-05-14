@@ -162,6 +162,22 @@ function estimateInputTokens(messages: OpenAiMessage[]) {
   )
 }
 
+function normalizeUsageText(value: unknown, fallback: string) {
+  if (typeof value !== 'string') return fallback
+  const normalized = value.trim().replace(/[^a-zA-Z0-9._:-]/g, '-')
+  return normalized || fallback
+}
+
+function classifyCommandType(command: string) {
+  const lower = command.toLowerCase()
+  if (isDeepSecSecurityScanCommand(command)) return 'security_scan'
+  if (/\b(pr|pull request|github)\b/.test(lower)) return 'github'
+  if (/\b(deploy|publish|ship)\b/.test(lower)) return 'deploy'
+  if (/\b(test|check|lint|typecheck|build)\b/.test(lower)) return 'verify'
+  if (/\b(fix|bug|error|broken)\b/.test(lower)) return 'fix'
+  return 'build'
+}
+
 function usageNumber(usage: unknown, keys: string[]) {
   if (!usage || typeof usage !== 'object') return 0
 
@@ -187,7 +203,10 @@ async function recordCodeExecutionUsage({
   usage,
   status,
   errorCode,
-  toolCalls
+  toolCalls,
+  source,
+  sessionId,
+  commandType
 }: {
   auth: SuccessfulAuth
   requestId: string
@@ -200,6 +219,9 @@ async function recordCodeExecutionUsage({
   status: 'success' | 'error'
   errorCode?: string
   toolCalls?: number
+  source?: string
+  sessionId?: string
+  commandType?: string
 }) {
   const inputTokens =
     usageNumber(usage, ['prompt_tokens', 'input_tokens']) ||
@@ -216,6 +238,10 @@ async function recordCodeExecutionUsage({
     endpoint: 'code',
     model,
     provider,
+    surface: 'brokcode',
+    runtime: provider,
+    source,
+    sessionId,
     inputTokens,
     outputTokens,
     toolCalls: toolCalls ?? 0,
@@ -223,7 +249,10 @@ async function recordCodeExecutionUsage({
     billedUsd: 0,
     latencyMs: Date.now() - startTime,
     status,
-    errorCode
+    errorCode,
+    metadata: {
+      commandType
+    }
   })
 }
 
@@ -389,7 +418,8 @@ function createExecutionStream({
   requireOpenCode,
   preferPi,
   requirePi,
-  taskId
+  taskId,
+  usageContext
 }: {
   auth: SuccessfulAuth
   requestId: string
@@ -405,6 +435,11 @@ function createExecutionStream({
   preferPi: boolean
   requirePi: boolean
   taskId?: string
+  usageContext: {
+    source?: string
+    sessionId?: string
+    commandType?: string
+  }
 }) {
   const encoder = new TextEncoder()
   let clientOpen = true
@@ -474,6 +509,7 @@ function createExecutionStream({
                 note: `Executed through Pi coding-agent (${result.provider}).`
               })
               await recordCodeExecutionUsage({
+                ...usageContext,
                 auth,
                 requestId,
                 startTime,
@@ -513,6 +549,7 @@ function createExecutionStream({
 
               if (requirePi) {
                 await recordCodeExecutionUsage({
+                  ...usageContext,
                   auth,
                   requestId,
                   startTime,
@@ -604,6 +641,7 @@ function createExecutionStream({
                 note: 'Executed through OpenCode runtime.'
               })
               await recordCodeExecutionUsage({
+                ...usageContext,
                 auth,
                 requestId,
                 startTime,
@@ -643,6 +681,7 @@ function createExecutionStream({
 
             if (requireOpenCode) {
               await recordCodeExecutionUsage({
+                ...usageContext,
                 auth,
                 requestId,
                 startTime,
@@ -670,6 +709,7 @@ function createExecutionStream({
             const message =
               'brokcode-cloud runtime is required but BROKCODE_OPENCODE_BASE_URL is not configured.'
             await recordCodeExecutionUsage({
+              ...usageContext,
               auth,
               requestId,
               startTime,
@@ -728,6 +768,7 @@ function createExecutionStream({
                 : 'Routed through Brok runtime.'
           })
           await recordCodeExecutionUsage({
+            ...usageContext,
             auth,
             requestId,
             startTime,
@@ -755,6 +796,7 @@ function createExecutionStream({
           close()
         } catch (error) {
           await recordCodeExecutionUsage({
+            ...usageContext,
             auth,
             requestId,
             startTime,
@@ -813,6 +855,11 @@ export async function POST(request: NextRequest) {
   const inboundMessages = Array.isArray(body?.messages)
     ? (body.messages as OpenAiMessage[])
     : undefined
+  const codeUsageContext = {
+    source: normalizeUsageText(body?.source, 'api'),
+    sessionId: normalizeUsageText(body?.session_id, 'default'),
+    commandType: command ? classifyCommandType(command) : 'unknown'
+  }
 
   if (!command) {
     return NextResponse.json(
@@ -892,6 +939,7 @@ export async function POST(request: NextRequest) {
       baseUrl
     })
     await recordCodeExecutionUsage({
+      ...codeUsageContext,
       auth: authResult,
       requestId,
       startTime,
@@ -957,6 +1005,7 @@ export async function POST(request: NextRequest) {
 
   if (requirePi && !preferPi) {
     await recordCodeExecutionUsage({
+      ...codeUsageContext,
       auth: authResult,
       requestId,
       startTime,
@@ -980,6 +1029,7 @@ export async function POST(request: NextRequest) {
 
   if (requireOpenCode && !opencodeBase) {
     await recordCodeExecutionUsage({
+      ...codeUsageContext,
       auth: authResult,
       requestId,
       startTime,
@@ -1020,7 +1070,10 @@ export async function POST(request: NextRequest) {
           : requireOpenCode
             ? 'brokcode-cloud'
             : 'auto',
-        stream: true
+        stream: true,
+        source: codeUsageContext.source,
+        sessionId: codeUsageContext.sessionId,
+        commandType: codeUsageContext.commandType
       }
     }).catch(error => {
       console.error('Failed to create BrokCode background task:', error)
@@ -1041,7 +1094,8 @@ export async function POST(request: NextRequest) {
       requireOpenCode,
       preferPi,
       requirePi,
-      taskId: task?.id
+      taskId: task?.id,
+      usageContext: codeUsageContext
     })
   }
 
@@ -1054,6 +1108,7 @@ export async function POST(request: NextRequest) {
       })
 
       await recordCodeExecutionUsage({
+        ...codeUsageContext,
         auth: authResult,
         requestId,
         startTime,
@@ -1081,6 +1136,7 @@ export async function POST(request: NextRequest) {
 
       if (requirePi) {
         await recordCodeExecutionUsage({
+          ...codeUsageContext,
           auth: authResult,
           requestId,
           startTime,
@@ -1129,6 +1185,7 @@ export async function POST(request: NextRequest) {
         const payload = await opencodeResponse.json()
         const content = extractAssistantText(payload)
         await recordCodeExecutionUsage({
+          ...codeUsageContext,
           auth: authResult,
           requestId,
           startTime,
@@ -1162,6 +1219,7 @@ export async function POST(request: NextRequest) {
 
       if (requireOpenCode) {
         await recordCodeExecutionUsage({
+          ...codeUsageContext,
           auth: authResult,
           requestId,
           startTime,
@@ -1186,6 +1244,7 @@ export async function POST(request: NextRequest) {
 
       if (requireOpenCode) {
         await recordCodeExecutionUsage({
+          ...codeUsageContext,
           auth: authResult,
           requestId,
           startTime,
@@ -1220,6 +1279,7 @@ export async function POST(request: NextRequest) {
   content = direct.content
   usage = direct.usage
   await recordCodeExecutionUsage({
+    ...codeUsageContext,
     auth: authResult,
     requestId,
     startTime,

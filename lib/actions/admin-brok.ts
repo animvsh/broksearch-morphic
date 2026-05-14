@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, lte, or, sql } from 'drizzle-orm'
 
 import { requireAdminAccess } from '@/lib/auth/admin'
 import { BROK_MODELS } from '@/lib/brok/models'
@@ -87,6 +87,24 @@ function toNumber(value: string | number | null | undefined): number {
 
   const parsed = Number.parseFloat(value)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+function startOfDay(date = new Date()) {
+  const value = new Date(date)
+  value.setHours(0, 0, 0, 0)
+  return value
+}
+
+function dateKey(date: Date) {
+  return date.toISOString().slice(0, 10)
+}
+
+function getTrailingDayKeys(days: number) {
+  return Array.from({ length: days }, (_, index) => {
+    const date = startOfDay()
+    date.setDate(date.getDate() - (days - 1 - index))
+    return dateKey(date)
+  })
 }
 
 async function getUserEmailMap(
@@ -210,8 +228,19 @@ export async function getBrokStats() {
   await assertAdminAccess()
 
   try {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = startOfDay()
+    const last7Days = startOfDay()
+    last7Days.setDate(last7Days.getDate() - 6)
+    const last14Days = startOfDay()
+    last14Days.setDate(last14Days.getDate() - 13)
+    const dayBucket = sql<string>`to_char(${usageEvents.createdAt}, 'YYYY-MM-DD')`
+    const brokCodeUsage = or(
+      eq(usageEvents.surface, 'brokcode'),
+      and(
+        eq(usageEvents.endpoint, 'code'),
+        sql`(${usageEvents.provider} in ('Pi', 'brokcode-cloud', 'DeepSec') or ${usageEvents.model} ilike '%code%')`
+      )
+    )
 
     const [totalsRow] = await db
       .select({
@@ -263,6 +292,155 @@ export async function getBrokStats() {
       0
     )
 
+    const [codeTodayRow] = await db
+      .select({
+        requests: sql<number>`count(*)::int`,
+        tokens: sql<number>`coalesce(sum(${usageEvents.inputTokens} + ${usageEvents.outputTokens}), 0)::int`,
+        revenue: sql<string>`coalesce(sum(${usageEvents.billedUsd}), 0)::text`,
+        providerCost: sql<string>`coalesce(sum(${usageEvents.providerCostUsd}), 0)::text`,
+        avgLatencyMs: sql<number>`coalesce(round(avg(${usageEvents.latencyMs})), 0)::int`,
+        failedRequests: sql<number>`coalesce(sum(case when ${usageEvents.status} <> 'success' then 1 else 0 end), 0)::int`
+      })
+      .from(usageEvents)
+      .where(and(brokCodeUsage, gte(usageEvents.createdAt, today)))
+
+    const [code7dRow] = await db
+      .select({
+        requests: sql<number>`count(*)::int`,
+        tokens: sql<number>`coalesce(sum(${usageEvents.inputTokens} + ${usageEvents.outputTokens}), 0)::int`,
+        revenue: sql<string>`coalesce(sum(${usageEvents.billedUsd}), 0)::text`,
+        providerCost: sql<string>`coalesce(sum(${usageEvents.providerCostUsd}), 0)::text`,
+        avgLatencyMs: sql<number>`coalesce(round(avg(${usageEvents.latencyMs})), 0)::int`,
+        failedRequests: sql<number>`coalesce(sum(case when ${usageEvents.status} <> 'success' then 1 else 0 end), 0)::int`,
+        activeUsers: sql<number>`count(distinct ${usageEvents.userId})::int`,
+        activeApiKeys: sql<number>`count(distinct ${usageEvents.apiKeyId})::int`
+      })
+      .from(usageEvents)
+      .where(and(brokCodeUsage, gte(usageEvents.createdAt, last7Days)))
+
+    const codeDailyRows = await db
+      .select({
+        day: dayBucket,
+        requests: sql<number>`count(*)::int`,
+        tokens: sql<number>`coalesce(sum(${usageEvents.inputTokens} + ${usageEvents.outputTokens}), 0)::int`,
+        failedRequests: sql<number>`coalesce(sum(case when ${usageEvents.status} <> 'success' then 1 else 0 end), 0)::int`,
+        avgLatencyMs: sql<number>`coalesce(round(avg(${usageEvents.latencyMs})), 0)::int`
+      })
+      .from(usageEvents)
+      .where(and(brokCodeUsage, gte(usageEvents.createdAt, last14Days)))
+      .groupBy(dayBucket)
+      .orderBy(dayBucket)
+
+    const codeDailyMap = new Map(codeDailyRows.map(row => [row.day, row]))
+    const codeDailyUsage = getTrailingDayKeys(14).map(day => {
+      const row = codeDailyMap.get(day)
+      return {
+        day,
+        requests: row?.requests ?? 0,
+        tokens: row?.tokens ?? 0,
+        failedRequests: row?.failedRequests ?? 0,
+        avgLatencyMs: row?.avgLatencyMs ?? 0
+      }
+    })
+
+    const codeRuntimeRows = await db
+      .select({
+        provider: usageEvents.provider,
+        requests: sql<number>`count(*)::int`,
+        tokens: sql<number>`coalesce(sum(${usageEvents.inputTokens} + ${usageEvents.outputTokens}), 0)::int`,
+        avgLatencyMs: sql<number>`coalesce(round(avg(${usageEvents.latencyMs})), 0)::int`
+      })
+      .from(usageEvents)
+      .where(and(brokCodeUsage, gte(usageEvents.createdAt, last7Days)))
+      .groupBy(usageEvents.provider)
+      .orderBy(desc(sql`count(*)`))
+
+    const totalCodeRuntimeRequests = codeRuntimeRows.reduce(
+      (sum, row) => sum + row.requests,
+      0
+    )
+
+    const endpointUsageRows = await db
+      .select({
+        endpoint: usageEvents.endpoint,
+        requests: sql<number>`count(*)::int`,
+        tokens: sql<number>`coalesce(sum(${usageEvents.inputTokens} + ${usageEvents.outputTokens}), 0)::int`
+      })
+      .from(usageEvents)
+      .where(gte(usageEvents.createdAt, last7Days))
+      .groupBy(usageEvents.endpoint)
+      .orderBy(desc(sql`count(*)`))
+
+    const totalEndpointRequests = endpointUsageRows.reduce(
+      (sum, row) => sum + row.requests,
+      0
+    )
+
+    const topCodeUsersRows = await db
+      .select({
+        id: usageEvents.userId,
+        workspace: workspaces.name,
+        requests: sql<number>`count(*)::int`,
+        tokens: sql<number>`coalesce(sum(${usageEvents.inputTokens} + ${usageEvents.outputTokens}), 0)::int`,
+        cost: sql<string>`coalesce(sum(${usageEvents.billedUsd}), 0)::text`,
+        avgLatencyMs: sql<number>`coalesce(round(avg(${usageEvents.latencyMs})), 0)::int`,
+        failedRequests: sql<number>`coalesce(sum(case when ${usageEvents.status} <> 'success' then 1 else 0 end), 0)::int`,
+        lastSeenAt: sql<Date>`max(${usageEvents.createdAt})`
+      })
+      .from(usageEvents)
+      .leftJoin(workspaces, eq(usageEvents.workspaceId, workspaces.id))
+      .where(and(brokCodeUsage, gte(usageEvents.createdAt, last7Days)))
+      .groupBy(usageEvents.userId, workspaces.name)
+      .orderBy(desc(sql`count(*)`))
+      .limit(6)
+
+    const topCodeKeysRows = await db
+      .select({
+        id: apiKeys.id,
+        name: apiKeys.name,
+        prefix: apiKeys.keyPrefix,
+        workspace: workspaces.name,
+        requests: sql<number>`count(*)::int`,
+        tokens: sql<number>`coalesce(sum(${usageEvents.inputTokens} + ${usageEvents.outputTokens}), 0)::int`,
+        avgLatencyMs: sql<number>`coalesce(round(avg(${usageEvents.latencyMs})), 0)::int`,
+        lastUsedAt: sql<Date>`max(${usageEvents.createdAt})`
+      })
+      .from(usageEvents)
+      .leftJoin(apiKeys, eq(usageEvents.apiKeyId, apiKeys.id))
+      .leftJoin(workspaces, eq(usageEvents.workspaceId, workspaces.id))
+      .where(and(brokCodeUsage, gte(usageEvents.createdAt, last7Days)))
+      .groupBy(apiKeys.id, apiKeys.name, apiKeys.keyPrefix, workspaces.name)
+      .orderBy(desc(sql`count(*)`))
+      .limit(6)
+
+    const recentCodeRunsRows = await db
+      .select({
+        id: usageEvents.id,
+        requestId: usageEvents.requestId,
+        userId: usageEvents.userId,
+        workspace: workspaces.name,
+        apiKeyName: apiKeys.name,
+        provider: usageEvents.provider,
+        model: usageEvents.model,
+        inputTokens: usageEvents.inputTokens,
+        outputTokens: usageEvents.outputTokens,
+        latencyMs: usageEvents.latencyMs,
+        status: usageEvents.status,
+        errorCode: usageEvents.errorCode,
+        createdAt: usageEvents.createdAt
+      })
+      .from(usageEvents)
+      .leftJoin(workspaces, eq(usageEvents.workspaceId, workspaces.id))
+      .leftJoin(apiKeys, eq(usageEvents.apiKeyId, apiKeys.id))
+      .where(brokCodeUsage)
+      .orderBy(desc(usageEvents.createdAt))
+      .limit(8)
+
+    const codeUserEmailMap = await getUserEmailMap([
+      ...topCodeUsersRows.map(row => row.id),
+      ...recentCodeRunsRows.map(row => row.userId)
+    ])
+
     return {
       requestsToday: totalsRow?.requestsToday ?? 0,
       tokensToday: totalsRow?.tokensToday ?? 0,
@@ -283,7 +461,94 @@ export async function getBrokStats() {
         count: row.count,
         percentage:
           totalModelRequests > 0 ? (row.count / totalModelRequests) * 100 : 0
-      }))
+      })),
+      brokCode: {
+        today: {
+          requests: codeTodayRow?.requests ?? 0,
+          tokens: codeTodayRow?.tokens ?? 0,
+          revenue: toNumber(codeTodayRow?.revenue),
+          providerCost: toNumber(codeTodayRow?.providerCost),
+          avgLatencyMs: codeTodayRow?.avgLatencyMs ?? 0,
+          failedRequests: codeTodayRow?.failedRequests ?? 0,
+          successRate:
+            (codeTodayRow?.requests ?? 0) > 0
+              ? ((codeTodayRow!.requests - codeTodayRow!.failedRequests) /
+                  codeTodayRow!.requests) *
+                100
+              : 0
+        },
+        last7Days: {
+          requests: code7dRow?.requests ?? 0,
+          tokens: code7dRow?.tokens ?? 0,
+          revenue: toNumber(code7dRow?.revenue),
+          providerCost: toNumber(code7dRow?.providerCost),
+          avgLatencyMs: code7dRow?.avgLatencyMs ?? 0,
+          failedRequests: code7dRow?.failedRequests ?? 0,
+          activeUsers: code7dRow?.activeUsers ?? 0,
+          activeApiKeys: code7dRow?.activeApiKeys ?? 0,
+          successRate:
+            (code7dRow?.requests ?? 0) > 0
+              ? ((code7dRow!.requests - code7dRow!.failedRequests) /
+                  code7dRow!.requests) *
+                100
+              : 0
+        },
+        dailyUsage: codeDailyUsage,
+        runtimeSplit: codeRuntimeRows.map(row => ({
+          provider: row.provider,
+          requests: row.requests,
+          tokens: row.tokens,
+          avgLatencyMs: row.avgLatencyMs,
+          percentage:
+            totalCodeRuntimeRequests > 0
+              ? (row.requests / totalCodeRuntimeRequests) * 100
+              : 0
+        })),
+        endpointSplit: endpointUsageRows.map(row => ({
+          endpoint: String(row.endpoint),
+          requests: row.requests,
+          tokens: row.tokens,
+          percentage:
+            totalEndpointRequests > 0
+              ? (row.requests / totalEndpointRequests) * 100
+              : 0
+        })),
+        topUsers: topCodeUsersRows.map(row => ({
+          id: row.id,
+          email: codeUserEmailMap[row.id] ?? row.id,
+          workspace: row.workspace ?? 'Unknown workspace',
+          requests: row.requests,
+          tokens: row.tokens,
+          cost: toNumber(row.cost),
+          avgLatencyMs: row.avgLatencyMs,
+          failedRequests: row.failedRequests,
+          lastSeenAt: row.lastSeenAt
+        })),
+        topApiKeys: topCodeKeysRows.map(row => ({
+          id: row.id ?? 'unknown',
+          name: row.name ?? 'Unknown key',
+          prefix: row.prefix ?? 'unknown',
+          workspace: row.workspace ?? 'Unknown workspace',
+          requests: row.requests,
+          tokens: row.tokens,
+          avgLatencyMs: row.avgLatencyMs,
+          lastUsedAt: row.lastUsedAt
+        })),
+        recentRuns: recentCodeRunsRows.map(row => ({
+          id: row.id,
+          requestId: row.requestId,
+          email: codeUserEmailMap[row.userId] ?? row.userId,
+          workspace: row.workspace ?? 'Unknown workspace',
+          apiKeyName: row.apiKeyName ?? 'Unknown key',
+          provider: row.provider,
+          model: row.model,
+          tokens: (row.inputTokens ?? 0) + (row.outputTokens ?? 0),
+          latencyMs: row.latencyMs ?? 0,
+          status: row.status,
+          errorCode: row.errorCode,
+          createdAt: row.createdAt
+        }))
+      }
     }
   } catch (error) {
     if (canUseDevDbFallback(error)) {
@@ -296,7 +561,41 @@ export async function getBrokStats() {
         failedRequests: 0,
         activeApiKeys: 0,
         topUsersByUsage: [],
-        modelUsage: []
+        modelUsage: [],
+        brokCode: {
+          today: {
+            requests: 0,
+            tokens: 0,
+            revenue: 0,
+            providerCost: 0,
+            avgLatencyMs: 0,
+            failedRequests: 0,
+            successRate: 0
+          },
+          last7Days: {
+            requests: 0,
+            tokens: 0,
+            revenue: 0,
+            providerCost: 0,
+            avgLatencyMs: 0,
+            failedRequests: 0,
+            activeUsers: 0,
+            activeApiKeys: 0,
+            successRate: 0
+          },
+          dailyUsage: getTrailingDayKeys(14).map(day => ({
+            day,
+            requests: 0,
+            tokens: 0,
+            failedRequests: 0,
+            avgLatencyMs: 0
+          })),
+          runtimeSplit: [],
+          endpointSplit: [],
+          topUsers: [],
+          topApiKeys: [],
+          recentRuns: []
+        }
       }
     }
 

@@ -14,6 +14,10 @@ export interface UsageRecord {
   endpoint: 'chat' | 'search' | 'code' | 'agents'
   model: string
   provider: string
+  surface?: string
+  runtime?: string
+  source?: string
+  sessionId?: string
   inputTokens: number
   outputTokens: number
   cachedTokens?: number
@@ -25,6 +29,7 @@ export interface UsageRecord {
   latencyMs: number
   status: 'success' | 'error'
   errorCode?: string
+  metadata?: Record<string, unknown>
 }
 
 export type UsageLimitResult =
@@ -80,6 +85,10 @@ export async function recordUsage(record: UsageRecord): Promise<void> {
       endpoint: record.endpoint,
       model: record.model,
       provider: record.provider,
+      surface: record.surface ?? 'api',
+      runtime: record.runtime,
+      source: record.source,
+      sessionId: record.sessionId,
       inputTokens: record.inputTokens,
       outputTokens: record.outputTokens,
       cachedTokens: record.cachedTokens ?? 0,
@@ -90,12 +99,18 @@ export async function recordUsage(record: UsageRecord): Promise<void> {
       billedUsd: record.billedUsd.toString(),
       latencyMs: record.latencyMs,
       status: record.status,
-      errorCode: record.errorCode
+      errorCode: record.errorCode,
+      metadata: record.metadata
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
 
     if (
+      message.includes('column "surface"') ||
+      message.includes('column "runtime"') ||
+      message.includes('column "source"') ||
+      message.includes('column "session_id"') ||
+      message.includes('column "metadata"') ||
       message.includes('column "feature"') ||
       message.includes('relation "usage_events" violates not-null constraint')
     ) {

@@ -463,6 +463,8 @@ async function sendChat(content) {
     body: JSON.stringify({
       command: content,
       model,
+      source: 'tui',
+      session_id: sessionId,
       stream: true,
       [requireCloudRuntimeField]: requireCloudRuntime,
       prefer_pi: !requireCloudRuntime,

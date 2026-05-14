@@ -2094,6 +2094,8 @@ export function BrokCodeApp({
         body: JSON.stringify({
           command: trimmed,
           model: selectedModel,
+          source: 'browser',
+          session_id: syncSessionId,
           stream: true,
           prefer_pi: true,
           messages: [

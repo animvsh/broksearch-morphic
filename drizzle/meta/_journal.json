@@ -176,6 +176,13 @@
       "when": 1778799000000,
       "tag": "0024_feature_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1778802600000,
+      "tag": "0025_usage_events_brokcode_dimensions",
+      "breakpoints": true
     }
   ]
 }
