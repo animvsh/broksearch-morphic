@@ -6,6 +6,7 @@ vi.mock('@/lib/auth/get-current-user', () => ({
 
 vi.mock('@/lib/integrations/composio', () => ({
   createConnectedAccountLink: vi.fn(),
+  executeComposioTool: vi.fn(),
   isComposioConfigured: vi.fn(),
   isComposioConnectMode: vi.fn(),
   listConnectedAccounts: vi.fn()
@@ -14,11 +15,13 @@ vi.mock('@/lib/integrations/composio', () => ({
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import {
   createConnectedAccountLink,
+  executeComposioTool,
   isComposioConfigured,
   isComposioConnectMode,
   listConnectedAccounts
 } from '@/lib/integrations/composio'
 
+import { GET as getCalendarEvents } from '../gcal/events/route'
 import { POST as connectGmail } from '../gmail/connect/route'
 import { GET as getGmailStatus } from '../gmail/status/route'
 
@@ -172,5 +175,51 @@ describe('BrokMail Gmail routes', () => {
     })
     expect(body.message).toContain('Composio is not configured')
     delete process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED
+  })
+
+  it('loads live Calendar events through a connected Composio account', async () => {
+    vi.mocked(listConnectedAccounts).mockResolvedValue([
+      {
+        id: 'acct_calendar',
+        status: 'active',
+        toolkit_slug: 'googlecalendar'
+      }
+    ] as any)
+    vi.mocked(executeComposioTool).mockResolvedValue({
+      events: [
+        {
+          id: 'event_123',
+          summary: 'Candidate Interview',
+          start: { dateTime: '2026-05-14T22:00:00.000Z' },
+          end: { dateTime: '2026-05-14T22:30:00.000Z' },
+          htmlLink: 'https://calendar.google.com/event?eid=event_123'
+        }
+      ]
+    } as any)
+
+    const response = await getCalendarEvents()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      provider: 'composio',
+      connectedAccountId: 'acct_calendar',
+      toolSlug: 'GOOGLECALENDAR_LIST_EVENTS',
+      events: [
+        {
+          id: 'event_123',
+          summary: 'Candidate Interview',
+          startAt: '2026-05-14T22:00:00.000Z',
+          endAt: '2026-05-14T22:30:00.000Z'
+        }
+      ]
+    })
+    expect(executeComposioTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolSlug: 'GOOGLECALENDAR_LIST_EVENTS',
+        userId: 'user_123',
+        connectedAccountId: 'acct_calendar'
+      })
+    )
   })
 })

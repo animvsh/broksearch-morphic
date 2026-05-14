@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import {
+  assertActionPayloadIsRunnable,
+  BrokMailApprovalCalendarEvent,
+  BrokMailApprovalThread,
+  BrokMailComposioAction,
+  isRecord,
+  normalizeActionApprovalPayload,
+  verifyBrokMailApproval
+} from '@/lib/brokmail/action-approval'
+import {
   executeComposioTool,
   isComposioConfigured,
   listConnectedAccounts
@@ -9,33 +18,6 @@ import {
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-type BrokMailComposioAction =
-  | 'create_draft'
-  | 'archive_threads'
-  | 'create_calendar_event'
-  | 'delete_calendar_event'
-
-type BrokMailComposioThread = {
-  id?: string
-  providerThreadId?: string
-  providerMessageIds?: string[]
-  senderEmail?: string
-  subject?: string
-}
-
-type BrokMailComposioCalendarEvent = {
-  id?: string
-  summary?: string
-  startAt?: string
-  endAt?: string
-}
-
-type BrokMailApprovalArtifact = {
-  id?: string
-  action?: string
-  approved?: boolean
-}
 
 const DEFAULT_GMAIL_TOOLKITS = ['gmail', 'googlesuper']
 const CALENDAR_TOOLKITS = [
@@ -106,80 +88,6 @@ function parseToolSlugs(action: BrokMailComposioAction) {
   return [...new Set([...configured, ...DEFAULT_TOOL_SLUGS[action]])]
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object'
-}
-
-function normalizeAction(value: unknown): BrokMailComposioAction | null {
-  if (
-    value === 'create_draft' ||
-    value === 'archive_threads' ||
-    value === 'create_calendar_event' ||
-    value === 'delete_calendar_event'
-  ) {
-    return value
-  }
-
-  return null
-}
-
-function normalizeThreads(value: unknown): BrokMailComposioThread[] {
-  if (!Array.isArray(value)) return []
-  return value.filter(isRecord).map(item => ({
-    id: typeof item.id === 'string' ? item.id : undefined,
-    providerThreadId:
-      typeof item.providerThreadId === 'string'
-        ? item.providerThreadId
-        : undefined,
-    providerMessageIds: Array.isArray(item.providerMessageIds)
-      ? item.providerMessageIds.filter(
-          (messageId): messageId is string => typeof messageId === 'string'
-        )
-      : undefined,
-    senderEmail:
-      typeof item.senderEmail === 'string' ? item.senderEmail : undefined,
-    subject: typeof item.subject === 'string' ? item.subject : undefined
-  }))
-}
-
-function normalizeCalendarEvent(
-  value: unknown
-): BrokMailComposioCalendarEvent | null {
-  if (!isRecord(value)) return null
-  return {
-    id: typeof value.id === 'string' ? value.id : undefined,
-    summary: typeof value.summary === 'string' ? value.summary : undefined,
-    startAt: typeof value.startAt === 'string' ? value.startAt : undefined,
-    endAt: typeof value.endAt === 'string' ? value.endAt : undefined
-  }
-}
-
-function normalizeApprovalArtifact(
-  value: unknown
-): BrokMailApprovalArtifact | null {
-  if (!isRecord(value)) return null
-  return {
-    id: typeof value.id === 'string' ? value.id : undefined,
-    action: typeof value.action === 'string' ? value.action : undefined,
-    approved: value.approved === true
-  }
-}
-
-function validateApprovalArtifact(
-  action: BrokMailComposioAction,
-  value: BrokMailApprovalArtifact | null
-) {
-  if (!value?.id?.trim() || value.approved !== true) {
-    return 'BrokMail requires an explicit approval artifact before running this Google action.'
-  }
-
-  if (value.action !== action) {
-    return 'BrokMail approval artifact does not match the requested Google action.'
-  }
-
-  return null
-}
-
 async function findConnectedAccountId(
   userId: string,
   action: BrokMailComposioAction
@@ -210,9 +118,9 @@ function buildActionText({
   calendarEvent
 }: {
   action: BrokMailComposioAction
-  threads: BrokMailComposioThread[]
+  threads: BrokMailApprovalThread[]
   draftBody?: string
-  calendarEvent?: BrokMailComposioCalendarEvent | null
+  calendarEvent?: BrokMailApprovalCalendarEvent | null
 }) {
   if (action === 'create_draft') {
     const thread = threads[0]
@@ -308,23 +216,44 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const action = normalizeAction(body.action)
-  if (!action) {
+  const payload = normalizeActionApprovalPayload(body)
+  if (!payload) {
     return NextResponse.json({ error: 'Unsupported action.' }, { status: 400 })
   }
 
-  const threads = normalizeThreads(body.threads)
-  const draftBody =
-    typeof body.draftBody === 'string' ? body.draftBody : undefined
-  const calendarEvent = normalizeCalendarEvent(body.calendarEvent)
-  const approval = normalizeApprovalArtifact(body.approval)
-  const approvalError = validateApprovalArtifact(action, approval)
+  try {
+    assertActionPayloadIsRunnable(payload)
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'BrokMail action payload is invalid.'
+      },
+      { status: 400 }
+    )
+  }
+
+  const approvalError = verifyBrokMailApproval({
+    userId: user.id,
+    approval: body.approval,
+    payload
+  })
   if (approvalError) {
     return NextResponse.json({ error: approvalError }, { status: 403 })
   }
 
-  const text = buildActionText({ action, threads, draftBody, calendarEvent })
-  const connectedAccountId = await findConnectedAccountId(user.id, action)
+  const text = buildActionText({
+    action: payload.action,
+    threads: payload.threads,
+    draftBody: payload.draftBody,
+    calendarEvent: payload.calendarEvent
+  })
+  const connectedAccountId = await findConnectedAccountId(
+    user.id,
+    payload.action
+  )
 
   if (!connectedAccountId) {
     return NextResponse.json(
@@ -338,7 +267,9 @@ export async function POST(request: NextRequest) {
 
   const attempted: Array<{ slug: string; error: string }> = []
 
-  for (const toolSlug of parseToolSlugs(action)) {
+  const approval = body.approval as { id?: unknown; action?: unknown }
+
+  for (const toolSlug of parseToolSlugs(payload.action)) {
     try {
       const result = await executeComposioTool({
         toolSlug,
@@ -349,12 +280,13 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         ok: true,
-        action,
+        action: payload.action,
         toolSlug,
         connectedAccountId,
         approval: {
-          id: approval?.id,
-          action: approval?.action,
+          id: typeof approval.id === 'string' ? approval.id : undefined,
+          action:
+            typeof approval.action === 'string' ? approval.action : undefined,
           approved: true
         },
         result

@@ -91,6 +91,16 @@ type ApprovalState = {
   }
 }
 
+type ServerIssuedApproval = {
+  id: string
+  action: string
+  approved: true
+  issuedAt: string
+  expiresAt: string
+  payloadHash: string
+  signature: string
+}
+
 type ActivityStep = {
   id: string
   message: string
@@ -172,24 +182,47 @@ async function executeComposioBrokMailAction({
   calendarEvent?: ApprovalState['calendarEvent']
   approval: Pick<ApprovalState, 'id'>
 }) {
+  const actionPayload = {
+    action,
+    threads: (threads ?? []).map(thread => ({
+      id: thread.id,
+      providerThreadId: thread.providerThreadId,
+      providerMessageIds: thread.providerMessageIds,
+      senderEmail: thread.senderEmail,
+      subject: thread.subject
+    })),
+    draftBody,
+    calendarEvent
+  }
+
+  const approvalResponse = await fetch('/api/brokmail/composio/approval', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(actionPayload)
+  })
+
+  const approvalBody = await approvalResponse.json().catch(() => null)
+  if (!approvalResponse.ok) {
+    throw new Error(
+      typeof approvalBody?.error === 'string'
+        ? approvalBody.error
+        : 'Could not create a server approval token.'
+    )
+  }
+
+  const serverApproval = approvalBody?.approval as ServerIssuedApproval | null
+  if (!serverApproval?.signature) {
+    throw new Error('BrokMail approval token was not returned by the server.')
+  }
+
   const response = await fetch('/api/brokmail/composio/action', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      action,
-      threads: (threads ?? []).map(thread => ({
-        id: thread.id,
-        providerThreadId: thread.providerThreadId,
-        providerMessageIds: thread.providerMessageIds,
-        senderEmail: thread.senderEmail,
-        subject: thread.subject
-      })),
-      draftBody,
-      calendarEvent,
+      ...actionPayload,
       approval: {
-        id: approval.id,
-        action,
-        approved: true
+        ...serverApproval,
+        clientApprovalId: approval.id
       }
     })
   })
@@ -655,6 +688,53 @@ export function BrokMailApp() {
     }
   }
 
+  async function loadComposioCalendarEvents() {
+    setIsSyncingCalendar(true)
+    setCalendarConnectionStatus(
+      'Loading live Google Calendar events through Composio...'
+    )
+
+    try {
+      const response = await fetch('/api/brokmail/gcal/events')
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error ??
+            'Could not load Google Calendar events through Composio.'
+        )
+      }
+
+      const liveEvents = Array.isArray(payload?.events)
+        ? (payload.events as BrokCalendarEvent[])
+        : []
+
+      setCalendarEvents(liveEvents)
+      setSelectedCalendarEventId(liveEvents[0]?.id ?? null)
+      setCalendarConnected(true)
+      setCalendarConnectionMode('composio')
+      setCalendarConnectionStatus(
+        liveEvents.length
+          ? `Composio Calendar connected (${liveEvents.length} upcoming events)`
+          : 'Composio Calendar connected, but no upcoming events were returned.'
+      )
+      if (liveEvents.length)
+        toast.success('Loaded live Calendar through Composio')
+      return liveEvents
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Could not load Google Calendar events through Composio.'
+      setCalendarEvents([])
+      setCalendarConnectionStatus(message)
+      toast.error(message)
+      return []
+    } finally {
+      setIsSyncingCalendar(false)
+    }
+  }
+
   function selectAdjacentThread(direction: 1 | -1) {
     if (filteredThreads.length === 0) return
     const currentIndex = Math.max(
@@ -737,9 +817,7 @@ export function BrokMailApp() {
       if (gcalStatus.connected) {
         setCalendarConnected(true)
         setCalendarConnectionMode('composio')
-        setCalendarConnectionStatus(
-          'Google Calendar is connected through Composio. Approval-safe calendar actions are available through Composio.'
-        )
+        await loadComposioCalendarEvents()
       } else {
         setCalendarConnectionStatus(
           gcalStatus.message ||
@@ -869,9 +947,7 @@ export function BrokMailApp() {
         if (connectedThroughComposio) {
           setCalendarConnected(true)
           setCalendarConnectionMode('composio')
-          setCalendarConnectionStatus(
-            'Google Calendar is connected through Composio. Approval-safe calendar actions are available through Composio.'
-          )
+          await loadComposioCalendarEvents()
           toast.success('Google Calendar connected through Composio')
           return
         }
@@ -969,10 +1045,17 @@ export function BrokMailApp() {
       setView('calendar')
       updateActivity('Checking Composio Calendar connection...')
       await wait(170)
+      let liveEvents = calendarEvents
+      if (calendarConnectionMode === 'composio') {
+        updateActivity('Loading upcoming events from Google Calendar...')
+        liveEvents = await loadComposioCalendarEvents()
+      }
 
       response =
         calendarConnectionMode === 'composio'
-          ? 'Google Calendar is connected through Composio. I can prepare approval-safe create and remove actions, but event listing is not exposed in this Composio route yet.'
+          ? liveEvents.length
+            ? `Google Calendar is live. I loaded ${liveEvents.length} upcoming events from Composio. Select an event to inspect or ask me to add/remove one with approval.`
+            : 'Google Calendar is connected through Composio, but no upcoming events were returned.'
           : 'Connect Google Calendar through Composio before using live calendar actions.'
     } else if (
       /calendar|meeting|event|schedule/.test(lower) &&
@@ -1032,28 +1115,9 @@ export function BrokMailApp() {
       } else {
         let candidate = findCalendarEventToDelete(command, calendarEvents)
 
-        const explicitEventId = command.match(/\bid\s+([^\s]+)/i)?.[1]
-
-        if (
-          !candidate &&
-          explicitEventId &&
-          calendarConnectionMode === 'composio'
-        ) {
-          candidate = {
-            id: explicitEventId,
-            summary: `Calendar event ${explicitEventId}`,
-            description: '',
-            location: '',
-            startAt: new Date().toISOString(),
-            endAt: new Date(Date.now() + 45 * 60_000).toISOString(),
-            isAllDay: false,
-            htmlLink: ''
-          }
-        }
-
         if (!candidate) {
           response =
-            'I could not find that calendar event. Try quoting the event title or include the event id.'
+            'I could not find that calendar event in the live upcoming-event list. Refresh Calendar, select the event, or quote the event title.'
         } else {
           updateActivity(
             `Preparing removal approval for "${candidate.summary}"...`
@@ -1417,6 +1481,7 @@ export function BrokMailApp() {
             approval
           })
           setCalendarConnected(true)
+          await loadComposioCalendarEvents()
           toast.success('Composio created the Google Calendar event')
         } else {
           toast.error(
@@ -1445,6 +1510,9 @@ export function BrokMailApp() {
             calendarEvent: approval.calendarEvent,
             approval
           })
+          setCalendarEvents(current =>
+            current.filter(event => event.id !== approval.calendarEvent?.id)
+          )
           toast.success('Composio removed the Google Calendar event')
         } else {
           toast.error(
