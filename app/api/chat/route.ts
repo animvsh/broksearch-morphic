@@ -10,8 +10,14 @@ import { checkAndEnforceOverallChatLimit } from '@/lib/rate-limit/chat-limits'
 import { checkAndEnforceGuestLimit } from '@/lib/rate-limit/guest-limit'
 import { createChatStreamResponse } from '@/lib/streaming/create-chat-stream-response'
 import { createEphemeralChatStreamResponse } from '@/lib/streaming/create-ephemeral-chat-stream-response'
+import { createSimpleChatStreamResponse } from '@/lib/streaming/create-simple-chat-stream-response'
 import { createBackgroundTask } from '@/lib/tasks/background-tasks'
 import { SearchMode } from '@/lib/types/search'
+import {
+  getLatestUserMessage,
+  getSimpleUtilityReplyForMessage,
+  shouldUseQuickReplyForMessage
+} from '@/lib/utils/chat-routing'
 import { selectModel } from '@/lib/utils/model-selection'
 import { perfLog, perfTime } from '@/lib/utils/perf-logging'
 import { resetAllCounters } from '@/lib/utils/perf-tracking'
@@ -89,7 +95,15 @@ export async function POST(req: Request) {
 
     // Get search mode from cookie
     const searchModeCookie = cookieStore.get('searchMode')?.value
-    const searchMode: SearchMode = normalizeSearchMode(searchModeCookie)
+    const requestedSearchMode: SearchMode =
+      normalizeSearchMode(searchModeCookie)
+    const currentUserMessage =
+      message ?? getLatestUserMessage(Array.isArray(messages) ? messages : [])
+    const searchMode: SearchMode = shouldUseQuickReplyForMessage(
+      currentUserMessage
+    )
+      ? 'quick'
+      : requestedSearchMode
 
     const selectedModel = await selectModel({ searchMode, cookieStore })
 
@@ -136,6 +150,19 @@ export async function POST(req: Request) {
         const adaptiveLimitResponse = await checkAndEnforceAdaptiveLimit(userId)
         if (adaptiveLimitResponse) return adaptiveLimitResponse
       }
+    }
+
+    const simpleReply = getSimpleUtilityReplyForMessage(currentUserMessage)
+    if (simpleReply && trigger === 'submit-message') {
+      return createSimpleChatStreamResponse({
+        chatId,
+        isNewChat,
+        message: currentUserMessage,
+        modelId: selectedModel.name,
+        searchMode,
+        text: simpleReply,
+        userId
+      })
     }
 
     const streamStart = performance.now()
