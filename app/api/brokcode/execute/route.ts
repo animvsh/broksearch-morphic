@@ -21,6 +21,10 @@ import {
   runDeepSecSecurityScan
 } from '@/lib/brokcode/security-scan'
 import { runPiAgentPrompt } from '@/lib/pi/coding-agent'
+import {
+  createBackgroundTask,
+  updateBackgroundTask
+} from '@/lib/tasks/background-tasks'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 export const runtime = 'nodejs'
@@ -365,7 +369,8 @@ function createExecutionStream({
   opencodeApiKey,
   requireOpenCode,
   preferPi,
-  requirePi
+  requirePi,
+  taskId
 }: {
   auth: SuccessfulAuth
   requestId: string
@@ -380,6 +385,7 @@ function createExecutionStream({
   requireOpenCode: boolean
   preferPi: boolean
   requirePi: boolean
+  taskId?: string
 }) {
   const encoder = new TextEncoder()
   let clientOpen = true
@@ -414,6 +420,21 @@ function createExecutionStream({
           let piFailure: string | null = null
           let opencodeFailure: string | null = null
 
+          if (taskId) {
+            await updateBackgroundTask({
+              id: taskId,
+              userId: auth.apiKey.userId,
+              status: 'running',
+              metadata: {
+                requestId,
+                model,
+                command
+              }
+            }).catch(error => {
+              console.error('Failed to mark BrokCode task running:', error)
+            })
+          }
+
           if (preferPi || requirePi) {
             try {
               send('status', {
@@ -444,6 +465,25 @@ function createExecutionStream({
                 usage: null,
                 status: 'success'
               })
+              if (taskId) {
+                await updateBackgroundTask({
+                  id: taskId,
+                  userId: auth.apiKey.userId,
+                  status: 'succeeded',
+                  result: {
+                    runtime: 'pi',
+                    model: result.model,
+                    previewUrl: extractPreviewUrl(
+                      `${command}\n${result.content}`
+                    )
+                  }
+                }).catch(error => {
+                  console.error(
+                    'Failed to mark BrokCode task succeeded:',
+                    error
+                  )
+                })
+              }
               close()
               return
             } catch (error) {
@@ -463,6 +503,16 @@ function createExecutionStream({
                   status: 'error',
                   errorCode: piFailure
                 })
+                if (taskId) {
+                  await updateBackgroundTask({
+                    id: taskId,
+                    userId: auth.apiKey.userId,
+                    status: 'failed',
+                    error: piFailure
+                  }).catch(error => {
+                    console.error('Failed to mark BrokCode task failed:', error)
+                  })
+                }
                 send('error', { message: piFailure })
                 close()
                 return
@@ -545,6 +595,23 @@ function createExecutionStream({
                 usage,
                 status: 'success'
               })
+              if (taskId) {
+                await updateBackgroundTask({
+                  id: taskId,
+                  userId: auth.apiKey.userId,
+                  status: 'succeeded',
+                  result: {
+                    runtime: 'opencode',
+                    model,
+                    previewUrl: extractPreviewUrl(`${command}\n${content}`)
+                  }
+                }).catch(error => {
+                  console.error(
+                    'Failed to mark BrokCode task succeeded:',
+                    error
+                  )
+                })
+              }
               close()
               return
             }
@@ -566,6 +633,16 @@ function createExecutionStream({
                 status: 'error',
                 errorCode: opencodeFailure ?? 'brokcode_cloud_error'
               })
+              if (taskId) {
+                await updateBackgroundTask({
+                  id: taskId,
+                  userId: auth.apiKey.userId,
+                  status: 'failed',
+                  error: opencodeFailure ?? 'brokcode_cloud_error'
+                }).catch(error => {
+                  console.error('Failed to mark BrokCode task failed:', error)
+                })
+              }
               send('error', { message: opencodeFailure })
               close()
               return
@@ -583,6 +660,16 @@ function createExecutionStream({
               status: 'error',
               errorCode: 'brokcode_cloud_not_configured'
             })
+            if (taskId) {
+              await updateBackgroundTask({
+                id: taskId,
+                userId: auth.apiKey.userId,
+                status: 'failed',
+                error: message
+              }).catch(error => {
+                console.error('Failed to mark BrokCode task failed:', error)
+              })
+            }
             send('error', { message })
             close()
             return
@@ -632,6 +719,20 @@ function createExecutionStream({
             usage,
             status: 'success'
           })
+          if (taskId) {
+            await updateBackgroundTask({
+              id: taskId,
+              userId: auth.apiKey.userId,
+              status: 'succeeded',
+              result: {
+                runtime: 'brok',
+                model,
+                previewUrl: extractPreviewUrl(`${command}\n${content}`)
+              }
+            }).catch(error => {
+              console.error('Failed to mark BrokCode task succeeded:', error)
+            })
+          }
           close()
         } catch (error) {
           await recordCodeExecutionUsage({
@@ -647,6 +748,19 @@ function createExecutionStream({
                 ? error.message
                 : 'brokcode_execution_failed'
           })
+          if (taskId) {
+            await updateBackgroundTask({
+              id: taskId,
+              userId: auth.apiKey.userId,
+              status: 'failed',
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'BrokCode Cloud execution failed.'
+            }).catch(updateError => {
+              console.error('Failed to mark BrokCode task failed:', updateError)
+            })
+          }
           send('error', {
             message:
               error instanceof Error
@@ -851,6 +965,31 @@ export async function POST(request: NextRequest) {
   }
 
   if (body?.stream === true) {
+    const task = await createBackgroundTask({
+      userId: authResult.apiKey.userId,
+      chatId:
+        typeof body?.chat_id === 'string'
+          ? body.chat_id
+          : typeof body?.session_id === 'string'
+            ? body.session_id
+            : null,
+      kind: 'brokcode',
+      title: command.slice(0, 120) || 'BrokCode run',
+      metadata: {
+        requestId,
+        model,
+        runtimePreference: preferPi
+          ? 'pi'
+          : requireOpenCode
+            ? 'brokcode-cloud'
+            : 'auto',
+        stream: true
+      }
+    }).catch(error => {
+      console.error('Failed to create BrokCode background task:', error)
+      return null
+    })
+
     return createExecutionStream({
       auth: authResult,
       requestId,
@@ -864,7 +1003,8 @@ export async function POST(request: NextRequest) {
       opencodeApiKey,
       requireOpenCode,
       preferPi,
-      requirePi
+      requirePi,
+      taskId: task?.id
     })
   }
 

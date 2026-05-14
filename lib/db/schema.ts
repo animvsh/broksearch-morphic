@@ -299,4 +299,46 @@ export const feedback = pgTable(
 
 export type Feedback = InferSelectModel<typeof feedback>
 
+// Durable task ledger for long-running chat/tool work.
+export const backgroundTasks = pgTable(
+  'background_tasks',
+  {
+    id: varchar('id', { length: ID_LENGTH })
+      .primaryKey()
+      .$defaultFn(() => generateId()),
+    userId: varchar('user_id', { length: USER_ID_LENGTH }).notNull(),
+    chatId: varchar('chat_id', { length: ID_LENGTH }),
+    kind: varchar('kind', { length: VARCHAR_LENGTH }).notNull(),
+    status: varchar('status', {
+      length: VARCHAR_LENGTH,
+      enum: ['queued', 'running', 'succeeded', 'failed', 'cancelled']
+    })
+      .notNull()
+      .default('queued'),
+    title: text('title').notNull(),
+    metadata: jsonb('metadata').$type<Record<string, any>>(),
+    result: jsonb('result').$type<Record<string, any>>(),
+    error: text('error'),
+    startedAt: timestamp('started_at'),
+    completedAt: timestamp('completed_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow()
+  },
+  table => [
+    index('background_tasks_user_id_idx').on(table.userId),
+    index('background_tasks_user_status_idx').on(table.userId, table.status),
+    index('background_tasks_chat_id_idx').on(table.chatId),
+    index('background_tasks_created_at_idx').on(table.createdAt.desc()),
+    pgPolicy('users_manage_own_background_tasks', {
+      as: 'permissive',
+      for: 'all',
+      to: 'public',
+      using: sql`user_id = current_setting('app.current_user_id', true)`,
+      withCheck: sql`user_id = current_setting('app.current_user_id', true)`
+    })
+  ]
+).enableRLS()
+
+export type BackgroundTask = InferSelectModel<typeof backgroundTasks>
+
 export * from './schema-brok'

@@ -10,6 +10,7 @@ import { checkAndEnforceOverallChatLimit } from '@/lib/rate-limit/chat-limits'
 import { checkAndEnforceGuestLimit } from '@/lib/rate-limit/guest-limit'
 import { createChatStreamResponse } from '@/lib/streaming/create-chat-stream-response'
 import { createEphemeralChatStreamResponse } from '@/lib/streaming/create-ephemeral-chat-stream-response'
+import { createBackgroundTask } from '@/lib/tasks/background-tasks'
 import { SearchMode } from '@/lib/types/search'
 import { selectModel } from '@/lib/utils/model-selection'
 import { perfLog, perfTime } from '@/lib/utils/perf-logging'
@@ -142,6 +143,24 @@ export async function POST(req: Request) {
       `createChatStreamResponse - Start: model=${selectedModel.providerId}:${selectedModel.id}, searchMode=${searchMode}`
     )
 
+    const task = !isGuest
+      ? await createBackgroundTask({
+          userId,
+          chatId,
+          kind: 'chat',
+          title: 'Chat response',
+          metadata: {
+            trigger,
+            searchMode,
+            modelId: selectedModel.id,
+            providerId: selectedModel.providerId
+          }
+        }).catch(error => {
+          console.error('Failed to create background task:', error)
+          return null
+        })
+      : null
+
     const response = isGuest
       ? await createEphemeralChatStreamResponse({
           messages: Array.isArray(messages) ? messages : [],
@@ -159,7 +178,8 @@ export async function POST(req: Request) {
           messageId,
           abortSignal: undefined,
           isNewChat,
-          searchMode
+          searchMode,
+          taskId: task?.id
         })
 
     perfTime('createChatStreamResponse resolved', streamStart)

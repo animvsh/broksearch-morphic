@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { Langfuse } from 'langfuse'
 
 import { researcher } from '@/lib/agents/researcher'
+import { updateBackgroundTask } from '@/lib/tasks/background-tasks'
 import { isTracingEnabled } from '@/lib/utils/telemetry'
 
 import { loadChat } from '../actions/chat'
@@ -39,7 +40,8 @@ export async function createChatStreamResponse(
     messageId,
     abortSignal,
     isNewChat,
-    searchMode
+    searchMode,
+    taskId
   } = config
   const internalModelId = `${model.providerId}:${model.id}`
   const publicModelId = model.name
@@ -174,6 +176,21 @@ export async function createChatStreamResponse(
     }
 
     const llmStart = performance.now()
+    if (taskId) {
+      await updateBackgroundTask({
+        id: taskId,
+        userId,
+        status: 'running',
+        metadata: {
+          chatId,
+          modelId: context.modelId,
+          searchMode
+        }
+      }).catch(error => {
+        console.error('Failed to mark chat task running:', error)
+      })
+    }
+
     perfLog(
       `researchAgent.stream - Start: model=${context.modelId}, searchMode=${searchMode}`
     )
@@ -215,6 +232,21 @@ export async function createChatStreamResponse(
             context.pendingInitialSave,
             context.pendingInitialUserMessage
           )
+
+          if (taskId) {
+            await updateBackgroundTask({
+              id: taskId,
+              userId,
+              status: 'succeeded',
+              result: {
+                chatId,
+                messageId: responseMessage.id,
+                disconnected: isAborted === true
+              }
+            }).catch(error => {
+              console.error('Failed to mark chat task succeeded:', error)
+            })
+          }
         } finally {
           if (langfuse) {
             await langfuse.flushAsync()
@@ -225,6 +257,17 @@ export async function createChatStreamResponse(
       consumeSseStream: consumeStream
     })
   } catch (error) {
+    if (taskId) {
+      await updateBackgroundTask({
+        id: taskId,
+        userId,
+        status: 'failed',
+        error: error instanceof Error ? error.message : GENERIC_CHAT_ERROR
+      }).catch(updateError => {
+        console.error('Failed to mark chat task failed:', updateError)
+      })
+    }
+
     if (langfuse) {
       await langfuse.flushAsync()
     }

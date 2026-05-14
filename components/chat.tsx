@@ -571,6 +571,7 @@ export function Chat({
           scrollContainerRef={scrollContainerRef}
           onNewChat={handleNewChat}
           isCloudDeployment={isCloudDeployment}
+          isGuest={isGuest}
           modelSelectorData={modelSelectorData}
           sections={sections}
         />

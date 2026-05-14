@@ -5,7 +5,13 @@ import Textarea from 'react-textarea-autosize'
 import { useRouter } from 'next/navigation'
 
 import { UseChatHelpers } from '@ai-sdk/react'
-import { ArrowUp, ChevronDown, MessageCirclePlus, Square } from 'lucide-react'
+import {
+  ArrowUp,
+  ChevronDown,
+  Clock3,
+  MessageCirclePlus,
+  Square
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { SHORTCUT_EVENTS } from '@/lib/keyboard-shortcuts'
@@ -54,9 +60,19 @@ interface ChatPanelProps {
   onNewChat?: () => void
   /** Whether the deployment is cloud mode */
   isCloudDeployment?: boolean
+  /** Whether the current chat is running without an authenticated user */
+  isGuest?: boolean
   modelSelectorData?: ModelSelectorData
   /** Chat sections for message navigation dots */
   sections?: { id: string; userMessage: UIMessage }[]
+}
+
+type BackgroundTaskSummary = {
+  id: string
+  kind: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  title: string
+  updatedAt: string
 }
 
 export function ChatPanel({
@@ -76,6 +92,7 @@ export function ChatPanel({
   scrollContainerRef,
   onNewChat,
   isCloudDeployment = false,
+  isGuest = false,
   modelSelectorData,
   sections = []
 }: ChatPanelProps) {
@@ -85,6 +102,7 @@ export function ChatPanel({
   const [isComposing, setIsComposing] = useState(false) // Composition state
   const [enterDisabled, setEnterDisabled] = useState(false) // Disable Enter after composition ends
   const [isInputFocused, setIsInputFocused] = useState(false) // Track input focus
+  const [recentTasks, setRecentTasks] = useState<BackgroundTaskSummary[]>([])
   const { close: closeArtifact } = useArtifact()
   const isLoading = status === 'submitted' || status === 'streaming'
   const hasUploadedFiles = uploadedFiles.some(
@@ -103,6 +121,9 @@ export function ChatPanel({
     initialDelay: 60,
     erase: false
   })
+  const activeTasks = recentTasks.filter(
+    task => task.status === 'queued' || task.status === 'running'
+  )
 
   const handleCompositionStart = () => setIsComposing(true)
 
@@ -145,6 +166,38 @@ export function ChatPanel({
       window.removeEventListener(SHORTCUT_EVENTS.newChat, handleNewChatShortcut)
     }
   }, [])
+
+  useEffect(() => {
+    if (isGuest) return
+
+    let cancelled = false
+
+    const loadTasks = async () => {
+      try {
+        const response = await fetch('/api/tasks?limit=5', {
+          cache: 'no-store'
+        })
+        if (!response.ok) return
+
+        const payload = (await response.json()) as {
+          tasks?: BackgroundTaskSummary[]
+        }
+        if (!cancelled) {
+          setRecentTasks(payload.tasks ?? [])
+        }
+      } catch {
+        // Task visibility is a resilience aid; never interrupt chat UX for it.
+      }
+    }
+
+    void loadTasks()
+    const interval = window.setInterval(loadTasks, isLoading ? 4000 : 10000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [isGuest, isLoading])
 
   const isToolInvocationInProgress = () => {
     if (!messages.length) return false
@@ -297,6 +350,24 @@ export function ChatPanel({
               <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted/70">
                 <div className="h-full w-1/2 animate-[brok-progress_1.35s_ease-in-out_infinite] rounded-full bg-zinc-950/80 dark:bg-white/80" />
               </div>
+            </div>
+          </div>
+        )}
+
+        {messages.length > 0 && activeTasks.length > 0 && (
+          <div className="mx-auto mb-2 max-w-3xl px-1">
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white/95 px-3 py-2 text-xs text-zinc-600 shadow-sm backdrop-blur">
+              <span className="inline-flex min-w-0 items-center gap-2">
+                <Clock3 className="size-3.5 shrink-0" />
+                <span className="truncate">
+                  {activeTasks.length === 1
+                    ? `${activeTasks[0].title} is still running`
+                    : `${activeTasks.length} tasks are still running`}
+                </span>
+              </span>
+              <span className="hidden shrink-0 text-zinc-400 sm:inline">
+                safe to reconnect
+              </span>
             </div>
           </div>
         )}
