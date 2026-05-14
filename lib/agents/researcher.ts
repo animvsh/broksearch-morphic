@@ -67,6 +67,49 @@ function wrapSearchToolForQuickMode<
   }) as T
 }
 
+function wrapSearchToolForDeepMode<
+  T extends ReturnType<typeof createSearchTool>
+>(originalTool: T): T {
+  return tool({
+    description: originalTool.description,
+    inputSchema: originalTool.inputSchema,
+    async *execute(params, context) {
+      const executeFunc = originalTool.execute
+      if (!executeFunc) {
+        throw new Error('Search tool execute function is not defined')
+      }
+
+      const modifiedParams = {
+        ...params,
+        type: params.type ?? ('optimized' as const),
+        search_depth: params.search_depth ?? ('advanced' as const),
+        max_results: Math.max(params.max_results ?? 20, 20)
+      }
+
+      const result = executeFunc(modifiedParams, context)
+
+      if (
+        result &&
+        typeof result === 'object' &&
+        Symbol.asyncIterator in result
+      ) {
+        for await (const chunk of result) {
+          yield chunk
+        }
+      } else {
+        const finalResult = await result
+        yield finalResult || {
+          state: 'complete' as const,
+          results: [],
+          images: [],
+          query: params.query,
+          number_of_results: 0
+        }
+      }
+    }
+  }) as T
+}
+
 // Enhanced researcher function with improved type safety using ToolLoopAgent
 // Note: abortSignal should be passed to agent.stream() or agent.generate() calls, not to the agent constructor
 export function createResearcher({
@@ -154,7 +197,7 @@ export function createResearcher({
           `[Researcher] Deep mode: maxSteps=35, tools=[${activeToolsList.join(', ')}]`
         )
         maxSteps = 35
-        searchTool = originalSearchTool
+        searchTool = wrapSearchToolForDeepMode(originalSearchTool)
         break
     }
 

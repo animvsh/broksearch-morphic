@@ -18,7 +18,7 @@ const MINIMAX_CONTEXT_WINDOW = 204_800
 export const BROK_MODELS: Record<string, BrokModelConfig> = {
   'brok-lite': {
     name: 'Brok Lite',
-    description: 'Fast, low-cost reasoning for simple tasks',
+    description: 'Fast, low-cost answers with optional web search',
     provider: 'minimax',
     providerModel: 'MiniMax-M2.7-highspeed',
     inputCostPerMillion: 0.1,
@@ -26,8 +26,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     maxTokens: MINIMAX_CONTEXT_WINDOW,
     contextWindow: MINIMAX_CONTEXT_WINDOW,
     supportsStreaming: true,
-    supportsSearch: false,
-    supportsTools: false
+    supportsSearch: true,
+    supportsTools: true
   },
   'brok-search': {
     name: 'Brok Search',

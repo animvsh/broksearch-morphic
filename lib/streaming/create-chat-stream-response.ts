@@ -253,7 +253,20 @@ export async function createChatStreamResponse(
           }
         }
       },
-      onError: () => GENERIC_CHAT_ERROR,
+      onError: error => {
+        if (taskId) {
+          void updateBackgroundTask({
+            id: taskId,
+            userId,
+            status: 'failed',
+            error: error instanceof Error ? error.message : GENERIC_CHAT_ERROR
+          }).catch(updateError => {
+            console.error('Failed to mark chat task failed:', updateError)
+          })
+        }
+
+        return GENERIC_CHAT_ERROR
+      },
       consumeSseStream: consumeStream
     })
   } catch (error) {

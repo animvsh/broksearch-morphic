@@ -14,13 +14,21 @@ function getTopSources(
   limit = 6
 ): SearchResultItem[] {
   const unique = new Map<string, SearchResultItem>()
+  const hostCounts = new Map<string, number>()
 
   for (const citationMap of Object.values(citationMaps)) {
     for (const citation of Object.values(citationMap)) {
-      if (!citation?.url || unique.has(citation.url)) {
+      const sourceKey = getSourceKey(citation?.url)
+      if (!citation?.url || !sourceKey || unique.has(sourceKey.key)) {
         continue
       }
-      unique.set(citation.url, citation)
+
+      const currentHostCount = hostCounts.get(sourceKey.host) ?? 0
+      if (currentHostCount >= 2) {
+        continue
+      }
+      hostCounts.set(sourceKey.host, currentHostCount + 1)
+      unique.set(sourceKey.key, citation)
       if (unique.size >= limit) {
         return Array.from(unique.values())
       }
@@ -28,6 +36,22 @@ function getTopSources(
   }
 
   return Array.from(unique.values())
+}
+
+function getSourceKey(url?: string) {
+  if (!url) return null
+
+  try {
+    const parsed = new URL(url)
+    const host = parsed.hostname.replace(/^www\./, '').toLowerCase()
+    const path = parsed.pathname.replace(/\/$/, '').toLowerCase()
+    return {
+      host,
+      key: `${host}${path}`
+    }
+  } catch {
+    return null
+  }
 }
 
 export function SourceStrip({

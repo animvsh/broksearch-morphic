@@ -56,6 +56,11 @@ const apiChecks: ApiCheck[] = [
       if (!Array.isArray(body.data) || body.data.length === 0) {
         throw new Error('expected a non-empty model list')
       }
+
+      const brokLite = body.data.find((model: any) => model.id === 'brok-lite')
+      if (!brokLite?.supports_search || !brokLite?.supports_tools) {
+        throw new Error('expected brok-lite to support search and tools')
+      }
     }
   },
   {
@@ -99,6 +104,102 @@ const apiChecks: ApiCheck[] = [
 
       if (body?.error?.code !== 'invalid_model') {
         throw new Error('expected invalid_model error')
+      }
+    }
+  },
+  {
+    name: 'POST /api/v1/chat/completions brok-lite web_search',
+    async run(url, apiKey) {
+      const response = await fetch(`${url}/api/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'brok-lite',
+          stream: false,
+          max_tokens: 80,
+          messages: [
+            {
+              role: 'user',
+              content:
+                'Search the web and answer briefly: what does capy.ad do?'
+            }
+          ],
+          tools: [{ type: 'web_search', web_search: { top_n: 3 } }],
+          tool_choice: { type: 'web_search', web_search: { top_n: 3 } }
+        })
+      })
+      const body = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          `expected 200, got ${response.status}: ${JSON.stringify(body)}`
+        )
+      }
+
+      if (body.model !== 'brok-lite') {
+        throw new Error('expected brok-lite chat response')
+      }
+
+      if (!Array.isArray(body.choices) || body.choices.length === 0) {
+        throw new Error('expected chat choices')
+      }
+
+      if (!Array.isArray(body.citations)) {
+        throw new Error('expected web_search citations')
+      }
+
+      const searchQueries = Array.isArray(body.search_queries)
+        ? body.search_queries
+        : []
+      if (
+        !searchQueries.some((query: string) => query.includes('site:capy.ad'))
+      ) {
+        throw new Error('expected chat web_search to keep capy.ad domain')
+      }
+    }
+  },
+  {
+    name: 'POST /api/v1/search/completions brok-lite',
+    async run(url, apiKey) {
+      const response = await fetch(`${url}/api/v1/search/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'brok-lite',
+          search_depth: 'basic',
+          stream: false,
+          query: 'What does capy.ad do? Answer in one sentence.'
+        })
+      })
+      const body = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          `expected 200, got ${response.status}: ${JSON.stringify(body)}`
+        )
+      }
+
+      if (body.model !== 'brok-lite') {
+        throw new Error('expected brok-lite search response')
+      }
+
+      if (!Array.isArray(body.citations)) {
+        throw new Error('expected citations array')
+      }
+
+      const searchQueries = Array.isArray(body.search_queries)
+        ? body.search_queries
+        : []
+      if (
+        !searchQueries.some((query: string) => query.includes('site:capy.ad'))
+      ) {
+        throw new Error('expected explicit capy.ad search query')
       }
     }
   },

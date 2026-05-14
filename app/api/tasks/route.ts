@@ -17,7 +17,8 @@ export async function GET(request: Request) {
     Math.max(Number.parseInt(url.searchParams.get('limit') || '20', 10), 1),
     100
   )
+  const chatId = url.searchParams.get('chatId')?.trim() || null
 
-  const tasks = await listBackgroundTasks({ userId: user.id, limit })
+  const tasks = await listBackgroundTasks({ userId: user.id, limit, chatId })
   return NextResponse.json({ tasks })
 }

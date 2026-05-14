@@ -331,7 +331,7 @@ async function synthesizeAnswerFromResults(
         {
           role: 'system',
           content:
-            'You are Brok, a Perplexity-style answer engine. Answer using only the provided search results. Start with the direct answer, then key points and details. Cite factual claims with [1], [2], etc. matching the source order. Mention uncertainty when evidence is weak. End naturally without generic "let me know" language.'
+            'You are Brok, a fast answer engine. Answer using only the provided search results. Start with the direct answer. Keep simple factual questions concise. Use bullets or tables only when they make the answer clearer. Cite factual claims with [1], [2], etc. matching the source order. Mention uncertainty when evidence is weak. For investment, medical, legal, or other high-stakes advice, do not decide for the user; give a brief due-diligence checklist. End naturally without generic "let me know" language.'
         },
         {
           role: 'user',
@@ -413,7 +413,11 @@ export function buildSearchQueries({
 }): string[] {
   const resolved = resolveQuery(query, classification)
   const freshness = recencyDays ? ` within ${recencyDays} days` : ''
-  const domainHint = domains?.length ? ` site:${domains.join(' OR site:')}` : ''
+  const inferredDomains = domains?.length ? [] : extractDomainsFromQuery(query)
+  const domainList = domains?.length ? domains : inferredDomains
+  const domainHint = domainList?.length
+    ? ` site:${domainList.join(' OR site:')}`
+    : ''
   const queries = [
     `${resolved}${freshness}${domainHint}`,
     `${resolved} official docs primary source${freshness}${domainHint}`,
@@ -427,6 +431,31 @@ export function buildSearchQueries({
   }
 
   return [...new Set(queries)].slice(0, limit)
+}
+
+function extractDomainsFromQuery(query: string): string[] {
+  const matches = query.match(
+    /\b(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)\b/gi
+  )
+
+  if (!matches) return []
+
+  return Array.from(
+    new Set(
+      matches
+        .map(match =>
+          match
+            .replace(/^https?:\/\//i, '')
+            .replace(/^www\./i, '')
+            .replace(/[),.;!?]+$/g, '')
+            .toLowerCase()
+        )
+        .filter(domain => {
+          if (!domain.includes('.')) return false
+          return !/\.(png|jpe?g|gif|webp|pdf|zip|txt|md)$/i.test(domain)
+        })
+    )
+  ).slice(0, 3)
 }
 
 export function rankAndDedupeSources(

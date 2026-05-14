@@ -44,6 +44,19 @@ describe('Brok search pipeline helpers', () => {
     expect(deepQueries[1]).toContain('official docs primary source')
   })
 
+  it('infers explicit domains from the query for corrected company URLs', () => {
+    const classification = classifyQuery('What does Capy at capy.ad do?')
+
+    expect(
+      buildSearchQueries({
+        query: 'What does Capy at capy.ad do?',
+        classification,
+        depth: 'lite',
+        limit: 1
+      })
+    ).toEqual(['What does Capy at capy.ad do? site:capy.ad'])
+  })
+
   it('dedupes sources and ranks primary sources ahead of weak domains', () => {
     const sources = rankAndDedupeSources(
       [

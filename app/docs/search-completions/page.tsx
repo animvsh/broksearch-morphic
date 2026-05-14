@@ -21,7 +21,7 @@ POST https://api.brok.ai/v1/search/completions
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| model | string | Yes | Model ID (brok-search, brok-search-pro, brok-agent) |
+| model | string | Yes | Any model with search enabled, including brok-lite, brok-search, brok-search-pro, and brok-agent |
 | query | string | Yes | User&apos;s search query |
 | search_depth | string | No | "basic" or "deep". Default: "basic" |
 | max_tokens | number | No | Maximum tokens to generate |
@@ -66,7 +66,7 @@ curl https://api.brok.ai/v1/search/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "brok-search",
+    "model": "brok-lite",
     "query": "What are the latest developments in AI?",
     "search_depth": "basic"
   }'
@@ -78,9 +78,18 @@ curl https://api.brok.ai/v1/search/completions \\
 {
   "id": "src_abc123",
   "object": "search.completion",
-  "model": "brok-search",
-  "query": "What are the latest developments in AI?",
-  "answer": "Based on recent sources, there have been significant...",
+  "model": "brok-lite",
+  "resolved_query": "What are the latest developments in AI?",
+  "classification": "current",
+  "search_queries": ["latest developments in AI"],
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "Recent AI development is moving across models, agents, and product integration..."
+      }
+    }
+  ],
   "citations": [
     {
       "index": 0,
@@ -90,6 +99,9 @@ curl https://api.brok.ai/v1/search/completions \\
       "domain": "techcrunch.com",
       "published_date": "2024-01-20"
     }
+  ],
+  "follow_ups": [
+    "Which source changed most recently?"
   ],
   "usage": {
     "prompt_tokens": 15,
@@ -108,7 +120,7 @@ curl https://api.brok.ai/v1/search/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "brok-search",
+    "model": "brok-lite",
     "query": "Latest AI news",
     "stream": true
   }'
@@ -201,7 +213,8 @@ export default function SearchCompletionsPage() {
                 <td className="py-2 px-3">string</td>
                 <td className="py-2 px-3">Yes</td>
                 <td className="py-2 px-3">
-                  Model ID (brok-search, brok-search-pro, brok-agent)
+                  Any model with search enabled, including brok-lite,
+                  brok-search, brok-search-pro, and brok-agent
                 </td>
               </tr>
               <tr className="border-b">
@@ -277,7 +290,7 @@ export default function SearchCompletionsPage() {
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "brok-search",
+    "model": "brok-lite",
     "query": "What are the latest developments in AI?",
     "search_depth": "basic"
   }'`}</code>
@@ -288,9 +301,18 @@ export default function SearchCompletionsPage() {
           <code>{`{
   "id": "src_abc123",
   "object": "search.completion",
-  "model": "brok-search",
-  "query": "What are the latest developments in AI?",
-  "answer": "Based on recent sources, there have been significant...",
+  "model": "brok-lite",
+  "resolved_query": "What are the latest developments in AI?",
+  "classification": "current",
+  "search_queries": ["latest developments in AI"],
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "Recent AI development is moving across models, agents, and product integration..."
+      }
+    }
+  ],
   "citations": [
     {
       "index": 0,
@@ -300,6 +322,9 @@ export default function SearchCompletionsPage() {
       "domain": "techcrunch.com",
       "published_date": "2024-01-20"
     }
+  ],
+  "follow_ups": [
+    "Which source changed most recently?"
   ],
   "usage": {
     "prompt_tokens": 15,

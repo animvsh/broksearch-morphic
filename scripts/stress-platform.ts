@@ -336,10 +336,10 @@ async function runSearch(baseKey: string) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: 'brok-search',
+      model: 'brok-lite',
       search_depth: 'basic',
       stream: false,
-      query: 'What is Brok? Answer briefly.'
+      query: 'What does capy.ad do? Answer briefly.'
     })
   })
 
@@ -347,6 +347,17 @@ async function runSearch(baseKey: string) {
 
   if (!Array.isArray(body.citations)) {
     throw new Error('search response missing citations array')
+  }
+
+  if (body.model !== 'brok-lite') {
+    throw new Error('search response did not use brok-lite')
+  }
+
+  const searchQueries = Array.isArray(body.search_queries)
+    ? body.search_queries
+    : []
+  if (!searchQueries.some((query: string) => query.includes('site:capy.ad'))) {
+    throw new Error('search response did not keep explicit capy.ad domain')
   }
 }
 

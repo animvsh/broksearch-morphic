@@ -155,6 +155,23 @@ export async function POST(req: Request) {
     }
 
     if (!isGuest) {
+      if (!chatId) {
+        return new Response('Chat ID is required', {
+          status: 400,
+          statusText: 'Bad Request'
+        })
+      }
+
+      if (!isNewChat) {
+        const existingChat = await loadChat(chatId, userId)
+        if (existingChat && existingChat.userId !== userId) {
+          return new Response('You are not allowed to access this chat', {
+            status: 403,
+            statusText: 'Forbidden'
+          })
+        }
+      }
+
       const overallLimitResponse = await checkAndEnforceOverallChatLimit(userId)
       if (overallLimitResponse) return overallLimitResponse
 
@@ -202,7 +219,7 @@ export async function POST(req: Request) {
           userId: userId, // userId is guaranteed to be non-null after authentication check above
           trigger,
           messageId,
-          abortSignal: undefined,
+          abortSignal: searchMode === 'deep' ? undefined : req.signal,
           isNewChat,
           searchMode,
           taskId: task?.id

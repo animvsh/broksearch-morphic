@@ -18,6 +18,7 @@ import {
   routeToProviderResponse
 } from '@/lib/brok/provider-router'
 import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
+import { runSearchPipeline } from '@/lib/brok/search-pipeline'
 import {
   checkUsageLimits,
   generateRequestId,
@@ -187,6 +188,94 @@ export async function POST(request: NextRequest) {
   )
 
   try {
+    if (isWebSearchToolRequest(tools, tool_choice)) {
+      const query = getLatestUserText(chatMessages)
+      if (!query) {
+        return invalidRequestResponse(
+          'missing_query',
+          'web_search tool requests require a user message.'
+        )
+      }
+
+      const searchResult = await runSearchPipeline({
+        query,
+        depth: 'lite'
+      })
+      const latencyMs = Date.now() - startTime
+      const inputTokens = searchResult.tokensUsed
+      const outputTokens = Math.round(searchResult.answer.length / 4)
+
+      await recordUsage({
+        requestId,
+        workspaceId: auth.workspace.id,
+        userId: auth.apiKey.userId,
+        apiKeyId: auth.apiKey.id,
+        endpoint: 'chat',
+        model: modelId,
+        provider: 'Brok',
+        inputTokens,
+        outputTokens,
+        providerCostUsd: 0,
+        billedUsd: 0,
+        latencyMs,
+        status: 'success'
+      })
+
+      if (shouldStream) {
+        return new Response(
+          createSearchToolStream(requestId, modelId, searchResult.answer),
+          {
+            headers: {
+              'Content-Type': 'text/event-stream; charset=utf-8',
+              'Cache-Control': 'no-cache, no-transform',
+              Connection: 'keep-alive',
+              'X-Brok-Request-Id': requestId,
+              ...brokRateLimitHeaders({
+                limit: rateLimit.limit,
+                current: rateLimit.current + 1,
+                resetAt: rateLimit.resetAt
+              })
+            }
+          }
+        )
+      }
+
+      return NextResponse.json(
+        {
+          id: requestId,
+          object: 'chat.completion',
+          model: modelId,
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: searchResult.answer
+              },
+              finish_reason: 'stop'
+            }
+          ],
+          citations: searchResult.citations,
+          follow_ups: searchResult.followUps,
+          search_queries: searchResult.searchQueryList,
+          usage: {
+            prompt_tokens: inputTokens,
+            completion_tokens: outputTokens,
+            total_tokens: inputTokens + outputTokens
+          }
+        },
+        {
+          headers: {
+            'X-Brok-Request-Id': requestId,
+            ...brokRateLimitHeaders({
+              limit: rateLimit.limit,
+              current: rateLimit.current + 1,
+              resetAt: rateLimit.resetAt
+            })
+          }
+        }
+      )
+    }
+
     if (shouldStream) {
       const providerResponse = await routeToProviderResponse(modelId, {
         model: modelId,
@@ -339,6 +428,95 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+function isWebSearchToolRequest(
+  tools?: Array<{ type: string }>,
+  toolChoice?: { type: string }
+) {
+  return (
+    toolChoice?.type === 'web_search' ||
+    tools?.some(tool => tool.type === 'web_search') === true
+  )
+}
+
+function getLatestUserText(messages: Array<Record<string, unknown>>) {
+  for (const message of messages.slice().reverse()) {
+    if (message.role !== 'user') continue
+
+    if (typeof message.content === 'string') {
+      return message.content
+    }
+
+    if (Array.isArray(message.content)) {
+      return message.content
+        .map(part => {
+          if (!part || typeof part !== 'object') return ''
+          const typed = part as { text?: unknown; content?: unknown }
+          return typeof typed.text === 'string'
+            ? typed.text
+            : typeof typed.content === 'string'
+              ? typed.content
+              : ''
+        })
+        .filter(Boolean)
+        .join('\n')
+    }
+  }
+
+  return ''
+}
+
+function createSearchToolStream(
+  requestId: string,
+  modelId: string,
+  answer: string
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder()
+
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({
+            id: requestId,
+            object: 'chat.completion.chunk',
+            model: modelId,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  role: 'assistant',
+                  content: answer
+                },
+                finish_reason: null
+              }
+            ],
+            usage: null
+          })}\n\n`
+        )
+      )
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({
+            id: requestId,
+            object: 'chat.completion.chunk',
+            model: modelId,
+            choices: [
+              {
+                index: 0,
+                delta: {},
+                finish_reason: 'stop'
+              }
+            ],
+            usage: null
+          })}\n\n`
+        )
+      )
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+      controller.close()
+    }
+  })
 }
 
 function createBrokStream(

@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 
 import { backgroundTasks, generateId } from '@/lib/db/schema'
 import { withRLS } from '@/lib/db/with-rls'
@@ -60,11 +60,24 @@ export async function updateBackgroundTask({
 }) {
   return withRLS(userId, async tx => {
     const now = new Date()
+    const [existing] = metadata
+      ? await tx
+          .select({ metadata: backgroundTasks.metadata })
+          .from(backgroundTasks)
+          .where(eq(backgroundTasks.id, id))
+          .limit(1)
+      : []
+    const nextMetadata = metadata
+      ? {
+          ...(existing?.metadata ?? {}),
+          ...metadata
+        }
+      : undefined
     const [task] = await tx
       .update(backgroundTasks)
       .set({
         status,
-        ...(metadata ? { metadata } : {}),
+        ...(nextMetadata ? { metadata: nextMetadata } : {}),
         ...(result ? { result } : {}),
         ...(error !== undefined ? { error } : {}),
         ...(status === 'running' ? { startedAt: now } : {}),
@@ -82,18 +95,96 @@ export async function updateBackgroundTask({
   })
 }
 
+export async function appendBackgroundTaskEvent({
+  id,
+  userId,
+  message,
+  progress,
+  metadata
+}: {
+  id: string
+  userId: string
+  message: string
+  progress?: number
+  metadata?: Record<string, any>
+}) {
+  return withRLS(userId, async tx => {
+    const [existing] = await tx
+      .select({ metadata: backgroundTasks.metadata })
+      .from(backgroundTasks)
+      .where(eq(backgroundTasks.id, id))
+      .limit(1)
+
+    const currentMetadata = existing?.metadata ?? {}
+    const currentEvents = Array.isArray(currentMetadata.events)
+      ? currentMetadata.events
+      : []
+    const nextMetadata = {
+      ...currentMetadata,
+      ...metadata,
+      ...(typeof progress === 'number' ? { progress } : {}),
+      events: [
+        ...currentEvents.slice(-49),
+        {
+          at: new Date().toISOString(),
+          message,
+          ...(typeof progress === 'number' ? { progress } : {})
+        }
+      ]
+    }
+
+    const [task] = await tx
+      .update(backgroundTasks)
+      .set({
+        metadata: nextMetadata,
+        updatedAt: new Date()
+      })
+      .where(eq(backgroundTasks.id, id))
+      .returning()
+
+    return task ?? null
+  })
+}
+
+export async function getBackgroundTask({
+  userId,
+  id
+}: {
+  userId: string
+  id: string
+}) {
+  return withRLS(userId, async tx => {
+    const [task] = await tx
+      .select()
+      .from(backgroundTasks)
+      .where(eq(backgroundTasks.id, id))
+      .limit(1)
+
+    return task ?? null
+  })
+}
+
 export async function listBackgroundTasks({
   userId,
-  limit = 20
+  limit = 20,
+  chatId
 }: {
   userId: string
   limit?: number
+  chatId?: string | null
 }) {
   return withRLS(userId, async tx => {
+    const whereClause = chatId
+      ? and(
+          eq(backgroundTasks.userId, userId),
+          eq(backgroundTasks.chatId, chatId)
+        )
+      : eq(backgroundTasks.userId, userId)
+
     return tx
       .select()
       .from(backgroundTasks)
-      .where(eq(backgroundTasks.userId, userId))
+      .where(whereClause)
       .orderBy(desc(backgroundTasks.createdAt))
       .limit(limit)
   })
