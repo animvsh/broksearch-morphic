@@ -13,6 +13,7 @@ import {
   createChat,
   createChatAndSaveMessage,
   createChatWithFirstMessage,
+  createShareableChatFromTranscript,
   deleteChat,
   deleteMessagesAfter,
   deleteMessagesFromIndex,
@@ -523,6 +524,127 @@ describe('Chat Actions', () => {
       const result = await shareChat('chat-123')
 
       expect(result).toBeNull()
+      expect(dbActions.updateChatVisibility).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('createShareableChatFromTranscript', () => {
+    it('should create a public share from a transcript', async () => {
+      const userId = 'user-123'
+      const mockChat: Chat = {
+        id: 'shared-chat-123',
+        title: 'Shared Transcript',
+        userId,
+        visibility: 'public',
+        createdAt: new Date()
+      }
+
+      vi.mocked(getCurrentUserId).mockResolvedValue(userId)
+      vi.mocked(dbActions.createChat).mockResolvedValue({
+        ...mockChat,
+        visibility: 'private'
+      })
+      vi.mocked(dbActions.upsertMessage).mockResolvedValue({
+        id: 'message-123',
+        chatId: mockChat.id,
+        role: 'user',
+        metadata: null,
+        createdAt: new Date(),
+        updatedAt: null
+      })
+      vi.mocked(dbActions.updateChatVisibility).mockResolvedValue(mockChat)
+
+      const result = await createShareableChatFromTranscript(
+        [
+          { role: 'user', content: '  Hello Brok  ' },
+          { role: 'system', content: 'System context becomes assistant text' },
+          { role: 'assistant', content: 'Shared answer' }
+        ],
+        'Shared Transcript'
+      )
+
+      const generatedChatId = vi.mocked(dbActions.createChat).mock.calls[0]?.[0]
+        .id
+
+      expect(result).toEqual(mockChat)
+      expect(dbActions.createChat).toHaveBeenCalledWith({
+        id: expect.any(String),
+        title: 'Shared Transcript',
+        userId,
+        visibility: 'private'
+      })
+      expect(dbActions.upsertMessage).toHaveBeenCalledTimes(3)
+      expect(dbActions.upsertMessage).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          role: 'assistant',
+          parts: [
+            { type: 'text', text: 'System context becomes assistant text' }
+          ]
+        }),
+        userId
+      )
+      expect(dbActions.updateChatVisibility).toHaveBeenCalledWith(
+        generatedChatId,
+        userId,
+        'public'
+      )
+      expect(revalidateTag).toHaveBeenCalledWith(
+        `chat-${generatedChatId}`,
+        'max'
+      )
+    })
+
+    it('should add a fallback message for an empty transcript', async () => {
+      const userId = 'user-123'
+      const mockChat: Chat = {
+        id: 'shared-chat-empty',
+        title: 'Empty Share',
+        userId,
+        visibility: 'public',
+        createdAt: new Date()
+      }
+
+      vi.mocked(getCurrentUserId).mockResolvedValue(userId)
+      vi.mocked(dbActions.createChat).mockResolvedValue({
+        ...mockChat,
+        visibility: 'private'
+      })
+      vi.mocked(dbActions.upsertMessage).mockResolvedValue({
+        id: 'message-123',
+        chatId: mockChat.id,
+        role: 'assistant',
+        metadata: null,
+        createdAt: new Date(),
+        updatedAt: null
+      })
+      vi.mocked(dbActions.updateChatVisibility).mockResolvedValue(mockChat)
+
+      const result = await createShareableChatFromTranscript(
+        [{ role: 'assistant', content: '   ' }],
+        'Empty Share'
+      )
+
+      expect(result).toEqual(mockChat)
+      expect(dbActions.upsertMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Shared from Brok Code.' }]
+        }),
+        userId
+      )
+    })
+
+    it('should return null for unauthenticated users', async () => {
+      vi.mocked(getCurrentUserId).mockResolvedValue(undefined)
+
+      const result = await createShareableChatFromTranscript([
+        { role: 'user', content: 'Hello' }
+      ])
+
+      expect(result).toBeNull()
+      expect(dbActions.createChat).not.toHaveBeenCalled()
+      expect(dbActions.upsertMessage).not.toHaveBeenCalled()
       expect(dbActions.updateChatVisibility).not.toHaveBeenCalled()
     })
   })

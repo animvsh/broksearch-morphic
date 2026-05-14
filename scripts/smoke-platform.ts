@@ -1,13 +1,15 @@
+import { eq } from 'drizzle-orm'
 import { chromium } from 'playwright'
 
 import { ensureWorkspaceForUser } from '../lib/actions/api-keys'
 import { generateApiKey, getKeyPrefix, hashApiKey } from '../lib/api-key'
 import { db } from '../lib/db'
-import { apiKeys } from '../lib/db/schema'
+import { apiKeys, chats, messages, parts } from '../lib/db/schema'
 
 import {
   createApiKeyViaSupabaseRest,
-  ensureWorkspaceForUserViaSupabaseRest
+  ensureWorkspaceForUserViaSupabaseRest,
+  supabaseRest
 } from './supabase-rest-seed'
 
 type UiCheck = {
@@ -22,6 +24,14 @@ type ProtectedUiCheck = {
 type ApiCheck = {
   name: string
   run: (baseUrl: string, apiKey: string) => Promise<void>
+}
+
+type ShareSeed = {
+  chatId: string
+  title: string
+  userText: string
+  assistantText: string
+  cleanup: () => Promise<void>
 }
 
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3001'
@@ -319,11 +329,12 @@ const apiChecks: ApiCheck[] = [
 ]
 
 async function createSmokeTestKey() {
-  if (process.env.SMOKE_SEED_TOKEN) {
+  const smokeSeedToken = process.env.SMOKE_SEED_TOKEN
+  if (smokeSeedToken) {
     const response = await fetch(`${baseUrl}/api/admin/brok/smoke-seed`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.SMOKE_SEED_TOKEN}`,
+        Authorization: `Bearer ${smokeSeedToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -388,6 +399,303 @@ async function createSmokeTestKey() {
     })
 
     return { workspaceId: workspace.id, apiKey: rawKey, dbBacked: false }
+  }
+}
+
+function makeSmokeId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function encodePortableSharePayload(payload: unknown) {
+  return Buffer.from(JSON.stringify(payload), 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
+}
+
+async function createShareSeed(): Promise<ShareSeed> {
+  const chatId = makeSmokeId('share-smoke-chat')
+  const userMessageId = makeSmokeId('share-smoke-user')
+  const assistantMessageId = makeSmokeId('share-smoke-assistant')
+  const title = 'Share smoke public thread'
+  const userText = 'Share smoke user prompt'
+  const assistantText = 'Share smoke answer visible to signed-out visitors'
+
+  const smokeSeedToken = process.env.SMOKE_SEED_TOKEN
+  if (smokeSeedToken) {
+    const response = await fetch(`${baseUrl}/api/admin/brok/smoke-seed`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${smokeSeedToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        kind: 'share',
+        userId: smokeUserId,
+        title,
+        userText,
+        assistantText
+      })
+    })
+    const body = await response.json().catch(() => null)
+
+    if (
+      response.ok &&
+      typeof body?.chatId === 'string' &&
+      typeof body?.title === 'string' &&
+      typeof body?.userText === 'string' &&
+      typeof body?.assistantText === 'string'
+    ) {
+      return {
+        chatId: body.chatId,
+        title: body.title,
+        userText: body.userText,
+        assistantText: body.assistantText,
+        cleanup: async () => {
+          await fetch(`${baseUrl}/api/admin/brok/smoke-seed`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${smokeSeedToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              kind: 'share-cleanup',
+              userId: smokeUserId,
+              chatId: body.chatId
+            })
+          })
+        }
+      }
+    }
+
+    console.warn(
+      `share seed endpoint unavailable (${response.status}); falling back to local seeding`
+    )
+  }
+
+  try {
+    await db.transaction(async tx => {
+      await tx.insert(chats).values({
+        id: chatId,
+        title,
+        userId: smokeUserId,
+        visibility: 'public'
+      })
+      await tx.insert(messages).values([
+        {
+          id: userMessageId,
+          chatId,
+          role: 'user'
+        },
+        {
+          id: assistantMessageId,
+          chatId,
+          role: 'assistant'
+        }
+      ])
+      await tx.insert(parts).values([
+        {
+          id: makeSmokeId('share-smoke-user-part'),
+          messageId: userMessageId,
+          order: 0,
+          type: 'text',
+          text_text: userText
+        },
+        {
+          id: makeSmokeId('share-smoke-assistant-part'),
+          messageId: assistantMessageId,
+          order: 0,
+          type: 'text',
+          text_text: assistantText
+        }
+      ])
+    })
+
+    return {
+      chatId,
+      title,
+      userText,
+      assistantText,
+      cleanup: async () => {
+        await db.delete(chats).where(eq(chats.id, chatId))
+      }
+    }
+  } catch (error) {
+    console.warn(
+      `share DB seed unavailable, using Supabase REST fallback: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+  }
+
+  await supabaseRest('chats', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: chatId,
+      title,
+      user_id: smokeUserId,
+      visibility: 'public'
+    })
+  })
+  await supabaseRest('messages', {
+    method: 'POST',
+    body: JSON.stringify([
+      {
+        id: userMessageId,
+        chat_id: chatId,
+        role: 'user'
+      },
+      {
+        id: assistantMessageId,
+        chat_id: chatId,
+        role: 'assistant'
+      }
+    ])
+  })
+  await supabaseRest('parts', {
+    method: 'POST',
+    body: JSON.stringify([
+      {
+        id: makeSmokeId('share-smoke-user-part'),
+        message_id: userMessageId,
+        order: 0,
+        type: 'text',
+        text_text: userText
+      },
+      {
+        id: makeSmokeId('share-smoke-assistant-part'),
+        message_id: assistantMessageId,
+        order: 0,
+        type: 'text',
+        text_text: assistantText
+      }
+    ])
+  })
+
+  return {
+    chatId,
+    title,
+    userText,
+    assistantText,
+    cleanup: async () => {
+      await supabaseRest(`chats?id=eq.${encodeURIComponent(chatId)}`, {
+        method: 'DELETE',
+        headers: {
+          Prefer: 'return=minimal'
+        }
+      })
+    }
+  }
+}
+
+async function runShareChecks() {
+  const browser = await chromium.launch({ headless: true })
+  const page = await browser.newPage()
+  const pageErrors: string[] = []
+  const seed = await createShareSeed()
+
+  page.on('pageerror', error => {
+    pageErrors.push(error.message)
+  })
+
+  try {
+    const shareResponse = await page.goto(`${baseUrl}/search/${seed.chatId}`, {
+      waitUntil: 'networkidle'
+    })
+
+    if (!shareResponse || !shareResponse.ok()) {
+      throw new Error(
+        `/search/${seed.chatId} expected 200, got ${
+          shareResponse?.status() ?? 'no response'
+        }`
+      )
+    }
+
+    const shareText = (await page.locator('body').innerText()).replace(
+      /\s+/g,
+      ' '
+    )
+
+    const titleText = await page.title()
+    if (!titleText.includes(seed.title.slice(0, 50))) {
+      throw new Error(
+        `/search/${seed.chatId} page title missing "${seed.title}"`
+      )
+    }
+
+    for (const expectedText of [seed.userText, seed.assistantText]) {
+      if (!shareText.includes(expectedText)) {
+        throw new Error(
+          `/search/${seed.chatId} missing shared text "${expectedText}"`
+        )
+      }
+    }
+
+    if (pageErrors.length > 0) {
+      throw new Error(
+        `/search/${seed.chatId} page errors: ${pageErrors.join('; ')}`
+      )
+    }
+
+    console.log(`share ok /search/${seed.chatId}`)
+
+    pageErrors.length = 0
+    const portablePayload = encodePortableSharePayload({
+      title: 'Portable BrokCode smoke share',
+      createdAt: new Date().toISOString(),
+      messages: [
+        {
+          role: 'user',
+          content: 'Build a small notes app.'
+        },
+        {
+          role: 'assistant',
+          content: 'Created a compact notes app plan.'
+        }
+      ]
+    })
+    const portableResponse = await page.goto(
+      `${baseUrl}/brokcode/shared?data=${portablePayload}`,
+      { waitUntil: 'networkidle' }
+    )
+
+    if (!portableResponse || !portableResponse.ok()) {
+      throw new Error(
+        `/brokcode/shared expected 200, got ${
+          portableResponse?.status() ?? 'no response'
+        }`
+      )
+    }
+
+    const portableText = (await page.locator('body').innerText()).replace(
+      /\s+/g,
+      ' '
+    )
+    for (const expectedText of [
+      'Portable BrokCode smoke share',
+      'Build a small notes app.',
+      'Created a compact notes app plan.'
+    ]) {
+      if (!portableText.includes(expectedText)) {
+        throw new Error(`/brokcode/shared missing text "${expectedText}"`)
+      }
+    }
+
+    if (pageErrors.length > 0) {
+      throw new Error(`/brokcode/shared page errors: ${pageErrors.join('; ')}`)
+    }
+
+    console.log('share ok /brokcode/shared')
+  } finally {
+    await seed.cleanup().catch(error => {
+      console.warn(
+        `share smoke cleanup failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+    })
+    await browser.close()
   }
 }
 
@@ -485,6 +793,7 @@ async function main() {
   console.log(`smoke workspace ${workspaceId}`)
 
   await runUiChecks(dbBacked ? 'Smoke Test Key' : undefined, dbBacked)
+  await runShareChecks()
   await runApiChecks(apiKey)
 
   console.log('smoke ok')

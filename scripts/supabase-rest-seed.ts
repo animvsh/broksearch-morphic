@@ -36,7 +36,7 @@ function getSupabaseConfig() {
   return { url, serviceRoleKey }
 }
 
-async function supabaseRest<T>(
+export async function supabaseRest<T>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {

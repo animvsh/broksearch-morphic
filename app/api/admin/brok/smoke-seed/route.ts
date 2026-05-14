@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { timingSafeEqual } from 'node:crypto'
 
 import { ensureWorkspaceForUser } from '@/lib/actions/api-keys'
 import { generateApiKey, getKeyPrefix, hashApiKey } from '@/lib/api-key'
 import { db } from '@/lib/db'
-import { apiKeys, usageEvents } from '@/lib/db/schema'
+import {
+  apiKeys,
+  chats,
+  generateId,
+  messages,
+  parts,
+  usageEvents
+} from '@/lib/db/schema'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-type SeedKind = 'smoke' | 'stress'
+type SeedKind = 'smoke' | 'stress' | 'share' | 'share-cleanup'
 
 function isAuthorized(request: NextRequest) {
   const token = process.env.SMOKE_SEED_TOKEN
@@ -168,6 +175,82 @@ async function seedStress(userId: string) {
   }
 }
 
+async function seedShare(
+  userId: string,
+  input: {
+    title?: string
+    userText?: string
+    assistantText?: string
+  }
+) {
+  const chatId = generateId()
+  const userMessageId = generateId()
+  const assistantMessageId = generateId()
+  const title = input.title?.trim() || 'Share smoke public thread'
+  const userText = input.userText?.trim() || 'Share smoke user prompt'
+  const assistantText =
+    input.assistantText?.trim() ||
+    'Share smoke answer visible to signed-out visitors'
+
+  await db.transaction(async tx => {
+    await tx.insert(chats).values({
+      id: chatId,
+      title,
+      userId,
+      visibility: 'public'
+    })
+    await tx.insert(messages).values([
+      {
+        id: userMessageId,
+        chatId,
+        role: 'user'
+      },
+      {
+        id: assistantMessageId,
+        chatId,
+        role: 'assistant'
+      }
+    ])
+    await tx.insert(parts).values([
+      {
+        id: generateId(),
+        messageId: userMessageId,
+        order: 0,
+        type: 'text',
+        text_text: userText
+      },
+      {
+        id: generateId(),
+        messageId: assistantMessageId,
+        order: 0,
+        type: 'text',
+        text_text: assistantText
+      }
+    ])
+  })
+
+  return {
+    kind: 'share' as const,
+    chatId,
+    title,
+    userText,
+    assistantText
+  }
+}
+
+async function cleanupShare(userId: string, chatId: string) {
+  const deleted = await db
+    .delete(chats)
+    .where(and(eq(chats.id, chatId), eq(chats.userId, userId)))
+    .returning({ id: chats.id })
+
+  return {
+    kind: 'share-cleanup' as const,
+    chatId,
+    deleted: deleted.length
+  }
+}
+
 export async function POST(request: NextRequest) {
   if (!process.env.SMOKE_SEED_TOKEN) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -198,8 +281,27 @@ export async function POST(request: NextRequest) {
     })
   }
 
+  if (kind === 'share') {
+    return NextResponse.json(await seedShare(userId, body || {}), {
+      headers: { 'Cache-Control': 'no-store' }
+    })
+  }
+
+  if (kind === 'share-cleanup') {
+    if (typeof body?.chatId !== 'string' || !body.chatId.trim()) {
+      return NextResponse.json(
+        { error: 'chatId is required for share-cleanup' },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json(await cleanupShare(userId, body.chatId.trim()), {
+      headers: { 'Cache-Control': 'no-store' }
+    })
+  }
+
   return NextResponse.json(
-    { error: 'kind must be smoke or stress' },
+    { error: 'kind must be smoke, stress, share, or share-cleanup' },
     { status: 400 }
   )
 }
