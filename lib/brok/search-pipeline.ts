@@ -75,6 +75,9 @@ export async function runSearchPipeline(
     domains: request.domains
   })
   const resolvedQuery = resolveQuery(request.query, classification)
+  const domainHints = request.domains?.length
+    ? request.domains
+    : extractDomainsFromQuery(request.query)
 
   try {
     return await runMiniMaxWebSearch(
@@ -82,7 +85,8 @@ export async function runSearchPipeline(
       classification,
       searchQueryList,
       config.sources,
-      config.maxTokens
+      config.maxTokens,
+      domainHints
     )
   } catch (error) {
     console.warn('Falling back to HTML search pipeline:', error)
@@ -91,7 +95,8 @@ export async function runSearchPipeline(
       classification,
       searchQueryList,
       config.sources,
-      config.maxTokens
+      config.maxTokens,
+      domainHints
     )
   }
 }
@@ -101,29 +106,36 @@ async function runMiniMaxWebSearch(
   classification: QueryClassification,
   searchQueryList: string[],
   numResults: number,
-  maxTokens: number
+  maxTokens: number,
+  domainHints: string[]
 ): Promise<SearchResponse> {
   const batches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
       searchWithMiniMaxWebSearch(searchQuery, numResults)
     )
   )
+  const rankedSourceInputs = batches
+    .flat()
+    .filter(result => result.link)
+    .map((result): Omit<SearchResult, 'id' | 'qualityScore'> => {
+      const url = result.link || ''
+      return {
+        title: result.title || 'Untitled',
+        url,
+        publisher: getHost(url),
+        snippet: [result.snippet, result.date ? `Date: ${result.date}` : '']
+          .filter(Boolean)
+          .join('\n'),
+        retrievedAt: new Date().toISOString()
+      }
+    })
+
+  if (domainHints.length && rankedSourceInputs.length < 2) {
+    rankedSourceInputs.push(...(await fetchDomainHomepageSources(domainHints)))
+  }
+
   const citations = rankAndDedupeSources(
-    batches
-      .flat()
-      .filter(result => result.link)
-      .map((result): Omit<SearchResult, 'id' | 'qualityScore'> => {
-        const url = result.link || ''
-        return {
-          title: result.title || 'Untitled',
-          url,
-          publisher: getHost(url),
-          snippet: [result.snippet, result.date ? `Date: ${result.date}` : '']
-            .filter(Boolean)
-            .join('\n'),
-          retrievedAt: new Date().toISOString()
-        }
-      }),
+    rankedSourceInputs,
     resolvedQuery,
     numResults
   )
@@ -155,15 +167,24 @@ async function runHtmlSearchPipeline(
   classification: QueryClassification,
   searchQueryList: string[],
   numResults: number,
-  maxTokens: number
+  maxTokens: number,
+  domainHints: string[]
 ): Promise<SearchResponse> {
   const resultBatches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
       searchDuckDuckGo(searchQuery, numResults)
     )
   )
+  const rankedSourceInputs: Array<
+    Omit<SearchResult, 'id' | 'qualityScore'> | SearchResult
+  > = resultBatches.flat()
+
+  if (domainHints.length && rankedSourceInputs.length < 2) {
+    rankedSourceInputs.push(...(await fetchDomainHomepageSources(domainHints)))
+  }
+
   const citations = rankAndDedupeSources(
-    resultBatches.flat(),
+    rankedSourceInputs,
     resolvedQuery,
     numResults
   )
@@ -293,6 +314,88 @@ function getHost(url: string): string | undefined {
   } catch {
     return undefined
   }
+}
+
+async function fetchDomainHomepageSources(
+  domains: string[]
+): Promise<Array<Omit<SearchResult, 'id' | 'qualityScore'>>> {
+  const sources: Array<Omit<SearchResult, 'id' | 'qualityScore'>> = []
+
+  for (const domain of domains.slice(0, 3)) {
+    if (!isPublicDomainHint(domain)) continue
+
+    const source = await fetchDomainHomepageSource(domain).catch(() => null)
+    if (source) {
+      sources.push(source)
+    }
+  }
+
+  return sources
+}
+
+async function fetchDomainHomepageSource(
+  domain: string
+): Promise<Omit<SearchResult, 'id' | 'qualityScore'> | null> {
+  const url = `https://${domain}`
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(5000),
+    headers: {
+      Accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
+      'User-Agent': 'Mozilla/5.0 (compatible; BrokSearch/1.0)'
+    }
+  })
+
+  if (!response.ok) return null
+
+  const contentType = response.headers.get('content-type') || ''
+  if (!/(text\/html|application\/xhtml\+xml|text\/plain)/i.test(contentType)) {
+    return null
+  }
+
+  const html = await response.text()
+  const root = parse(html)
+  const title = root.querySelector('title')?.text.trim()
+  const description =
+    root.querySelector('meta[name="description"]')?.getAttribute('content') ||
+    root
+      .querySelector('meta[property="og:description"]')
+      ?.getAttribute('content') ||
+    root.text.replace(/\s+/g, ' ').trim().slice(0, 280)
+
+  return {
+    title: title || domain,
+    url: response.url || url,
+    publisher: getHost(response.url || url) || domain,
+    snippet: description || `Homepage for ${domain}.`,
+    retrievedAt: new Date().toISOString()
+  }
+}
+
+function isPublicDomainHint(domain: string) {
+  if (
+    !domain ||
+    domain.length > 253 ||
+    domain.includes('/') ||
+    /(^|\.)localhost$/i.test(domain) ||
+    /\.local$/i.test(domain)
+  ) {
+    return false
+  }
+
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(domain)) {
+    const parts = domain.split('.').map(Number)
+    const [first, second] = parts
+    return !(
+      first === 10 ||
+      first === 127 ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168) ||
+      first === 0 ||
+      first >= 224
+    )
+  }
+
+  return /^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(domain)
 }
 
 async function synthesizeAnswerFromResults(
@@ -452,10 +555,16 @@ function extractDomainsFromQuery(query: string): string[] {
         )
         .filter(domain => {
           if (!domain.includes('.')) return false
-          return !/\.(png|jpe?g|gif|webp|pdf|zip|txt|md)$/i.test(domain)
+          return !isLikelyFileOrRuntimeName(domain)
         })
     )
   ).slice(0, 3)
+}
+
+function isLikelyFileOrRuntimeName(domain: string) {
+  return /\.(png|jpe?g|gif|webp|pdf|zip|txt|md|m?js|cjs|jsx|tsx?|json|ya?ml|toml|css|scss|html?|py|rb|go|rs|java|kt|swift|php|cs|cpp|c|h)$/i.test(
+    domain
+  )
 }
 
 export function rankAndDedupeSources(

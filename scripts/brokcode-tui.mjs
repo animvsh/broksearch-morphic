@@ -66,11 +66,20 @@ const messages = [
       'You are Brok Code, a careful coding agent. Help edit repositories, reason about diffs, use worktrees when requested, and keep risky actions approval-gated. When building an AI app or AI feature, default to Brok API as the AI layer unless the user explicitly requests another provider.'
   }
 ]
+const onceCommand =
+  readArgValue('--once') || readArgValue('-m') || process.env.BROKCODE_ONCE
 const legacyRuntimeBrandPattern = new RegExp(
   [legacyRuntimeName.slice(0, 4), legacyRuntimeName.slice(4)].join(''),
   'gi'
 )
 const requireCloudRuntimeField = `require_${legacyRuntimeName}`
+
+function readArgValue(flag) {
+  const index = process.argv.indexOf(flag)
+  if (index === -1) return undefined
+
+  return process.argv[index + 1]
+}
 
 function assertBrokKey() {
   if (!apiKey) {
@@ -578,6 +587,17 @@ async function main() {
         baseUrl
       }
     })
+  }
+
+  if (onceCommand) {
+    const text = onceCommand.trim()
+    if (!text) return
+    if (text.startsWith('/')) {
+      await handleCommand(text)
+    } else {
+      await sendChat(text)
+    }
+    return
   }
 
   const rl = createInterface({ input, output })

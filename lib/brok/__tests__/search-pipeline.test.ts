@@ -1,14 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   buildSearchQueries,
   classifyQuery,
   generateFollowUps,
   rankAndDedupeSources,
-  resolveQuery
+  resolveQuery,
+  runSearchPipeline
 } from '@/lib/brok/search-pipeline'
 
 describe('Brok search pipeline helpers', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('classifies and resolves comparison queries', () => {
     const classification = classifyQuery('MiniMax M2 vs OpenAI API pricing')
 
@@ -55,6 +60,59 @@ describe('Brok search pipeline helpers', () => {
         limit: 1
       })
     ).toEqual(['What does Capy at capy.ad do? site:capy.ad'])
+  })
+
+  it('does not treat dotted runtime names as site filters', () => {
+    const classification = classifyQuery('How does Node.js streaming work?')
+
+    expect(
+      buildSearchQueries({
+        query: 'How does Node.js streaming work?',
+        classification,
+        depth: 'lite',
+        limit: 1
+      })
+    ).toEqual(['How does Node.js streaming work?'])
+  })
+
+  it('falls back to an explicit domain homepage when search returns no results', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+
+        if (url.startsWith('https://html.duckduckgo.com/html/')) {
+          return new Response('<html><body></body></html>', {
+            status: 200,
+            headers: { 'content-type': 'text/html' }
+          })
+        }
+
+        if (url === 'https://capy.ad') {
+          return new Response(
+            '<html><head><title>Capy - AI-Powered Outbound Sales</title><meta name="description" content="Capy is your autonomous AI CMO that books meetings on autopilot."></head><body></body></html>',
+            {
+              status: 200,
+              headers: { 'content-type': 'text/html' }
+            }
+          )
+        }
+
+        return new Response('not found', { status: 404 })
+      })
+    )
+
+    const result = await runSearchPipeline({
+      query: 'What does capy.ad do?',
+      depth: 'lite'
+    })
+
+    expect(result.citations[0]).toMatchObject({
+      title: 'Capy - AI-Powered Outbound Sales',
+      publisher: 'capy.ad',
+      url: 'https://capy.ad'
+    })
+    expect(result.answer).toContain('Capy')
   })
 
   it('dedupes sources and ranks primary sources ahead of weak domains', () => {
