@@ -485,6 +485,8 @@ async function sendChat(content) {
   let buffer = ''
   let assistant = ''
   let resultContent = ''
+  let currentEvent = 'message'
+  let streamFailed = false
 
   while (true) {
     const { done, value } = await reader.read()
@@ -495,24 +497,37 @@ async function sendChat(content) {
     buffer = lines.pop() ?? ''
 
     for (const line of lines) {
+      if (!line.trim()) {
+        currentEvent = 'message'
+        continue
+      }
+
+      if (line.startsWith('event:')) {
+        currentEvent = line.slice(6).trim() || 'message'
+        continue
+      }
+
       if (!line.startsWith('data:')) continue
       const data = line.slice(5).trim()
       if (!data || data === '[DONE]') continue
 
       try {
         const payload = JSON.parse(data)
+        if (currentEvent === 'error' || payload.error) {
+          streamFailed = true
+          const errorMessage = normalizeRuntimeBrand(
+            payload.error?.message ||
+              payload.message ||
+              'Brok Code stream failed'
+          )
+          output.write(`${colors.red}${errorMessage}${colors.reset}\n`)
+          continue
+        }
+
         if (payload.message && !payload.content) {
           output.write(
             `${colors.dim}${normalizeRuntimeBrand(payload.message)}${colors.reset}\n`
           )
-          continue
-        }
-
-        if (payload.error?.message || payload.message) {
-          const errorMessage = normalizeRuntimeBrand(
-            payload.error?.message || payload.message
-          )
-          output.write(`${colors.red}${errorMessage}${colors.reset}\n`)
           continue
         }
 
@@ -536,6 +551,8 @@ async function sendChat(content) {
   }
 
   output.write('\n\n')
+  if (streamFailed) return
+
   messages.push({ role: 'assistant', content: assistant })
   await syncEvent({
     role: 'assistant',
