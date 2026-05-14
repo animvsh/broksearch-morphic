@@ -9,7 +9,7 @@ import type { Chat, Message } from '@/lib/db/schema'
 import { generateId } from '@/lib/db/schema'
 import type { UIMessage } from '@/lib/types/ai'
 import type { PersistableUIMessage } from '@/lib/types/message-persistence'
-import { getTextFromParts } from '@/lib/utils/message-utils'
+import { getVisibleTextFromParts } from '@/lib/utils/message-utils'
 
 // Constants
 const DEFAULT_CHAT_TITLE = 'Untitled'
@@ -112,7 +112,9 @@ export async function createChatAndSaveMessage(
 
   // Extract title from message if not provided
   const chatTitle =
-    title || getTextFromParts(message.parts as any[]) || DEFAULT_CHAT_TITLE
+    title ||
+    getVisibleTextFromParts(message.parts as any[]) ||
+    DEFAULT_CHAT_TITLE
 
   // Create chat
   const chat = await dbActions.createChat({
@@ -387,7 +389,7 @@ export async function saveChatTitle(
   parentTraceId?: string
 ) {
   if (!chat && message) {
-    const userContent = getTextFromParts(message.parts)
+    const userContent = getVisibleTextFromParts(message.parts)
     const title = await generateChatTitle({
       userMessageContent: userContent,
       modelId,

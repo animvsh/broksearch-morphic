@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import { isAcceptedChatFile } from '@/lib/files/chat-file-utils'
 import { extractUploadedFileText } from '@/lib/files/server-file-extraction'
 import { uploadFileLocal } from '@/lib/storage/local-file-client'
 import {
@@ -12,7 +13,6 @@ import {
 } from '@/lib/storage/r2-client'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
 
 export const runtime = 'nodejs'
 
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    if (!isAcceptedChatFile(file)) {
       return NextResponse.json(
         { error: 'Unsupported file type' },
         { status: 400 }
@@ -134,7 +134,7 @@ async function handleLocalUpload(req: NextRequest, userId: string) {
     )
   }
 
-  if (!ALLOWED_TYPES.includes(file.type)) {
+  if (!isAcceptedChatFile(file)) {
     return NextResponse.json(
       { error: 'Unsupported file type' },
       { status: 400 }

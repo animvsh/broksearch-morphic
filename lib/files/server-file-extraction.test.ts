@@ -23,6 +23,33 @@ describe('extractUploadedFileText', () => {
     expect(result.pageCount).toBe(1)
   })
 
+  it('extracts readable text from text and markdown uploads', async () => {
+    const file = new File(
+      ['# Notes\n\nThe onboarding checklist has 7 blockers.'],
+      'notes.md',
+      {
+        type: 'text/markdown'
+      }
+    )
+
+    const result = await extractUploadedFileText(file)
+
+    expect(result.status).toBe('extracted')
+    expect(result.text).toContain('onboarding checklist has 7 blockers')
+    expect(result.charCount).toBeGreaterThan(20)
+  })
+
+  it('extracts readable text from code uploads by extension even without a MIME type', async () => {
+    const file = new File(['export const apiStatus = "working"'], 'status.ts', {
+      type: ''
+    })
+
+    const result = await extractUploadedFileText(file)
+
+    expect(result.status).toBe('extracted')
+    expect(result.text).toContain('apiStatus')
+  })
+
   it('skips non-document attachments', async () => {
     const file = new File(['not an image'], 'fixture.png', {
       type: 'image/png'

@@ -13,7 +13,7 @@ import {
   shouldTruncateMessages,
   truncateMessages
 } from '../utils/context-window'
-import { getTextFromParts } from '../utils/message-utils'
+import { getVisibleTextFromParts } from '../utils/message-utils'
 import { perfLog, perfTime } from '../utils/perf-logging'
 
 import { persistStreamResults } from './helpers/persist-stream-results'
@@ -163,7 +163,7 @@ export async function createChatStreamResponse(
 
     // Start title generation in parallel if it's a new chat
     if (!initialChat && message) {
-      const userContent = getTextFromParts(message.parts)
+      const userContent = getVisibleTextFromParts(message.parts)
       titlePromise = generateChatTitle({
         userMessageContent: userContent,
         modelId: context.modelId,

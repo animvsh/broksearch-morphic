@@ -7,7 +7,7 @@ import {
 } from '@/lib/actions/chat'
 import { generateId } from '@/lib/db/schema'
 import type { SearchMode } from '@/lib/types/search'
-import { getTextFromParts } from '@/lib/utils/message-utils'
+import { getVisibleTextFromParts } from '@/lib/utils/message-utils'
 
 type SimpleChatStreamConfig = {
   chatId?: string
@@ -42,7 +42,7 @@ async function persistSimpleMessages({
     id: message.id || generateId()
   }
 
-  const title = getTextFromParts(userMessage.parts).trim() || 'Quick check'
+  const title = getVisibleTextFromParts(userMessage.parts) || 'Quick check'
 
   if (isNewChat) {
     await createChatWithFirstMessage(chatId, userMessage, userId, title)

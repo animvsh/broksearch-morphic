@@ -1,6 +1,6 @@
 import type { UIMessage } from 'ai'
 
-import { getTextFromParts } from './message-utils'
+import { getVisibleTextFromParts } from './message-utils'
 
 const SIMPLE_CHAT_PATTERNS = [
   /^(hi|hello|hey|yo|sup|hiya|howdy)[!.?]*$/i,
@@ -24,7 +24,7 @@ export function shouldUseQuickReplyForMessage(
 ) {
   if (!message || message.role !== 'user') return false
 
-  const text = getTextFromParts(message.parts).trim()
+  const text = getVisibleTextFromParts(message.parts)
   if (!text || URL_PATTERN.test(text)) return false
 
   const hasNonTextContext = message.parts.some(part => {
@@ -85,7 +85,7 @@ export function getSimpleUtilityReplyForMessage(
 ) {
   if (!shouldUseQuickReplyForMessage(message)) return null
 
-  return createSimpleUtilityReply(getTextFromParts(message?.parts).trim())
+  return createSimpleUtilityReply(getVisibleTextFromParts(message?.parts))
 }
 
 export function getLatestUserMessage(

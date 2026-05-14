@@ -44,6 +44,8 @@ const MAX_TEXT_EXTRACT_CHARS = 20_000
 
 export const CHAT_MAX_FILES = 3
 export const CHAT_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
+export const CHAT_FILE_TRUNCATION_MARKER =
+  '[File content truncated for faster analysis]'
 export const CHAT_FILE_INPUT_ACCEPT = [
   '.csv',
   '.html',
@@ -118,5 +120,5 @@ export async function extractTextForChat(
 
   if (!wasTruncated) return charTrimmed
 
-  return `${charTrimmed}\n\n[File content truncated for faster analysis]`
+  return `${charTrimmed}\n\n${CHAT_FILE_TRUNCATION_MARKER}`
 }

@@ -8,6 +8,9 @@ interface DatabaseMessageInput {
   parts: any // Using 'any' here as we don't know the exact structure expected by the database
 }
 
+const UPLOADED_FILE_CONTEXT_PATTERN =
+  /<uploaded_file\s+name=(["'])(.*?)\1[^>]*>[\s\S]*?<\/uploaded_file>/gi
+
 /**
  * Converts a single message from AI SDK to a database-compatible message format
  * @param message - Message from AI SDK
@@ -71,18 +74,32 @@ export function extractTitleFromMessage(
   if (!message.content) return 'New Chat'
 
   if (typeof message.content === 'string') {
-    return message.content.substring(0, maxLength)
+    return (
+      stripUploadedFileContext(message.content).substring(0, maxLength) ||
+      'New Chat'
+    )
   }
 
   // For array content, try to find text parts
   if (Array.isArray(message.content)) {
     const textPart = message.content.find(part => part.type === 'text')
     if (textPart && 'text' in textPart) {
-      return textPart.text.substring(0, maxLength)
+      return (
+        stripUploadedFileContext(textPart.text).substring(0, maxLength) ||
+        'New Chat'
+      )
     }
   }
 
   return 'New Chat'
+}
+
+/**
+ * Removes hidden uploaded-file context from text that is stored for the model
+ * but should not be shown in UI chrome, chat titles, or routing decisions.
+ */
+export function stripUploadedFileContext(text: string): string {
+  return text.replace(UPLOADED_FILE_CONTEXT_PATTERN, '').trim()
 }
 
 /**
@@ -98,6 +115,12 @@ export function getTextFromParts(parts?: UIMessage['parts']): string {
       .map(part => part.text)
       .join(' ') ?? ''
   )
+}
+
+export function getVisibleTextFromParts(parts?: UIMessage['parts']): string {
+  return stripUploadedFileContext(getTextFromParts(parts))
+    .replace(/\s{2,}/g, ' ')
+    .trim()
 }
 
 /**

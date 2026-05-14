@@ -1,5 +1,11 @@
 import { createRequire } from 'module'
 
+import {
+  CHAT_FILE_TRUNCATION_MARKER,
+  extractTextForChat,
+  isTextLikeFile
+} from '@/lib/files/chat-file-utils'
+
 type PdfParseResult = {
   text?: string
   numpages?: number
@@ -47,6 +53,31 @@ export async function extractUploadedFileText(
   file: File,
   parsePdf: PdfParse = pdfParse
 ): Promise<UploadedFileTextExtraction> {
+  if (isTextLikeFile(file)) {
+    try {
+      const extracted = await extractTextForChat(file)
+
+      if (!extracted) {
+        return { status: 'empty', charCount: 0, truncated: false }
+      }
+
+      return {
+        status: 'extracted',
+        text: extracted,
+        charCount: extracted.replace(`\n\n${CHAT_FILE_TRUNCATION_MARKER}`, '')
+          .length,
+        truncated: extracted.includes(CHAT_FILE_TRUNCATION_MARKER)
+      }
+    } catch (error) {
+      return {
+        status: 'failed',
+        charCount: 0,
+        truncated: false,
+        error: error instanceof Error ? error.message : 'Text extraction failed'
+      }
+    }
+  }
+
   if (file.type !== 'application/pdf') {
     return { status: 'skipped', charCount: 0, truncated: false }
   }
