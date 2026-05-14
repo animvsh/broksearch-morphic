@@ -6,6 +6,11 @@ import {
   unauthorizedResponse,
   verifyRequestAuth
 } from '@/lib/brok/auth'
+import {
+  brokRateLimitHeaders,
+  invalidRequestResponse,
+  readJsonBody
+} from '@/lib/brok/http'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
 import {
@@ -69,20 +74,6 @@ function completionPayload({
   }
 }
 
-function rateLimitHeaders(rateLimit: {
-  limit: number
-  current: number
-  resetAt: number
-}) {
-  return {
-    'X-RateLimit-Limit': String(rateLimit.limit),
-    'X-RateLimit-Remaining': String(
-      Math.max(rateLimit.limit - rateLimit.current, 0)
-    ),
-    'X-RateLimit-Reset': String(rateLimit.resetAt)
-  }
-}
-
 function normalizeSearchDepth(value: unknown): 'lite' | 'standard' | 'deep' {
   if (value === 'deep' || value === 'advanced') return 'deep'
   if (value === 'lite' || value === 'basic' || value === 'quick') return 'lite'
@@ -110,7 +101,20 @@ export async function POST(request: NextRequest) {
   }
 
   // Parse body
-  const body = await request.json()
+  const parsedBody = await readJsonBody<{
+    query?: unknown
+    model?: unknown
+    stream?: unknown
+    recency_days?: number
+    domains?: unknown
+    depth?: unknown
+    search_depth?: unknown
+  }>(request)
+  if (!parsedBody.ok) {
+    return parsedBody.response
+  }
+
+  const body = parsedBody.body
   const {
     query,
     model = 'brok-search',
@@ -119,18 +123,19 @@ export async function POST(request: NextRequest) {
     domains
   } = body
   const depth = normalizeSearchDepth(body.depth ?? body.search_depth)
+  const searchDomains = Array.isArray(domains)
+    ? domains.filter((domain): domain is string => typeof domain === 'string')
+    : undefined
 
-  if (!query) {
-    return NextResponse.json(
-      {
-        error: {
-          type: 'invalid_request_error',
-          code: 'missing_query',
-          message: 'Query is required'
-        }
-      },
-      { status: 400 }
+  if (typeof query !== 'string' || query.trim().length === 0) {
+    return invalidRequestResponse(
+      'missing_query',
+      'query must be a non-empty string.'
     )
+  }
+
+  if (typeof model !== 'string') {
+    return invalidRequestResponse('invalid_model', 'model must be a string.')
   }
 
   // Validate model supports search
@@ -181,7 +186,15 @@ export async function POST(request: NextRequest) {
           )
         }
       },
-      { status: 429, headers: rateLimitHeaders(rateLimit) }
+      {
+        status: 429,
+        headers: brokRateLimitHeaders({
+          limit: rateLimit.limit,
+          current: rateLimit.limit,
+          resetAt: rateLimit.resetAt,
+          includeRetryAfter: true
+        })
+      }
     )
   }
 
@@ -212,7 +225,7 @@ export async function POST(request: NextRequest) {
             depth,
             limit: depth === 'deep' ? 5 : depth === 'lite' ? 1 : 3,
             recencyDays: recency_days,
-            domains
+            domains: searchDomains
           })
 
           send('search.step', {
@@ -238,7 +251,7 @@ export async function POST(request: NextRequest) {
               id: requestId,
               depth,
               recency_days,
-              domains: Array.isArray(domains) ? domains : [],
+              domains: searchDomains ?? [],
               search_queries: searchQueries
             })
 
@@ -246,7 +259,7 @@ export async function POST(request: NextRequest) {
               query,
               depth,
               recencyDays: recency_days,
-              domains
+              domains: searchDomains
             })
 
             const latencyMs = Date.now() - startTime
@@ -359,9 +372,10 @@ export async function POST(request: NextRequest) {
           'Cache-Control': 'no-cache, no-transform',
           Connection: 'keep-alive',
           'X-Brok-Request-Id': requestId,
-          ...rateLimitHeaders({
-            ...rateLimit,
-            current: rateLimit.current + 1
+          ...brokRateLimitHeaders({
+            limit: rateLimit.limit,
+            current: rateLimit.current + 1,
+            resetAt: rateLimit.resetAt
           })
         }
       }
@@ -373,7 +387,7 @@ export async function POST(request: NextRequest) {
       query,
       depth,
       recencyDays: recency_days,
-      domains
+      domains: searchDomains
     })
 
     const latencyMs = Date.now() - startTime
@@ -407,9 +421,10 @@ export async function POST(request: NextRequest) {
       {
         headers: {
           'X-Brok-Request-Id': requestId,
-          ...rateLimitHeaders({
-            ...rateLimit,
-            current: rateLimit.current + 1
+          ...brokRateLimitHeaders({
+            limit: rateLimit.limit,
+            current: rateLimit.current + 1,
+            resetAt: rateLimit.resetAt
           })
         }
       }

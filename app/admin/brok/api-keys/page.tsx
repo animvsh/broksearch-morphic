@@ -34,6 +34,11 @@ export default async function AdminApiKeysPage() {
                 <th className="text-left p-4 font-medium">Environment</th>
                 <th className="text-left p-4 font-medium">Status</th>
                 <th className="text-left p-4 font-medium">RPM Limit</th>
+                <th className="text-left p-4 font-medium">Daily</th>
+                <th className="text-left p-4 font-medium">Budget</th>
+                <th className="text-left p-4 font-medium">Scopes</th>
+                <th className="text-left p-4 font-medium">Models</th>
+                <th className="text-left p-4 font-medium">Last Used</th>
                 <th className="text-left p-4 font-medium">Created</th>
                 <th className="text-left p-4 font-medium">Actions</th>
               </tr>
@@ -42,7 +47,7 @@ export default async function AdminApiKeysPage() {
               {keys.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={13}
                     className="p-4 text-center text-muted-foreground"
                   >
                     No API keys found
@@ -79,6 +84,31 @@ export default async function AdminApiKeysPage() {
                       </Badge>
                     </td>
                     <td className="p-4">{key.rpmLimit}</td>
+                    <td className="p-4">{key.dailyRequestLimit}</td>
+                    <td className="p-4">
+                      {key.monthlyBudgetCents
+                        ? `$${(key.monthlyBudgetCents / 100).toFixed(2)}`
+                        : 'Unlimited'}
+                    </td>
+                    <td className="p-4">
+                      <div className="flex max-w-56 flex-wrap gap-1">
+                        {key.scopes.map(scope => (
+                          <Badge key={scope} variant="outline">
+                            {scope}
+                          </Badge>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="p-4 text-sm text-muted-foreground">
+                      {key.allowedModels.length > 0
+                        ? key.allowedModels.join(', ')
+                        : 'All models'}
+                    </td>
+                    <td className="p-4">
+                      {key.lastUsedAt
+                        ? new Date(key.lastUsedAt).toLocaleString()
+                        : 'Never'}
+                    </td>
                     <td className="p-4">
                       {new Date(key.createdAt).toLocaleDateString()}
                     </td>

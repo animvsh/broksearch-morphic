@@ -32,12 +32,16 @@ export default async function AdminLogsPage({
                 <th className="text-left p-4 font-medium">Request ID</th>
                 <th className="text-left p-4 font-medium">Workspace</th>
                 <th className="text-left p-4 font-medium">Endpoint</th>
+                <th className="text-left p-4 font-medium">Surface</th>
+                <th className="text-left p-4 font-medium">Runtime</th>
                 <th className="text-left p-4 font-medium">Model</th>
+                <th className="text-left p-4 font-medium">Provider</th>
                 <th className="text-left p-4 font-medium">Input Tokens</th>
                 <th className="text-left p-4 font-medium">Output Tokens</th>
                 <th className="text-left p-4 font-medium">Cost</th>
                 <th className="text-left p-4 font-medium">Latency</th>
                 <th className="text-left p-4 font-medium">Status</th>
+                <th className="text-left p-4 font-medium">Error</th>
                 <th className="text-left p-4 font-medium">Time</th>
               </tr>
             </thead>
@@ -45,7 +49,7 @@ export default async function AdminLogsPage({
               {logs.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={14}
                     className="p-4 text-center text-muted-foreground"
                   >
                     No logs found
@@ -61,7 +65,10 @@ export default async function AdminLogsPage({
                     <td className="p-4">
                       <Badge variant="outline">{log.endpoint}</Badge>
                     </td>
+                    <td className="p-4">{log.surface}</td>
+                    <td className="p-4">{log.runtime ?? 'api'}</td>
                     <td className="p-4">{log.model}</td>
+                    <td className="p-4">{log.provider}</td>
                     <td className="p-4">{log.inputTokens}</td>
                     <td className="p-4">{log.outputTokens}</td>
                     <td className="p-4">${Number(log.billedUsd).toFixed(4)}</td>
@@ -74,6 +81,9 @@ export default async function AdminLogsPage({
                       >
                         {log.status}
                       </Badge>
+                    </td>
+                    <td className="p-4 max-w-56 truncate text-sm text-muted-foreground">
+                      {log.errorCode ?? '—'}
                     </td>
                     <td className="p-4">
                       {new Date(log.createdAt).toLocaleString()}

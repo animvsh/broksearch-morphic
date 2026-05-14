@@ -6,6 +6,11 @@ import {
   unauthorizedResponse,
   verifyRequestAuth
 } from '@/lib/brok/auth'
+import {
+  brokRateLimitHeaders,
+  invalidRequestResponse,
+  readJsonBody
+} from '@/lib/brok/http'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import {
   calculateCost,
@@ -58,9 +63,33 @@ export async function POST(request: NextRequest) {
     return usageLimitResponse(usageLimit)
   }
 
-  const body = await request.json()
+  const parsedBody = await readJsonBody<{
+    model?: unknown
+    stream?: unknown
+    system?: AnthropicContentBlock
+    messages?: unknown
+    temperature?: number
+    top_p?: number
+    max_tokens?: number
+  }>(request)
+  if (!parsedBody.ok) {
+    return parsedBody.response
+  }
+
+  const body = parsedBody.body
   const modelId = body.model ?? 'brok-code'
   const stream = Boolean(body.stream)
+
+  if (typeof modelId !== 'string') {
+    return invalidRequestResponse('invalid_model', 'model must be a string.')
+  }
+
+  if (!Array.isArray(body.messages)) {
+    return invalidRequestResponse(
+      'missing_messages',
+      'messages must be an array of Anthropic messages.'
+    )
+  }
 
   if (!isValidBrokModel(modelId)) {
     return NextResponse.json(
@@ -102,7 +131,7 @@ export async function POST(request: NextRequest) {
       auth.workspace.id,
       'rpm',
       rateLimit.limit,
-      rateLimit.current,
+      rateLimit.current + 1,
       true
     )
 
@@ -114,7 +143,15 @@ export async function POST(request: NextRequest) {
           message: 'Rate limit exceeded for this API key.'
         }
       },
-      { status: 429 }
+      {
+        status: 429,
+        headers: brokRateLimitHeaders({
+          limit: rateLimit.limit,
+          current: rateLimit.limit,
+          resetAt: rateLimit.resetAt,
+          includeRetryAfter: true
+        })
+      }
     )
   }
 
@@ -123,11 +160,12 @@ export async function POST(request: NextRequest) {
     auth.workspace.id,
     'rpm',
     rateLimit.limit,
-    rateLimit.current,
+    rateLimit.current + 1,
     false
   )
 
-  const providerMessages = toOpenAiMessages(body.system, body.messages ?? [])
+  const anthropicMessages = body.messages as AnthropicMessage[]
+  const providerMessages = toOpenAiMessages(body.system, anthropicMessages)
 
   try {
     if (stream) {
@@ -168,7 +206,12 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'text/event-stream; charset=utf-8',
             'Cache-Control': 'no-cache, no-transform',
             Connection: 'keep-alive',
-            'X-Brok-Request-Id': requestId
+            'X-Brok-Request-Id': requestId,
+            ...brokRateLimitHeaders({
+              limit: rateLimit.limit,
+              current: rateLimit.current + 1,
+              resetAt: rateLimit.resetAt
+            })
           }
         }
       )
@@ -227,7 +270,12 @@ export async function POST(request: NextRequest) {
       },
       {
         headers: {
-          'X-Brok-Request-Id': requestId
+          'X-Brok-Request-Id': requestId,
+          ...brokRateLimitHeaders({
+            limit: rateLimit.limit,
+            current: rateLimit.current + 1,
+            resetAt: rateLimit.resetAt
+          })
         }
       }
     )

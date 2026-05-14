@@ -10,6 +10,7 @@ import { db } from '@/lib/db'
 import {
   apiKeys,
   providerRoutes,
+  rateLimitEvents,
   usageEvents,
   workspaces
 } from '@/lib/db/schema'
@@ -343,16 +344,17 @@ export async function getBrokStats() {
       }
     })
 
+    const runtimeLabel = sql<string>`coalesce(nullif(${usageEvents.runtime}, ''), nullif(${usageEvents.provider}, ''), 'unknown')`
     const codeRuntimeRows = await db
       .select({
-        provider: usageEvents.provider,
+        provider: runtimeLabel,
         requests: sql<number>`count(*)::int`,
         tokens: sql<number>`coalesce(sum(${usageEvents.inputTokens} + ${usageEvents.outputTokens}), 0)::int`,
         avgLatencyMs: sql<number>`coalesce(round(avg(${usageEvents.latencyMs})), 0)::int`
       })
       .from(usageEvents)
       .where(and(brokCodeUsage, gte(usageEvents.createdAt, last7Days)))
-      .groupBy(usageEvents.provider)
+      .groupBy(runtimeLabel)
       .orderBy(desc(sql`count(*)`))
 
     const totalCodeRuntimeRequests = codeRuntimeRows.reduce(
@@ -367,7 +369,7 @@ export async function getBrokStats() {
         tokens: sql<number>`coalesce(sum(${usageEvents.inputTokens} + ${usageEvents.outputTokens}), 0)::int`
       })
       .from(usageEvents)
-      .where(gte(usageEvents.createdAt, last7Days))
+      .where(and(brokCodeUsage, gte(usageEvents.createdAt, last7Days)))
       .groupBy(usageEvents.endpoint)
       .orderBy(desc(sql`count(*)`))
 
@@ -613,7 +615,10 @@ export async function getAllApiKeysForAdmin(): Promise<
     environment: string
     status: string
     scopes: string[]
+    allowedModels: string[]
     rpmLimit: number | null
+    dailyRequestLimit: number | null
+    monthlyBudgetCents: number | null
     lastUsedAt: Date | null
     createdAt: Date
   }>
@@ -631,7 +636,10 @@ export async function getAllApiKeysForAdmin(): Promise<
         environment: apiKeys.environment,
         status: apiKeys.status,
         scopes: apiKeys.scopes,
+        allowedModels: apiKeys.allowedModels,
         rpmLimit: apiKeys.rpmLimit,
+        dailyRequestLimit: apiKeys.dailyRequestLimit,
+        monthlyBudgetCents: apiKeys.monthlyBudgetCents,
         lastUsedAt: apiKeys.lastUsedAt,
         createdAt: apiKeys.createdAt
       })
@@ -642,7 +650,10 @@ export async function getAllApiKeysForAdmin(): Promise<
     return keys.map(key => ({
       ...key,
       workspaceName: key.workspaceName ?? 'Unknown workspace',
-      scopes: Array.isArray(key.scopes) ? (key.scopes as string[]) : []
+      scopes: Array.isArray(key.scopes) ? (key.scopes as string[]) : [],
+      allowedModels: Array.isArray(key.allowedModels)
+        ? (key.allowedModels as string[])
+        : []
     }))
   } catch (error) {
     if (canUseDevDbFallback(error)) {
@@ -668,12 +679,19 @@ export async function getUsageForAdmin(filters: {
     endpoint: string
     model: string
     provider: string
+    userId: string
+    apiKeyId: string | null
+    surface: string
+    runtime: string | null
+    source: string | null
+    sessionId: string | null
     inputTokens: number | null
     outputTokens: number | null
     providerCostUsd: string
     billedUsd: string
     latencyMs: number | null
     status: string
+    errorCode: string | null
     createdAt: Date
   }>
 > {
@@ -711,12 +729,19 @@ export async function getUsageForAdmin(filters: {
         endpoint: usageEvents.endpoint,
         model: usageEvents.model,
         provider: usageEvents.provider,
+        userId: usageEvents.userId,
+        apiKeyId: usageEvents.apiKeyId,
+        surface: usageEvents.surface,
+        runtime: usageEvents.runtime,
+        source: usageEvents.source,
+        sessionId: usageEvents.sessionId,
         inputTokens: usageEvents.inputTokens,
         outputTokens: usageEvents.outputTokens,
         providerCostUsd: usageEvents.providerCostUsd,
         billedUsd: usageEvents.billedUsd,
         latencyMs: usageEvents.latencyMs,
         status: usageEvents.status,
+        errorCode: usageEvents.errorCode,
         createdAt: usageEvents.createdAt
       })
       .from(usageEvents)
@@ -733,9 +758,58 @@ export async function getUsageForAdmin(filters: {
     return rows.map(row => ({
       ...row,
       endpoint: String(row.endpoint),
+      surface: row.surface ?? 'api',
       providerCostUsd: row.providerCostUsd ?? '0',
       billedUsd: row.billedUsd ?? '0',
       workspaceName: row.workspaceName ?? 'Unknown workspace'
+    }))
+  } catch (error) {
+    if (canUseDevDbFallback(error)) {
+      return []
+    }
+
+    throw error
+  }
+}
+
+export async function getRateLimitEventsForAdmin(): Promise<
+  Array<{
+    id: string
+    workspaceName: string
+    apiKeyName: string
+    keyPrefix: string | null
+    limitType: string
+    limitValue: number
+    currentValue: number
+    blocked: boolean
+    createdAt: Date
+  }>
+> {
+  await assertAdminAccess()
+
+  try {
+    const rows = await db
+      .select({
+        id: rateLimitEvents.id,
+        workspaceName: workspaces.name,
+        apiKeyName: apiKeys.name,
+        keyPrefix: apiKeys.keyPrefix,
+        limitType: rateLimitEvents.limitType,
+        limitValue: rateLimitEvents.limitValue,
+        currentValue: rateLimitEvents.currentValue,
+        blocked: rateLimitEvents.blocked,
+        createdAt: rateLimitEvents.createdAt
+      })
+      .from(rateLimitEvents)
+      .leftJoin(workspaces, eq(rateLimitEvents.workspaceId, workspaces.id))
+      .leftJoin(apiKeys, eq(rateLimitEvents.apiKeyId, apiKeys.id))
+      .orderBy(desc(rateLimitEvents.createdAt))
+      .limit(200)
+
+    return rows.map(row => ({
+      ...row,
+      workspaceName: row.workspaceName ?? 'Unknown workspace',
+      apiKeyName: row.apiKeyName ?? 'Unknown key'
     }))
   } catch (error) {
     if (canUseDevDbFallback(error)) {

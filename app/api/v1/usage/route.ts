@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { and, eq, gte, sql } from 'drizzle-orm'
 
-import { unauthorizedResponse, verifyRequestAuth } from '@/lib/brok/auth'
+import {
+  apiKeyHasScope,
+  forbiddenScopeResponse,
+  unauthorizedResponse,
+  verifyRequestAuth
+} from '@/lib/brok/auth'
 import { db } from '@/lib/db'
 import { usageEvents } from '@/lib/db/schema-brok'
 
@@ -10,6 +15,9 @@ export async function GET(request: NextRequest) {
   const auth = await verifyRequestAuth(request)
   if (!auth.success) {
     return unauthorizedResponse(auth)
+  }
+  if (!apiKeyHasScope(auth.apiKey, 'usage:read')) {
+    return forbiddenScopeResponse('usage:read')
   }
 
   const searchParams = request.nextUrl.searchParams

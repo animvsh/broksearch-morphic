@@ -43,8 +43,10 @@ All errors follow a consistent format:
 | Code | Message | Cause |
 |------|---------|-------|
 | invalid_api_key | Invalid API key provided | The API key format is incorrect |
-| expired_api_key | API key has expired | Key has passed its expiration date |
-| revoked_api_key | API key has been revoked | Key was manually revoked |
+| missing_authorization | Authorization is missing | No Bearer token or x-api-key header was sent |
+| invalid_authorization_format | Authorization format is invalid | The Authorization header is not a Bearer token |
+| inactive_key | API key is inactive | Key is paused or revoked |
+| auth_storage_unavailable | API key storage unavailable | The key database could not be reached |
 
 **How to handle:**
 - Verify your API key is correct
@@ -55,9 +57,10 @@ All errors follow a consistent format:
 
 | Code | Message | Cause |
 |------|---------|-------|
+| missing_scope | API key is missing a required scope | Add the required scope or create a new key |
 | model_not_allowed | Model not allowed for this key | The API key lacks permission for the requested model |
-| feature_disabled | Feature not enabled | Your plan doesn&apos;t include this feature |
-| quota_exceeded | Monthly quota exceeded | You&apos;ve reached your monthly spending limit |
+| api_key_monthly_budget_exceeded | Monthly API-key budget exceeded | This key reached its configured budget |
+| workspace_monthly_budget_exceeded | Workspace monthly budget exceeded | The workspace reached its configured budget |
 
 **How to handle:**
 - Check which models are allowed for your key
@@ -68,10 +71,11 @@ All errors follow a consistent format:
 
 | Code | Message | Cause |
 |------|---------|-------|
-| invalid_parameter | Invalid parameter value | A request parameter has an invalid value |
-| missing_required_param | Missing required parameter | A required parameter was not provided |
+| invalid_json | Invalid JSON body | The request body is not a valid JSON object |
+| missing_messages | Missing messages | The chat/messages request did not include a messages array |
+| missing_query | Missing query | The search request did not include a query string |
 | invalid_model | Model not found | The specified model does not exist |
-| messages_too_long | Messages exceed max tokens | Input exceeds model&apos;s maximum context |
+| daily_request_limit_exceeded | Daily request limit exceeded | This key reached its configured daily limit |
 
 **How to handle:**
 - Check the param field for which parameter is invalid
@@ -125,7 +129,7 @@ async function makeBrokRequest(payload) {
           console.error('Check your API key')
           break
         case 'rate_limit_exceeded':
-          const retryAfter = response.headers.get('X-RateLimit-Retry-After')
+          const retryAfter = response.headers.get('Retry-After')
           await sleep(retryAfter * 1000)
           return makeBrokRequest(payload)
         case 'model_not_allowed':
@@ -256,23 +260,42 @@ export default function ErrorsPage() {
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b">
-                <td className="py-2 px-3 font-mono">invalid_api_key</td>
-                <td className="py-2 px-3">Invalid API key provided</td>
-                <td className="py-2 px-3">The API key format is incorrect</td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-3 font-mono">expired_api_key</td>
-                <td className="py-2 px-3">API key has expired</td>
-                <td className="py-2 px-3">
-                  Key has passed its expiration date
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2 px-3 font-mono">revoked_api_key</td>
-                <td className="py-2 px-3">API key has been revoked</td>
-                <td className="py-2 px-3">Key was manually revoked</td>
-              </tr>
+              {[
+                [
+                  'invalid_api_key',
+                  'Invalid API key provided',
+                  'The API key format is incorrect'
+                ],
+                [
+                  'missing_authorization',
+                  'Authorization is missing',
+                  'No Bearer token or x-api-key header was sent'
+                ],
+                [
+                  'invalid_authorization_format',
+                  'Authorization format is invalid',
+                  'The Authorization header is not a Bearer token'
+                ],
+                [
+                  'inactive_key',
+                  'API key is inactive',
+                  'Key is paused or revoked'
+                ],
+                [
+                  'auth_storage_unavailable',
+                  'API key storage unavailable',
+                  'The key database could not be reached'
+                ]
+              ].map(([code, message, cause], index, rows) => (
+                <tr
+                  key={code}
+                  className={index < rows.length - 1 ? 'border-b' : undefined}
+                >
+                  <td className="py-2 px-3 font-mono">{code}</td>
+                  <td className="py-2 px-3">{message}</td>
+                  <td className="py-2 px-3">{cause}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -295,27 +318,37 @@ export default function ErrorsPage() {
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b">
-                <td className="py-2 px-3 font-mono">model_not_allowed</td>
-                <td className="py-2 px-3">Model not allowed for this key</td>
-                <td className="py-2 px-3">
-                  The API key lacks permission for the requested model
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-3 font-mono">feature_disabled</td>
-                <td className="py-2 px-3">Feature not enabled</td>
-                <td className="py-2 px-3">
-                  Your plan doesn&apos;t include this feature
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2 px-3 font-mono">quota_exceeded</td>
-                <td className="py-2 px-3">Monthly quota exceeded</td>
-                <td className="py-2 px-3">
-                  You&apos;ve reached your monthly spending limit
-                </td>
-              </tr>
+              {[
+                [
+                  'missing_scope',
+                  'API key is missing a required scope',
+                  'Add the required scope or create a new key'
+                ],
+                [
+                  'model_not_allowed',
+                  'Model not allowed for this key',
+                  'The API key lacks permission for the requested model'
+                ],
+                [
+                  'api_key_monthly_budget_exceeded',
+                  'Monthly API-key budget exceeded',
+                  'This key reached its configured budget'
+                ],
+                [
+                  'workspace_monthly_budget_exceeded',
+                  'Workspace monthly budget exceeded',
+                  'The workspace reached its configured budget'
+                ]
+              ].map(([code, message, cause], index, rows) => (
+                <tr
+                  key={code}
+                  className={index < rows.length - 1 ? 'border-b' : undefined}
+                >
+                  <td className="py-2 px-3 font-mono">{code}</td>
+                  <td className="py-2 px-3">{message}</td>
+                  <td className="py-2 px-3">{cause}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -338,34 +371,42 @@ export default function ErrorsPage() {
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b">
-                <td className="py-2 px-3 font-mono">invalid_parameter</td>
-                <td className="py-2 px-3">Invalid parameter value</td>
-                <td className="py-2 px-3">
-                  A request parameter has an invalid value
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-3 font-mono">missing_required_param</td>
-                <td className="py-2 px-3">Missing required parameter</td>
-                <td className="py-2 px-3">
-                  A required parameter was not provided
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="py-2 px-3 font-mono">invalid_model</td>
-                <td className="py-2 px-3">Model not found</td>
-                <td className="py-2 px-3">
-                  The specified model does not exist
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2 px-3 font-mono">messages_too_long</td>
-                <td className="py-2 px-3">Messages exceed max tokens</td>
-                <td className="py-2 px-3">
-                  Input exceeds model&apos;s maximum context
-                </td>
-              </tr>
+              {[
+                [
+                  'invalid_json',
+                  'Invalid JSON body',
+                  'The request body is not a valid JSON object'
+                ],
+                [
+                  'missing_messages',
+                  'Missing messages',
+                  'The chat/messages request did not include a messages array'
+                ],
+                [
+                  'missing_query',
+                  'Missing query',
+                  'The search request did not include a query string'
+                ],
+                [
+                  'invalid_model',
+                  'Model not found',
+                  'The specified model does not exist'
+                ],
+                [
+                  'daily_request_limit_exceeded',
+                  'Daily request limit exceeded',
+                  'This key reached its configured daily limit'
+                ]
+              ].map(([code, message, cause], index, rows) => (
+                <tr
+                  key={code}
+                  className={index < rows.length - 1 ? 'border-b' : undefined}
+                >
+                  <td className="py-2 px-3 font-mono">{code}</td>
+                  <td className="py-2 px-3">{message}</td>
+                  <td className="py-2 px-3">{cause}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -466,7 +507,7 @@ export default function ErrorsPage() {
           console.error('Check your API key')
           break
         case 'rate_limit_exceeded':
-          const retryAfter = response.headers.get('X-RateLimit-Retry-After')
+          const retryAfter = response.headers.get('Retry-After')
           await sleep(retryAfter * 1000)
           return makeBrokRequest(payload)
         case 'model_not_allowed':

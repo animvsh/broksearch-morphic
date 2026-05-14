@@ -75,6 +75,27 @@ describe('verifyRequestAuth', () => {
     }
   })
 
+  it('allows x-api-key to take precedence over a malformed authorization header', async () => {
+    process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK = 'true'
+    process.env.BROK_SMOKE_API_KEY = 'brok_sk_local_smoke'
+
+    const mockRequest = {
+      headers: {
+        get: (name: string) => {
+          if (name === 'authorization') return 'NotBearer nope'
+          if (name === 'x-api-key') return 'brok_sk_local_smoke'
+          return null
+        }
+      }
+    } as unknown as Request
+
+    const result = await verifyRequestAuth(mockRequest)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.apiKey.scopes).toContain('usage:read')
+    }
+  })
+
   it('returns error for unknown API key', async () => {
     // Setup mock chain: db.select().from().where().limit() returns empty array
     mockSelect.mockReturnValueOnce({

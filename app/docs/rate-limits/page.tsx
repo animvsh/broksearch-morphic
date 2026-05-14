@@ -28,7 +28,7 @@ When you make an API request, rate limit information is included in response hea
 X-RateLimit-Limit: 60
 X-RateLimit-Remaining: 45
 X-RateLimit-Reset: 1677652288
-X-RateLimit-Retry-After: 32
+Retry-After: 32
 \`\`\`
 
 ### Header Descriptions
@@ -38,7 +38,7 @@ X-RateLimit-Retry-After: 32
 | X-RateLimit-Limit | Maximum requests allowed per minute |
 | X-RateLimit-Remaining | Requests remaining in current window |
 | X-RateLimit-Reset | Unix timestamp when the limit resets |
-| X-RateLimit-Retry-After | Seconds until you can retry (only on 429) |
+| Retry-After | Seconds until you can retry (only on 429) |
 
 ## Checking Your Rate Limit
 
@@ -189,7 +189,7 @@ export default function RateLimitsPage() {
           <code>{`X-RateLimit-Limit: 60
 X-RateLimit-Remaining: 45
 X-RateLimit-Reset: 1677652288
-X-RateLimit-Retry-After: 32`}</code>
+Retry-After: 32`}</code>
         </pre>
 
         <h3>Header Descriptions</h3>
@@ -221,7 +221,7 @@ X-RateLimit-Retry-After: 32`}</code>
                 </td>
               </tr>
               <tr>
-                <td className="py-2 px-3 font-mono">X-RateLimit-Retry-After</td>
+                <td className="py-2 px-3 font-mono">Retry-After</td>
                 <td className="py-2 px-3">
                   Seconds until you can retry (only on 429)
                 </td>

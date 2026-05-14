@@ -30,13 +30,15 @@ export async function checkRateLimit(
   const windowStart = new Date(now - windowMs)
 
   try {
-    // Count requests in the current window
+    // Count accepted requests in the current window. Blocked attempts are still
+    // recorded for observability, but they should not extend the lockout window.
     const result = await db
       .select({ count: rateLimitEvents.id })
       .from(rateLimitEvents)
       .where(
         and(
           eq(rateLimitEvents.apiKeyId, apiKeyId),
+          eq(rateLimitEvents.blocked, false),
           gte(rateLimitEvents.createdAt, windowStart)
         )
       )
@@ -44,18 +46,6 @@ export async function checkRateLimit(
     const currentCount = result.length
     const allowed = currentCount < rpmLimit
     const resetAt = Math.floor((now + windowMs) / 1000) // Unix timestamp
-
-    if (!allowed) {
-      // Record a blocked event
-      await db.insert(rateLimitEvents).values({
-        workspaceId,
-        apiKeyId,
-        limitType: 'rpm',
-        limitValue: rpmLimit,
-        currentValue: currentCount,
-        blocked: true
-      })
-    }
 
     return {
       allowed,

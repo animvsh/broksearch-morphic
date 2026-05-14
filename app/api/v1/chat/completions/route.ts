@@ -6,6 +6,11 @@ import {
   unauthorizedResponse,
   verifyRequestAuth
 } from '@/lib/brok/auth'
+import {
+  brokRateLimitHeaders,
+  invalidRequestResponse,
+  readJsonBody
+} from '@/lib/brok/http'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import {
   calculateCost,
@@ -44,7 +49,37 @@ export async function POST(request: NextRequest) {
   }
 
   // Parse body
-  const body = await request.json()
+  const parsedBody = await readJsonBody<{
+    model?: unknown
+    messages?: unknown
+    stream?: unknown
+    temperature?: number
+    max_tokens?: number
+    max_completion_tokens?: number
+    top_p?: number
+    tools?: Array<{
+      type: string
+      function?: {
+        name: string
+        description?: string
+        parameters?: Record<string, unknown>
+      }
+      web_search?: {
+        top_n?: number
+      }
+    }>
+    tool_choice?: {
+      type: string
+      web_search?: {
+        top_n?: number
+      }
+    }
+  }>(request)
+  if (!parsedBody.ok) {
+    return parsedBody.response
+  }
+
+  const body = parsedBody.body
   const {
     model: modelId,
     messages,
@@ -57,8 +92,21 @@ export async function POST(request: NextRequest) {
     tool_choice
   } = body
 
+  if (typeof modelId !== 'string') {
+    return invalidRequestResponse('invalid_model', 'model must be a string.')
+  }
+
+  if (!Array.isArray(messages)) {
+    return invalidRequestResponse(
+      'missing_messages',
+      'messages must be an array of chat messages.'
+    )
+  }
+  const chatMessages = messages as Array<Record<string, unknown>>
+  const shouldStream = stream === true
+
   // Validate model
-  if (!modelId || !isValidBrokModel(modelId)) {
+  if (!isValidBrokModel(modelId)) {
     return NextResponse.json(
       {
         error: {
@@ -100,7 +148,7 @@ export async function POST(request: NextRequest) {
       auth.workspace.id,
       'rpm',
       rateLimit.limit,
-      rateLimit.current,
+      rateLimit.current + 1,
       true
     )
 
@@ -118,14 +166,12 @@ export async function POST(request: NextRequest) {
       },
       {
         status: 429,
-        headers: {
-          'X-Brok-RateLimit-Limit': String(rateLimit.limit),
-          'X-Brok-RateLimit-Remaining': String(Math.max(0, rateLimit.current)),
-          'X-Brok-RateLimit-Reset': String(rateLimit.resetAt),
-          'Retry-After': String(
-            Math.ceil((rateLimit.resetAt * 1000 - Date.now()) / 1000)
-          )
-        }
+        headers: brokRateLimitHeaders({
+          limit: rateLimit.limit,
+          current: rateLimit.limit,
+          resetAt: rateLimit.resetAt,
+          includeRetryAfter: true
+        })
       }
     )
   }
@@ -136,15 +182,15 @@ export async function POST(request: NextRequest) {
     auth.workspace.id,
     'rpm',
     rateLimit.limit,
-    rateLimit.current,
+    rateLimit.current + 1,
     false
   )
 
   try {
-    if (stream) {
+    if (shouldStream) {
       const providerResponse = await routeToProviderResponse(modelId, {
         model: modelId,
-        messages,
+        messages: chatMessages,
         stream: true,
         temperature,
         topP: top_p,
@@ -183,11 +229,11 @@ export async function POST(request: NextRequest) {
             'Cache-Control': 'no-cache, no-transform',
             Connection: 'keep-alive',
             'X-Brok-Request-Id': requestId,
-            'X-Brok-RateLimit-Limit': String(rateLimit.limit),
-            'X-Brok-RateLimit-Remaining': String(
-              Math.max(0, rateLimit.limit - rateLimit.current - 1)
-            ),
-            'X-Brok-RateLimit-Reset': String(rateLimit.resetAt)
+            ...brokRateLimitHeaders({
+              limit: rateLimit.limit,
+              current: rateLimit.current + 1,
+              resetAt: rateLimit.resetAt
+            })
           }
         }
       )
@@ -196,8 +242,8 @@ export async function POST(request: NextRequest) {
     // Route to provider
     const providerResponse = await routeToProvider(modelId, {
       model: modelId,
-      messages,
-      stream,
+      messages: chatMessages,
+      stream: shouldStream,
       temperature,
       topP: top_p,
       maxTokens: max_tokens ?? max_completion_tokens,
@@ -255,11 +301,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(brokResponse, {
       headers: {
         'X-Brok-Request-Id': requestId,
-        'X-Brok-RateLimit-Limit': String(rateLimit.limit),
-        'X-Brok-RateLimit-Remaining': String(
-          Math.max(0, rateLimit.limit - rateLimit.current - 1)
-        ),
-        'X-Brok-RateLimit-Reset': String(rateLimit.resetAt)
+        ...brokRateLimitHeaders({
+          limit: rateLimit.limit,
+          current: rateLimit.current + 1,
+          resetAt: rateLimit.resetAt
+        })
       }
     })
   } catch (error) {

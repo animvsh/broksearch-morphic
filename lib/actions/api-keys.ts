@@ -105,6 +105,21 @@ export async function createApiKey(
 }
 
 export async function listApiKeys(workspaceId: string) {
+  const user = await getRequiredBrokAccountUser()
+  if (!user) {
+    throw new Error('Sign in to your Brok account before viewing API keys.')
+  }
+
+  const [workspace] = await db
+    .select()
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1)
+
+  if (!workspace || workspace.ownerUserId !== user.id) {
+    throw new Error('This workspace does not belong to your Brok account.')
+  }
+
   const keys = await db
     .select()
     .from(apiKeys)

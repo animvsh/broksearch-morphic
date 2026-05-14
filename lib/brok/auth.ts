@@ -53,9 +53,17 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
     return { success: false, error: 'missing_authorization', status: 401 }
   }
 
+  if (!apiKeyHeader && authHeader && !authHeader.startsWith('Bearer ')) {
+    return {
+      success: false,
+      error: 'invalid_authorization_format',
+      status: 401
+    }
+  }
+
   const key = apiKeyHeader ?? authHeader?.slice(7)
 
-  if (!key || (authHeader && !authHeader.startsWith('Bearer '))) {
+  if (!key) {
     return {
       success: false,
       error: 'invalid_authorization_format',
@@ -168,7 +176,13 @@ function createLocalFallbackAuth(key: string): AuthResult | null {
       keyHash,
       environment: key.includes('_test_') ? 'test' : 'live',
       status: 'active',
-      scopes: ['chat:write', 'search:write', 'code:write', 'agents:write'],
+      scopes: [
+        'chat:write',
+        'search:write',
+        'code:write',
+        'agents:write',
+        'usage:read'
+      ],
       allowedModels: [],
       rpmLimit: 120,
       dailyRequestLimit: 10000,
