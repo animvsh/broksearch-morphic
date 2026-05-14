@@ -127,22 +127,20 @@ const viewLabels: Array<{
 ]
 
 const quickPrompts = [
-  'What needs my attention today?',
-  'Summarize this thread.',
-  'Draft a reply asking for the signed version.',
-  'Show my next calendar events.',
-  'Add a calendar event tomorrow at 3pm called Candidate Interview.',
-  'Remove the calendar event called Candidate Interview.',
-  'Show follow-ups.',
-  'Archive newsletters older than 30 days.',
-  'Whenever I get a receipt, label it expenses.'
+  'Triage today',
+  'Summarize thread',
+  'Draft a reply',
+  'Show calendar',
+  'Find follow-ups',
+  'Archive newsletters',
+  'Create receipt rule'
 ]
 
 const commandPrompts = [
-  'What needs my attention today?',
-  'Show follow-ups.',
-  'Draft a reply to this thread.',
-  'Show my next calendar events.'
+  'Triage inbox',
+  'Follow-ups',
+  'Draft reply',
+  'Show calendar'
 ]
 
 const sortOptions: Array<{ id: MailSortMode; label: string }> = [
@@ -473,7 +471,7 @@ export function BrokMailApp() {
       id: 'welcome',
       role: 'assistant',
       content:
-        'Connect Gmail or Google Calendar through Composio to start. BrokMail uses live connected accounts and never uses platform Google OAuth or sample mail.'
+        'Connect Gmail or Google Calendar through Composio to start. I can triage, draft, schedule, and prepare approval-gated actions from your connected accounts.'
     }
   ])
   const deferredQuery = useDeferredValue(query)
@@ -1704,8 +1702,8 @@ export function BrokMailApp() {
   }
 
   return (
-    <div className="dashboard-shell brokmail-shell flex h-full w-full flex-col overflow-hidden pt-12 text-foreground lg:flex-row">
-      <aside className="dashboard-rail flex max-h-[44dvh] shrink-0 flex-col border-b lg:max-h-none lg:w-[340px] lg:border-b-0 lg:border-r 2xl:w-[380px]">
+    <div className="dashboard-shell brokmail-shell flex h-full w-full flex-col overflow-hidden bg-background text-foreground lg:flex-row">
+      <aside className="dashboard-rail flex min-h-[46dvh] max-h-[52dvh] shrink-0 flex-col border-b bg-card/55 lg:max-h-none lg:min-h-0 lg:w-[392px] lg:border-b-0 lg:border-r 2xl:w-[424px]">
         <AgentPanel
           activity={activity}
           agentInput={agentInput}
@@ -1730,7 +1728,7 @@ export function BrokMailApp() {
         />
       </aside>
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background/80">
         <BrokMailStatusBar
           connected={connected}
           connectionMode={connectionMode}
@@ -1746,7 +1744,7 @@ export function BrokMailApp() {
         />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col 2xl:flex-row">
-          <aside className="dashboard-rail hidden w-52 shrink-0 border-r 2xl:flex 2xl:flex-col">
+          <aside className="dashboard-rail hidden w-48 shrink-0 border-r bg-card/35 2xl:flex 2xl:flex-col">
             <div className="border-b p-3">
               <Button
                 className="h-9 w-full gap-2"
@@ -1782,26 +1780,18 @@ export function BrokMailApp() {
             </nav>
 
             <div className="border-t p-3">
-              <div className="space-y-3">
-                <div className="dashboard-card p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-xs font-medium">Gmail</p>
-                      <p className="text-xs text-muted-foreground">
-                        {connected ? 'Connected' : 'Not connected'}
-                      </p>
-                    </div>
+              <div className="space-y-2">
+                <div className="rounded-lg border border-border/70 bg-background/70 p-2.5">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-medium">Gmail</span>
                     <Badge variant={connected ? 'default' : 'outline'}>
                       {modeLabel(connectionMode)}
                     </Badge>
                   </div>
-                  <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
-                    {connectionStatus}
-                  </p>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="mt-3 h-8 w-full gap-2"
+                    className="mt-2 h-8 w-full gap-2"
                     onClick={connectGmail}
                     disabled={isConnecting}
                   >
@@ -1822,25 +1812,17 @@ export function BrokMailApp() {
                     </Button>
                   )}
                 </div>
-                <div className="dashboard-card p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-xs font-medium">Google Calendar</p>
-                      <p className="text-xs text-muted-foreground">
-                        {calendarConnected ? 'Connected' : 'Not connected'}
-                      </p>
-                    </div>
+                <div className="rounded-lg border border-border/70 bg-background/70 p-2.5">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-medium">Calendar</span>
                     <Badge variant={calendarConnected ? 'default' : 'outline'}>
                       {modeLabel(calendarConnectionMode)}
                     </Badge>
                   </div>
-                  <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
-                    {calendarConnectionStatus}
-                  </p>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="mt-3 h-8 w-full gap-2"
+                    className="mt-2 h-8 w-full gap-2"
                     onClick={connectCalendar}
                     disabled={isConnectingCalendar}
                   >
@@ -1921,8 +1903,8 @@ export function BrokMailApp() {
             </div>
           </div>
 
-          <div className="flex max-h-[34dvh] w-full shrink-0 flex-col border-b 2xl:max-h-none 2xl:w-[360px] 2xl:border-b-0 2xl:border-r">
-            <div className="border-b p-3">
+          <div className="flex max-h-[34dvh] w-full shrink-0 flex-col border-b bg-card/20 2xl:max-h-none 2xl:w-[360px] 2xl:border-b-0 2xl:border-r">
+            <div className="border-b bg-card/40 p-3">
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />
                 <Input
@@ -1979,7 +1961,7 @@ export function BrokMailApp() {
                     <article
                       key={thread.id}
                       className={cn(
-                        'border-b border-border/65 transition-colors hover:bg-muted/70',
+                        'border-b border-border/65 transition-colors hover:bg-muted/60',
                         selectedThread?.id === thread.id &&
                           'dashboard-list-row-active'
                       )}
@@ -2027,16 +2009,9 @@ export function BrokMailApp() {
                         <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                           {thread.snippet}
                         </p>
-                        <div className="mt-2 flex items-center gap-2">
-                          <Badge
-                            variant={
-                              thread.needsReply ? 'default' : 'secondary'
-                            }
-                            className="max-w-full truncate rounded-md px-2 py-0 text-[11px]"
-                          >
-                            AI: {thread.aiSummary}
-                          </Badge>
-                        </div>
+                        <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                          {thread.aiSummary}
+                        </p>
                       </button>
                       <div className="flex items-center gap-1 px-3 pb-3">
                         <Button
@@ -2168,70 +2143,44 @@ function BrokMailStatusBar({
   runPriorityBrief: () => void
 }) {
   return (
-    <div className="dashboard-rail border-b px-3 py-2.5 sm:px-4">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid min-w-0 gap-2 sm:grid-cols-3 xl:flex xl:items-center">
-          <div className="min-w-0 rounded-md border border-border/70 bg-background/65 px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium">Inbox</span>
-              <Badge variant={connected ? 'default' : 'outline'}>
-                {modeLabel(connectionMode)}
-              </Badge>
-            </div>
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              {connectionStatus}
-            </p>
-          </div>
-          <div className="min-w-0 rounded-md border border-border/70 bg-background/65 px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium">Calendar</span>
-              <Badge variant={calendarConnected ? 'default' : 'outline'}>
-                {modeLabel(calendarConnectionMode)}
-              </Badge>
-            </div>
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              {calendarConnectionStatus}
-            </p>
-          </div>
-          <div className="rounded-md border border-border/70 bg-background/65 px-3 py-2">
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span className="font-medium">Queue</span>
-              <span className="text-muted-foreground">
-                {counts['needs-reply']} replies · {counts['follow-ups']}{' '}
-                follow-ups
-              </span>
-            </div>
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              {isRunning ? 'BrokMail is working...' : 'Ready for commands'}
-            </p>
-          </div>
+    <div className="dashboard-rail border-b bg-card/35 px-3 py-2 sm:px-4">
+      <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Badge
+            variant={connected ? 'default' : 'outline'}
+            className="h-7 gap-1.5 rounded-md"
+          >
+            <MailCheck className="size-3.5" />
+            Gmail {modeLabel(connectionMode)}
+          </Badge>
+          <Badge
+            variant={calendarConnected ? 'default' : 'outline'}
+            className="h-7 gap-1.5 rounded-md"
+          >
+            <CalendarDays className="size-3.5" />
+            Calendar {modeLabel(calendarConnectionMode)}
+          </Badge>
+          <span className="rounded-md border border-border/70 bg-background/65 px-2.5 py-1.5 text-xs text-muted-foreground">
+            {counts['needs-reply']} replies · {counts['follow-ups']} follow-ups
+            · {insights.unread} unread
+          </span>
           <button
-            className="rounded-md border border-border/70 bg-background/65 px-3 py-2 text-left transition-colors hover:bg-muted/70"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/70 bg-background/65 px-2.5 text-xs font-medium transition-colors hover:bg-muted/70 disabled:opacity-60"
             onClick={runPriorityBrief}
             disabled={isRunning}
           >
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span className="flex items-center gap-1 font-medium">
-                <Flame className="size-3.5" />
-                Focus Brief
-              </span>
-              <span className="text-muted-foreground">
-                {insights.unread} unread
-              </span>
-            </div>
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              {insights.needsReply} replies · {insights.followUps} waiting
-            </p>
+            <Flame className="size-3.5" />
+            Focus brief
           </button>
         </div>
 
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 xl:mx-0 xl:pb-0">
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 xl:mx-0 xl:pb-0">
           {commandPrompts.map(prompt => (
             <Button
               key={prompt}
               variant="outline"
               size="sm"
-              className="h-8 shrink-0"
+              className="h-7 shrink-0 rounded-md px-2.5 text-xs"
               onClick={() => runAgent(prompt)}
               disabled={isRunning}
             >
@@ -2239,6 +2188,13 @@ function BrokMailStatusBar({
             </Button>
           ))}
         </div>
+      </div>
+      <div className="mt-1 hidden min-w-0 gap-3 text-[11px] text-muted-foreground lg:flex">
+        <span className="truncate">{connectionStatus}</span>
+        <span className="truncate">{calendarConnectionStatus}</span>
+        <span className="shrink-0">
+          {isRunning ? 'Pi runtime active' : 'Ready'}
+        </span>
       </div>
     </div>
   )
@@ -2281,7 +2237,7 @@ function ThreadView({
 
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="border-b px-3 py-3 sm:px-4">
+      <div className="border-b bg-card/30 px-3 py-3 sm:px-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -2342,42 +2298,35 @@ function ThreadView({
           </div>
         </div>
 
-        <div className="mt-3 grid gap-3 xl:grid-cols-[0.8fr_1fr_1fr]">
-          <div className="dashboard-card p-3">
-            <div className="mb-2 flex items-center gap-2 text-xs font-medium">
-              <Flame className="size-3.5" />
-              Triage Score
-            </div>
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className="text-2xl font-semibold">{priorityScore}</p>
-                <p className="text-xs text-muted-foreground">
-                  {priorityLabel(priorityScore)} priority
-                </p>
+        <div className="mt-3 rounded-lg border border-border/70 bg-background/70 p-3">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                <Badge variant={thread.needsReply ? 'default' : 'secondary'}>
+                  {thread.needsReply ? 'Reply needed' : 'Monitor'}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  {priorityLabel(priorityScore)} · score {priorityScore}
+                </span>
               </div>
-              <Badge variant={thread.needsReply ? 'default' : 'secondary'}>
-                {thread.needsReply ? 'Reply' : 'Monitor'}
-              </Badge>
+              <p className="text-sm leading-6 text-muted-foreground">
+                {thread.aiSummary}
+              </p>
             </div>
-          </div>
-          <div className="dashboard-card p-3">
-            <div className="mb-2 flex items-center gap-2 text-xs font-medium">
-              <Sparkles className="size-3.5" />
-              AI Summary
-            </div>
-            <p className="text-sm text-muted-foreground">{thread.aiSummary}</p>
-          </div>
-          <div className="dashboard-card p-3">
-            <div className="mb-2 flex items-center gap-2 text-xs font-medium">
-              <CheckCircle2 className="size-3.5" />
-              Action Items
-            </div>
-            <div className="space-y-1 text-sm text-muted-foreground">
-              {thread.actionItems.length ? (
-                thread.actionItems.map(item => <p key={item}>{item}</p>)
-              ) : (
-                <p>No action needed.</p>
-              )}
+            <div className="min-w-0 xl:w-80">
+              <div className="mb-1 flex items-center gap-2 text-xs font-medium">
+                <CheckCircle2 className="size-3.5" />
+                Next actions
+              </div>
+              <div className="space-y-1 text-sm text-muted-foreground">
+                {thread.actionItems.length ? (
+                  thread.actionItems
+                    .slice(0, 3)
+                    .map(item => <p key={item}>{item}</p>)
+                ) : (
+                  <p>No action needed.</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -2386,7 +2335,10 @@ function ThreadView({
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
         <div className="mx-auto max-w-3xl space-y-3">
           {thread.messages.map(message => (
-            <article key={message.id} className="dashboard-card p-4">
+            <article
+              key={message.id}
+              className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm"
+            >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium">{message.from}</p>
@@ -2404,16 +2356,17 @@ function ThreadView({
             </article>
           ))}
 
-          <section className="dashboard-card p-4">
+          <section className="sticky bottom-0 rounded-xl border border-border/70 bg-card/95 p-3 shadow-[0_-18px_42px_-34px_rgba(24,24,27,0.5)] backdrop-blur sm:p-4">
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <PenLine className="size-4" />
-                <p className="text-sm font-medium">Reply Composer</p>
+                <p className="text-sm font-medium">Reply</p>
               </div>
               <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center">
                 <Button
                   variant="outline"
                   size="sm"
+                  className="h-8"
                   onClick={() => rewriteComposer('shorter')}
                 >
                   Shorter
@@ -2421,6 +2374,7 @@ function ThreadView({
                 <Button
                   variant="outline"
                   size="sm"
+                  className="h-8"
                   onClick={() => rewriteComposer('warmer')}
                 >
                   Warmer
@@ -2428,6 +2382,7 @@ function ThreadView({
                 <Button
                   variant="outline"
                   size="sm"
+                  className="h-8"
                   onClick={() => rewriteComposer('direct')}
                 >
                   Direct
@@ -2438,15 +2393,15 @@ function ThreadView({
               value={composer}
               onChange={event => setComposer(event.target.value)}
               placeholder="Draft or insert a reply..."
-              className="min-h-36 resize-none"
+              className="min-h-32 resize-none rounded-lg border-border/70 bg-background/80 leading-6 shadow-inner"
             />
-            <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
-              <div className="rounded-md border border-border/70 bg-background/60 px-2 py-1.5">
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <div className="rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5">
                 {composerStats.words} words · {composerStats.characters} chars
               </div>
               <div
                 className={cn(
-                  'rounded-md border px-2 py-1.5',
+                  'rounded-md border px-2.5 py-1.5',
                   hasGreeting
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                     : 'border-border/70 bg-background/60'
@@ -2456,7 +2411,7 @@ function ThreadView({
               </div>
               <div
                 className={cn(
-                  'rounded-md border px-2 py-1.5',
+                  'rounded-md border px-2.5 py-1.5',
                   hasQuestion
                     ? 'border-sky-200 bg-sky-50 text-sky-800'
                     : 'border-border/70 bg-background/60'
@@ -2541,15 +2496,15 @@ function AgentPanel({
         : 'Not connected'
 
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ block: 'end' })
+    messageEndRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
   }, [activity.length, messages.length])
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b p-3 sm:p-4">
+    <div className="flex h-full flex-col bg-gradient-to-b from-card/90 to-background">
+      <div className="border-b bg-card/95 p-3 shadow-sm sm:p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="relative inline-flex size-8 items-center justify-center rounded-lg border border-border/70 bg-background shadow-sm">
+            <span className="relative inline-flex size-9 items-center justify-center rounded-xl border border-border bg-background shadow-sm">
               <Bot className="size-4" />
               {connected && (
                 <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
@@ -2558,13 +2513,16 @@ function AgentPanel({
             <div>
               <h2 className="font-semibold leading-none">BrokMail Agent</h2>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                {isRunning ? 'Working in Pi runtime' : runtimeLabel}
+                {isRunning ? 'Pi is working' : runtimeLabel}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="rounded-md">
-              Safe mode
+            <Badge
+              variant="secondary"
+              className="hidden h-7 rounded-md sm:inline-flex"
+            >
+              Approval gated
             </Badge>
             <Button
               variant="outline"
@@ -2578,33 +2536,37 @@ function AgentPanel({
             </Button>
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <div className="rounded-lg border border-border/65 bg-background/72 px-2.5 py-2">
-            <p className="text-[10px] uppercase text-muted-foreground">Mail</p>
-            <p className="mt-1 truncate text-xs font-medium">
+        <div className="mt-3 grid grid-cols-3 gap-1.5 rounded-xl border border-border/70 bg-background/55 p-1.5">
+          <div className="rounded-lg px-2.5 py-2">
+            <p className="text-[10px] font-medium uppercase text-muted-foreground">
+              Mail
+            </p>
+            <p className="mt-1 truncate text-[11px] font-medium">
               {connected ? `${threadCount} live threads` : 'Disconnected'}
             </p>
           </div>
-          <div className="rounded-lg border border-border/65 bg-background/72 px-2.5 py-2">
-            <p className="text-[10px] uppercase text-muted-foreground">
+          <div className="rounded-lg px-2.5 py-2">
+            <p className="text-[10px] font-medium uppercase text-muted-foreground">
               Calendar
             </p>
-            <p className="mt-1 truncate text-xs font-medium">
+            <p className="mt-1 truncate text-[11px] font-medium">
               {calendarConnected ? 'Connected' : 'Waiting'}
             </p>
           </div>
-          <div className="rounded-lg border border-border/65 bg-background/72 px-2.5 py-2">
-            <p className="text-[10px] uppercase text-muted-foreground">
+          <div className="rounded-lg px-2.5 py-2">
+            <p className="text-[10px] font-medium uppercase text-muted-foreground">
               Actions
             </p>
-            <p className="mt-1 truncate text-xs font-medium">Approval gated</p>
+            <p className="mt-1 truncate text-[11px] font-medium">
+              Approval gated
+            </p>
           </div>
         </div>
-        <div className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1">
+        <div className="-mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
           {quickPrompts.map(prompt => (
             <button
               key={prompt}
-              className="dashboard-card shrink-0 px-2.5 py-2 text-left text-xs transition-colors hover:bg-muted/70"
+              className="shrink-0 rounded-full border border-border/75 bg-background/80 px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
               onClick={() => runAgent(prompt)}
               disabled={isRunning}
             >
@@ -2614,25 +2576,36 @@ function AgentPanel({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 sm:p-4">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 scroll-smooth sm:p-4">
         {activity.length > 0 && (
-          <div className="dashboard-card p-3">
-            <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-              <Wand2 className="size-4" />
-              Agent Activity
+          <div className="rounded-xl border border-border/70 bg-card/90 p-3 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+                <Wand2 className="size-4" />
+                Activity
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                {activity.filter(step => step.status === 'done').length}/
+                {activity.length}
+              </span>
             </div>
-            <div className="space-y-2">
-              {activity.map(step => (
+            <div className="space-y-1.5">
+              {activity.slice(-4).map(step => (
                 <div
                   key={step.id}
-                  className="flex items-center gap-2 text-xs text-muted-foreground"
+                  className={cn(
+                    'flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors',
+                    step.status === 'running'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground'
+                  )}
                 >
                   {step.status === 'done' ? (
                     <CheckCircle2 className="size-3.5 text-emerald-600" />
                   ) : (
-                    <span className="size-2 rounded-full bg-primary" />
+                    <span className="size-2 animate-pulse rounded-full bg-foreground" />
                   )}
-                  <span>{step.message}</span>
+                  <span className="truncate">{step.message}</span>
                 </div>
               ))}
             </div>
@@ -2643,23 +2616,23 @@ function AgentPanel({
           <article
             key={message.id}
             className={cn(
-              'flex',
+              'flex animate-in fade-in-0 slide-in-from-bottom-1 duration-200',
               message.role === 'user' ? 'justify-end' : 'justify-start'
             )}
           >
             <div
               className={cn(
-                'max-w-[92%] rounded-md border border-border/70 p-3 text-sm sm:max-w-[88%]',
+                'max-w-[94%] rounded-2xl px-3.5 py-3 text-sm shadow-sm ring-1 ring-transparent transition-colors sm:max-w-[88%]',
                 message.role === 'user'
-                  ? 'border-sky-200 bg-sky-50 text-sky-950'
-                  : 'bg-card/95'
+                  ? 'rounded-br-md bg-foreground text-background'
+                  : 'rounded-bl-md border border-border/70 bg-card text-foreground'
               )}
             >
               <p className="whitespace-pre-wrap break-words leading-6">
                 {message.content}
               </p>
               {message.draft && (
-                <div className="mt-3 rounded-md border bg-muted/40 p-3 text-foreground">
+                <div className="mt-3 rounded-xl border border-border/70 bg-background/70 p-3 text-foreground">
                   <div className="mb-2 flex items-center gap-2 font-medium">
                     <PenLine className="size-4" />
                     Draft Reply
@@ -2674,14 +2647,14 @@ function AgentPanel({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full sm:w-auto"
+                      className="h-8 w-full sm:w-auto"
                       onClick={() => insertDraft(message.draft!)}
                     >
                       Insert
                     </Button>
                     <Button
                       size="sm"
-                      className="w-full sm:w-auto"
+                      className="h-8 w-full sm:w-auto"
                       onClick={() => insertDraft(message.draft!)}
                     >
                       Edit
@@ -2690,7 +2663,7 @@ function AgentPanel({
                 </div>
               )}
               {message.approval && (
-                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900">
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950 shadow-sm">
                   <div className="mb-2 flex items-center gap-2 font-medium">
                     <AlertTriangle className="size-4" />
                     {message.approval.title}
@@ -2706,7 +2679,7 @@ function AgentPanel({
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <Button
                         size="sm"
-                        className="w-full sm:w-auto"
+                        className="h-8 w-full sm:w-auto"
                         onClick={() =>
                           approveAction(message.approval!, message.draft)
                         }
@@ -2716,7 +2689,7 @@ function AgentPanel({
                       <Button
                         variant="outline"
                         size="sm"
-                        className="w-full sm:w-auto"
+                        className="h-8 w-full border-amber-300 bg-white/60 sm:w-auto"
                         onClick={() => cancelAction(message.approval!)}
                       >
                         Cancel
@@ -2730,14 +2703,13 @@ function AgentPanel({
         ))}
         {isRunning && (
           <article className="flex justify-start">
-            <div className="max-w-[88%] rounded-md border border-border/70 bg-card/95 p-3 text-sm shadow-sm">
+            <div className="max-w-[88%] rounded-2xl rounded-bl-md border border-border/70 bg-card p-3 text-sm shadow-sm">
               <div className="flex items-center gap-2">
-                <span className="size-2 animate-pulse rounded-full bg-primary" />
+                <span className="size-2 animate-pulse rounded-full bg-foreground" />
                 <span className="font-medium">BrokMail is working</span>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Reading live Gmail and calendar context through Pi. No sample
-                mail is used.
+                Reading live Gmail and Calendar context through Pi.
               </p>
             </div>
           </article>
@@ -2745,9 +2717,9 @@ function AgentPanel({
         <div ref={messageEndRef} />
       </div>
 
-      <div className="border-t p-3 sm:p-4">
+      <div className="border-t bg-card/95 p-3 shadow-[0_-16px_40px_-36px_rgba(24,24,27,0.45)] backdrop-blur sm:p-4">
         <form
-          className="flex items-end gap-2"
+          className="rounded-2xl border border-border bg-background/95 p-2 shadow-sm transition-all focus-within:border-foreground/25 focus-within:shadow-md"
           onSubmit={event => {
             event.preventDefault()
             runAgent(agentInput)
@@ -2757,16 +2729,23 @@ function AgentPanel({
             value={agentInput}
             onChange={event => setAgentInput(event.target.value)}
             placeholder="Ask your inbox anything..."
-            className="max-h-32 min-h-10 resize-none"
+            className="max-h-36 min-h-12 resize-none border-0 bg-transparent px-2 py-2 text-sm leading-6 shadow-none focus-visible:ring-0"
           />
-          <Button
-            type="submit"
-            size="icon"
-            disabled={isRunning || !agentInput.trim()}
-          >
-            <Send className="size-4" />
-            <span className="sr-only">Send</span>
-          </Button>
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <span className="flex min-w-0 items-center gap-1.5 truncate px-2 text-[11px] text-muted-foreground">
+              <ShieldCheck className="size-3.5 shrink-0" />
+              Live actions ask first
+            </span>
+            <Button
+              type="submit"
+              size="icon"
+              className="size-9 shrink-0 rounded-xl"
+              disabled={isRunning || !agentInput.trim()}
+            >
+              <Send className="size-4" />
+              <span className="sr-only">Send</span>
+            </Button>
+          </div>
         </form>
       </div>
     </div>
@@ -3019,9 +2998,8 @@ function EmptyMailWorkspace({
             Connect Gmail to load your real inbox.
           </h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            BrokMail will not show sample mail. After connection, this workspace
-            loads live Gmail threads in this browser, then prepares summaries,
-            drafts, and approval-safe actions.
+            After connection, this workspace loads live Gmail threads in this
+            browser, then prepares summaries, drafts, and approval-safe actions.
           </p>
           <div className="mt-4 rounded-lg border border-border/70 bg-background/70 p-3 text-xs text-muted-foreground">
             {isSyncingMail ? 'Syncing Gmail...' : connectionStatus}

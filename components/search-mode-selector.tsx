@@ -43,13 +43,13 @@ export function SearchModeSelector() {
     const savedMode = getCookie('searchMode')
     const normalizedMode = normalizeSearchMode(savedMode)
     const hasMigratedDefault = getCookie('searchModeDefaultMigrated') === 'true'
-    if (!hasMigratedDefault && (!savedMode || savedMode === 'quick')) {
-      setCookie('searchMode', 'search')
+    if (!hasMigratedDefault && !savedMode) {
+      setCookie('searchMode', DEFAULT_SEARCH_MODE)
       setCookie('searchModeDefaultMigrated', 'true')
       return
     }
     if (normalizedMode === 'code') {
-      setCookie('searchMode', 'search')
+      setCookie('searchMode', DEFAULT_SEARCH_MODE)
       return
     }
     if (savedMode !== normalizedMode) {

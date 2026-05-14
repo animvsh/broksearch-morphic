@@ -258,8 +258,8 @@ export function ChatPanel({
       className={cn(
         'w-full group/form-container shrink-0',
         messages.length > 0
-          ? 'sticky bottom-0 bg-transparent px-2 pb-2 md:pb-4'
-          : 'mx-auto flex w-full max-w-4xl flex-col px-4 pb-8 pt-24 sm:px-6 md:pt-32'
+          ? 'sticky bottom-0 bg-gradient-to-t from-background via-background/95 to-transparent px-4 pb-4 pt-4 md:px-6'
+          : 'mx-auto flex w-full max-w-4xl flex-col px-4 pb-8 pt-10 sm:px-6 md:pt-16'
       )}
     >
       {uploadedFiles.length > 0 && (
@@ -291,7 +291,7 @@ export function ChatPanel({
           setIsInputFocused(false)
           inputRef.current?.blur()
         }}
-        className={cn('relative mx-auto w-full max-w-full md:max-w-3xl')}
+        className={cn('relative mx-auto w-full max-w-4xl')}
       >
         {/* Scroll to bottom button */}
         {messages.length > 0 && (
@@ -405,7 +405,7 @@ export function ChatPanel({
             spellCheck={false}
             value={input}
             disabled={isLoading || isToolInvocationInProgress()}
-            className="min-h-14 w-full resize-none border-0 bg-transparent p-4 text-sm leading-6 placeholder:text-zinc-400 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 md:p-5"
+            className="min-h-12 w-full resize-none border-0 bg-transparent p-4 text-sm leading-6 placeholder:text-zinc-400 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 md:min-h-14 md:p-5"
             onChange={handleInputChange}
             onKeyDown={e => {
               if (

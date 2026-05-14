@@ -177,7 +177,7 @@ export async function createChatStreamResponse(
 
     const llmStart = performance.now()
     if (taskId) {
-      await updateBackgroundTask({
+      void updateBackgroundTask({
         id: taskId,
         userId,
         status: 'running',

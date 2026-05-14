@@ -96,6 +96,36 @@ function resolveSelectedModelKey(
 }
 
 export async function getModelSelectorData(): Promise<ModelSelectorData> {
+  const modelsByProvider = withDefaultModel({})
+  const fallbackModel =
+    isProviderEnabled(DEFAULT_MODEL.providerId) &&
+    Object.values(modelsByProvider)
+      .flat()
+      .some(
+        model =>
+          model.providerId === DEFAULT_MODEL.providerId &&
+          model.id === DEFAULT_MODEL.id
+      )
+      ? DEFAULT_MODEL
+      : pickFirstAvailableModel(modelsByProvider)
+  const hasAvailableModels =
+    fallbackModel !== null || isProviderEnabled(DEFAULT_MODEL.providerId)
+  const cookieStore = await cookies()
+  const selectedModelKey = resolveSelectedModelKey(
+    modelsByProvider,
+    fallbackModel,
+    cookieStore.get(MODEL_SELECTION_COOKIE)?.value
+  )
+
+  return {
+    enabled: true,
+    modelsByProvider,
+    selectedModelKey,
+    hasAvailableModels
+  }
+}
+
+export async function getLiveModelSelectorData(): Promise<ModelSelectorData> {
   const modelsByProvider = withDefaultModel(await fetchAvailableModels())
   const fallbackModel =
     isProviderEnabled(DEFAULT_MODEL.providerId) &&

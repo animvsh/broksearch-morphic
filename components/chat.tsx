@@ -214,7 +214,7 @@ export function Chat({
         toast.error('Brok could not complete the request. Please try again.')
       }
     },
-    experimental_throttle: 32,
+    experimental_throttle: 80,
     generateId
   })
 
@@ -499,7 +499,7 @@ export function Chat({
       <div
         className={cn(
           'relative flex h-full min-w-0 flex-1 flex-col bg-background',
-          messages.length === 0 ? 'items-center justify-center pb-14' : ''
+          messages.length === 0 ? 'items-center justify-center pb-10' : ''
         )}
         data-testid="full-chat"
         onDragOver={handleDragOver}

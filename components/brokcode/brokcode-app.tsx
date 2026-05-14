@@ -27,6 +27,7 @@ import {
   KeyRound,
   ListChecks,
   Monitor,
+  MoreHorizontal,
   Play,
   PlugZap,
   Radar,
@@ -52,6 +53,14 @@ import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -875,8 +884,6 @@ export function BrokCodeApp({
     models.length > 0
       ? models
       : [{ id: 'brok-code', name: 'Brok Code', supports_code: true }]
-
-  const syncSources = activeSyncSession?.sources ?? []
 
   const getAuthHeaders = useCallback(
     (key = apiKey): Record<string, string> => {
@@ -2334,115 +2341,83 @@ export function BrokCodeApp({
   }, [connectGithub, githubStatus, hasLiveKey, hasLiveRuntime, isRunning])
 
   return (
-    <div className="dashboard-shell brokcode-shell flex h-full w-full flex-col pt-12 text-foreground">
-      <header className="dashboard-panel sticky top-0 z-20 mx-3 border-b px-3 py-3 sm:mx-4 sm:px-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-md border bg-muted shadow-[0_16px_36px_-22px_rgba(99,102,241,0.45)]">
-              <Code2 className="size-5" />
+    <div className="dashboard-shell brokcode-shell flex h-full w-full flex-col text-foreground">
+      <header className="sticky top-0 z-20 border-b bg-background/95 px-3 py-2 backdrop-blur sm:px-4">
+        <div className="flex h-11 items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted">
+              <Code2 className="size-4" />
             </div>
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-lg font-semibold sm:text-xl">
-                  Brok Code
-                </h1>
-                <Badge variant="secondary" className="rounded-md text-[11px]">
-                  Lovable-style builder
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground sm:truncate">
-                Chat-first app builder on the left, live preview and runtime
-                controls on the right.
+              <h1 className="truncate text-sm font-semibold sm:text-base">
+                Brok Code
+              </h1>
+              <p className="truncate text-xs text-muted-foreground">
+                {isRunning
+                  ? runStreamingHints[runHintIndex]
+                  : getRuntimeLabel(activeRuntime)}
               </p>
-              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-2 py-1 text-[11px] text-muted-foreground">
-                <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-                Runtime and fallback state stay visible
-              </div>
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="inline-flex items-center rounded-md border border-border/70 bg-card/45 p-0.5 backdrop-blur-sm">
-              <Button size="sm" className="h-7 rounded-sm px-2.5 text-xs">
-                Cloud
-              </Button>
-              <Button
-                asChild
-                variant="ghost"
-                size="sm"
-                className="h-7 rounded-sm px-2.5 text-xs"
-              >
-                <Link href="/brokcode/tui">TUI</Link>
-              </Button>
-            </div>
-            <Badge variant="outline" className="hidden rounded-md sm:flex">
-              {executionRuns.length} real runs
-            </Badge>
-            <Badge
-              variant={hasLiveRuntime ? 'default' : 'secondary'}
-              className="rounded-md"
-            >
+          <div className="hidden min-w-0 items-center gap-2 text-xs text-muted-foreground md:flex">
+            <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-1">
+              <span
+                className={cn(
+                  'size-1.5 rounded-full',
+                  hasLiveRuntime ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+                )}
+              />
               {hasLiveKey
-                ? 'Account key'
+                ? 'Key ready'
                 : hasAccountRuntime
                   ? 'Key required'
                   : 'Sign in required'}
-            </Badge>
-            <Badge variant="outline" className="rounded-md">
-              Sync:{' '}
-              {syncSources.includes('cloud') && syncSources.includes('tui')
-                ? 'Cloud + TUI'
-                : syncSources.includes('tui')
-                  ? 'TUI'
-                  : syncSources.includes('cloud')
-                    ? 'Cloud'
-                    : syncSessionId}
-            </Badge>
-            <Badge
-              variant={githubStatus === 'connected' ? 'default' : 'secondary'}
-              className="rounded-md"
-            >
-              GitHub:{' '}
-              {githubStatus === 'checking'
-                ? 'Checking'
-                : githubStatus === 'connected'
-                  ? 'Connected'
-                  : githubStatus === 'ready'
-                    ? 'Connect'
-                    : 'Unavailable'}
-            </Badge>
-            {isConnectingIntegration && (
-              <Badge variant="secondary" className="rounded-md">
-                Connecting {formatToolkitName(isConnectingIntegration)}
-              </Badge>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full gap-2 sm:w-auto"
-              disabled={
-                isConnectingGithub ||
-                Boolean(isConnectingIntegration) ||
-                githubStatus === 'connected'
-              }
-              onClick={() => handleChatAction('connect-github')}
-            >
-              {isConnectingGithub ? (
-                <RefreshCcw className="size-4 animate-spin" />
-              ) : (
-                <Github className="size-4" />
-              )}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-1">
+              <span
+                className={cn(
+                  'size-1.5 rounded-full',
+                  githubStatus === 'connected'
+                    ? 'bg-emerald-500'
+                    : githubStatus === 'checking'
+                      ? 'animate-pulse bg-cyan-500'
+                      : 'bg-muted-foreground/40'
+                )}
+              />
+              GitHub{' '}
               {githubStatus === 'connected'
-                ? 'GitHub Connected'
-                : isConnectingGithub
-                  ? 'Connecting...'
-                  : 'Connect GitHub'}
+                ? 'connected'
+                : githubStatus === 'checking'
+                  ? 'checking'
+                  : 'off'}
+            </span>
+            {isConnectingIntegration && (
+              <span className="truncate rounded-full border px-2 py-1">
+                Connecting {formatToolkitName(isConnectingIntegration)}
+              </span>
+            )}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              asChild
+              variant="ghost"
+              size="icon"
+              className="size-9"
+              title="Open TUI"
+            >
+              <Link href="/brokcode/tui">
+                <TerminalSquare className="size-4" />
+                <span className="sr-only">Open TUI</span>
+              </Link>
             </Button>
             <Button
-              variant="outline"
-              size="sm"
-              className="w-full gap-2 sm:w-auto"
+              variant="ghost"
+              size="icon"
+              className="size-9"
               disabled={isSharing}
+              title="Share chat"
               onClick={() => {
                 startShareTransition(() => {
                   void shareCurrentChat()
@@ -2454,15 +2429,95 @@ export function BrokCodeApp({
               ) : (
                 <Share2 className="size-4" />
               )}
-              {isSharing ? 'Sharing...' : 'Share Chat'}
+              <span className="sr-only">
+                {isSharing ? 'Sharing chat' : 'Share chat'}
+              </span>
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-9"
+                  title="Brok Code actions"
+                >
+                  <MoreHorizontal className="size-4" />
+                  <span className="sr-only">Brok Code actions</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>Workspace</DropdownMenuLabel>
+                <DropdownMenuItem
+                  disabled={
+                    isConnectingGithub ||
+                    Boolean(isConnectingIntegration) ||
+                    githubStatus === 'connected'
+                  }
+                  onClick={() => handleChatAction('connect-github')}
+                >
+                  <Github className="size-4" />
+                  {githubStatus === 'connected'
+                    ? 'GitHub connected'
+                    : isConnectingGithub
+                      ? 'Connecting GitHub...'
+                      : 'Connect GitHub'}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleChatAction('run-checks')}
+                >
+                  <CheckCircle2 className="size-4" />
+                  Run platform checks
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Ship</DropdownMenuLabel>
+                <DropdownMenuItem
+                  disabled={
+                    !hasLiveKey ||
+                    isSubmittingPr ||
+                    githubStatus !== 'connected'
+                  }
+                  onClick={() => {
+                    void submitPullRequest()
+                  }}
+                >
+                  <Rocket className="size-4" />
+                  {isSubmittingPr ? 'Opening PR...' : 'Open PR'}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!hasLiveKey || isDeploying}
+                  onClick={() => {
+                    void deployBrokCodeCloud()
+                  }}
+                >
+                  <Rocket className="size-4" />
+                  {isDeploying ? 'Deploying...' : '1-click deploy'}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/brokcode/tui">
+                    <TerminalSquare className="size-4" />
+                    Open terminal TUI
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                  <KeyRound className="size-4" />
+                  {hasLiveKey
+                    ? `API key ${maskedKey ?? 'ready'}`
+                    : 'Add key in Setup'}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                  <Globe className="size-4" />
+                  Sync session {syncSessionId}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 px-3 pb-3 sm:px-4 sm:pb-4 lg:grid-cols-[minmax(340px,420px)_minmax(0,1fr)] xl:grid-cols-[minmax(380px,460px)_minmax(0,1fr)]">
-        <section className="dashboard-rail flex min-h-[620px] flex-col overflow-hidden rounded-xl border lg:min-h-0">
-          <div className="border-b bg-background/90 px-3 py-3 sm:px-4">
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] xl:grid-cols-[minmax(390px,470px)_minmax(0,1fr)]">
+        <section className="dashboard-rail flex min-h-[620px] flex-col overflow-hidden border-r lg:min-h-0">
+          <div className="border-b bg-white/94 px-3 py-2 sm:px-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold">Chat</p>
@@ -2477,84 +2532,69 @@ export function BrokCodeApp({
                 {isRunning ? 'Working' : 'Ready'}
               </Badge>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
-              <div className="rounded-md border bg-muted/20 px-2 py-1.5">
-                <span className="block font-medium text-foreground">
-                  {getRuntimeLabel(activeRuntime)}
-                </span>
-                Runtime
-              </div>
-              <div className="rounded-md border bg-muted/20 px-2 py-1.5">
-                <span className="block font-medium text-foreground">
-                  {runtimeAgents.length}
-                </span>
-                Agents
-              </div>
-              <div className="rounded-md border bg-muted/20 px-2 py-1.5">
-                <span className="block font-medium text-foreground">
-                  {executionRuns.length}
-                </span>
-                Runs
-              </div>
-            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-5">
             <div className="flex flex-col gap-4">
-              <div className="rounded-md border bg-background p-3 lg:hidden">
-                <Tabs defaultValue="visualizer">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold">
-                        Pi coding-agent Runtime Workspace
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Watch execution lanes and live browser preview.
-                      </p>
+              {executionRuns.length > 0 && (
+                <div className="rounded-md border bg-background p-3 lg:hidden">
+                  <Tabs defaultValue="visualizer">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">
+                          Pi coding-agent Runtime Workspace
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Watch execution lanes and live browser preview.
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="w-fit rounded-md">
+                        Runtime:{' '}
+                        {activeRuntime === 'not_connected'
+                          ? 'Not connected'
+                          : getRuntimeLabel(activeRuntime)}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="w-fit rounded-md">
-                      Runtime:{' '}
-                      {activeRuntime === 'not_connected'
-                        ? 'Not connected'
-                        : getRuntimeLabel(activeRuntime)}
-                    </Badge>
-                  </div>
 
-                  <TabsList className="mt-3 h-9 w-full justify-start rounded-md">
-                    <TabsTrigger
-                      value="visualizer"
-                      className="gap-1.5 rounded-sm"
-                    >
-                      <Activity className="size-4" />
-                      Visualizer
-                    </TabsTrigger>
-                    <TabsTrigger value="browser" className="gap-1.5 rounded-sm">
-                      <Monitor className="size-4" />
-                      Browser Preview
-                    </TabsTrigger>
-                  </TabsList>
+                    <TabsList className="mt-3 h-9 w-full justify-start rounded-md">
+                      <TabsTrigger
+                        value="visualizer"
+                        className="gap-1.5 rounded-sm"
+                      >
+                        <Activity className="size-4" />
+                        Visualizer
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="browser"
+                        className="gap-1.5 rounded-sm"
+                      >
+                        <Monitor className="size-4" />
+                        Browser Preview
+                      </TabsTrigger>
+                    </TabsList>
 
-                  <TabsContent value="visualizer" className="mt-3">
-                    <ExecutionVisualizer runs={executionRuns} />
-                  </TabsContent>
+                    <TabsContent value="visualizer" className="mt-3">
+                      <ExecutionVisualizer runs={executionRuns} />
+                    </TabsContent>
 
-                  <TabsContent value="browser" className="mt-3">
-                    <BrowserPreviewPanel
-                      previewInput={previewInput}
-                      previewUrl={previewUrl}
-                      previewFrameKey={previewFrameKey}
-                      previewHealth={previewHealth}
-                      onPreviewInputChange={setPreviewInput}
-                      onApply={applyPreviewInput}
-                      onDirectLoad={loadPreviewTarget}
-                      onReload={reloadPreview}
-                      runtimeError={runtimeError}
-                      latestRun={executionRuns[0]}
-                    />
-                  </TabsContent>
-                </Tabs>
-              </div>
+                    <TabsContent value="browser" className="mt-3">
+                      <BrowserPreviewPanel
+                        previewInput={previewInput}
+                        previewUrl={previewUrl}
+                        previewFrameKey={previewFrameKey}
+                        previewHealth={previewHealth}
+                        onPreviewInputChange={setPreviewInput}
+                        onApply={applyPreviewInput}
+                        onDirectLoad={loadPreviewTarget}
+                        onReload={reloadPreview}
+                        runtimeError={runtimeError}
+                        latestRun={executionRuns[0]}
+                      />
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              )}
 
-              <div className="sm:hidden">
+              <div className="hidden">
                 <SyncedSessionPanel
                   session={activeSyncSession}
                   sessionId={syncSessionId}
@@ -2565,7 +2605,7 @@ export function BrokCodeApp({
                 />
               </div>
 
-              <div className="sm:hidden">
+              <div className="hidden">
                 <VersionHistoryPanel
                   versions={versions}
                   loading={versionsLoading}
@@ -2577,7 +2617,7 @@ export function BrokCodeApp({
                 />
               </div>
 
-              <div className="rounded-md border bg-muted/20 p-3 sm:hidden">
+              <div className="hidden">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold">Runtime agents</p>
@@ -2676,19 +2716,6 @@ export function BrokCodeApp({
 
           <div className="border-t bg-background p-3 sm:p-4">
             <div className="w-full">
-              <div className="-mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1">
-                {brokCodeCommands.map(command => (
-                  <button
-                    key={command}
-                    className="shrink-0 rounded-md border bg-muted/30 px-2.5 py-1.5 text-xs transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                    onClick={() => runCommand(command)}
-                    disabled={isRunning}
-                  >
-                    {command}
-                  </button>
-                ))}
-              </div>
-
               <form
                 className="relative flex items-end gap-2 overflow-hidden rounded-md border bg-background p-2 shadow-sm"
                 onSubmit={event => {
@@ -2709,9 +2736,37 @@ export function BrokCodeApp({
                   placeholder="Ask Brok Code to build, fix, audit, or ship..."
                   className="max-h-36 min-h-12 resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="mb-1 size-9 shrink-0"
+                      disabled={isRunning}
+                      title="Example commands"
+                    >
+                      <Wand2 className="size-4" />
+                      <span className="sr-only">Example commands</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-72">
+                    <DropdownMenuLabel>Example commands</DropdownMenuLabel>
+                    {brokCodeCommands.map(command => (
+                      <DropdownMenuItem
+                        key={command}
+                        onClick={() => runCommand(command)}
+                      >
+                        <Wand2 className="size-4" />
+                        <span className="line-clamp-1">{command}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   type="submit"
                   size="icon"
+                  className="mb-1 size-9 shrink-0"
                   disabled={isRunning || !input.trim()}
                 >
                   <Send className="size-4" />
@@ -2722,13 +2777,13 @@ export function BrokCodeApp({
           </div>
         </section>
 
-        <aside className="hidden min-h-0 flex-col overflow-hidden rounded-xl border bg-muted/20 lg:flex">
-          <div className="border-b bg-background/90 px-3 py-3">
+        <aside className="hidden min-h-0 flex-col overflow-hidden bg-zinc-50/45 lg:flex">
+          <div className="border-b bg-white/94 px-3 py-2">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold">Preview</p>
                 <p className="truncate text-xs text-muted-foreground">
-                  Load the app Brok Code is building and keep it visible.
+                  Keep the generated app visible while you iterate.
                 </p>
               </div>
               <Badge variant="outline" className="shrink-0 rounded-md">
@@ -2743,7 +2798,7 @@ export function BrokCodeApp({
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <BrowserPreviewPanel
               previewInput={previewInput}
               previewUrl={previewUrl}
@@ -2758,9 +2813,9 @@ export function BrokCodeApp({
             />
           </div>
 
-          <div className="border-t bg-background/95 p-3">
+          <div className="border-t bg-white/96 p-2">
             <Tabs defaultValue="run">
-              <TabsList className="h-9 w-full justify-start rounded-md">
+              <TabsList className="h-9 w-full justify-start rounded-lg bg-zinc-100/80">
                 <TabsTrigger value="run" className="gap-1.5 rounded-sm">
                   <Activity className="size-4" />
                   Run
@@ -3585,72 +3640,88 @@ function BrowserPreviewPanel({
         : 'outline'
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-md border bg-background px-3 py-2">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold">External Preview URL</p>
-            <p className="text-xs text-muted-foreground">
-              Points at your running app server. HMR is shown only when that
-              server provides it.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant={healthTone} className="rounded-md">
-              {previewHealth.status === 'online'
-                ? 'Live'
-                : previewHealth.status === 'checking'
-                  ? 'Checking'
-                  : previewHealth.status === 'offline'
-                    ? 'Offline'
-                    : 'Ready'}
-            </Badge>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-2"
-              onClick={onReload}
-            >
-              <RefreshCcw className="size-3.5" />
-              Reload Preview
-            </Button>
-          </div>
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {previewHealth.message}
-          {previewHealth.httpStatus ? ` (${previewHealth.httpStatus})` : ''}
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-2 sm:flex-row">
+    <div className="flex min-h-0 flex-col gap-2">
+      <div className="flex flex-col gap-2 rounded-md border bg-background p-2 sm:flex-row sm:items-center">
         <Input
           value={previewInput}
           onChange={event => onPreviewInputChange(event.target.value)}
           placeholder="http://127.0.0.1:3001"
-          className="h-9"
+          className="h-9 min-w-0 flex-1"
         />
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 gap-2"
-          onClick={onApply}
-        >
-          <Eye className="size-4" />
-          Load
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Badge variant={healthTone} className="shrink-0 rounded-md">
+            {previewHealth.status === 'online'
+              ? 'Live'
+              : previewHealth.status === 'checking'
+                ? 'Checking'
+                : previewHealth.status === 'offline'
+                  ? 'Offline'
+                  : 'Ready'}
+          </Badge>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-9 shrink-0"
+            onClick={onApply}
+            title="Load preview URL"
+          >
+            <Eye className="size-4" />
+            <span className="sr-only">Load preview URL</span>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-9 shrink-0"
+                title="Preview shortcuts"
+              >
+                <Globe className="size-4" />
+                <span className="sr-only">Preview shortcuts</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Preview shortcuts</DropdownMenuLabel>
+              {previewShortcuts.map(shortcut => (
+                <DropdownMenuItem
+                  key={shortcut.label}
+                  onClick={() => onDirectLoad(shortcut.value)}
+                >
+                  <Globe className="size-4" />
+                  {shortcut.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-9 shrink-0"
+            onClick={onReload}
+            title="Reload preview"
+          >
+            <RefreshCcw className="size-4" />
+            <span className="sr-only">Reload preview</span>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            size="icon"
+            className="size-9 shrink-0"
+            title="Open preview in new tab"
+          >
+            <a href={previewUrl} target="_blank" rel="noreferrer">
+              <ExternalLink className="size-4" />
+              <span className="sr-only">Open preview in new tab</span>
+            </a>
+          </Button>
+        </div>
       </div>
 
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        {previewShortcuts.map(shortcut => (
-          <button
-            key={shortcut.label}
-            className="shrink-0 rounded-md border bg-muted/20 px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-            onClick={() => onDirectLoad(shortcut.value)}
-          >
-            {shortcut.label}
-          </button>
-        ))}
-      </div>
+      <p className="truncate text-xs text-muted-foreground">
+        {previewHealth.message}
+        {previewHealth.httpStatus ? ` (${previewHealth.httpStatus})` : ''}
+      </p>
 
       {runtimeError && (
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-50">
@@ -3671,21 +3742,9 @@ function BrowserPreviewPanel({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-md border bg-background shadow-[0_16px_44px_-32px_rgba(15,23,42,0.45)]">
-        <div className="flex items-center justify-between gap-3 border-b px-3 py-2 text-xs">
-          <span className="truncate text-muted-foreground">{previewUrl}</span>
-          <a
-            href={previewUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-foreground underline"
-          >
-            <ExternalLink className="size-3.5" />
-            Open
-          </a>
-        </div>
+      <div className="min-h-0 overflow-hidden rounded-md border bg-background shadow-[0_16px_44px_-32px_rgba(15,23,42,0.45)]">
         {isBlockedPreview ? (
-          <div className="flex h-[360px] min-h-[360px] w-full items-center justify-center bg-muted/20 px-6 text-center text-sm text-muted-foreground lg:h-[calc(100vh-22rem)] lg:min-h-[420px]">
+          <div className="flex h-[360px] min-h-[360px] w-full items-center justify-center bg-muted/20 px-6 text-center text-sm text-muted-foreground lg:h-[calc(100vh-14rem)] lg:min-h-[520px]">
             BrokCode preview cannot render the BrokCode app itself. Load your
             generated app URL instead.
           </div>
@@ -3694,7 +3753,7 @@ function BrowserPreviewPanel({
             key={previewFrameKey}
             src={previewUrl}
             title="Brok Code browser preview"
-            className="h-[360px] min-h-[360px] w-full bg-white lg:h-[calc(100vh-22rem)] lg:min-h-[420px]"
+            className="h-[360px] min-h-[360px] w-full bg-white lg:h-[calc(100vh-14rem)] lg:min-h-[520px]"
             loading="lazy"
             referrerPolicy="no-referrer"
           />

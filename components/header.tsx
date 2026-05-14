@@ -5,10 +5,8 @@ import Link from 'next/link'
 
 import { User } from '@supabase/supabase-js'
 
-import { cn } from '@/lib/utils'
-
 import { IconBlinkingLogo } from '@/components/ui/icons'
-import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar'
+import { SidebarTrigger } from '@/components/ui/sidebar'
 
 import GuestMenu from './guest-menu'
 import UserMenu from './user-menu'
@@ -18,16 +16,8 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ user }) => {
-  const { open } = useSidebar()
-
   return (
-    <header
-      className={cn(
-        'pointer-events-none absolute top-0 right-0 z-[70] flex h-16 items-center justify-between border-b border-zinc-200 bg-white px-3 text-zinc-950 transition-[width] duration-150 ease-linear md:m-3 md:h-14 md:rounded-xl md:border md:px-4',
-        open ? 'md:w-[calc(100%-var(--sidebar-width))]' : 'md:w-full',
-        'w-full'
-      )}
-    >
+    <header className="pointer-events-none sticky top-0 z-[70] flex h-14 w-full shrink-0 items-center justify-between border-b border-zinc-200 bg-white/95 px-3 text-zinc-950 shadow-[0_1px_0_rgba(24,24,27,0.03)] backdrop-blur md:px-4">
       <div className="pointer-events-auto flex min-w-0 items-center gap-2">
         <SidebarTrigger
           className="size-9 shrink-0 rounded-full border border-zinc-200 bg-white text-zinc-700 transition-colors duration-100 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950"

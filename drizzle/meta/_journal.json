@@ -169,6 +169,13 @@
       "when": 1778712600000,
       "tag": "0023_brokmail_approval_consumptions",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1778799000000,
+      "tag": "0024_feature_requests",
+      "breakpoints": true
     }
   ]
 }

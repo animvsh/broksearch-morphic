@@ -66,6 +66,39 @@ const FEATURED_TOOLKITS = [
     ]
   },
   {
+    slug: 'googledocs',
+    aliases: ['googledocs', 'google_docs', 'google-docs', 'docs'],
+    name: 'Google Docs',
+    description:
+      'Create, read, and update Google Docs through connected Workspace workflows.',
+    envKeys: [
+      'COMPOSIO_GOOGLEDOCS_AUTH_CONFIG_ID',
+      'COMPOSIO_GOOGLE_DOCS_AUTH_CONFIG_ID'
+    ]
+  },
+  {
+    slug: 'googleslides',
+    aliases: ['googleslides', 'google_slides', 'google-slides', 'slides'],
+    name: 'Google Slides',
+    description:
+      'Create, inspect, and update slide decks through connected Workspace workflows.',
+    envKeys: [
+      'COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID',
+      'COMPOSIO_GOOGLE_SLIDES_AUTH_CONFIG_ID'
+    ]
+  },
+  {
+    slug: 'googlemeet',
+    aliases: ['googlemeet', 'google_meet', 'google-meet', 'meet'],
+    name: 'Google Meet',
+    description:
+      'Schedule, inspect, and coordinate Meet workflows from agent actions.',
+    envKeys: [
+      'COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID',
+      'COMPOSIO_GOOGLE_MEET_AUTH_CONFIG_ID'
+    ]
+  },
+  {
     slug: 'github',
     aliases: ['github'],
     name: 'GitHub',

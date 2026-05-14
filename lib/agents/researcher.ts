@@ -14,6 +14,7 @@ import { getModel } from '../utils/registry'
 import { isTracingEnabled } from '../utils/telemetry'
 
 import {
+  FAST_CHAT_PROMPT,
   getAdaptiveModePrompt,
   QUICK_MODE_PROMPT
 } from './prompts/search-mode-prompts'
@@ -99,19 +100,36 @@ export function createResearcher({
     // Configure based on search mode
     switch (searchMode) {
       case 'quick':
-      case 'search':
-      case 'code':
         console.log(
-          `[Researcher] ${searchMode} mode: maxSteps=20, tools=[search, fetch, composioIntegrations, documentArtifacts]`
+          `[Researcher] quick mode: maxSteps=6, tools=[composioIntegrations, documentArtifacts]`
         )
         systemPrompt = QUICK_MODE_PROMPT
+        activeToolsList = ['composioIntegrations', 'documentArtifacts']
+        maxSteps = 6
+        break
+
+      case 'search':
+        console.log(
+          `[Researcher] search mode: maxSteps=12, tools=[search, fetch, composioIntegrations, documentArtifacts]`
+        )
+        systemPrompt = FAST_CHAT_PROMPT
         activeToolsList = [
           'search',
           'fetch',
           'composioIntegrations',
           'documentArtifacts'
         ]
-        maxSteps = 20
+        maxSteps = 12
+        searchTool = wrapSearchToolForQuickMode(originalSearchTool)
+        break
+
+      case 'code':
+        console.log(
+          `[Researcher] code mode: maxSteps=10, tools=[composioIntegrations, documentArtifacts]`
+        )
+        systemPrompt = QUICK_MODE_PROMPT
+        activeToolsList = ['composioIntegrations', 'documentArtifacts']
+        maxSteps = 10
         searchTool = wrapSearchToolForQuickMode(originalSearchTool)
         break
 
@@ -126,9 +144,9 @@ export function createResearcher({
           'documentArtifacts'
         ]
         console.log(
-          `[Researcher] Deep mode: maxSteps=50, tools=[${activeToolsList.join(', ')}]`
+          `[Researcher] Deep mode: maxSteps=35, tools=[${activeToolsList.join(', ')}]`
         )
-        maxSteps = 50
+        maxSteps = 35
         searchTool = originalSearchTool
         break
     }

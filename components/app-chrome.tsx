@@ -10,6 +10,7 @@ import { SidebarProvider } from '@/components/ui/sidebar'
 
 import AppSidebar from '@/components/app-sidebar'
 import ArtifactRoot from '@/components/artifact/artifact-root'
+import { FeatureRequestWidget } from '@/components/feature-request-widget'
 import Header from '@/components/header'
 import { KeyboardShortcutHandler } from '@/components/keyboard-shortcut-handler'
 
@@ -47,13 +48,12 @@ export function AppChrome({
         <main
           className={cn(
             'flex min-h-0 min-w-0 flex-1',
-            usesPageScroll
-              ? 'overflow-y-auto pt-16 md:pt-20'
-              : 'overflow-hidden'
+            usesPageScroll ? 'overflow-y-auto' : 'overflow-hidden'
           )}
         >
           <ArtifactRoot>{children}</ArtifactRoot>
         </main>
+        <FeatureRequestWidget />
       </div>
     </SidebarProvider>
   )

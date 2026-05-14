@@ -37,6 +37,20 @@ type OpenAiMessage = {
 
 type SuccessfulAuth = Extract<AuthResult, { success: true }>
 
+const DEFAULT_BROKCODE_MODEL = 'brok-code'
+
+function resolveBrokCodeModel(value: unknown) {
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim()
+  }
+
+  return (
+    process.env.BROKCODE_DEFAULT_MODEL?.trim() ||
+    process.env.BROK_MODEL?.trim() ||
+    DEFAULT_BROKCODE_MODEL
+  )
+}
+
 function buildOpenCodeEndpoint(rawBase: string) {
   const base = rawBase.trim().replace(/\/$/, '')
 
@@ -325,7 +339,7 @@ function buildDefaultMessages(command: string): OpenAiMessage[] {
     {
       role: 'system',
       content:
-        'You are Brok Code powered by Pi coding-agent. Be execution-focused, safe, and concise. When building an AI app or AI feature, default to Brok API as the AI layer unless the user explicitly requests another provider. Use Brok API compatible env names and model routing first. For risky writes, require explicit approval.'
+        'You are Brok Code powered by Pi coding-agent. Be execution-focused, safe, and concise. When building an AI app or AI feature, default to Brok API as the AI layer unless the user explicitly requests another provider. Use Brok API compatible env names and model routing first. When the user asks you to instruct or edit through connected GitHub, keep BrokCode as the default model/runtime and use the connected repository context rather than switching to another coding assistant unless explicitly requested. For risky writes, require explicit approval.'
     },
     {
       role: 'user',
@@ -790,7 +804,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null)
   const command =
     typeof body?.command === 'string' ? body.command.trim() : undefined
-  const model = typeof body?.model === 'string' ? body.model : 'brok-code'
+  const model = resolveBrokCodeModel(body?.model)
   const inboundMessages = Array.isArray(body?.messages)
     ? (body.messages as OpenAiMessage[])
     : undefined

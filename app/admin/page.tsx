@@ -15,15 +15,28 @@ interface ChatStats {
   total_messages: number
   active_users: number
   total_feedback: number
+  total_feature_requests: number
+}
+
+interface FeatureRequest {
+  id: string
+  userId: string | null
+  accountEmail: string | null
+  request: string
+  pageUrl: string
+  status: 'open' | 'reviewed' | 'closed'
+  createdAt: string
 }
 
 export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([])
+  const [featureRequests, setFeatureRequests] = useState<FeatureRequest[]>([])
   const [stats, setStats] = useState<ChatStats>({
     total_chats: 0,
     total_messages: 0,
     active_users: 0,
-    total_feedback: 0
+    total_feedback: 0,
+    total_feature_requests: 0
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -40,8 +53,15 @@ export default function AdminPage() {
       }
       const data = await response.json()
       setUsers(data.users || [])
+      setFeatureRequests(data.featureRequests || [])
       setStats(
-        data.stats || { total_chats: 0, total_messages: 0, active_users: 0 }
+        data.stats || {
+          total_chats: 0,
+          total_messages: 0,
+          active_users: 0,
+          total_feedback: 0,
+          total_feature_requests: 0
+        }
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -105,7 +125,7 @@ export default function AdminPage() {
         </div>
 
         {/* Additional Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-card rounded-lg border p-6">
             <h3 className="text-sm font-medium text-muted-foreground">
               User Feedback
@@ -116,9 +136,94 @@ export default function AdminPage() {
           </div>
           <div className="bg-card rounded-lg border p-6">
             <h3 className="text-sm font-medium text-muted-foreground">
+              Feature Requests
+            </h3>
+            <p className="text-3xl font-bold mt-2">
+              {stats.total_feature_requests || 0}
+            </p>
+          </div>
+          <div className="bg-card rounded-lg border p-6">
+            <h3 className="text-sm font-medium text-muted-foreground">
               Search Mode
             </h3>
             <p className="text-lg font-bold mt-2">Brok AI</p>
+          </div>
+        </div>
+
+        <div className="bg-card rounded-lg border mb-8">
+          <div className="p-6 border-b">
+            <h2 className="text-lg font-semibold">Feature Requests</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Latest submitted account and request details
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left p-4 font-medium">Account</th>
+                  <th className="text-left p-4 font-medium">Request</th>
+                  <th className="text-left p-4 font-medium">Page</th>
+                  <th className="text-left p-4 font-medium">Status</th>
+                  <th className="text-left p-4 font-medium">Submitted</th>
+                </tr>
+              </thead>
+              <tbody>
+                {featureRequests.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="p-4 text-center text-muted-foreground"
+                    >
+                      No feature requests yet
+                    </td>
+                  </tr>
+                ) : (
+                  featureRequests.map(featureRequest => (
+                    <tr
+                      key={featureRequest.id}
+                      className="border-b align-top last:border-b-0"
+                    >
+                      <td className="p-4">
+                        <div className="max-w-[220px]">
+                          <p className="truncate font-medium">
+                            {featureRequest.accountEmail || 'Anonymous'}
+                          </p>
+                          {featureRequest.userId ? (
+                            <p className="truncate text-xs text-muted-foreground">
+                              {featureRequest.userId}
+                            </p>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <p className="max-w-xl whitespace-pre-wrap text-sm">
+                          {featureRequest.request}
+                        </p>
+                      </td>
+                      <td className="p-4">
+                        <a
+                          href={featureRequest.pageUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block max-w-[240px] truncate text-sm text-primary hover:underline"
+                        >
+                          {featureRequest.pageUrl}
+                        </a>
+                      </td>
+                      <td className="p-4">
+                        <span className="inline-flex rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium capitalize text-zinc-700">
+                          {featureRequest.status}
+                        </span>
+                      </td>
+                      <td className="p-4 text-sm text-muted-foreground">
+                        {new Date(featureRequest.createdAt).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 

@@ -299,6 +299,46 @@ export const feedback = pgTable(
 
 export type Feedback = InferSelectModel<typeof feedback>
 
+export const featureRequests = pgTable(
+  'feature_requests',
+  {
+    id: varchar('id', { length: ID_LENGTH })
+      .primaryKey()
+      .$defaultFn(() => generateId()),
+    userId: varchar('user_id', { length: USER_ID_LENGTH }),
+    accountEmail: text('account_email'),
+    request: text('request').notNull(),
+    pageUrl: text('page_url').notNull(),
+    userAgent: text('user_agent'),
+    status: varchar('status', {
+      length: VARCHAR_LENGTH,
+      enum: ['open', 'reviewed', 'closed']
+    })
+      .notNull()
+      .default('open'),
+    createdAt: timestamp('created_at').notNull().defaultNow()
+  },
+  table => [
+    index('feature_requests_user_id_idx').on(table.userId),
+    index('feature_requests_account_email_idx').on(table.accountEmail),
+    index('feature_requests_created_at_idx').on(table.createdAt.desc()),
+    pgPolicy('feature_requests_select_policy', {
+      as: 'permissive',
+      for: 'select',
+      to: 'public',
+      using: sql`true`
+    }),
+    pgPolicy('feature_requests_insert_policy', {
+      as: 'permissive',
+      for: 'insert',
+      to: 'public',
+      withCheck: sql`true`
+    })
+  ]
+).enableRLS()
+
+export type FeatureRequest = InferSelectModel<typeof featureRequests>
+
 // Durable task ledger for long-running chat/tool work.
 export const backgroundTasks = pgTable(
   'background_tasks',

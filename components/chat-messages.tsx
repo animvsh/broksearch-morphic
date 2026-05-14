@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { UseChatHelpers } from '@ai-sdk/react'
 
-import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import type { UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
 import { cn } from '@/lib/utils'
 import { extractCitationMapsFromMessages } from '@/lib/utils/citation'
@@ -52,7 +51,6 @@ export function ChatMessages({
   // Cache tool counts for performance optimization
   const toolCountCacheRef = useRef<Map<string, number>>(new Map())
   const isLoading = status === 'submitted' || status === 'streaming'
-  const isMobile = useMediaQuery('(max-width: 767px)')
 
   // Tool types definition - moved outside function for performance
   const toolTypes = [
@@ -70,12 +68,6 @@ export function ChatMessages({
       toolCountCacheRef.current.clear()
     }
   }, [isLoading])
-
-  // Calculate the offset height based on device type
-  // Note: pt-14 (56px) on scroll-container must be included in desktop offset
-  const offsetHeight = isMobile
-    ? 208 // Mobile: larger offset for mobile header/input (pt-14 = 56px)
-    : 196 // Desktop: smaller offset (140px) + pt-14 (56px)
 
   // Extract citation maps from all messages in all sections
   const allCitationMaps = useMemo(() => {
@@ -169,21 +161,16 @@ export function ChatMessages({
       role="list"
       aria-roledescription="chat messages"
       className={cn(
-        'relative size-full pt-14',
+        'relative size-full pt-4 md:pt-5',
         sections.length > 0 ? 'flex-1 overflow-y-auto' : ''
       )}
     >
-      <div className="relative mx-auto w-full max-w-full md:max-w-3xl px-4">
+      <div className="relative mx-auto w-full max-w-4xl px-4 md:px-6">
         {sections.map((section, sectionIndex) => (
           <div
             key={section.id}
             id={`section-${section.id}`}
-            className="chat-section scroll-mt-14 pb-4 md:pb-14"
-            style={
-              sectionIndex === sections.length - 1
-                ? { minHeight: `calc(100dvh - ${offsetHeight}px)` }
-                : {}
-            }
+            className="chat-section scroll-mt-6 pb-8 md:pb-10"
           >
             {/* User message */}
             <div className="flex flex-col gap-2 md:gap-4 mb-2 md:mb-4">
@@ -237,7 +224,7 @@ export function ChatMessages({
             })}
             {/* Show assistant logo and footer message after assistant messages */}
             {showAssistantLogo && sectionIndex === sections.length - 1 && (
-              <div className="flex items-center gap-3 py-1 md:py-4">
+              <div className="flex items-center gap-3 py-3">
                 <AnimatedLogo
                   className="size-10 shrink-0"
                   animate={isLoading}

@@ -49,9 +49,67 @@ const DEFAULT_CONNECT_TOOLKITS = [
   'github',
   'gmail',
   'googlecalendar',
+  'googledocs',
+  'googleslides',
+  'googlemeet',
   'slack'
 ]
 const CONNECT_KEY_PREFIX = 'ck_'
+
+const TOOLKIT_AUTH_CONFIG_ENV_KEYS: Record<string, string[]> = {
+  gcal: [
+    'COMPOSIO_GCAL_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLECALENDAR_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_CALENDAR_AUTH_CONFIG_ID'
+  ],
+  github: ['COMPOSIO_GITHUB_AUTH_CONFIG_ID'],
+  gmail: ['COMPOSIO_GMAIL_AUTH_CONFIG_ID'],
+  google_calendar: [
+    'COMPOSIO_GCAL_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLECALENDAR_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_CALENDAR_AUTH_CONFIG_ID'
+  ],
+  google_docs: [
+    'COMPOSIO_GOOGLEDOCS_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_DOCS_AUTH_CONFIG_ID'
+  ],
+  google_meet: [
+    'COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_MEET_AUTH_CONFIG_ID'
+  ],
+  google_slides: [
+    'COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_SLIDES_AUTH_CONFIG_ID'
+  ],
+  googlecalendar: [
+    'COMPOSIO_GCAL_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLECALENDAR_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_CALENDAR_AUTH_CONFIG_ID'
+  ],
+  googledocs: [
+    'COMPOSIO_GOOGLEDOCS_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_DOCS_AUTH_CONFIG_ID'
+  ],
+  googlemeet: [
+    'COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_MEET_AUTH_CONFIG_ID'
+  ],
+  googleslides: [
+    'COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_SLIDES_AUTH_CONFIG_ID'
+  ],
+  googlesuper: [
+    'COMPOSIO_GOOGLESUPER_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_SUPER_AUTH_CONFIG_ID'
+  ],
+  google_super: [
+    'COMPOSIO_GOOGLESUPER_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_SUPER_AUTH_CONFIG_ID'
+  ],
+  linear: ['COMPOSIO_LINEAR_AUTH_CONFIG_ID'],
+  slack: ['COMPOSIO_SLACK_AUTH_CONFIG_ID'],
+  supabase: ['COMPOSIO_SUPABASE_AUTH_CONFIG_ID']
+}
 
 function resolveBaseUrl() {
   const baseUrl =
@@ -337,6 +395,8 @@ function inferToolkitFromAuthConfigId(authConfigId?: string) {
 function resolveToolkitEnvKeys(toolkitSlug?: string) {
   if (!toolkitSlug) return []
 
+  const normalized = toolkitSlug.trim().toLowerCase()
+  const compact = normalized.replace(/[-_]+/g, '')
   const upper = toolkitSlug
     .trim()
     .replace(/([a-z])([A-Z])/g, '$1_$2')
@@ -344,11 +404,11 @@ function resolveToolkitEnvKeys(toolkitSlug?: string) {
     .replace(/^_+|_+$/g, '')
     .toUpperCase()
 
-  const keys = [`COMPOSIO_${upper}_AUTH_CONFIG_ID`]
-
-  if (toolkitSlug.toLowerCase() === 'googlesuper') {
-    keys.push('COMPOSIO_GOOGLE_SUPER_AUTH_CONFIG_ID')
-  }
+  const keys = [
+    `COMPOSIO_${upper}_AUTH_CONFIG_ID`,
+    ...(TOOLKIT_AUTH_CONFIG_ENV_KEYS[normalized] ?? []),
+    ...(TOOLKIT_AUTH_CONFIG_ENV_KEYS[compact] ?? [])
+  ]
 
   return [...new Set(keys)]
 }
