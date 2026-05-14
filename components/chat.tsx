@@ -443,13 +443,15 @@ export function Chat({
 
       uploaded.forEach(file => {
         if (file.extractedText) {
+          const filename = file.name || file.file.name
           parts.push({
             type: 'text',
-            text: [
-              `File: ${file.name || file.file.name}`,
-              'Use this file context when answering:',
-              file.extractedText
-            ].join('\n')
+            text:
+              [
+                `<uploaded_file name="${filename}">`,
+                'The user uploaded this file. Treat the extracted content below as primary context when answering questions about the file.',
+                file.extractedText
+              ].join('\n') + '\n</uploaded_file>'
           })
         }
       })

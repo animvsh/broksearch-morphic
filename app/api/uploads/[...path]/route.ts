@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { existsSync } from 'fs'
 import path from 'path'
 
-import { LOCAL_STORAGE_PATH } from '@/lib/storage/local-storage-config'
+import { getLocalStorageRoots } from '@/lib/storage/local-storage-config'
 
 export async function GET(
   req: NextRequest,
@@ -11,13 +11,32 @@ export async function GET(
 ) {
   const { path: pathParts } = await params
   const filePath = pathParts.join('/')
-  const storageRoot = path.resolve(/*turbopackIgnore: true*/ LOCAL_STORAGE_PATH)
-  const fullPath = path.resolve(storageRoot, filePath)
+  const candidates = getLocalStorageRoots().map(storageRoot => {
+    const resolvedRoot = path.resolve(/*turbopackIgnore: true*/ storageRoot)
+    return {
+      fullPath: path.resolve(resolvedRoot, filePath),
+      storageRoot: resolvedRoot
+    }
+  })
 
   // Security: prevent directory traversal
-  if (!fullPath.startsWith(`${storageRoot}${path.sep}`)) {
+  if (
+    candidates.some(
+      candidate =>
+        candidate.fullPath === candidate.storageRoot ||
+        !candidate.fullPath.startsWith(`${candidate.storageRoot}${path.sep}`)
+    )
+  ) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  const candidate = candidates.find(candidate => existsSync(candidate.fullPath))
+
+  if (!candidate) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  const { fullPath } = candidate
 
   if (!existsSync(fullPath)) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })

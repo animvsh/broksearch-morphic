@@ -146,6 +146,7 @@ export function useFileDropzone({
                       url: file.url,
                       name: file.filename,
                       key: file.key,
+                      extractedText: file.extractedText,
                       source: 'upload'
                     }
                   : existing

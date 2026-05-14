@@ -3,11 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
-import {
-  LOCAL_PUBLIC_URL,
-  LOCAL_STORAGE_PATH,
-  uploadFileLocal
-} from '@/lib/storage/local-file-client'
+import { extractUploadedFileText } from '@/lib/files/server-file-extraction'
+import { uploadFileLocal } from '@/lib/storage/local-file-client'
 import {
   getR2Client,
   R2_BUCKET_NAME,
@@ -16,6 +13,8 @@ import {
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf']
+
+export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
@@ -58,7 +57,19 @@ export async function POST(req: NextRequest) {
       )
     }
     const result = await uploadFileToR2(file, userId, chatId)
-    return NextResponse.json({ success: true, file: result }, { status: 200 })
+    const extraction = await extractUploadedFileText(file)
+
+    return NextResponse.json(
+      {
+        success: true,
+        file: {
+          ...result,
+          extractedText: extraction.text,
+          extraction
+        }
+      },
+      { status: 200 }
+    )
   } catch (err: any) {
     console.error('Upload Error:', err)
     return NextResponse.json(
@@ -132,7 +143,19 @@ async function handleLocalUpload(req: NextRequest, userId: string) {
 
   try {
     const result = await uploadFileLocal(file, userId, chatId)
-    return NextResponse.json({ success: true, file: result }, { status: 200 })
+    const extraction = await extractUploadedFileText(file)
+
+    return NextResponse.json(
+      {
+        success: true,
+        file: {
+          ...result,
+          extractedText: extraction.text,
+          extraction
+        }
+      },
+      { status: 200 }
+    )
   } catch (err: any) {
     console.error('Local Upload Error:', err)
     return NextResponse.json(
