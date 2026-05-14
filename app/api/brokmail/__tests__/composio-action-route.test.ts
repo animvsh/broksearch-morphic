@@ -12,7 +12,12 @@ vi.mock('@/lib/integrations/composio', () => ({
   listConnectedAccounts: vi.fn()
 }))
 
+vi.mock('@/lib/brokmail/approval-consumption', () => ({
+  consumeBrokMailApproval: vi.fn()
+}))
+
 import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { consumeBrokMailApproval } from '@/lib/brokmail/approval-consumption'
 import {
   executeComposioTool,
   isComposioConfigured,
@@ -56,6 +61,7 @@ describe('BrokMail Composio action route', () => {
       }
     ] as any)
     vi.mocked(executeComposioTool).mockResolvedValue({ ok: true } as any)
+    vi.mocked(consumeBrokMailApproval).mockResolvedValue(true)
   })
 
   it('rejects Google actions without a server-issued approval token', async () => {
@@ -108,6 +114,26 @@ describe('BrokMail Composio action route', () => {
 
     expect(response.status).toBe(403)
     expect(body.error).toContain('does not match the requested action payload')
+    expect(executeComposioTool).not.toHaveBeenCalled()
+  })
+
+  it('rejects replayed approval tokens before Composio execution', async () => {
+    vi.mocked(consumeBrokMailApproval).mockResolvedValue(false)
+    const approval = signBrokMailApproval({
+      userId: 'user_123',
+      payload: draftPayload
+    })
+
+    const response = await runBrokMailAction(
+      actionRequest({
+        ...draftPayload,
+        approval
+      }) as any
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(body.error).toContain('already been used')
     expect(executeComposioTool).not.toHaveBeenCalled()
   })
 

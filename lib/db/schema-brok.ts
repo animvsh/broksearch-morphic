@@ -182,6 +182,27 @@ export const brokCodeRuntimeKeys = pgTable(
   })
 )
 
+export const brokMailApprovalConsumptions = pgTable(
+  'brokmail_approval_consumptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    approvalId: text('approval_id').notNull(),
+    userId: text('user_id').notNull(),
+    action: text('action').notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    consumedAt: timestamp('consumed_at').defaultNow().notNull()
+  },
+  table => ({
+    approvalUserUniqueIdx: uniqueIndex(
+      'brokmail_approval_consumptions_approval_user_unique_idx'
+    ).on(table.approvalId, table.userId),
+    userIdx: index('brokmail_approval_consumptions_user_idx').on(table.userId),
+    consumedAtIdx: index('brokmail_approval_consumptions_consumed_at_idx').on(
+      table.consumedAt
+    )
+  })
+)
+
 // Relations
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
   apiKeys: many(apiKeys),

@@ -39,7 +39,6 @@ export type BrokMailSignedApproval = {
 }
 
 const APPROVAL_TTL_MS = 5 * 60 * 1000
-const usedApprovalIds = new Set<string>()
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object'
@@ -172,13 +171,11 @@ export function verifyBrokMailApproval({
   userId,
   approval,
   payload,
-  consume = true,
   now = new Date()
 }: {
   userId: string
   approval: unknown
   payload: BrokMailActionApprovalPayload
-  consume?: boolean
   now?: Date
 }) {
   const normalized = normalizeSignedApproval(approval)
@@ -211,17 +208,10 @@ export function verifyBrokMailApproval({
     return 'BrokMail approval token signature is invalid.'
   }
 
-  if (consume) {
-    if (usedApprovalIds.has(normalized.id)) {
-      return 'BrokMail approval token has already been used.'
-    }
-    usedApprovalIds.add(normalized.id)
-  }
-
   return null
 }
 
-function normalizeSignedApproval(
+export function normalizeSignedApproval(
   value: unknown
 ): BrokMailSignedApproval | null {
   if (!isRecord(value)) return null

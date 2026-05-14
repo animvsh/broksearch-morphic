@@ -4,6 +4,12 @@ import { POST as postSearchCompletion } from '@/app/api/v1/search/completions/ro
 
 export const runtime = 'nodejs'
 
+function normalizeSearchDepth(value: unknown) {
+  if (value === 'deep' || value === 'advanced') return 'deep'
+  if (value === 'lite' || value === 'basic' || value === 'quick') return 'lite'
+  return 'standard'
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.json()
   const headers = new Headers(request.headers)
@@ -15,7 +21,7 @@ export async function POST(request: NextRequest) {
       ? 'deep'
       : body.mode === 'quick' || body.mode === 'lite'
         ? 'lite'
-        : body.depth || body.search_depth || 'standard'
+        : normalizeSearchDepth(body.depth || body.search_depth)
 
   const forwarded = new NextRequest(
     new URL('/api/v1/search/completions', request.url),

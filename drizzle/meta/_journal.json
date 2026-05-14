@@ -162,6 +162,13 @@
       "when": 1778711600000,
       "tag": "0022_background_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1778712600000,
+      "tag": "0023_brokmail_approval_consumptions",
+      "breakpoints": true
     }
   ]
 }

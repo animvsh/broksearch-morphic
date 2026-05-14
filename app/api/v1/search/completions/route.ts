@@ -83,6 +83,12 @@ function rateLimitHeaders(rateLimit: {
   }
 }
 
+function normalizeSearchDepth(value: unknown): 'lite' | 'standard' | 'deep' {
+  if (value === 'deep' || value === 'advanced') return 'deep'
+  if (value === 'lite' || value === 'basic' || value === 'quick') return 'lite'
+  return 'standard'
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
   const requestId = generateRequestId()
@@ -112,7 +118,7 @@ export async function POST(request: NextRequest) {
     recency_days,
     domains
   } = body
-  const depth = body.depth ?? body.search_depth ?? 'standard'
+  const depth = normalizeSearchDepth(body.depth ?? body.search_depth)
 
   if (!query) {
     return NextResponse.json(

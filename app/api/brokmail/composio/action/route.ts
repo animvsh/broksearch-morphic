@@ -8,8 +8,10 @@ import {
   BrokMailComposioAction,
   isRecord,
   normalizeActionApprovalPayload,
+  normalizeSignedApproval,
   verifyBrokMailApproval
 } from '@/lib/brokmail/action-approval'
+import { consumeBrokMailApproval } from '@/lib/brokmail/approval-consumption'
 import {
   executeComposioTool,
   isComposioConfigured,
@@ -244,6 +246,38 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: approvalError }, { status: 403 })
   }
 
+  const approval = normalizeSignedApproval(body.approval)
+  if (!approval) {
+    return NextResponse.json(
+      { error: 'BrokMail approval token is invalid.' },
+      { status: 403 }
+    )
+  }
+
+  try {
+    const consumed = await consumeBrokMailApproval({
+      userId: user.id,
+      approval
+    })
+
+    if (!consumed) {
+      return NextResponse.json(
+        { error: 'BrokMail approval token has already been used.' },
+        { status: 409 }
+      )
+    }
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Could not record BrokMail approval consumption.'
+      },
+      { status: 503 }
+    )
+  }
+
   const text = buildActionText({
     action: payload.action,
     threads: payload.threads,
@@ -267,8 +301,6 @@ export async function POST(request: NextRequest) {
 
   const attempted: Array<{ slug: string; error: string }> = []
 
-  const approval = body.approval as { id?: unknown; action?: unknown }
-
   for (const toolSlug of parseToolSlugs(payload.action)) {
     try {
       const result = await executeComposioTool({
@@ -284,9 +316,8 @@ export async function POST(request: NextRequest) {
         toolSlug,
         connectedAccountId,
         approval: {
-          id: typeof approval.id === 'string' ? approval.id : undefined,
-          action:
-            typeof approval.action === 'string' ? approval.action : undefined,
+          id: approval.id,
+          action: approval.action,
           approved: true
         },
         result

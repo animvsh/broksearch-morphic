@@ -352,7 +352,7 @@ async function runSearch(baseKey: string) {
     },
     body: JSON.stringify({
       model: 'brok-search',
-      depth: 'lite',
+      search_depth: 'basic',
       stream: false,
       query: 'What is Brok? Answer briefly.'
     })
