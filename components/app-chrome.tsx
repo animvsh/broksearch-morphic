@@ -4,6 +4,8 @@ import { usePathname } from 'next/navigation'
 
 import type { User } from '@supabase/supabase-js'
 
+import { cn } from '@/lib/utils'
+
 import { SidebarProvider } from '@/components/ui/sidebar'
 
 import AppSidebar from '@/components/app-sidebar'
@@ -20,6 +22,7 @@ export function AppChrome({
 }) {
   const pathname = usePathname()
   const isAuthRoute = pathname?.startsWith('/auth')
+  const isDocsRoute = pathname?.startsWith('/docs')
 
   if (isAuthRoute) {
     return (
@@ -35,7 +38,12 @@ export function AppChrome({
       <KeyboardShortcutHandler />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header user={user} />
-        <main className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <main
+          className={cn(
+            'flex min-h-0 min-w-0 flex-1',
+            isDocsRoute ? 'overflow-y-auto pt-16 md:pt-20' : 'overflow-hidden'
+          )}
+        >
           <ArtifactRoot>{children}</ArtifactRoot>
         </main>
       </div>
