@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 
 export function FeatureRequestWidget() {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const [request, setRequest] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [isPending, startTransition] = useTransition()

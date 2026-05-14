@@ -46,7 +46,7 @@ const legacyRuntimeName = ['open', 'code'].join('')
 const legacyRuntimeEnvKey = `BROKCODE_REQUIRE_${legacyRuntimeName.toUpperCase()}`
 const requireCloudRuntime =
   (process.env.BROKCODE_REQUIRE_CLOUD_RUNTIME ??
-    process.env[legacyRuntimeEnvKey]) !== 'false'
+    process.env[legacyRuntimeEnvKey]) === 'true'
 
 const colors = {
   reset: '\x1b[0m',

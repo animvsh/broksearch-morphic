@@ -708,12 +708,8 @@ export function BrokCodeApp({
   )
   const [syncLoading, setSyncLoading] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
-  const [previewUrl, setPreviewUrl] = useState(
-    'http://127.0.0.1:3001/playground'
-  )
-  const [previewInput, setPreviewInput] = useState(
-    'http://127.0.0.1:3001/playground'
-  )
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [previewInput, setPreviewInput] = useState('')
   const [previewFrameKey, setPreviewFrameKey] = useState(0)
   const [previewHealth, setPreviewHealth] = useState<PreviewHealth>({
     status: 'idle',
@@ -1239,6 +1235,15 @@ export function BrokCodeApp({
   const checkPreviewHealth = useCallback(
     async (target = previewUrl) => {
       const normalized = normalizePreviewUrl(target)
+      if (!target.trim()) {
+        setPreviewHealth({
+          status: 'idle',
+          message:
+            'Preview appears here after a run or when you paste an app URL.'
+        })
+        return
+      }
+
       if (!normalized || isBrokCodeWorkspaceUrl(normalized)) {
         setPreviewHealth({
           status: 'offline',
@@ -1288,6 +1293,15 @@ export function BrokCodeApp({
   )
 
   function reloadPreview() {
+    if (!previewUrl.trim()) {
+      setPreviewHealth({
+        status: 'idle',
+        message:
+          'Preview appears here after a run or when you paste an app URL.'
+      })
+      return
+    }
+
     setPreviewFrameKey(value => value + 1)
     void checkPreviewHealth(previewUrl)
   }
@@ -3656,9 +3670,9 @@ function BrowserPreviewPanel({
   const previewShortcuts = [
     { label: 'localhost:3000', value: 'http://localhost:3000' },
     { label: 'localhost:5173', value: 'http://localhost:5173' },
-    { label: '127.0.0.1:8080', value: 'http://127.0.0.1:8080' },
-    { label: 'Playground', value: 'http://127.0.0.1:3001/playground' }
+    { label: '127.0.0.1:8080', value: 'http://127.0.0.1:8080' }
   ]
+  const hasPreviewUrl = Boolean(previewUrl.trim())
   const isBlockedPreview = isBrokCodeWorkspaceUrl(previewUrl)
   const healthTone =
     previewHealth.status === 'online'
@@ -3673,7 +3687,7 @@ function BrowserPreviewPanel({
         <Input
           value={previewInput}
           onChange={event => onPreviewInputChange(event.target.value)}
-          placeholder="http://127.0.0.1:3001"
+          placeholder="Paste your app preview URL"
           className="h-9 min-w-0 flex-1"
         />
         <div className="flex items-center gap-1.5">
@@ -3731,18 +3745,31 @@ function BrowserPreviewPanel({
             <RefreshCcw className="size-4" />
             <span className="sr-only">Reload preview</span>
           </Button>
-          <Button
-            asChild
-            variant="outline"
-            size="icon"
-            className="size-9 shrink-0"
-            title="Open preview in new tab"
-          >
-            <a href={previewUrl} target="_blank" rel="noreferrer">
+          {hasPreviewUrl ? (
+            <Button
+              asChild
+              variant="outline"
+              size="icon"
+              className="size-9 shrink-0"
+              title="Open preview in new tab"
+            >
+              <a href={previewUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="size-4" />
+                <span className="sr-only">Open preview in new tab</span>
+              </a>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-9 shrink-0"
+              title="Open preview in new tab"
+              disabled
+            >
               <ExternalLink className="size-4" />
               <span className="sr-only">Open preview in new tab</span>
-            </a>
-          </Button>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -3771,7 +3798,20 @@ function BrowserPreviewPanel({
       )}
 
       <div className="min-h-0 overflow-hidden rounded-md border bg-background shadow-[0_16px_44px_-32px_rgba(15,23,42,0.45)]">
-        {isBlockedPreview ? (
+        {!hasPreviewUrl ? (
+          <div className="flex h-[360px] min-h-[360px] w-full items-center justify-center bg-muted/10 px-6 text-center lg:h-[calc(100vh-14rem)] lg:min-h-[520px]">
+            <div className="max-w-sm">
+              <div className="mx-auto flex size-10 items-center justify-center rounded-md border bg-background">
+                <Monitor className="size-5 text-muted-foreground" />
+              </div>
+              <p className="mt-3 text-sm font-medium">Preview is ready</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Paste a localhost or deployed app URL, or run Brok Code and open
+                the preview it returns.
+              </p>
+            </div>
+          </div>
+        ) : isBlockedPreview ? (
           <div className="flex h-[360px] min-h-[360px] w-full items-center justify-center bg-muted/20 px-6 text-center text-sm text-muted-foreground lg:h-[calc(100vh-14rem)] lg:min-h-[520px]">
             BrokCode preview cannot render the BrokCode app itself. Load your
             generated app URL instead.
