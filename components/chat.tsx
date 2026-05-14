@@ -389,9 +389,26 @@ export function Chat({
         if (messageIndex === -1) return prevMessages
 
         const updatedMessages = [...prevMessages]
+        const existingMessage = updatedMessages[messageIndex]
+        const existingParts = Array.isArray(existingMessage.parts)
+          ? existingMessage.parts
+          : []
+        const preservedContextParts = existingParts.filter(
+          part =>
+            (part as any)?.type === 'file' ||
+            ((part as any)?.type === 'text' &&
+              typeof (part as any).text === 'string' &&
+              (part as any).text.includes('<uploaded_file'))
+        )
+
         updatedMessages[messageIndex] = {
-          ...updatedMessages[messageIndex],
-          parts: [{ type: 'text', text: newContentText }]
+          ...existingMessage,
+          parts: [
+            ...(newContentText.trim()
+              ? [{ type: 'text' as const, text: newContentText }]
+              : []),
+            ...preservedContextParts
+          ]
         }
 
         return updatedMessages

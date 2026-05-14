@@ -5,6 +5,7 @@ import { runSearchPipeline } from '@/lib/brok/search-pipeline'
 import {
   appendBackgroundTaskEvent,
   createBackgroundTask,
+  getBackgroundTask,
   updateBackgroundTask
 } from '@/lib/tasks/background-tasks'
 
@@ -16,6 +17,12 @@ interface DeepResearchBody {
   query?: unknown
   recency_days?: unknown
   domains?: unknown
+}
+
+class DeepResearchCancelled extends Error {
+  constructor() {
+    super('Deep research task was cancelled.')
+  }
 }
 
 function taskTitle(query: string) {
@@ -36,7 +43,15 @@ async function runDeepResearchTask({
   recencyDays?: number
   domains?: string[]
 }) {
+  const stopIfCancelled = async () => {
+    const latest = await getBackgroundTask({ id: taskId, userId })
+    if (latest?.status === 'cancelled') {
+      throw new DeepResearchCancelled()
+    }
+  }
+
   try {
+    await stopIfCancelled()
     await updateBackgroundTask({
       id: taskId,
       userId,
@@ -55,6 +70,7 @@ async function runDeepResearchTask({
       message: 'Planning deep research queries',
       progress: 20
     })
+    await stopIfCancelled()
 
     const result = await runSearchPipeline({
       query,
@@ -62,6 +78,7 @@ async function runDeepResearchTask({
       recencyDays,
       domains
     })
+    await stopIfCancelled()
 
     await appendBackgroundTaskEvent({
       id: taskId,
@@ -102,6 +119,15 @@ async function runDeepResearchTask({
       progress: 100
     })
   } catch (error) {
+    if (error instanceof DeepResearchCancelled) {
+      await appendBackgroundTaskEvent({
+        id: taskId,
+        userId,
+        message: 'Deep research stopped before writing final results'
+      })
+      return
+    }
+
     await appendBackgroundTaskEvent({
       id: taskId,
       userId,

@@ -9,7 +9,6 @@ describe('Composio integration', () => {
     delete process.env.COMPOSIO_GITHUB_AUTH_CONFIG_ID
     delete process.env.COMPOSIO_GMAIL_AUTH_CONFIG_ID
     delete process.env.COMPOSIO_GOOGLEDOCS_AUTH_CONFIG_ID
-    delete process.env.COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID
     delete process.env.COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID
   })
 
@@ -60,13 +59,11 @@ describe('Composio integration', () => {
     process.env.COMPOSIO_API_KEY = 'test-composio-key'
     process.env.COMPOSIO_GITHUB_AUTH_CONFIG_ID = 'ac_github'
     process.env.COMPOSIO_GOOGLEDOCS_AUTH_CONFIG_ID = 'ac_docs'
-    process.env.COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID = 'ac_slides'
     process.env.COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID = 'ac_meet'
 
     const toolkitByConfigId = new Map([
       ['ac_github', 'github'],
       ['ac_docs', 'googledocs'],
-      ['ac_slides', 'googleslides'],
       ['ac_meet', 'googlemeet']
     ])
     const requestedConfigIds: string[] = []
@@ -119,25 +116,12 @@ describe('Composio integration', () => {
     await expect(
       createConnectedAccountLink({
         userId: 'user_123',
-        toolkitSlug: 'googleslides'
-      })
-    ).resolves.toMatchObject({
-      url: 'https://connect.composio.dev/oauth'
-    })
-    await expect(
-      createConnectedAccountLink({
-        userId: 'user_123',
         toolkitSlug: 'googlemeet'
       })
     ).resolves.toMatchObject({
       url: 'https://connect.composio.dev/oauth'
     })
 
-    expect(requestedConfigIds).toEqual([
-      'ac_github',
-      'ac_docs',
-      'ac_slides',
-      'ac_meet'
-    ])
+    expect(requestedConfigIds).toEqual(['ac_github', 'ac_docs', 'ac_meet'])
   })
 })

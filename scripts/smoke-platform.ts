@@ -32,7 +32,9 @@ const uiChecks: UiCheck[] = [
   { path: '/docs', expectedText: 'Brok Documentation' },
   { path: '/docs/quickstart', expectedText: 'Quickstart' },
   { path: '/docs/api-keys', expectedText: 'API Keys' },
-  { path: '/playground', expectedText: 'BrokCode API' }
+  { path: '/playground', expectedText: 'BrokCode API' },
+  { path: '/tools', expectedText: 'AI Humanizer' },
+  { path: '/tools/humanizer', expectedText: 'Humanized Output' }
 ]
 
 const protectedUiChecks: ProtectedUiCheck[] = [
@@ -158,6 +160,77 @@ const apiChecks: ApiCheck[] = [
         !searchQueries.some((query: string) => query.includes('site:capy.ad'))
       ) {
         throw new Error('expected chat web_search to keep capy.ad domain')
+      }
+    }
+  },
+  {
+    name: 'POST /api/v1/chat/completions respects tool_choice none',
+    async run(url, apiKey) {
+      const response = await fetch(`${url}/api/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'brok-lite',
+          stream: false,
+          max_tokens: 20,
+          messages: [
+            {
+              role: 'user',
+              content: 'Reply briefly: no search'
+            }
+          ],
+          tools: [{ type: 'web_search', web_search: { top_n: 3 } }],
+          tool_choice: 'none'
+        })
+      })
+      const body = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          `expected 200, got ${response.status}: ${JSON.stringify(body)}`
+        )
+      }
+
+      if ('citations' in body || 'search_queries' in body) {
+        throw new Error('expected tool_choice none to skip web_search')
+      }
+    }
+  },
+  {
+    name: 'POST /api/v1/chat/completions streams web_search metadata',
+    async run(url, apiKey) {
+      const response = await fetch(`${url}/api/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'brok-lite',
+          stream: true,
+          max_tokens: 80,
+          messages: [
+            {
+              role: 'user',
+              content:
+                'Search the web and answer briefly: what does capy.ad do?'
+            }
+          ],
+          tools: [{ type: 'web_search', web_search: { top_n: 3 } }],
+          tool_choice: { type: 'web_search', web_search: { top_n: 3 } }
+        })
+      })
+      const body = await response.text()
+
+      if (!response.ok) {
+        throw new Error(`expected 200, got ${response.status}: ${body}`)
+      }
+
+      if (!body.includes('citations') || !body.includes('search_queries')) {
+        throw new Error('expected streamed web_search metadata')
       }
     }
   },

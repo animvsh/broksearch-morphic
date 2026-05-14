@@ -74,6 +74,9 @@ type BackgroundTaskSummary = {
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
   title: string
   updatedAt: string
+  metadata?: {
+    progress?: number
+  }
 }
 
 export function ChatPanel({
@@ -128,6 +131,24 @@ export function ChatPanel({
     task => task.status === 'queued' || task.status === 'running'
   )
 
+  const loadRecentTasks = useCallback(async () => {
+    if (isGuest) return
+
+    try {
+      const response = await fetch('/api/tasks?limit=5', {
+        cache: 'no-store'
+      })
+      if (!response.ok) return
+
+      const payload = (await response.json()) as {
+        tasks?: BackgroundTaskSummary[]
+      }
+      setRecentTasks(payload.tasks ?? [])
+    } catch {
+      // Task visibility is a resilience aid; never interrupt chat UX for it.
+    }
+  }, [isGuest])
+
   const handleCompositionStart = () => setIsComposing(true)
 
   const handleCompositionEnd = () => {
@@ -176,20 +197,8 @@ export function ChatPanel({
     let cancelled = false
 
     const loadTasks = async () => {
-      try {
-        const response = await fetch('/api/tasks?limit=5', {
-          cache: 'no-store'
-        })
-        if (!response.ok) return
-
-        const payload = (await response.json()) as {
-          tasks?: BackgroundTaskSummary[]
-        }
-        if (!cancelled) {
-          setRecentTasks(payload.tasks ?? [])
-        }
-      } catch {
-        // Task visibility is a resilience aid; never interrupt chat UX for it.
+      if (!cancelled) {
+        await loadRecentTasks()
       }
     }
 
@@ -200,7 +209,7 @@ export function ChatPanel({
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [isGuest, isLoading])
+  }, [isGuest, isLoading, loadRecentTasks])
 
   const isToolInvocationInProgress = () => {
     if (!messages.length) return false
@@ -229,6 +238,62 @@ export function ChatPanel({
       })
     },
     [append]
+  )
+
+  const startDeepResearch = useCallback(async () => {
+    const queryText = input.trim()
+    if (!queryText) return
+
+    try {
+      const response = await fetch('/api/tasks/deep-research', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ query: queryText })
+      })
+
+      if (!response.ok) {
+        throw new Error('Deep research could not be started.')
+      }
+
+      const payload = (await response.json()) as {
+        task?: BackgroundTaskSummary
+      }
+      if (payload.task) {
+        setRecentTasks(prev => [payload.task!, ...prev].slice(0, 5))
+      } else {
+        await loadRecentTasks()
+      }
+      toast.success('Deep research is running in the background.')
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Deep research could not be started.'
+      )
+    }
+  }, [input, loadRecentTasks])
+
+  const cancelBackgroundTask = useCallback(
+    async (taskId: string) => {
+      try {
+        const response = await fetch(`/api/tasks/${taskId}/cancel`, {
+          method: 'POST'
+        })
+        if (!response.ok) {
+          throw new Error('Task could not be cancelled.')
+        }
+        await loadRecentTasks()
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : 'Task could not be cancelled.'
+        )
+      }
+    },
+    [loadRecentTasks]
   )
 
   // if query is not empty, submit the query
@@ -368,9 +433,13 @@ export function ChatPanel({
                     : `${activeTasks.length} tasks are still running`}
                 </span>
               </span>
-              <span className="hidden shrink-0 text-zinc-400 sm:inline">
-                safe to reconnect
-              </span>
+              <button
+                type="button"
+                className="shrink-0 rounded-md px-2 py-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+                onClick={() => void cancelBackgroundTask(activeTasks[0].id)}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}
@@ -445,6 +514,20 @@ export function ChatPanel({
                 }}
               />
               <SearchModeSelector />
+              {!isGuest && input.trim().length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 rounded-lg px-2.5 text-xs"
+                  onClick={() => void startDeepResearch()}
+                  disabled={isLoading}
+                  title="Run this as background deep research"
+                >
+                  <Clock3 className="size-3.5 md:mr-1" />
+                  <span className="hidden md:inline">Research</span>
+                </Button>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="hidden text-[11px] text-muted-foreground md:inline">

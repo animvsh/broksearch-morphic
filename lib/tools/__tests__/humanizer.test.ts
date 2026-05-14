@@ -24,4 +24,25 @@ describe('humanizeText', () => {
     expect(result.output).toContain("it's useful")
     expect(result.output).toContain("can't use it")
   })
+
+  test('detects broader AI-writing patterns from the humanizer guide', () => {
+    const result = humanizeText(
+      '🚀 Here is what you need to know: **Speed:** Industry observers have noted that this groundbreaking platform could potentially possibly streamline workflows, enhance collaboration, and foster alignment. While details are limited, exciting times lie ahead!'
+    )
+
+    expect(result.output).not.toMatch(/🚀|Here is what you need to know/i)
+    expect(result.output).not.toMatch(/\*\*|could potentially possibly/i)
+    expect(result.output).not.toMatch(/Industry observers|While details/i)
+    expect(result.output).not.toMatch(/exciting times lie ahead/i)
+    expect(result.detectedPatterns).toEqual(
+      expect.arrayContaining([
+        'Emoji markers',
+        'Markdown bolding',
+        'Vague attribution',
+        'Excessive hedging',
+        'Cutoff disclaimer',
+        'Generic conclusion'
+      ])
+    )
+  })
 })

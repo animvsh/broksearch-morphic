@@ -41,7 +41,7 @@ Response style:
   report, brief, Markdown file, HTML file, or text file, use the
   documentArtifacts tool.
 - If the user asks to connect or operate an integration such as Gmail, GitHub,
-  Google Docs, Google Slides, Google Meet, Slack, or Linear, use the
+  Google Docs, Google Meet, Slack, or Linear, use the
   composioIntegrations tool.
 - If search results are weak, say what you could verify and keep the answer
   brief instead of overexplaining.

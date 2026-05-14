@@ -50,7 +50,6 @@ const DEFAULT_CONNECT_TOOLKITS = [
   'gmail',
   'googlecalendar',
   'googledocs',
-  'googleslides',
   'googlemeet',
   'slack'
 ]
@@ -77,10 +76,6 @@ const TOOLKIT_AUTH_CONFIG_ENV_KEYS: Record<string, string[]> = {
     'COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID',
     'COMPOSIO_GOOGLE_MEET_AUTH_CONFIG_ID'
   ],
-  google_slides: [
-    'COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID',
-    'COMPOSIO_GOOGLE_SLIDES_AUTH_CONFIG_ID'
-  ],
   googlecalendar: [
     'COMPOSIO_GCAL_AUTH_CONFIG_ID',
     'COMPOSIO_GOOGLECALENDAR_AUTH_CONFIG_ID',
@@ -93,10 +88,6 @@ const TOOLKIT_AUTH_CONFIG_ENV_KEYS: Record<string, string[]> = {
   googlemeet: [
     'COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID',
     'COMPOSIO_GOOGLE_MEET_AUTH_CONFIG_ID'
-  ],
-  googleslides: [
-    'COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID',
-    'COMPOSIO_GOOGLE_SLIDES_AUTH_CONFIG_ID'
   ],
   googlesuper: [
     'COMPOSIO_GOOGLESUPER_AUTH_CONFIG_ID',

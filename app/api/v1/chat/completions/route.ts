@@ -69,12 +69,14 @@ export async function POST(request: NextRequest) {
         top_n?: number
       }
     }>
-    tool_choice?: {
-      type: string
-      web_search?: {
-        top_n?: number
-      }
-    }
+    tool_choice?:
+      | string
+      | {
+          type: string
+          web_search?: {
+            top_n?: number
+          }
+        }
   }>(request)
   if (!parsedBody.ok) {
     return parsedBody.response
@@ -92,6 +94,13 @@ export async function POST(request: NextRequest) {
     tools,
     tool_choice
   } = body
+  const providerToolChoice =
+    typeof tool_choice === 'string'
+      ? tool_choice === 'none'
+        ? undefined
+        : { type: tool_choice }
+      : tool_choice
+  const providerTools = filterProviderTools(tools)
 
   if (typeof modelId !== 'string') {
     return invalidRequestResponse('invalid_model', 'model must be a string.')
@@ -223,7 +232,7 @@ export async function POST(request: NextRequest) {
 
       if (shouldStream) {
         return new Response(
-          createSearchToolStream(requestId, modelId, searchResult.answer),
+          createSearchToolStream(requestId, modelId, searchResult),
           {
             headers: {
               'Content-Type': 'text/event-stream; charset=utf-8',
@@ -284,8 +293,8 @@ export async function POST(request: NextRequest) {
         temperature,
         topP: top_p,
         maxTokens: max_tokens ?? max_completion_tokens,
-        tools,
-        toolChoice: tool_choice
+        tools: providerTools,
+        toolChoice: providerToolChoice
       })
 
       if (!providerResponse.body) {
@@ -336,8 +345,8 @@ export async function POST(request: NextRequest) {
       temperature,
       topP: top_p,
       maxTokens: max_tokens ?? max_completion_tokens,
-      tools,
-      toolChoice: tool_choice
+      tools: providerTools,
+      toolChoice: providerToolChoice
     })
 
     const latencyMs = Date.now() - startTime
@@ -432,12 +441,24 @@ export async function POST(request: NextRequest) {
 
 function isWebSearchToolRequest(
   tools?: Array<{ type: string }>,
-  toolChoice?: { type: string }
+  toolChoice?: string | { type?: string }
 ) {
+  const toolChoiceType =
+    typeof toolChoice === 'string' ? toolChoice : toolChoice?.type
+
+  if (toolChoiceType === 'none') {
+    return false
+  }
+
   return (
-    toolChoice?.type === 'web_search' ||
+    toolChoiceType === 'web_search' ||
     tools?.some(tool => tool.type === 'web_search') === true
   )
+}
+
+function filterProviderTools(tools?: Array<{ type: string }>) {
+  const providerTools = tools?.filter(tool => tool.type !== 'web_search')
+  return providerTools && providerTools.length > 0 ? providerTools : undefined
 }
 
 function getLatestUserText(messages: Array<Record<string, unknown>>) {
@@ -470,7 +491,12 @@ function getLatestUserText(messages: Array<Record<string, unknown>>) {
 function createSearchToolStream(
   requestId: string,
   modelId: string,
-  answer: string
+  searchResult: {
+    answer: string
+    citations: unknown[]
+    followUps: unknown[]
+    searchQueryList: string[]
+  }
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder()
 
@@ -487,7 +513,7 @@ function createSearchToolStream(
                 index: 0,
                 delta: {
                   role: 'assistant',
-                  content: answer
+                  content: searchResult.answer
                 },
                 finish_reason: null
               }
@@ -509,6 +535,9 @@ function createSearchToolStream(
                 finish_reason: 'stop'
               }
             ],
+            citations: searchResult.citations,
+            follow_ups: searchResult.followUps,
+            search_queries: searchResult.searchQueryList,
             usage: null
           })}\n\n`
         )
