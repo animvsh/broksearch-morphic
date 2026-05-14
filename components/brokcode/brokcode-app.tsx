@@ -2371,10 +2371,10 @@ export function BrokCodeApp({
 
   return (
     <div className="dashboard-shell brokcode-shell flex h-full w-full flex-col text-foreground">
-      <header className="sticky top-0 z-20 border-b bg-background/95 px-3 py-2 backdrop-blur sm:px-4">
+      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 px-3 py-2 backdrop-blur-xl sm:px-4">
         <div className="flex h-11 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50">
               <Code2 className="size-4" />
             </div>
             <div className="min-w-0">
@@ -2389,8 +2389,8 @@ export function BrokCodeApp({
             </div>
           </div>
 
-          <div className="hidden min-w-0 items-center gap-2 text-xs text-muted-foreground md:flex">
-            <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-1">
+          <div className="hidden min-w-0 items-center gap-1.5 text-xs text-muted-foreground md:flex">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/70 px-2 py-1">
               <span
                 className={cn(
                   'size-1.5 rounded-full',
@@ -2403,7 +2403,7 @@ export function BrokCodeApp({
                   ? 'Key required'
                   : 'Sign in required'}
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-1">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/70 px-2 py-1">
               <span
                 className={cn(
                   'size-1.5 rounded-full',
@@ -2422,7 +2422,7 @@ export function BrokCodeApp({
                   : 'off'}
             </span>
             {isConnectingIntegration && (
-              <span className="truncate rounded-full border px-2 py-1">
+              <span className="truncate rounded-full border border-zinc-200/80 bg-white/70 px-2 py-1">
                 Connecting {formatToolkitName(isConnectingIntegration)}
               </span>
             )}
@@ -2545,12 +2545,12 @@ export function BrokCodeApp({
       </header>
 
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] xl:grid-cols-[minmax(390px,470px)_minmax(0,1fr)]">
-        <section className="dashboard-rail flex min-h-[620px] flex-col overflow-hidden border-r lg:min-h-0">
-          <div className="border-b bg-white/94 px-3 py-2 sm:px-4">
+        <section className="dashboard-rail flex min-h-[620px] flex-col overflow-hidden border-r border-zinc-200/80 lg:min-h-0">
+          <div className="border-b border-zinc-100 bg-white/80 px-3 py-2 sm:px-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold">Chat</p>
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="hidden truncate text-xs text-muted-foreground sm:block">
                   Tell Brok Code what to build, fix, test, or ship.
                 </p>
               </div>
@@ -2743,10 +2743,10 @@ export function BrokCodeApp({
             </div>
           </div>
 
-          <div className="border-t bg-background p-3 sm:p-4">
+          <div className="border-t border-zinc-100 bg-white/82 p-3 backdrop-blur sm:p-4">
             <div className="w-full">
               <form
-                className="relative flex items-end gap-2 overflow-hidden rounded-md border bg-background p-2 shadow-sm"
+                className="smooth-composer relative flex items-end gap-2 overflow-hidden rounded-lg border border-zinc-200/80 bg-white/96 p-2 shadow-[0_18px_48px_-44px_rgba(15,23,42,0.45)]"
                 onSubmit={event => {
                   event.preventDefault()
                   runCommand(input)
@@ -2807,7 +2807,7 @@ export function BrokCodeApp({
         </section>
 
         <aside className="hidden min-h-0 flex-col overflow-hidden bg-zinc-50/45 lg:flex">
-          <div className="border-b bg-white/94 px-3 py-2">
+          <div className="border-b border-zinc-100 bg-white/80 px-3 py-2 backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold">Preview</p>
@@ -2842,7 +2842,7 @@ export function BrokCodeApp({
             />
           </div>
 
-          <div className="border-t bg-white/96 p-2">
+          <div className="border-t border-zinc-100 bg-white/90 p-2 backdrop-blur">
             <details className="group rounded-lg border border-border/70 bg-background/80">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-medium">
                 <span>Runtime details, setup, and history</span>

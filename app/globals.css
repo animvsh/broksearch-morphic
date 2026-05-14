@@ -440,12 +440,46 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings:
+      'rlig' 1,
+      'calt' 1;
+    text-rendering: optimizeLegibility;
   }
 
   /* Tailwind v4: Restore pointer cursor for buttons */
   button:not(:disabled),
   [role='button']:not(:disabled) {
     cursor: pointer;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--foreground) 14%, transparent);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 16%, transparent)
+      transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 0.7rem;
+    height: 0.7rem;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border: 0.22rem solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: color-mix(in oklab, var(--foreground) 14%, transparent);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--foreground) 22%, transparent);
   }
 }
 
@@ -463,13 +497,11 @@
     --accent: oklch(0.93 0.035 295);
     --accent-foreground: oklch(0.32 0.16 295);
     color: var(--foreground);
-    background:
-      linear-gradient(
-        180deg,
-        oklch(0.982 0.004 285) 0%,
-        oklch(0.965 0.006 285) 100%
-      ),
-      linear-gradient(135deg, rgba(109, 0, 216, 0.04), transparent 42%);
+    background: linear-gradient(
+      180deg,
+      oklch(0.992 0.002 285) 0%,
+      oklch(0.972 0.004 285) 100%
+    );
   }
 
   .dashboard-shell::before {
@@ -482,7 +514,7 @@
       rgba(255, 255, 255, 0.8) 0%,
       rgba(255, 255, 255, 0) 44%
     );
-    opacity: 0.9;
+    opacity: 0.72;
   }
 
   .dashboard-shell > * {
@@ -491,21 +523,21 @@
   }
 
   .dashboard-panel {
-    @apply rounded-2xl border border-zinc-200 bg-white backdrop-blur-md;
+    @apply rounded-lg border border-zinc-200/80 bg-white/88 backdrop-blur-md;
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.9) inset,
-      0 24px 60px -48px rgba(23, 23, 23, 0.32);
+      0 22px 56px -50px rgba(23, 23, 23, 0.32);
   }
 
   .dashboard-rail {
-    @apply border-zinc-100 bg-white backdrop-blur-md;
+    @apply border-zinc-200/80 bg-white/74 backdrop-blur-xl;
   }
 
   .dashboard-card {
-    @apply rounded-2xl border border-zinc-200 bg-white backdrop-blur-sm;
+    @apply rounded-lg border border-zinc-200/80 bg-white/86 backdrop-blur-sm;
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.9) inset,
-      0 18px 44px -36px rgba(23, 23, 23, 0.2);
+      0 16px 42px -38px rgba(23, 23, 23, 0.22);
   }
 
   .prose pre {
@@ -517,14 +549,14 @@
   }
 
   .dashboard-action-card {
-    @apply rounded-2xl border border-zinc-200 bg-white backdrop-blur-sm transition-all duration-200;
+    @apply rounded-lg border border-zinc-200/80 bg-white/88 backdrop-blur-sm transition-all duration-200;
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.9) inset,
       0 18px 44px -36px rgba(23, 23, 23, 0.2);
   }
 
   .dashboard-action-card:hover {
-    transform: translateY(-1px);
+    transform: translateY(-0.5px);
     border-color: color-mix(in oklab, var(--foreground) 12%, var(--border));
     box-shadow: 0 18px 44px -34px rgba(23, 23, 23, 0.28);
   }
@@ -551,8 +583,8 @@
   .brokcode-shell .rounded-md.border.bg-background,
   .brokmail-shell .rounded-md.border.bg-background,
   .playground-shell .rounded-md.border.bg-background {
-    @apply rounded-lg border border-border/70 bg-card/78 backdrop-blur-sm;
-    box-shadow: 0 10px 22px -16px rgba(15, 23, 42, 0.2);
+    @apply rounded-lg border border-border/60 bg-card/72 backdrop-blur-sm;
+    box-shadow: 0 8px 20px -18px rgba(15, 23, 42, 0.22);
   }
 
   .brokcode-shell .rounded-md.border.bg-muted\/10,
@@ -561,7 +593,7 @@
   .brokmail-shell .rounded-md.border.bg-muted\/20,
   .brokmail-shell .rounded-md.border.bg-muted\/25,
   .playground-shell .rounded-md.border.bg-muted\/20 {
-    @apply rounded-lg border border-border/65 bg-card/52 backdrop-blur-sm;
+    @apply rounded-lg border border-border/55 bg-card/46 backdrop-blur-sm;
   }
 
   .brokcode-shell .hover\:bg-accent:hover,
@@ -777,6 +809,18 @@
 
   .clicky-control {
     @apply transition-all duration-150 active:translate-y-px;
+  }
+
+  .smooth-composer {
+    transform: translateZ(0);
+  }
+
+  .smooth-composer textarea::placeholder {
+    transition: color 0.18s ease;
+  }
+
+  .smooth-composer:focus-within textarea::placeholder {
+    color: color-mix(in oklab, var(--foreground) 28%, transparent);
   }
 
   .sidebar-section-label {

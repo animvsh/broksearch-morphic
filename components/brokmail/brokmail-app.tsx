@@ -1761,8 +1761,8 @@ export function BrokMailApp() {
         />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col 2xl:flex-row">
-          <aside className="dashboard-rail hidden w-48 shrink-0 border-r bg-card/35 2xl:flex 2xl:flex-col">
-            <div className="border-b p-3">
+          <aside className="dashboard-rail hidden w-48 shrink-0 border-r border-zinc-200/80 bg-white/45 2xl:flex 2xl:flex-col">
+            <div className="border-b border-zinc-100 p-3">
               <Button
                 className="h-9 w-full gap-2"
                 onClick={() => setComposer('Hi,\n\n\n\nBest,\nAnimesh')}
@@ -1796,7 +1796,7 @@ export function BrokMailApp() {
               })}
             </nav>
 
-            <div className="border-t p-3">
+            <div className="border-t border-zinc-100 p-3">
               <div className="space-y-2">
                 <div className="rounded-lg border border-border/70 bg-background/70 p-2.5">
                   <div className="flex items-center justify-between gap-2 text-xs">
@@ -1853,7 +1853,7 @@ export function BrokMailApp() {
             </div>
           </aside>
 
-          <div className="dashboard-rail border-b px-3 py-3 2xl:hidden">
+          <div className="dashboard-rail border-b border-zinc-200/80 px-3 py-3 2xl:hidden">
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Button
@@ -1920,8 +1920,8 @@ export function BrokMailApp() {
             </div>
           </div>
 
-          <div className="flex max-h-[34dvh] w-full shrink-0 flex-col border-b bg-card/20 2xl:max-h-none 2xl:w-[360px] 2xl:border-b-0 2xl:border-r">
-            <div className="border-b bg-card/40 p-3">
+          <div className="flex max-h-[34dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white/45 2xl:max-h-none 2xl:w-[360px] 2xl:border-b-0 2xl:border-r">
+            <div className="border-b border-zinc-100 bg-white/60 p-3 backdrop-blur">
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />
                 <Input
@@ -2160,7 +2160,7 @@ function BrokMailStatusBar({
   runPriorityBrief: () => void
 }) {
   return (
-    <div className="dashboard-rail border-b bg-card/35 px-3 py-2 sm:px-4">
+    <div className="dashboard-rail border-b border-zinc-200/80 bg-white/78 px-3 py-2 backdrop-blur-xl sm:px-4">
       <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="mr-1 hidden min-w-0 sm:block">
@@ -2183,7 +2183,7 @@ function BrokMailStatusBar({
             <CalendarDays className="size-3.5" />
             Calendar {modeLabel(calendarConnectionMode)}
           </Badge>
-          <span className="rounded-md border border-border/70 bg-background/65 px-2.5 py-1.5 text-xs text-muted-foreground">
+          <span className="hidden rounded-lg border border-border/70 bg-background/65 px-2.5 py-1.5 text-xs text-muted-foreground md:inline-flex">
             {counts['needs-reply']} replies · {counts['follow-ups']} follow-ups
             · {insights.unread} unread
           </span>
@@ -2209,7 +2209,7 @@ function BrokMailStatusBar({
           </Button>
         </div>
       </div>
-      <div className="mt-1 hidden min-w-0 gap-3 text-[11px] text-muted-foreground lg:flex">
+      <div className="mt-1 hidden min-w-0 gap-3 text-[11px] text-muted-foreground 2xl:flex">
         <span className="truncate">{connectionStatus}</span>
         <span className="truncate">{calendarConnectionStatus}</span>
         <span className="shrink-0">

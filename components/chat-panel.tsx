@@ -333,20 +333,6 @@ export function ChatPanel({
       {uploadedFiles.length > 0 && (
         <UploadedFileList files={uploadedFiles} onRemove={handleFileRemove} />
       )}
-      {messages.length === 0 && (
-        <div className="mx-auto mb-4 grid w-full max-w-3xl grid-cols-1 gap-2 px-1 text-xs text-muted-foreground sm:grid-cols-3">
-          <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-background/80 px-3 py-2 shadow-sm">
-            <span className="brand-status-pulse" />
-            <span className="truncate">Brok agent online</span>
-          </div>
-          <div className="rounded-lg border border-border/70 bg-background/80 px-3 py-2 shadow-sm">
-            Live search and reasoning
-          </div>
-          <div className="rounded-lg border border-border/70 bg-background/80 px-3 py-2 shadow-sm">
-            Files, tools, and citations
-          </div>
-        </div>
-      )}
       <form
         onSubmit={e => {
           if (!hasAvailableModels && !canSubmitWithoutModel) {
@@ -446,11 +432,10 @@ export function ChatPanel({
 
         <div
           className={cn(
-            'relative flex w-full flex-col gap-2 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_18px_50px_-42px_rgba(15,23,42,0.35)] transition-all duration-150',
+            'smooth-composer relative flex w-full flex-col gap-2 overflow-hidden rounded-lg border border-zinc-200/80 bg-white/96 shadow-[0_18px_52px_-46px_rgba(15,23,42,0.36)] backdrop-blur-xl transition-all duration-200',
             isLoading &&
-              'border-zinc-300 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.5)]',
-            isInputFocused &&
-              'ring-2 ring-zinc-300 ring-offset-1 ring-offset-background'
+              'border-zinc-300/90 shadow-[0_24px_64px_-48px_rgba(15,23,42,0.48)]',
+            isInputFocused && 'border-zinc-300 ring-4 ring-zinc-950/[0.035]'
           )}
         >
           <div
@@ -506,7 +491,7 @@ export function ChatPanel({
           />
 
           {/* Bottom menu area */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 bg-zinc-50 p-2.5 md:p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100/80 bg-zinc-50/80 p-2.5 md:p-3">
             <div className="flex items-center gap-2">
               <FileUploadButton
                 onFileSelect={files => {
