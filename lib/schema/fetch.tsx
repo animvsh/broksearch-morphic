@@ -1,5 +1,5 @@
 import { DeepPartial } from 'ai'
-import { z } from 'zod'
+import * as z from 'zod'
 
 export const fetchSchema = z.object({
   url: z.string().describe('The URL to retrieve content from'),

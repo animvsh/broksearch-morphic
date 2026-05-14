@@ -1,5 +1,5 @@
 import { dynamicTool } from 'ai'
-import { z } from 'zod'
+import * as z from 'zod'
 
 import type { MCPClient } from '@/lib/types/dynamic-tools'
 

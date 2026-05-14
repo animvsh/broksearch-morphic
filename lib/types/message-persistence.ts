@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import * as z from 'zod'
 
 import type { parts } from '@/lib/db/schema'
 import type { UIMessage } from '@/lib/types/ai'

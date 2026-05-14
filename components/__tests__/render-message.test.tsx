@@ -65,9 +65,9 @@ describe('RenderMessage', () => {
 
     const processSections = screen.getAllByTestId('research-process')
     expect(processSections).toHaveLength(1)
-    expect(processSections[0]).toHaveTextContent(
-      'reasoning,tool-search,reasoning'
-    )
+    expect(processSections[0]).toHaveTextContent('First reasoning')
+    expect(processSections[0]).toHaveTextContent('Second reasoning')
+    expect(processSections[0]).not.toHaveTextContent('Final answer')
 
     const answerSections = screen.getAllByTestId('answer-section')
     expect(answerSections).toHaveLength(1)

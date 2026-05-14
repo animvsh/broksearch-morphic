@@ -315,7 +315,7 @@ export function ResearchProcessSection({
     return null
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-testid="research-process">
       {segments.map((seg, sidx) => {
         const groups = groupConsecutiveParts(seg)
         const isSingle = groups.length === 1 && groups[0].length === 1

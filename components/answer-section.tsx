@@ -66,7 +66,7 @@ export function AnswerSection({
       showIcon={false}
     >
       {content && (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1" data-testid="answer-section">
           <SourceStrip citationMaps={citationMaps} />
           <MarkdownMessage message={content} citationMaps={citationMaps} />
           <MessageActions

@@ -2,7 +2,7 @@
 
 import { headers } from 'next/headers'
 
-import { z } from 'zod'
+import * as z from 'zod'
 
 import { featureRequests, generateId } from '@/lib/db/schema'
 import { withOptionalRLS } from '@/lib/db/with-rls'

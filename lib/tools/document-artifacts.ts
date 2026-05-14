@@ -1,7 +1,7 @@
 import { tool } from 'ai'
 import { mkdir, writeFile } from 'fs/promises'
 import path from 'path'
-import { z } from 'zod'
+import * as z from 'zod'
 
 import {
   LOCAL_PUBLIC_URL,

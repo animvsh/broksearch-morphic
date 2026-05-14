@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import * as z from 'zod'
 
 // Standard schema with optional fields for inputLabel and inputPlaceholder
 export const questionSchema = z.object({

@@ -1,5 +1,5 @@
 import { DeepPartial } from 'ai'
-import { z } from 'zod'
+import * as z from 'zod'
 
 import { getSearchTypeDescription } from '@/lib/utils/search-config'
 

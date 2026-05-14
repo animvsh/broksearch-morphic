@@ -225,7 +225,7 @@ describe('ResearchProcessSection', () => {
         />
       )
 
-      const buttons = screen.getAllByRole('button')
+      const buttons = screen.getAllByLabelText('Expand')
 
       // Click first button to open
       fireEvent.click(buttons[0])
@@ -266,7 +266,7 @@ describe('ResearchProcessSection', () => {
         />
       )
 
-      const button = screen.getByRole('button')
+      const button = screen.getByLabelText('Expand')
       fireEvent.click(button)
 
       // For single sections, should directly call onOpenChange

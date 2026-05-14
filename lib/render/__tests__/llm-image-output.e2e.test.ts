@@ -11,7 +11,7 @@
  */
 import { generateText, stepCountIs, tool } from 'ai'
 import { describe, expect, test } from 'vitest'
-import { z } from 'zod'
+import * as z from 'zod'
 
 import { getAdaptiveModePrompt } from '@/lib/agents/prompts/search-mode-prompts'
 import { getModel } from '@/lib/utils/registry'

@@ -91,7 +91,11 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
 export function useArtifact() {
   const context = useContext(ArtifactContext)
   if (context === undefined) {
-    throw new Error('useArtifact must be used within an ArtifactProvider')
+    return {
+      state: initialState,
+      open: () => {},
+      close: () => {}
+    }
   }
   return context
 }

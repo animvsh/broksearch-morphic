@@ -95,7 +95,7 @@ export function SearchSection({
   )
 
   return (
-    <div className="relative">
+    <div className="relative" data-testid="tool-section">
       {/* Rails for header - show based on position */}
       {borderless && (
         <>

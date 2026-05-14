@@ -144,7 +144,7 @@ export function ReasoningSection({
   if (content.isDone && !content.reasoning?.trim()) return null
 
   return (
-    <div className="relative">
+    <div className="relative" data-testid="reasoning-section">
       {/* Rails for header - show based on position */}
       {!isFirst && (
         <div className="absolute left-[19.5px] w-px bg-border h-2 top-0" />

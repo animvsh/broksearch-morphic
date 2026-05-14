@@ -32,7 +32,7 @@ const uiChecks: UiCheck[] = [
   { path: '/docs', expectedText: 'Brok Documentation' },
   { path: '/docs/quickstart', expectedText: 'Quickstart' },
   { path: '/docs/api-keys', expectedText: 'API Keys' },
-  { path: '/playground', expectedText: 'Brok Playground' }
+  { path: '/playground', expectedText: 'BrokCode API' }
 ]
 
 const protectedUiChecks: ProtectedUiCheck[] = [
