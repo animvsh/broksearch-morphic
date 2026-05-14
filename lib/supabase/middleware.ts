@@ -47,6 +47,7 @@ export async function updateSession(request: NextRequest) {
     pathname === '/library' ||
     pathname === '/spaces' ||
     pathname === '/playground' ||
+    pathname.startsWith('/brokcode/shared') ||
     pathname.startsWith('/tools') ||
     pathname.startsWith('/auth') ||
     pathname.startsWith('/api') ||
