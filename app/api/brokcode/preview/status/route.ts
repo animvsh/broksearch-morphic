@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { unauthorizedResponse } from '@/lib/brok/auth'
+import {
+  enforceBrokCodeAccountOwnership,
+  resolveBrokCodeRequestAuth
+} from '@/lib/brokcode/account-guard'
+
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
@@ -91,6 +97,15 @@ function jsonNoStore(body: unknown, init?: ResponseInit) {
 }
 
 export async function GET(request: NextRequest) {
+  const { authResult } = await resolveBrokCodeRequestAuth(request, {
+    allowBrowserSession: true
+  })
+  if (!authResult.success) {
+    return unauthorizedResponse(authResult)
+  }
+  const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
+  if (accountMismatch) return accountMismatch
+
   const rawUrl = request.nextUrl.searchParams.get('url')
   if (!rawUrl) {
     return jsonNoStore(

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
+  canExecuteComposioTools,
   isComposioConfigured,
   isComposioConnectMode,
   listConnectedAccounts
@@ -50,12 +51,22 @@ export async function GET() {
       )
     }
 
-    const accountsByToolkit = await Promise.all(
+    const settledAccountsByToolkit = await Promise.allSettled(
       resolveToolkitCandidates().map(async toolkit => {
         const accounts = await listConnectedAccounts(user.id, toolkit, 20)
         return { toolkit, accounts }
       })
     )
+    const accountsByToolkit = settledAccountsByToolkit
+      .filter(
+        (
+          result
+        ): result is PromiseFulfilledResult<{
+          toolkit: string
+          accounts: Awaited<ReturnType<typeof listConnectedAccounts>>
+        }> => result.status === 'fulfilled'
+      )
+      .map(result => result.value)
 
     const connectedAccounts = accountsByToolkit.flatMap(result =>
       result.accounts.filter(account => {
@@ -64,11 +75,20 @@ export async function GET() {
       })
     )
 
+    const executionReady = canExecuteComposioTools()
+    const accountConnected = connectedAccounts.length > 0
+
     return NextResponse.json({
       configured: true,
-      connected: connectedAccounts.length > 0,
+      connected: accountConnected && executionReady,
+      accountConnected,
+      executionReady,
       provider: isComposioConnectMode() ? 'composio-connect' : 'composio',
       connectedCount: connectedAccounts.length,
+      message:
+        accountConnected && !executionReady
+          ? 'Gmail is connected for OAuth, but BrokMail needs a backend COMPOSIO_API_KEY before it can sync or act on mail.'
+          : undefined,
       accounts: connectedAccounts.map(account => ({
         id: account.id,
         status: account.status,

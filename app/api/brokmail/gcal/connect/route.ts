@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { resolveBrokMailCallbackUrl } from '@/lib/brokmail/callback-url'
 import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
   createConnectedAccountLink,
@@ -31,23 +32,8 @@ function resolveToolkitCandidates() {
   return candidates.length > 0 ? candidates : DEFAULT_GCAL_TOOLKIT_CANDIDATES
 }
 
-function resolveRequestOrigin(request: NextRequest) {
-  const host =
-    request.headers.get('x-forwarded-host') || request.headers.get('host')
-  const protocol =
-    request.headers.get('x-forwarded-proto') ||
-    request.nextUrl.protocol.replace(':', '')
-
-  if (host) {
-    return `${protocol}://${host}`
-  }
-
-  return request.nextUrl.origin
-}
-
 export async function POST(request: NextRequest) {
-  const origin = resolveRequestOrigin(request)
-  const redirectUrl = `${origin}/brokmail?gcal=connected`
+  const redirectUrl = resolveBrokMailCallbackUrl(request, '?gcal=connected')
 
   if (!isComposioConfigured()) {
     return NextResponse.json(

@@ -113,12 +113,12 @@ export async function POST(request: NextRequest) {
       content: result.content
     })
   } catch (error) {
+    console.error('BrokMail Pi agent failed:', error)
+
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : 'Pi-powered BrokMail assistant failed.'
+          'BrokMail assistant is temporarily unavailable. Try again in a moment.'
       },
       { status: 503 }
     )

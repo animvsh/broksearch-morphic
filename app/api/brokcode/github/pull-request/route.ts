@@ -237,6 +237,8 @@ export async function POST(request: NextRequest) {
   }
   const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
   if (accountMismatch) return accountMismatch
+  const isBrowserSession =
+    'isBrowserSession' in authResult && authResult.isBrowserSession === true
 
   const body = await request.json().catch(() => null)
   const repository = sanitizeRepository(body?.repository)
@@ -317,6 +319,21 @@ export async function POST(request: NextRequest) {
           ? error.message
           : 'Could not create a GitHub pull request through Composio.'
     }
+  }
+
+  if (isBrowserSession) {
+    return jsonNoStore(
+      {
+        error: {
+          type: 'integration_error',
+          code: 'github_user_connection_required',
+          message: composioFailure
+            ? `Could not create the pull request through your connected GitHub account: ${composioFailure}`
+            : 'Connect GitHub through BrokCode before opening a browser PR.'
+        }
+      },
+      { status: isComposioConfigured() ? 502 : 412 }
+    )
   }
 
   const githubToken =

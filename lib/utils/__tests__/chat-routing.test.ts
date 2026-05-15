@@ -72,6 +72,8 @@ describe('chat routing', () => {
     expect(shouldForceSearchForText('should i invest in this founder')).toBe(
       true
     )
+    expect(shouldForceSearchForText('how does Capy work?')).toBe(true)
+    expect(shouldForceSearchForText('why is Founders Inc notable')).toBe(true)
     expect(shouldForceSearchForText('test')).toBe(false)
     expect(shouldForceSearchForText('help me rewrite this paragraph')).toBe(
       false

@@ -22,6 +22,18 @@ describe('chat completions web search compatibility', () => {
     expect(
       isWebSearchToolRequest([{ type: 'web_search_preview' }], 'auto')
     ).toBe(true)
+    expect(
+      isWebSearchToolRequest(
+        [{ type: 'web_search_preview' }, { type: 'function' }],
+        'auto'
+      )
+    ).toBe(false)
+    expect(
+      isWebSearchToolRequest(
+        [{ type: 'web_search_preview' }, { type: 'function' }],
+        'required'
+      )
+    ).toBe(false)
     expect(isWebSearchToolRequest(undefined, 'web_search_preview')).toBe(true)
     expect(isWebSearchToolRequest([{ type: 'web_search' }], 'none')).toBe(false)
     expect(

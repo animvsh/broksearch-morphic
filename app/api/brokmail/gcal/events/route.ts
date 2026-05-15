@@ -147,12 +147,22 @@ export async function GET() {
     )
   }
 
-  const accountsByToolkit = await Promise.all(
+  const settledAccountsByToolkit = await Promise.allSettled(
     resolveCalendarToolkits().map(async toolkit => {
       const accounts = await listConnectedAccounts(user.id, toolkit, 10)
       return { toolkit, accounts }
     })
   )
+  const accountsByToolkit = settledAccountsByToolkit
+    .filter(
+      (
+        result
+      ): result is PromiseFulfilledResult<{
+        toolkit: string
+        accounts: Awaited<ReturnType<typeof listConnectedAccounts>>
+      }> => result.status === 'fulfilled'
+    )
+    .map(result => result.value)
 
   const account = accountsByToolkit
     .flatMap(result => result.accounts)

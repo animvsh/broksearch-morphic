@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { appendAssistantMessageToChat } from '@/lib/actions/chat'
 import { generateId } from '@/lib/db/schema'
 import { SHORTCUT_EVENTS } from '@/lib/keyboard-shortcuts'
 import { UploadedFile } from '@/lib/types'
@@ -51,6 +52,7 @@ interface ChatPanelProps {
   status: UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>['status']
   messages: UIMessage[]
   setMessages: (messages: UIMessage[]) => void
+  chatId: string
   query?: string
   stop: () => void
   append: (message: any) => void
@@ -101,6 +103,7 @@ export function ChatPanel({
   status,
   messages,
   setMessages,
+  chatId,
   query,
   stop,
   append,
@@ -328,21 +331,37 @@ export function ChatPanel({
   )
 
   const addDeepResearchToChat = useCallback(
-    (task: BackgroundTaskSummary) => {
+    async (task: BackgroundTaskSummary) => {
       const answer = task.result?.answer?.trim()
       if (!answer) return
 
-      setMessages([
-        ...messages,
-        {
-          id: generateId(),
-          role: 'assistant',
-          parts: [{ type: 'text', text: answer }]
-        } as UIMessage
-      ])
+      const optimisticMessage = {
+        id: generateId(),
+        role: 'assistant',
+        parts: [{ type: 'text', text: answer }]
+      } as UIMessage
+
+      setMessages([...messages, optimisticMessage])
       setInsertedTaskIds(prev => new Set(prev).add(task.id))
+
+      if (!isGuest) {
+        try {
+          await appendAssistantMessageToChat({
+            chatId,
+            content: answer,
+            title: task.title
+          })
+          router.refresh()
+        } catch (error) {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : 'Could not save deep research to this chat.'
+          )
+        }
+      }
     },
-    [messages, setMessages]
+    [chatId, isGuest, messages, router, setMessages]
   )
 
   // if query is not empty, submit the query
@@ -509,7 +528,9 @@ export function ChatPanel({
                 <button
                   type="button"
                   className="shrink-0 rounded-md bg-white/80 px-2 py-1 font-medium text-emerald-950 hover:bg-white"
-                  onClick={() => addDeepResearchToChat(latestCompletedResearch)}
+                  onClick={() =>
+                    void addDeepResearchToChat(latestCompletedResearch)
+                  }
                 >
                   Add brief
                 </button>

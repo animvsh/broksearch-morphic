@@ -126,7 +126,19 @@ export async function DELETE(request: NextRequest) {
 
   const authResult = await verifyRequestAuth(request)
   if (!authResult.success) {
-    return unauthorizedResponse(authResult)
+    if (authResult.error !== 'missing_authorization') {
+      return unauthorizedResponse(authResult)
+    }
+
+    const row = await getLatestSavedBrokCodeRuntimeKeyForUser(signedIn.user.id)
+    if (row) {
+      await deleteBrokCodeRuntimeKeyById({
+        id: row.id,
+        userId: signedIn.user.id
+      })
+    }
+
+    return jsonNoStore({ ok: true })
   }
 
   const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)

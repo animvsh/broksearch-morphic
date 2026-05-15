@@ -568,6 +568,10 @@ export function isComposioConfigured() {
   return Boolean(resolveBackendApiKey() || resolveConnectApiKey())
 }
 
+export function canExecuteComposioTools() {
+  return Boolean(resolveBackendApiKey())
+}
+
 export async function listConnectedAccounts(
   userId?: string,
   toolkitSlug?: string,

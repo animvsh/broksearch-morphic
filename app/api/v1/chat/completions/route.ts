@@ -95,7 +95,8 @@ export async function POST(request: NextRequest) {
     tool_choice
   } = body
   const providerToolChoice = normalizeProviderToolChoice(tool_choice)
-  const providerTools = filterProviderTools(tools)
+  const providerTools =
+    tool_choice === 'none' ? undefined : filterProviderTools(tools)
 
   if (typeof modelId !== 'string') {
     return invalidRequestResponse('invalid_model', 'model must be a string.')
@@ -476,6 +477,8 @@ export function isWebSearchToolRequest(
 ) {
   const toolChoiceType =
     typeof toolChoice === 'string' ? toolChoice : toolChoice?.type
+  const hasProviderTools =
+    tools?.some(tool => !isBrokWebSearchToolType(tool.type)) === true
 
   if (toolChoiceType === 'none') {
     return false
@@ -487,6 +490,10 @@ export function isWebSearchToolRequest(
     toolChoiceType !== 'required'
   ) {
     return isBrokWebSearchToolType(toolChoiceType)
+  }
+
+  if (hasProviderTools) {
+    return false
   }
 
   return tools?.some(tool => isBrokWebSearchToolType(tool.type)) === true

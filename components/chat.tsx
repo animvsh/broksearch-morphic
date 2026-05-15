@@ -37,6 +37,14 @@ interface ChatSection {
   assistantMessages: UIMessage[]
 }
 
+function escapeUploadedFileAttribute(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
 export function Chat({
   id: providedId,
   savedMessages = [],
@@ -486,11 +494,12 @@ export function Chat({
       uploaded.forEach(file => {
         if (file.extractedText) {
           const filename = file.name || file.file.name
+          const safeFilename = escapeUploadedFileAttribute(filename)
           parts.push({
             type: 'text',
             text:
               [
-                `<uploaded_file name="${filename}">`,
+                `<uploaded_file name="${safeFilename}">`,
                 'The user uploaded this file. Treat the extracted content below as primary context when answering questions about the file.',
                 file.extractedText
               ].join('\n') + '\n</uploaded_file>'
@@ -603,6 +612,7 @@ export function Chat({
           status={status}
           messages={messages}
           setMessages={setMessages}
+          chatId={chatId}
           stop={stop}
           query={query}
           append={(message: any) => {

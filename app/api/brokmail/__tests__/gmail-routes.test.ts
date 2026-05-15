@@ -5,6 +5,7 @@ vi.mock('@/lib/auth/get-current-user', () => ({
 }))
 
 vi.mock('@/lib/integrations/composio', () => ({
+  canExecuteComposioTools: vi.fn(),
   createConnectedAccountLink: vi.fn(),
   executeComposioTool: vi.fn(),
   isComposioConfigured: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock('@/lib/integrations/composio', () => ({
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import {
+  canExecuteComposioTools,
   createConnectedAccountLink,
   executeComposioTool,
   isComposioConfigured,
@@ -31,10 +33,34 @@ describe('BrokMail Gmail routes', () => {
     vi.clearAllMocks()
     delete process.env.COMPOSIO_GMAIL_TOOLKIT_SLUGS
     vi.mocked(isComposioConfigured).mockReturnValue(true)
+    vi.mocked(canExecuteComposioTools).mockReturnValue(true)
     vi.mocked(isComposioConnectMode).mockReturnValue(false)
     vi.mocked(getCurrentUser).mockResolvedValue({
       id: 'user_123'
     } as any)
+  })
+
+  it('does not mark connect-only Gmail as sync-ready without backend execution', async () => {
+    vi.mocked(canExecuteComposioTools).mockReturnValue(false)
+    vi.mocked(listConnectedAccounts).mockResolvedValue([
+      {
+        id: 'acct_gmail',
+        status: 'active',
+        toolkit_slug: 'gmail'
+      }
+    ] as any)
+
+    const response = await getGmailStatus()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      configured: true,
+      connected: false,
+      accountConnected: true,
+      executionReady: false
+    })
+    expect(body.message).toContain('COMPOSIO_API_KEY')
   })
 
   it('creates Gmail links with the dedicated gmail toolkit before googlesuper', async () => {

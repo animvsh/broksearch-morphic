@@ -783,7 +783,9 @@ export function BrokMailApp() {
               unread: false,
               needsReply: false,
               waitingOnReply: false,
-              labels: thread.labels.filter(label => label !== 'Inbox')
+              labels: thread.labels.filter(
+                label => label.toLowerCase() !== 'inbox'
+              )
             }
           : thread
       )

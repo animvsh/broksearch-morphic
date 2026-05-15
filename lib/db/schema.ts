@@ -322,12 +322,6 @@ export const featureRequests = pgTable(
     index('feature_requests_user_id_idx').on(table.userId),
     index('feature_requests_account_email_idx').on(table.accountEmail),
     index('feature_requests_created_at_idx').on(table.createdAt.desc()),
-    pgPolicy('feature_requests_select_policy', {
-      as: 'permissive',
-      for: 'select',
-      to: 'public',
-      using: sql`true`
-    }),
     pgPolicy('feature_requests_insert_policy', {
       as: 'permissive',
       for: 'insert',

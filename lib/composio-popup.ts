@@ -29,7 +29,9 @@ export function openComposioPopup(
       `left=${Math.round(left)}`,
       `top=${Math.round(top)}`,
       'resizable=yes',
-      'scrollbars=yes'
+      'scrollbars=yes',
+      'noopener=yes',
+      'noreferrer=yes'
     ].join(',')
   )
 }

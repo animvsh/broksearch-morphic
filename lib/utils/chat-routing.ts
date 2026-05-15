@@ -11,6 +11,8 @@ const SIMPLE_CHAT_PATTERNS = [
 ]
 
 const URL_PATTERN = /\bhttps?:\/\/\S+|\bwww\.\S+/i
+const QUESTION_LIKE_PATTERN =
+  /\b(who|what|when|where|why|how|which|can|should|does|do|did|is|are|was|were)\b/i
 const SEARCH_INTENT_PATTERN =
   /\b(search|look\s*up|find\s+(?:me\s+)?(?:sources|results|info|information|articles|news)|web|internet|sources?|latest|today|current|recent|who\s+is|what\s+is|what\s+(?:companies|company|startups?)|where\s+(?:is|else)|when\s+is|founder|founded|company|startup|news|price|stock|weather|score|benchmark|research|invest|investment|traction|funding|mentioned)\b/i
 
@@ -26,7 +28,12 @@ export function shouldForceSearchForText(text: string | null | undefined) {
   if (!normalized) return false
   if (isSimpleUtilityText(normalized)) return false
 
-  return URL_PATTERN.test(normalized) || SEARCH_INTENT_PATTERN.test(normalized)
+  return (
+    URL_PATTERN.test(normalized) ||
+    SEARCH_INTENT_PATTERN.test(normalized) ||
+    (normalized.includes('?') && QUESTION_LIKE_PATTERN.test(normalized)) ||
+    /^(who|what|when|where|why|how|which)\b/i.test(normalized)
+  )
 }
 
 export function hasUploadedFileContext(

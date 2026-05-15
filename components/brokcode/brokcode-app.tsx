@@ -3328,8 +3328,8 @@ function SyncedSessionPanel({
         </>
       ) : (
         <p className="mt-3 text-xs leading-5 text-muted-foreground">
-          No synced events yet. Start the terminal with the same session id, or
-          run a cloud command after saving a Brok API key.
+          No synced events yet. Run a cloud command in the browser, or start the
+          terminal with the same session id when using a CLI/TUI key.
         </p>
       )}
     </div>

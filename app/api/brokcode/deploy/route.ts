@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { requireAdminAccess } from '@/lib/auth/admin'
 import {
   apiKeyHasScope,
   forbiddenScopeResponse,
@@ -390,6 +391,22 @@ export async function POST(request: NextRequest) {
   const successfulAuth = authResult as BrokCodeAuthResult
   const accountMismatch = await enforceBrokCodeAccountOwnership(successfulAuth)
   if (accountMismatch) return accountMismatch
+  if (successfulAuth.isBrowserSession) {
+    const admin = await requireAdminAccess()
+    if (!admin.ok) {
+      return NextResponse.json(
+        {
+          error: {
+            type: 'authorization_error',
+            code: 'brokcode_deploy_admin_required',
+            message:
+              'BrokCode browser deploys are admin-only until per-project deploy targets are configured.'
+          }
+        },
+        { status: 403 }
+      )
+    }
+  }
   if (
     !successfulAuth.isBrowserSession &&
     !apiKeyHasScope(successfulAuth.apiKey, 'code:write')

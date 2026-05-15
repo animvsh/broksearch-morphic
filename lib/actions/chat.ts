@@ -202,6 +202,47 @@ export async function upsertMessage(
   return dbMessage
 }
 
+export async function appendAssistantMessageToChat({
+  chatId,
+  content,
+  title
+}: {
+  chatId: string
+  content: string
+  title?: string
+}): Promise<UIMessage> {
+  const userId = await getCurrentUserId()
+  if (!userId) {
+    throw new Error('User not authenticated')
+  }
+
+  const normalizedContent = content.trim()
+  if (!chatId || !normalizedContent) {
+    throw new Error('chatId and content are required')
+  }
+
+  const existingChat = await dbActions.getChat(chatId, userId)
+  if (!existingChat) {
+    await dbActions.createChat({
+      id: chatId,
+      title: (title?.trim() || DEFAULT_CHAT_TITLE).substring(0, 255),
+      userId,
+      visibility: 'private'
+    })
+  }
+
+  const message: UIMessage = {
+    id: generateId(),
+    role: 'assistant',
+    parts: [{ type: 'text', text: normalizedContent }]
+  }
+
+  await dbActions.upsertMessage({ ...message, chatId }, userId)
+  revalidateTag(`chat-${chatId}`, 'max')
+
+  return message
+}
+
 /**
  * Delete a chat
  */
