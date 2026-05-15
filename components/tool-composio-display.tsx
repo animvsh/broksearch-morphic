@@ -1,10 +1,13 @@
 'use client'
 
 import { Check, Link2, PlugZap, TriangleAlert } from 'lucide-react'
+import { toast } from 'sonner'
 
+import { openComposioPopup } from '@/lib/composio-popup'
 import type { ToolPart } from '@/lib/types/ai'
 
 import { Badge } from './ui/badge'
+import { Button } from './ui/button'
 
 type ComposioOutput = {
   state?: string
@@ -30,8 +33,24 @@ export function ToolComposioDisplay({
     tool.state === 'input-streaming' || tool.state === 'input-available'
   const isError = tool.state === 'output-error' || output?.success === false
 
+  function openConnectionPopup() {
+    if (!output?.connectionUrl) return
+
+    const popup = openComposioPopup(
+      output.connectionUrl,
+      'brok-composio-tool-connect'
+    )
+
+    if (!popup) {
+      toast.error('Popup blocked. Allow popups for Brok, then try again.')
+      return
+    }
+
+    popup.focus()
+  }
+
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
+    <div className="composio-connect-card rounded-xl border border-border/70 bg-card/90 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <PlugZap className="h-4 w-4 text-muted-foreground" />
@@ -60,15 +79,16 @@ export function ToolComposioDisplay({
       </div>
 
       {output?.connectionUrl && (
-        <a
-          href={output.connectionUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-2 hover:underline"
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-3 h-8 gap-1.5 rounded-lg text-xs"
+          onClick={openConnectionPopup}
         >
           <Link2 className="h-3.5 w-3.5" />
-          Open connection link
-        </a>
+          Open connection popup
+        </Button>
       )}
     </div>
   )

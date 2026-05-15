@@ -47,6 +47,7 @@ import {
   MailThread
 } from '@/lib/brokmail/data'
 import { BrokCalendarEvent } from '@/lib/brokmail/google-calendar-client'
+import { openComposioPopup } from '@/lib/composio-popup'
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
@@ -843,14 +844,16 @@ export function BrokMailApp() {
       }
 
       if (body?.connectionUrl) {
-        const popup = window.open(
+        const popup = openComposioPopup(
           body.connectionUrl,
-          'brokmail-gmail-connect',
-          'popup=yes,width=560,height=760,noopener,noreferrer'
+          'brokmail-gmail-connect'
         )
 
         if (!popup) {
-          window.location.href = body.connectionUrl
+          const message =
+            'Popup blocked. Allow popups for Brok, then connect Gmail again.'
+          setConnectionStatus(message)
+          toast.error(message)
           return
         }
 
@@ -911,14 +914,16 @@ export function BrokMailApp() {
       }
 
       if (body?.connectionUrl) {
-        const popup = window.open(
+        const popup = openComposioPopup(
           body.connectionUrl,
-          'brokmail-gcal-connect',
-          'popup=yes,width=560,height=760,noopener,noreferrer'
+          'brokmail-gcal-connect'
         )
 
         if (!popup) {
-          window.location.href = body.connectionUrl
+          const message =
+            'Popup blocked. Allow popups for Brok, then connect Calendar again.'
+          setCalendarConnectionStatus(message)
+          toast.error(message)
           return
         }
 

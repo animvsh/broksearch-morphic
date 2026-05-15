@@ -446,10 +446,10 @@ export function ChatPanel({
 
         <div
           className={cn(
-            'smooth-composer relative flex w-full flex-col gap-2 overflow-hidden rounded-lg border border-zinc-200/80 bg-white/96 shadow-[0_18px_52px_-46px_rgba(15,23,42,0.36)] backdrop-blur-xl transition-all duration-200',
+            'smooth-composer morphic-surface relative flex w-full flex-col gap-2 overflow-hidden rounded-2xl backdrop-blur-xl transition-all duration-200',
             isLoading &&
-              'border-zinc-300/90 shadow-[0_24px_64px_-48px_rgba(15,23,42,0.48)]',
-            isInputFocused && 'border-zinc-300 ring-4 ring-zinc-950/[0.035]'
+              'border-zinc-300/90 shadow-[0_18px_48px_-40px_rgba(15,23,42,0.28)]',
+            isInputFocused && 'border-zinc-300 ring-4 ring-zinc-950/[0.028]'
           )}
         >
           <div
@@ -505,7 +505,7 @@ export function ChatPanel({
           />
 
           {/* Bottom menu area */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100/80 bg-zinc-50/80 p-2.5 md:p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100/90 bg-zinc-50/65 p-2.5 md:p-3">
             <div className="flex items-center gap-2">
               <FileUploadButton
                 onFileSelect={files => {
@@ -518,7 +518,7 @@ export function ChatPanel({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 rounded-lg border-zinc-200 bg-white/75 px-2.5 text-xs shadow-none hover:bg-white"
+                  className="h-8 rounded-lg border-zinc-200 bg-white/70 px-2.5 text-xs shadow-none hover:bg-white"
                   onClick={() => void startDeepResearch()}
                   disabled={isLoading}
                   title="Run this as background deep research"
@@ -540,7 +540,7 @@ export function ChatPanel({
                   variant="outline"
                   size="icon"
                   onClick={handleNewChat}
-                  className="shrink-0 size-8 rounded-lg group md:size-10"
+                  className="group size-8 shrink-0 rounded-xl shadow-none md:size-10"
                   type="button"
                   disabled={isLoading}
                   aria-label="Start new chat"
@@ -553,7 +553,7 @@ export function ChatPanel({
                 size={'icon'}
                 className={cn(
                   isLoading && 'animate-pulse',
-                  'size-8 rounded-lg md:size-10'
+                  'size-8 rounded-xl md:size-10'
                 )}
                 disabled={
                   (!isLoading &&

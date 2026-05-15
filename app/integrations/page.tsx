@@ -326,11 +326,11 @@ export default async function IntegrationsPage() {
 
   return (
     <div className="dashboard-shell min-h-full w-full p-3 sm:p-4">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-        <section className="dashboard-panel px-4 py-4 sm:px-5">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3">
+        <section className="morphic-surface rounded-2xl px-4 py-4 sm:px-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-xs text-muted-foreground">
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-border/70 bg-white/70 px-2.5 py-1 text-xs text-muted-foreground">
                 <Link2 className="size-3.5" />
                 {providerLabel}
               </div>
@@ -348,7 +348,7 @@ export default async function IntegrationsPage() {
                 return (
                   <div
                     key={card.label}
-                    className="rounded-lg border border-border/70 bg-background/75 p-3"
+                    className="rounded-xl border border-border/70 bg-white/70 p-3"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs text-muted-foreground">
@@ -367,7 +367,7 @@ export default async function IntegrationsPage() {
           </div>
         </section>
 
-        <Card className="border-border/70 shadow-sm">
+        <Card className="morphic-surface rounded-2xl border-border/70 shadow-none">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Available Integrations</CardTitle>
             <CardDescription>
@@ -396,7 +396,7 @@ export default async function IntegrationsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/70 shadow-sm">
+        <Card className="morphic-surface rounded-2xl border-border/70 shadow-none">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Runtime Behavior</CardTitle>
           </CardHeader>

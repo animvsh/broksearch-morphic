@@ -48,6 +48,7 @@ import {
   BrokCodeSubagent,
   SubagentStatus
 } from '@/lib/brokcode/data'
+import { openComposioPopup } from '@/lib/composio-popup'
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
@@ -1674,14 +1675,17 @@ export function BrokCodeApp({
       }
 
       if (typeof body?.connectionUrl === 'string' && body.connectionUrl) {
-        const popup = window.open(
+        const popup = openComposioPopup(
           body.connectionUrl,
-          'brokcode-github-connect',
-          'popup=yes,width=560,height=760,noopener,noreferrer'
+          'brokcode-github-connect'
         )
 
         if (!popup) {
-          window.location.href = body.connectionUrl
+          const message =
+            'Popup blocked. Allow popups for Brok, then connect GitHub again.'
+          setGithubStatus('ready')
+          setGithubMessage(message)
+          toast.error(message)
           return
         }
 
@@ -1791,14 +1795,17 @@ export function BrokCodeApp({
       }
 
       if (typeof body?.connectionUrl === 'string' && body.connectionUrl) {
-        const popup = window.open(
+        const popup = openComposioPopup(
           body.connectionUrl,
-          `brokcode-integration-${normalizedToolkit}`,
-          'popup=yes,width=560,height=760,noopener,noreferrer'
+          `brokcode-integration-${normalizedToolkit}`
         )
 
         if (!popup) {
-          window.location.href = body.connectionUrl
+          const message = `Popup blocked. Allow popups for Brok, then connect ${formatToolkitName(
+            normalizedToolkit
+          )} again.`
+          setRuntimeError(message)
+          toast.error(message)
           return
         }
 
@@ -2747,7 +2754,7 @@ export function BrokCodeApp({
           <div className="border-t border-zinc-100 bg-white/82 p-3 backdrop-blur sm:p-4">
             <div className="w-full">
               <form
-                className="smooth-composer relative flex items-end gap-2 overflow-hidden rounded-lg border border-zinc-200/80 bg-white/96 p-2 shadow-[0_18px_48px_-44px_rgba(15,23,42,0.45)]"
+                className="smooth-composer morphic-surface relative flex items-end gap-2 overflow-hidden rounded-2xl p-2"
                 onSubmit={event => {
                   event.preventDefault()
                   runCommand(input)

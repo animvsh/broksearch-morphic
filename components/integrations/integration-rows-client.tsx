@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { openComposioPopup } from '@/lib/composio-popup'
 import { cn } from '@/lib/utils'
 
 import { Badge } from '@/components/ui/badge'
@@ -307,14 +308,16 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
         )
       }
 
-      const popup = window.open(
+      const popup = openComposioPopup(
         payload.connectionUrl,
-        `brok-integration-connect-${toolkit}`,
-        'popup=yes,width=560,height=760'
+        `brok-integration-connect-${toolkit}`
       )
 
       if (!popup) {
-        window.location.href = payload.connectionUrl
+        const message =
+          'Popup blocked. Allow popups for Brok, then click Connect again.'
+        setRowMessages(current => ({ ...current, [toolkit]: message }))
+        toast.error(message)
         return
       }
 
@@ -389,7 +392,10 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
         <Button
           variant={row.status === 'connected' ? 'outline' : 'default'}
           size="sm"
-          className="h-8 gap-2"
+          className={cn(
+            'h-8 gap-2 rounded-lg transition-all duration-200',
+            isConnecting && 'composio-connect-button'
+          )}
           onClick={() => connectToolkit(row.slug)}
           disabled={disabled}
         >
@@ -451,8 +457,9 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
             <div
               key={current.slug}
               className={cn(
-                'rounded-xl border border-border/70 bg-background/80 p-3 shadow-sm transition-colors hover:bg-muted/25',
-                current.featured ? 'ring-1 ring-primary/10' : ''
+                'composio-connect-card rounded-xl border border-border/70 bg-background/86 p-3 transition-all duration-200 hover:border-zinc-300 hover:bg-white/90',
+                current.featured ? 'ring-1 ring-primary/10' : '',
+                connectingToolkit === current.slug && 'is-connecting'
               )}
             >
               <div className="flex items-start justify-between gap-3">
