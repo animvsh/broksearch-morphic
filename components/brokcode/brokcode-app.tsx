@@ -1061,7 +1061,7 @@ export function BrokCodeApp({
   }, [refreshGithubStatus])
 
   useEffect(() => {
-    if (!hasLiveKey) {
+    if (!hasLiveRuntime) {
       setUsage(null)
       setSyncedSessions([])
       setVersions([])
@@ -1080,25 +1080,26 @@ export function BrokCodeApp({
   }, [
     apiKey,
     hasLiveKey,
+    hasLiveRuntime,
     refreshRepoContext,
     refreshSyncedSessions,
     refreshVersions
   ])
 
   useEffect(() => {
-    if (!hasLiveKey || (apiKey && !isValidBrokApiKey(apiKey))) return
+    if (!hasLiveRuntime || (apiKey && !isValidBrokApiKey(apiKey))) return
     void refreshVersions(apiKey)
-  }, [apiKey, hasLiveKey, refreshVersions, syncSessionId])
+  }, [apiKey, hasLiveRuntime, refreshVersions, syncSessionId])
 
   useEffect(() => {
-    if (!hasLiveKey || (apiKey && !isValidBrokApiKey(apiKey))) return
+    if (!hasLiveRuntime || (apiKey && !isValidBrokApiKey(apiKey))) return
 
     const timer = window.setInterval(() => {
       void refreshSyncedSessions(apiKey)
     }, 5000)
 
     return () => window.clearInterval(timer)
-  }, [apiKey, hasLiveKey, refreshSyncedSessions])
+  }, [apiKey, hasLiveRuntime, refreshSyncedSessions])
 
   async function appendSyncEvent({
     role,
@@ -1111,7 +1112,7 @@ export function BrokCodeApp({
     type: string
     metadata?: Record<string, unknown>
   }) {
-    if (!hasLiveKey) return
+    if (!hasLiveRuntime) return
 
     try {
       const response = await fetch('/api/brokcode/sessions', {
@@ -1505,7 +1506,7 @@ export function BrokCodeApp({
     previewUrl?: string | null
     prUrl?: string | null
   }) {
-    if (!hasLiveKey) return null
+    if (!hasLiveRuntime) return null
 
     try {
       const response = await fetch('/api/brokcode/versions', {
@@ -1886,8 +1887,8 @@ export function BrokCodeApp({
   }
 
   async function submitPullRequest() {
-    if (!hasLiveKey) {
-      setRuntimeError('Set a valid Brok API key before opening a PR.')
+    if (!hasLiveRuntime) {
+      setRuntimeError('Sign in before opening a PR.')
       return
     }
 
@@ -3096,7 +3097,7 @@ export function BrokCodeApp({
                             variant="outline"
                             size="sm"
                             className="h-9 gap-2"
-                            disabled={!hasLiveKey || syncLoading}
+                            disabled={!hasLiveRuntime || syncLoading}
                             onClick={() => {
                               void refreshSyncedSessions()
                             }}
@@ -3140,11 +3141,9 @@ export function BrokCodeApp({
                           variant="ghost"
                           size="sm"
                           className="h-7 gap-1 px-2 text-xs"
-                          disabled={!hasLiveKey}
+                          disabled={!hasLiveRuntime}
                           onClick={() => {
-                            if (apiKey) {
-                              void refreshRepoContext(apiKey)
-                            }
+                            void refreshRepoContext(apiKey)
                           }}
                         >
                           <RefreshCcw className="size-3.5" />

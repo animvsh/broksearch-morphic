@@ -62,6 +62,34 @@ export async function verifyBrokCodeRequestAuth(request: Request): Promise<{
   }
 }
 
+export async function resolveBrokCodeRequestAuth(
+  request: Request,
+  {
+    allowBrowserSession = false
+  }: {
+    allowBrowserSession?: boolean
+  } = {}
+) {
+  const auth = await verifyBrokCodeRequestAuth(request)
+  if (
+    auth.authResult.success ||
+    !allowBrowserSession ||
+    auth.authorization ||
+    auth.xApiKey ||
+    auth.apiKey
+  ) {
+    return auth
+  }
+
+  const browserSessionAuth = await getBrokCodeBrowserSessionAuth()
+  if (!browserSessionAuth) return auth
+
+  return {
+    ...auth,
+    authResult: browserSessionAuth
+  }
+}
+
 export async function getBrokCodeBrowserSessionAuth(): Promise<BrokCodeAuthResult | null> {
   const user = await getCurrentUser()
   if (!user) return null

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { unauthorizedResponse } from '@/lib/brok/auth'
 import {
   enforceBrokCodeAccountOwnership,
-  verifyBrokCodeRequestAuth
+  resolveBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 import {
   createBrokCodeVersion,
@@ -20,7 +20,9 @@ function jsonNoStore(body: unknown, init?: ResponseInit) {
 }
 
 export async function GET(request: NextRequest) {
-  const { authResult } = await verifyBrokCodeRequestAuth(request)
+  const { authResult } = await resolveBrokCodeRequestAuth(request, {
+    allowBrowserSession: true
+  })
   if (!authResult.success) {
     return unauthorizedResponse(authResult)
   }
@@ -36,7 +38,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { authResult } = await verifyBrokCodeRequestAuth(request)
+  const { authResult } = await resolveBrokCodeRequestAuth(request, {
+    allowBrowserSession: true
+  })
   if (!authResult.success) {
     return unauthorizedResponse(authResult)
   }

@@ -8,7 +8,7 @@ import { promisify } from 'node:util'
 import { unauthorizedResponse } from '@/lib/brok/auth'
 import {
   enforceBrokCodeAccountOwnership,
-  verifyBrokCodeRequestAuth
+  resolveBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 
 export const runtime = 'nodejs'
@@ -96,7 +96,9 @@ function jsonNoStore(body: unknown, init?: ResponseInit) {
 }
 
 export async function GET(request: NextRequest) {
-  const { authResult } = await verifyBrokCodeRequestAuth(request)
+  const { authResult } = await resolveBrokCodeRequestAuth(request, {
+    allowBrowserSession: true
+  })
   if (!authResult.success) {
     return unauthorizedResponse(authResult)
   }
