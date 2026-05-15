@@ -63,13 +63,17 @@ export async function GET(request: NextRequest) {
 
   const sessionId = request.nextUrl.searchParams.get('session_id')
   if (sessionId) {
-    const session = await getBrokCodeSession(sessionId)
+    const session = await getBrokCodeSession(sessionId, authResult.workspace.id)
     return jsonNoStore({
       session: filterSessionForWorkspace(session, authResult.workspace.id)
     })
   }
 
-  const sessions = (await listBrokCodeSessions())
+  const sessions = (
+    await listBrokCodeSessions({
+      workspaceId: authResult.workspace.id
+    })
+  )
     .map(session => filterSessionForWorkspace(session, authResult.workspace.id))
     .filter(session => Boolean(session))
   return jsonNoStore({ sessions })

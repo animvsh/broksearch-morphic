@@ -190,6 +190,96 @@ export const brokCodeRuntimeKeys = pgTable(
   })
 )
 
+export const brokCodeSessions = pgTable(
+  'brokcode_sessions',
+  {
+    rowId: text('row_id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    title: text('title').notNull(),
+    sources: jsonb('sources').default([]).notNull(),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => ({
+    workspaceSessionUniqueIdx: uniqueIndex(
+      'brokcode_sessions_workspace_session_unique_idx'
+    ).on(table.workspaceId, table.sessionId),
+    workspaceIdx: index('brokcode_sessions_workspace_idx').on(
+      table.workspaceId
+    ),
+    userIdx: index('brokcode_sessions_user_idx').on(table.userId),
+    updatedAtIdx: index('brokcode_sessions_updated_at_idx').on(table.updatedAt)
+  })
+)
+
+export const brokCodeSessionEvents = pgTable(
+  'brokcode_session_events',
+  {
+    id: text('id').primaryKey(),
+    sessionRowId: text('session_row_id')
+      .references(() => brokCodeSessions.rowId)
+      .notNull(),
+    sessionId: text('session_id').notNull(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    source: text('source').notNull(),
+    role: text('role').notNull(),
+    type: text('type').notNull(),
+    content: text('content').notNull(),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => ({
+    sessionRowIdx: index('brokcode_session_events_session_row_idx').on(
+      table.sessionRowId
+    ),
+    sessionIdx: index('brokcode_session_events_session_idx').on(
+      table.sessionId
+    ),
+    workspaceIdx: index('brokcode_session_events_workspace_idx').on(
+      table.workspaceId
+    ),
+    createdAtIdx: index('brokcode_session_events_created_at_idx').on(
+      table.createdAt
+    )
+  })
+)
+
+export const brokCodeVersions = pgTable(
+  'brokcode_versions',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').notNull(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    command: text('command').notNull(),
+    summary: text('summary').notNull(),
+    runtime: text('runtime').notNull(),
+    status: text('status').notNull(),
+    previewUrl: text('preview_url'),
+    branch: text('branch'),
+    commitSha: text('commit_sha'),
+    prUrl: text('pr_url'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => ({
+    workspaceIdx: index('brokcode_versions_workspace_idx').on(
+      table.workspaceId
+    ),
+    sessionIdx: index('brokcode_versions_session_idx').on(table.sessionId),
+    createdAtIdx: index('brokcode_versions_created_at_idx').on(table.createdAt)
+  })
+)
+
 export const brokMailApprovalConsumptions = pgTable(
   'brokmail_approval_consumptions',
   {
@@ -215,7 +305,9 @@ export const brokMailApprovalConsumptions = pgTable(
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
   apiKeys: many(apiKeys),
   usageEvents: many(usageEvents),
-  brokCodeRuntimeKeys: many(brokCodeRuntimeKeys)
+  brokCodeRuntimeKeys: many(brokCodeRuntimeKeys),
+  brokCodeSessions: many(brokCodeSessions),
+  brokCodeVersions: many(brokCodeVersions)
 }))
 
 export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
@@ -236,6 +328,41 @@ export const brokCodeRuntimeKeysRelations = relations(
     apiKey: one(apiKeys, {
       fields: [brokCodeRuntimeKeys.apiKeyId],
       references: [apiKeys.id]
+    })
+  })
+)
+
+export const brokCodeSessionsRelations = relations(
+  brokCodeSessions,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [brokCodeSessions.workspaceId],
+      references: [workspaces.id]
+    }),
+    events: many(brokCodeSessionEvents)
+  })
+)
+
+export const brokCodeSessionEventsRelations = relations(
+  brokCodeSessionEvents,
+  ({ one }) => ({
+    session: one(brokCodeSessions, {
+      fields: [brokCodeSessionEvents.sessionRowId],
+      references: [brokCodeSessions.rowId]
+    }),
+    workspace: one(workspaces, {
+      fields: [brokCodeSessionEvents.workspaceId],
+      references: [workspaces.id]
+    })
+  })
+)
+
+export const brokCodeVersionsRelations = relations(
+  brokCodeVersions,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [brokCodeVersions.workspaceId],
+      references: [workspaces.id]
     })
   })
 )

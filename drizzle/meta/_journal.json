@@ -183,6 +183,13 @@
       "when": 1778802600000,
       "tag": "0025_usage_events_brokcode_dimensions",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1778868000000,
+      "tag": "0026_brokcode_durable_sessions",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,9 @@
+import { and, desc, eq } from 'drizzle-orm'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+
+import { db } from '@/lib/db'
+import { brokCodeSessionEvents, brokCodeSessions } from '@/lib/db/schema-brok'
 
 export type BrokCodeSessionSource = 'cloud' | 'tui' | 'api'
 export type BrokCodeSessionRole = 'user' | 'assistant' | 'system'
@@ -47,6 +51,63 @@ function createId(prefix: string) {
     .slice(2, 8)}`
 }
 
+function createSessionRowId(workspaceId: string, sessionId: string) {
+  return `sess_${workspaceId}_${sessionId}`.replace(/[^a-zA-Z0-9._:-]/g, '-')
+}
+
+function canUseDatabaseStore() {
+  return (
+    process.env.BROKCODE_SYNC_STORAGE !== 'file' && !!process.env.DATABASE_URL
+  )
+}
+
+function toIso(value: Date | string) {
+  return value instanceof Date
+    ? value.toISOString()
+    : new Date(value).toISOString()
+}
+
+function sourcesFrom(value: unknown): BrokCodeSessionSource[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((source): source is BrokCodeSessionSource =>
+    ['cloud', 'tui', 'api'].includes(source)
+  )
+}
+
+function workspaceIdFrom(metadata?: Record<string, unknown>) {
+  return typeof metadata?.workspaceId === 'string' ? metadata.workspaceId : null
+}
+
+function userIdFrom(metadata?: Record<string, unknown>) {
+  return typeof metadata?.userId === 'string' ? metadata.userId : null
+}
+
+function buildSessionFromRows({
+  session,
+  events
+}: {
+  session: typeof brokCodeSessions.$inferSelect
+  events: (typeof brokCodeSessionEvents.$inferSelect)[]
+}): BrokCodeSession {
+  return {
+    id: session.sessionId,
+    title: session.title,
+    sources: sourcesFrom(session.sources),
+    createdAt: toIso(session.createdAt),
+    updatedAt: toIso(session.updatedAt),
+    events: events.map(event => ({
+      id: event.id,
+      sessionId: event.sessionId,
+      source: event.source as BrokCodeSessionSource,
+      role: event.role as BrokCodeSessionRole,
+      type: event.type,
+      content: event.content,
+      createdAt: toIso(event.createdAt),
+      ...(event.metadata ? { metadata: event.metadata } : {})
+    }))
+  }
+}
+
 function sanitizeSessionId(value: unknown) {
   if (typeof value !== 'string' || !value.trim()) {
     return 'default'
@@ -84,13 +145,83 @@ async function writeStore(store: BrokCodeSessionFile) {
   await writeFile(filePath, JSON.stringify(store, null, 2), 'utf8')
 }
 
-export async function listBrokCodeSessions() {
+export async function listBrokCodeSessions({
+  workspaceId
+}: {
+  workspaceId?: string
+} = {}) {
+  if (canUseDatabaseStore()) {
+    try {
+      const rows = await db
+        .select()
+        .from(brokCodeSessions)
+        .where(
+          workspaceId
+            ? eq(brokCodeSessions.workspaceId, workspaceId)
+            : undefined
+        )
+        .orderBy(desc(brokCodeSessions.updatedAt))
+        .limit(MAX_SESSIONS)
+
+      return Promise.all(
+        rows.map(async session => {
+          const events = await db
+            .select()
+            .from(brokCodeSessionEvents)
+            .where(eq(brokCodeSessionEvents.sessionRowId, session.rowId))
+            .orderBy(brokCodeSessionEvents.createdAt)
+            .limit(MAX_EVENTS_PER_SESSION)
+
+          return buildSessionFromRows({ session, events })
+        })
+      )
+    } catch (error) {
+      console.error('BrokCode session DB list failed; using file store:', error)
+    }
+  }
+
   const store = await readStore()
   return store.sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }
 
-export async function getBrokCodeSession(sessionId: string) {
+export async function getBrokCodeSession(
+  sessionId: string,
+  workspaceId?: string
+) {
   const id = sanitizeSessionId(sessionId)
+  if (canUseDatabaseStore()) {
+    try {
+      const [session] = await db
+        .select()
+        .from(brokCodeSessions)
+        .where(
+          workspaceId
+            ? and(
+                eq(brokCodeSessions.sessionId, id),
+                eq(brokCodeSessions.workspaceId, workspaceId)
+              )
+            : eq(brokCodeSessions.sessionId, id)
+        )
+        .limit(1)
+
+      if (!session) return null
+
+      const events = await db
+        .select()
+        .from(brokCodeSessionEvents)
+        .where(eq(brokCodeSessionEvents.sessionRowId, session.rowId))
+        .orderBy(brokCodeSessionEvents.createdAt)
+        .limit(MAX_EVENTS_PER_SESSION)
+
+      return buildSessionFromRows({ session, events })
+    } catch (error) {
+      console.error(
+        'BrokCode session DB lookup failed; using file store:',
+        error
+      )
+    }
+  }
+
   const store = await readStore()
   return store.sessions.find(session => session.id === id) ?? null
 }
@@ -112,6 +243,75 @@ export async function appendBrokCodeSessionEvent({
   title?: string
   metadata?: Record<string, unknown>
 }) {
+  const workspaceId = workspaceIdFrom(metadata)
+  const userId = userIdFrom(metadata)
+  if (canUseDatabaseStore() && workspaceId && userId) {
+    try {
+      const id = sanitizeSessionId(sessionId)
+      const rowId = createSessionRowId(workspaceId, id)
+      const now = new Date()
+      const fallbackTitle =
+        content.trim().slice(0, 72) ||
+        (source === 'tui' ? 'Terminal session' : 'Cloud session')
+      const [existing] = await db
+        .select()
+        .from(brokCodeSessions)
+        .where(
+          and(
+            eq(brokCodeSessions.sessionId, id),
+            eq(brokCodeSessions.workspaceId, workspaceId)
+          )
+        )
+        .limit(1)
+      const sources = new Set(sourcesFrom(existing?.sources))
+      sources.add(source)
+
+      if (existing) {
+        await db
+          .update(brokCodeSessions)
+          .set({
+            title: sanitizeTitle(title, existing.title || fallbackTitle),
+            sources: Array.from(sources),
+            updatedAt: now
+          })
+          .where(eq(brokCodeSessions.rowId, existing.rowId))
+      } else {
+        await db.insert(brokCodeSessions).values({
+          rowId,
+          sessionId: id,
+          workspaceId,
+          userId,
+          title: sanitizeTitle(title, fallbackTitle),
+          sources: Array.from(sources),
+          createdAt: now,
+          updatedAt: now
+        })
+      }
+
+      await db.insert(brokCodeSessionEvents).values({
+        id: createId('event'),
+        sessionRowId: existing?.rowId ?? rowId,
+        sessionId: id,
+        workspaceId,
+        userId,
+        source,
+        role,
+        type: type?.trim() || 'message',
+        content: content.slice(0, MAX_CONTENT_LENGTH),
+        metadata,
+        createdAt: now
+      })
+
+      const session = await getBrokCodeSession(id, workspaceId)
+      if (session) return session
+    } catch (error) {
+      console.error(
+        'BrokCode session DB append failed; using file store:',
+        error
+      )
+    }
+  }
+
   const operation = writeQueue.then(async () => {
     const id = sanitizeSessionId(sessionId)
     const now = new Date().toISOString()
