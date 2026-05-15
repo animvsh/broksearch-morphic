@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Textarea from 'react-textarea-autosize'
 import { useRouter } from 'next/navigation'
 
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { generateId } from '@/lib/db/schema'
 import { SHORTCUT_EVENTS } from '@/lib/keyboard-shortcuts'
 import { UploadedFile } from '@/lib/types'
 import type { UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
@@ -79,6 +80,17 @@ type BackgroundTaskSummary = {
   updatedAt: string
   metadata?: {
     progress?: number
+    confidence?: 'low' | 'medium' | 'high'
+    researchPasses?: number
+    citationCount?: number
+    gaps?: string[]
+  }
+  result?: {
+    answer?: string
+    confidence?: 'low' | 'medium' | 'high'
+    citations?: Array<{ id: string; title: string; url: string }>
+    researchPlan?: Array<{ label: string; query: string }>
+    gaps?: string[]
   }
 }
 
@@ -110,6 +122,9 @@ export function ChatPanel({
   const [enterDisabled, setEnterDisabled] = useState(false) // Disable Enter after composition ends
   const [isInputFocused, setIsInputFocused] = useState(false) // Track input focus
   const [recentTasks, setRecentTasks] = useState<BackgroundTaskSummary[]>([])
+  const [insertedTaskIds, setInsertedTaskIds] = useState<Set<string>>(
+    () => new Set()
+  )
   const { close: closeArtifact } = useArtifact()
   const { value: searchMode, selectedMode } = useSearchMode()
   const isLoading = status === 'submitted' || status === 'streaming'
@@ -133,6 +148,17 @@ export function ChatPanel({
   })
   const activeTasks = recentTasks.filter(
     task => task.status === 'queued' || task.status === 'running'
+  )
+  const latestCompletedResearch = useMemo(
+    () =>
+      recentTasks.find(
+        task =>
+          task.kind === 'deep-research' &&
+          task.status === 'succeeded' &&
+          Boolean(task.result?.answer) &&
+          !insertedTaskIds.has(task.id)
+      ),
+    [insertedTaskIds, recentTasks]
   )
   const isDeepResearchMode = searchMode === 'deep'
 
@@ -301,6 +327,24 @@ export function ChatPanel({
     [loadRecentTasks]
   )
 
+  const addDeepResearchToChat = useCallback(
+    (task: BackgroundTaskSummary) => {
+      const answer = task.result?.answer?.trim()
+      if (!answer) return
+
+      setMessages([
+        ...messages,
+        {
+          id: generateId(),
+          role: 'assistant',
+          parts: [{ type: 'text', text: answer }]
+        } as UIMessage
+      ])
+      setInsertedTaskIds(prev => new Set(prev).add(task.id))
+    },
+    [messages, setMessages]
+  )
+
   // if query is not empty, submit the query
   useEffect(() => {
     if (isFirstRender.current && query && query.trim().length > 0) {
@@ -426,14 +470,18 @@ export function ChatPanel({
           </div>
         )}
 
-        {messages.length > 0 && activeTasks.length > 0 && (
+        {activeTasks.length > 0 && (
           <div className="mx-auto mb-2 max-w-3xl px-1">
             <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white/95 px-3 py-2 text-xs text-zinc-600 shadow-sm backdrop-blur">
               <span className="inline-flex min-w-0 items-center gap-2">
                 <Clock3 className="size-3.5 shrink-0" />
                 <span className="truncate">
                   {activeTasks.length === 1
-                    ? `${activeTasks[0].title} is still running`
+                    ? `${activeTasks[0].title} is still running${
+                        typeof activeTasks[0].metadata?.progress === 'number'
+                          ? ` - ${activeTasks[0].metadata.progress}%`
+                          : ''
+                      }`
                     : `${activeTasks.length} tasks are still running`}
                 </span>
               </span>
@@ -444,6 +492,50 @@ export function ChatPanel({
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        )}
+
+        {latestCompletedResearch && (
+          <div className="mx-auto mb-2 max-w-3xl px-1">
+            <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/80 px-3 py-2 text-xs text-emerald-950 shadow-sm backdrop-blur">
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <Brain className="size-3.5 shrink-0" />
+                  <span className="truncate">
+                    Deep research ready: {latestCompletedResearch.title}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-md bg-white/80 px-2 py-1 font-medium text-emerald-950 hover:bg-white"
+                  onClick={() => addDeepResearchToChat(latestCompletedResearch)}
+                >
+                  Add brief
+                </button>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-emerald-900/75">
+                {latestCompletedResearch.result?.confidence ||
+                latestCompletedResearch.metadata?.confidence ? (
+                  <span>
+                    Confidence:{' '}
+                    {latestCompletedResearch.result?.confidence ??
+                      latestCompletedResearch.metadata?.confidence}
+                  </span>
+                ) : null}
+                {typeof latestCompletedResearch.metadata?.citationCount ===
+                'number' ? (
+                  <span>
+                    Sources: {latestCompletedResearch.metadata.citationCount}
+                  </span>
+                ) : null}
+                {typeof latestCompletedResearch.metadata?.researchPasses ===
+                'number' ? (
+                  <span>
+                    Passes: {latestCompletedResearch.metadata.researchPasses}
+                  </span>
+                ) : null}
+              </div>
             </div>
           </div>
         )}

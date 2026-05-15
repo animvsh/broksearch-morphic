@@ -1,7 +1,10 @@
 import { after, NextResponse } from 'next/server'
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
-import { runSearchPipeline } from '@/lib/brok/search-pipeline'
+import {
+  DeepResearchCancelled,
+  runDeepResearch
+} from '@/lib/brok/deep-research'
 import {
   appendBackgroundTaskEvent,
   createBackgroundTask,
@@ -17,12 +20,6 @@ interface DeepResearchBody {
   query?: unknown
   recency_days?: unknown
   domains?: unknown
-}
-
-class DeepResearchCancelled extends Error {
-  constructor() {
-    super('Deep research task was cancelled.')
-  }
 }
 
 function taskTitle(query: string) {
@@ -67,25 +64,30 @@ async function runDeepResearchTask({
     await appendBackgroundTaskEvent({
       id: taskId,
       userId,
-      message: 'Planning deep research queries',
-      progress: 20
+      message: 'Planning deep research strategy',
+      progress: 10
     })
     await stopIfCancelled()
 
-    const result = await runSearchPipeline({
+    const result = await runDeepResearch({
       query,
-      depth: 'deep',
       recencyDays,
-      domains
+      domains,
+      shouldCancel: async () => {
+        await stopIfCancelled()
+        return false
+      },
+      onProgress: async event => {
+        await appendBackgroundTaskEvent({
+          id: taskId,
+          userId,
+          message: event.message,
+          progress: event.progress,
+          metadata: event.metadata
+        })
+      }
     })
     await stopIfCancelled()
-
-    await appendBackgroundTaskEvent({
-      id: taskId,
-      userId,
-      message: 'Synthesizing answer and citations',
-      progress: 90
-    })
 
     await updateBackgroundTask({
       id: taskId,
@@ -98,7 +100,11 @@ async function runDeepResearchTask({
         recencyDays,
         domains: domains ?? [],
         citationCount: result.citations.length,
-        searchQueries: result.searchQueryList
+        searchQueries: result.searchQueryList,
+        researchPlan: result.researchPlan,
+        confidence: result.confidence,
+        gaps: result.gaps,
+        researchPasses: result.usage.researchPasses
       },
       result: {
         answer: result.answer,
@@ -106,9 +112,14 @@ async function runDeepResearchTask({
         followUps: result.followUps,
         resolvedQuery: result.resolvedQuery,
         classification: result.classification,
+        researchPlan: result.researchPlan,
+        findings: result.findings,
+        gaps: result.gaps,
+        confidence: result.confidence,
         usage: {
-          searchQueries: result.searchQueries,
-          tokensUsed: result.tokensUsed
+          researchPasses: result.usage.researchPasses,
+          searchQueries: result.usage.searchQueries,
+          tokensUsed: result.usage.tokensUsed
         }
       }
     })
