@@ -4,12 +4,43 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 function resolveAllowedOrigins() {
+  const derivedPreviewUrls = [
+    process.env.BROKCODE_PREVIEW_URL,
+    process.env.BROKCODE_DEPLOY_PREVIEW_URL,
+    process.env.NEXT_PUBLIC_BROKCODE_PREVIEW_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.NEXT_PUBLIC_BASE_URL,
+    process.env.BASE_URL,
+    process.env.RAILWAY_PUBLIC_DOMAIN,
+    process.env.RAILWAY_STATIC_URL,
+    process.env.NEXT_PUBLIC_SITE_URL
+  ]
+
   return new Set(
-    (process.env.BROKCODE_PREVIEW_ALLOWED_ORIGINS ?? '')
-      .split(',')
-      .map(value => value.trim().replace(/\/+$/, ''))
-      .filter(Boolean)
+    [
+      ...(process.env.BROKCODE_PREVIEW_ALLOWED_ORIGINS ?? '')
+        .split(',')
+        .map(value => value.trim()),
+      ...derivedPreviewUrls
+    ]
+      .map(value => normalizeOrigin(value))
+      .filter((value): value is string => Boolean(value))
   )
+}
+
+function normalizeOrigin(value: unknown) {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim().replace(/\/+$/, '')
+  if (!trimmed) return null
+
+  try {
+    const withProtocol = /^https?:\/\//i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`
+    return new URL(withProtocol).origin
+  } catch {
+    return null
+  }
 }
 
 function isLocalPreviewHost(hostname: string) {
@@ -26,10 +57,11 @@ function canCheckLocalPreviewHost() {
   return process.env.NODE_ENV !== 'production'
 }
 
-function isAllowedPreviewUrl(url: URL) {
+function isAllowedPreviewUrl(url: URL, requestOrigin: string) {
   if (!['http:', 'https:'].includes(url.protocol)) return false
   if (url.pathname.startsWith('/brokcode')) return false
   if (isLocalPreviewHost(url.hostname)) return canCheckLocalPreviewHost()
+  if (url.origin === requestOrigin) return true
   return resolveAllowedOrigins().has(url.origin)
 }
 
@@ -64,7 +96,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  if (!isAllowedPreviewUrl(url)) {
+  if (!isAllowedPreviewUrl(url, request.nextUrl.origin)) {
     return jsonNoStore(
       {
         ok: false,

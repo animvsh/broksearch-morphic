@@ -181,6 +181,20 @@ function classifyCommandType(command: string) {
   return 'build'
 }
 
+function canUseGenericBrokFallback({
+  source,
+  commandType,
+  allowBrokFallback
+}: {
+  source?: string
+  commandType?: string
+  allowBrokFallback?: boolean
+}) {
+  if (allowBrokFallback) return true
+  if (source !== 'browser') return true
+  return commandType === 'verify' || commandType === 'security_scan'
+}
+
 function usageNumber(usage: unknown, keys: string[]) {
   if (!usage || typeof usage !== 'object') return 0
 
@@ -721,6 +735,42 @@ function createExecutionStream({
               messages,
               status: 'error',
               errorCode: 'brokcode_cloud_not_configured'
+            })
+            if (taskId) {
+              await updateBackgroundTask({
+                id: taskId,
+                userId: auth.apiKey.userId,
+                status: 'failed',
+                error: message
+              }).catch(error => {
+                console.error('Failed to mark BrokCode task failed:', error)
+              })
+            }
+            send('error', { message })
+            close()
+            return
+          }
+
+          if (
+            !canUseGenericBrokFallback({
+              source: usageContext.source,
+              commandType: usageContext.commandType
+            })
+          ) {
+            const message =
+              piFailure || opencodeFailure
+                ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} BrokCode Cloud could not complete this build/edit run.`
+                : 'BrokCode Cloud runtime is not available for build/edit runs.'
+            await recordCodeExecutionUsage({
+              ...usageContext,
+              auth,
+              requestId,
+              startTime,
+              model,
+              provider: 'BrokCode Cloud',
+              messages,
+              status: 'error',
+              errorCode: 'runtime_unavailable'
             })
             if (taskId) {
               await updateBackgroundTask({
@@ -1287,6 +1337,37 @@ export async function POST(request: NextRequest) {
   let content = ''
   let usage: unknown = null
   let responseModel = model
+
+  if (
+    !canUseGenericBrokFallback({
+      source: codeUsageContext.source,
+      commandType: codeUsageContext.commandType,
+      allowBrokFallback: body?.allow_brok_fallback === true
+    })
+  ) {
+    await recordCodeExecutionUsage({
+      ...codeUsageContext,
+      auth: authResult,
+      requestId,
+      startTime,
+      model,
+      provider: 'BrokCode Cloud',
+      messages,
+      status: 'error',
+      errorCode: 'runtime_unavailable'
+    })
+    return NextResponse.json(
+      {
+        error: {
+          type: 'runtime_error',
+          code: 'runtime_unavailable',
+          message:
+            'BrokCode Cloud runtime is required for browser build/edit runs.'
+        }
+      },
+      { status: 503 }
+    )
+  }
 
   const direct = await runDirectBrokRuntime({
     model,

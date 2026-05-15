@@ -6,7 +6,9 @@ import {
   unauthorizedResponse
 } from '@/lib/brok/auth'
 import {
+  BrokCodeAuthResult,
   enforceBrokCodeAccountOwnership,
+  getBrokCodeBrowserSessionAuth,
   verifyBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 
@@ -33,6 +35,62 @@ type GraphqlResponse<TData> = {
 type RailwayNode = {
   id: string
   name: string
+}
+
+function normalizeDeployPreviewUrl(value: unknown) {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  try {
+    const withProtocol = /^https?:\/\//i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`
+    const url = new URL(withProtocol)
+    if (!['http:', 'https:'].includes(url.protocol)) return null
+    return url.toString().replace(/\/$/, '')
+  } catch {
+    return null
+  }
+}
+
+function findPreviewUrlFromPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null
+  const record = payload as Record<string, unknown>
+  const direct =
+    normalizeDeployPreviewUrl(record.previewUrl) ??
+    normalizeDeployPreviewUrl(record.deploymentPreviewUrl) ??
+    normalizeDeployPreviewUrl(record.preview_url) ??
+    normalizeDeployPreviewUrl(record.deploymentUrl) ??
+    normalizeDeployPreviewUrl(record.deployment_url) ??
+    normalizeDeployPreviewUrl(record.url) ??
+    normalizeDeployPreviewUrl(record.domain)
+  if (direct) return direct
+
+  for (const value of Object.values(record)) {
+    if (value && typeof value === 'object') {
+      const nested = findPreviewUrlFromPayload(value)
+      if (nested) return nested
+    }
+  }
+
+  return null
+}
+
+function resolveDeployPreviewUrl(request: NextRequest, payload?: unknown) {
+  return (
+    findPreviewUrlFromPayload(payload) ??
+    normalizeDeployPreviewUrl(process.env.BROKCODE_PREVIEW_URL) ??
+    normalizeDeployPreviewUrl(process.env.BROKCODE_DEPLOY_PREVIEW_URL) ??
+    normalizeDeployPreviewUrl(process.env.NEXT_PUBLIC_BROKCODE_PREVIEW_URL) ??
+    normalizeDeployPreviewUrl(process.env.NEXT_PUBLIC_APP_URL) ??
+    normalizeDeployPreviewUrl(process.env.NEXT_PUBLIC_BASE_URL) ??
+    normalizeDeployPreviewUrl(process.env.BASE_URL) ??
+    normalizeDeployPreviewUrl(process.env.RAILWAY_PUBLIC_DOMAIN) ??
+    normalizeDeployPreviewUrl(process.env.RAILWAY_STATIC_URL) ??
+    normalizeDeployPreviewUrl(process.env.NEXT_PUBLIC_SITE_URL) ??
+    request.nextUrl.origin
+  )
 }
 
 function summarizeGraphqlErrors(errors: GraphqlError[] | undefined) {
@@ -314,17 +372,36 @@ async function triggerRailwayDeployment({
 }
 
 export async function POST(request: NextRequest) {
-  const { authResult } = await verifyBrokCodeRequestAuth(request)
+  const body = await request.json().catch(() => ({}))
+  const { authResult: verifiedAuthResult } =
+    await verifyBrokCodeRequestAuth(request)
+  let authResult = verifiedAuthResult
+  if (
+    !authResult.success &&
+    (body?.source === 'browser' || body?.browser_session === true)
+  ) {
+    authResult =
+      (await getBrokCodeBrowserSessionAuth()) ??
+      ({
+        success: false,
+        error: 'missing_authorization',
+        status: 401
+      } as typeof authResult)
+  }
+
   if (!authResult.success) {
     return unauthorizedResponse(authResult)
   }
-  const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
+  const successfulAuth = authResult as BrokCodeAuthResult
+  const accountMismatch = await enforceBrokCodeAccountOwnership(successfulAuth)
   if (accountMismatch) return accountMismatch
-  if (!apiKeyHasScope(authResult.apiKey, 'code:write')) {
+  if (
+    !successfulAuth.isBrowserSession &&
+    !apiKeyHasScope(successfulAuth.apiKey, 'code:write')
+  ) {
     return forbiddenScopeResponse('code:write')
   }
 
-  const body = await request.json().catch(() => ({}))
   const commitSha =
     typeof body?.commit_sha === 'string' ? body.commit_sha.trim() : null
 
@@ -341,7 +418,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         source: 'brokcode',
         requestedAt: new Date().toISOString(),
-        requestedByWorkspaceId: authResult.workspace.id,
+        requestedByWorkspaceId: successfulAuth.workspace.id,
         commitSha: commitSha || undefined
       })
     })
@@ -361,11 +438,15 @@ export async function POST(request: NextRequest) {
 
     const payload = await response.json().catch(() => null)
 
+    const previewUrl = resolveDeployPreviewUrl(request, payload)
+
     return NextResponse.json({
       status: 'triggered',
       strategy: 'webhook',
       message: 'Deployment triggered via configured webhook.',
-      deployment: payload
+      deployment: payload,
+      previewUrl,
+      deploymentPreviewUrl: previewUrl
     })
   }
 
@@ -402,12 +483,16 @@ export async function POST(request: NextRequest) {
       commitSha
     })
 
+    const previewUrl = resolveDeployPreviewUrl(request)
+
     return NextResponse.json({
       status: 'triggered',
       strategy: deployment.strategy,
       message: deployment.message,
       deploymentId: deployment.deploymentId,
-      railway: target
+      railway: target,
+      previewUrl,
+      deploymentPreviewUrl: previewUrl
     })
   } catch (error) {
     return NextResponse.json(

@@ -1229,6 +1229,15 @@ export function BrokCodeApp({
     setRuntimeError(null)
   }
 
+  function loadPreviewUrlIfAllowed(rawTarget: unknown) {
+    if (typeof rawTarget !== 'string') return null
+    const normalized = normalizePreviewUrl(rawTarget)
+    if (!normalized || isBrokCodeWorkspaceUrl(normalized)) return null
+
+    loadPreviewTarget(normalized)
+    return normalized
+  }
+
   function applyPreviewInput() {
     loadPreviewTarget(previewInput)
   }
@@ -1605,8 +1614,8 @@ export function BrokCodeApp({
   }
 
   async function deployBrokCodeCloud() {
-    if (!hasLiveKey) {
-      setRuntimeError('Set a valid Brok API key before deploying.')
+    if (!hasLiveRuntime) {
+      setRuntimeError('Sign in before deploying from BrokCode Cloud.')
       return
     }
 
@@ -1620,7 +1629,7 @@ export function BrokCodeApp({
           ...getAuthHeaders(apiKey),
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({})
+        body: JSON.stringify({ source: 'browser' })
       })
 
       const body = await response.json().catch(() => null)
@@ -1633,6 +1642,14 @@ export function BrokCodeApp({
         typeof body?.deploymentId === 'string' ? body.deploymentId : null
       const strategy =
         typeof body?.strategy === 'string' ? body.strategy : 'unknown'
+      const previewCandidate =
+        body?.previewUrl ??
+        body?.deploymentPreviewUrl ??
+        body?.deployment?.previewUrl ??
+        body?.deployment?.deploymentPreviewUrl ??
+        body?.deployment?.deploymentUrl ??
+        body?.deployment?.url
+      const loadedPreviewUrl = loadPreviewUrlIfAllowed(previewCandidate)
       const message =
         typeof body?.message === 'string'
           ? body.message
@@ -1643,10 +1660,14 @@ export function BrokCodeApp({
         {
           id: createId('assistant'),
           role: 'assistant',
-          content: `${message}\nStrategy: ${strategy}${deploymentId ? `\nDeployment ID: ${deploymentId}` : ''}`
+          content: `${message}\nStrategy: ${strategy}${deploymentId ? `\nDeployment ID: ${deploymentId}` : ''}${loadedPreviewUrl ? `\nPreview: ${loadedPreviewUrl}` : ''}`
         }
       ])
-      toast.success('Deployment triggered')
+      toast.success(
+        loadedPreviewUrl
+          ? 'Deployment triggered and preview loaded'
+          : 'Deployment triggered'
+      )
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Deployment failed to start.'
@@ -2204,11 +2225,7 @@ export function BrokCodeApp({
       })
 
       if (discoveredPreviewUrl) {
-        const normalized = normalizePreviewUrl(discoveredPreviewUrl)
-        if (normalized && !isBrokCodeWorkspaceUrl(normalized)) {
-          setPreviewUrl(normalized)
-          setPreviewInput(normalized)
-        }
+        loadPreviewUrlIfAllowed(discoveredPreviewUrl)
       }
 
       setMessages(current =>
@@ -2509,7 +2526,7 @@ export function BrokCodeApp({
                 <DropdownMenuLabel>Ship</DropdownMenuLabel>
                 <DropdownMenuItem
                   disabled={
-                    !hasLiveKey ||
+                    !hasLiveRuntime ||
                     isSubmittingPr ||
                     githubStatus !== 'connected'
                   }
@@ -2521,7 +2538,7 @@ export function BrokCodeApp({
                   {isSubmittingPr ? 'Opening PR...' : 'Open PR'}
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled={!hasLiveKey || isDeploying}
+                  disabled={!hasLiveRuntime || isDeploying}
                   onClick={() => {
                     void deployBrokCodeCloud()
                   }}
@@ -3197,7 +3214,7 @@ export function BrokCodeApp({
                             void submitPullRequest()
                           }}
                           disabled={
-                            !hasLiveKey ||
+                            !hasLiveRuntime ||
                             isSubmittingPr ||
                             githubStatus !== 'connected'
                           }
@@ -3215,7 +3232,7 @@ export function BrokCodeApp({
                           onClick={() => {
                             void deployBrokCodeCloud()
                           }}
-                          disabled={!hasLiveKey || isDeploying}
+                          disabled={!hasLiveRuntime || isDeploying}
                         >
                           {isDeploying ? (
                             <RefreshCcw className="size-4 animate-spin" />
@@ -3830,7 +3847,6 @@ function BrowserPreviewPanel({
             src={previewUrl}
             title="Brok Code browser preview"
             className="h-[360px] min-h-[360px] w-full bg-white lg:h-[calc(100vh-14rem)] lg:min-h-[520px]"
-            loading="lazy"
             referrerPolicy="no-referrer"
           />
         )}
