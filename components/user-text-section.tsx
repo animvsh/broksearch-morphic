@@ -148,7 +148,7 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
   return (
     <CollapsibleMessage role="user">
       <div
-        className="group relative w-full flex-1 break-words rounded-lg border border-zinc-200/70 bg-white/82 px-3 py-2.5 shadow-[0_12px_34px_-30px_rgba(15,23,42,0.45)] outline-hidden backdrop-blur-sm"
+        className="group relative ml-auto w-fit max-w-[88%] flex-1 break-words rounded-2xl border border-zinc-200/70 bg-white/86 px-3.5 py-2.5 shadow-[0_12px_34px_-30px_rgba(15,23,42,0.36)] outline-hidden backdrop-blur-sm"
         tabIndex={0}
       >
         {isEditing ? (

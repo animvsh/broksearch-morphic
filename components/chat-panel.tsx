@@ -327,19 +327,19 @@ export function ChatPanel({
       className={cn(
         'w-full group/form-container shrink-0',
         messages.length > 0
-          ? 'sticky bottom-0 bg-gradient-to-t from-background via-background/95 to-transparent px-4 pb-4 pt-4 md:px-6'
-          : 'mx-auto flex w-full max-w-4xl flex-col px-4 pb-8 pt-10 sm:px-6 md:pt-16'
+          ? 'sticky bottom-0 bg-gradient-to-t from-[#f7f7f8] via-[#f7f7f8]/96 to-transparent px-4 pb-4 pt-4 md:px-6'
+          : 'mx-auto flex w-full max-w-3xl flex-col px-4 pb-8 pt-12 sm:px-6 md:pt-20'
       )}
     >
       {uploadedFiles.length > 0 && (
         <UploadedFileList files={uploadedFiles} onRemove={handleFileRemove} />
       )}
       {messages.length === 0 && (
-        <div className="mx-auto mb-5 flex w-full max-w-3xl flex-col items-center text-center">
-          <div className="brand-mark brand-halo mb-3 size-11 rounded-full">
+        <div className="mx-auto mb-6 flex w-full max-w-3xl flex-col items-center text-center">
+          <div className="brand-mark brand-halo mb-3 size-10 rounded-full">
             <IconBlinkingLogo className="size-6" />
           </div>
-          <h1 className="text-balance text-2xl font-semibold tracking-normal text-zinc-950 sm:text-3xl">
+          <h1 className="text-balance text-3xl font-semibold tracking-normal text-zinc-950 sm:text-4xl">
             What are we working on?
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500">
@@ -359,7 +359,7 @@ export function ChatPanel({
           setIsInputFocused(false)
           inputRef.current?.blur()
         }}
-        className={cn('relative mx-auto w-full max-w-4xl')}
+        className={cn('relative mx-auto w-full max-w-3xl')}
       >
         {/* Scroll to bottom button */}
         {messages.length > 0 && (
@@ -398,7 +398,7 @@ export function ChatPanel({
         )}
         {messages.length > 0 && isLoading && (
           <div className="mx-auto mb-2 max-w-3xl px-1">
-            <div className="overflow-hidden rounded-xl border border-border/75 bg-card/95 px-3 py-2 shadow-[0_16px_44px_-36px_rgba(15,23,42,0.45)] backdrop-blur">
+            <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/88 px-3 py-2 shadow-[0_16px_42px_-38px_rgba(15,23,42,0.38)] backdrop-blur">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <IconBlinkingLogo className="size-3.5" />
                 <span className="inline-flex min-w-0 items-center gap-1">
@@ -449,7 +449,8 @@ export function ChatPanel({
             'smooth-composer morphic-surface relative flex w-full flex-col gap-2 overflow-hidden rounded-2xl backdrop-blur-xl transition-all duration-200',
             isLoading &&
               'border-zinc-300/90 shadow-[0_18px_48px_-40px_rgba(15,23,42,0.28)]',
-            isInputFocused && 'border-zinc-300 ring-4 ring-zinc-950/[0.028]'
+            isInputFocused &&
+              'border-zinc-300 shadow-[0_22px_62px_-46px_rgba(15,23,42,0.36)] ring-4 ring-zinc-950/[0.028]'
           )}
         >
           <div
@@ -476,7 +477,7 @@ export function ChatPanel({
             spellCheck={false}
             value={input}
             disabled={isLoading || isToolInvocationInProgress()}
-            className="min-h-12 w-full resize-none border-0 bg-transparent p-4 text-sm leading-6 placeholder:text-zinc-400 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 md:min-h-14 md:p-5"
+            className="min-h-14 w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-7 placeholder:text-zinc-400 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 md:min-h-16 md:p-5"
             onChange={handleInputChange}
             onKeyDown={e => {
               if (
@@ -505,7 +506,7 @@ export function ChatPanel({
           />
 
           {/* Bottom menu area */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100/90 bg-zinc-50/65 p-2.5 md:p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100/90 bg-white/48 p-2.5 md:p-3">
             <div className="flex items-center gap-2">
               <FileUploadButton
                 onFileSelect={files => {

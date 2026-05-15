@@ -49,15 +49,15 @@ export function FeatureRequestWidget() {
     <aside
       className={cn(
         'group fixed bottom-4 right-4 z-[90] transition-all duration-300 ease-out',
-        open ? 'w-[min(calc(100vw-2rem),340px)]' : 'w-11 hover:w-36'
+        open ? 'w-[min(calc(100vw-2rem),330px)]' : 'w-10 hover:w-32'
       )}
       aria-label="Feature request"
     >
       {open ? (
-        <div className="overflow-hidden rounded-lg border border-zinc-200/80 bg-white/96 shadow-[0_22px_70px_-50px_rgba(24,24,27,0.5)] backdrop-blur-xl">
+        <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/94 shadow-[0_22px_70px_-52px_rgba(24,24,27,0.5)] backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-3 py-2.5">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-zinc-950 text-white">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white">
                 <HelpCircle className="size-4" aria-hidden="true" />
               </span>
               <div className="min-w-0">
@@ -93,7 +93,7 @@ export function FeatureRequestWidget() {
                   value={request}
                   onChange={event => setRequest(event.target.value)}
                   placeholder="What should Brok do better?"
-                  className="min-h-24 resize-none rounded-lg border-zinc-200 bg-zinc-50/70 focus-visible:ring-zinc-300"
+                  className="min-h-24 resize-none rounded-xl border-zinc-200 bg-zinc-50/70 focus-visible:ring-zinc-300"
                   maxLength={4000}
                 />
                 <div className="mt-2 flex items-center justify-between gap-2">
@@ -118,13 +118,13 @@ export function FeatureRequestWidget() {
       ) : (
         <button
           type="button"
-          className="flex h-11 w-full items-center gap-2 overflow-hidden rounded-lg border border-zinc-200/80 bg-white/95 px-3 text-sm font-medium text-zinc-950 shadow-[0_16px_54px_-42px_rgba(24,24,27,0.52)] backdrop-blur transition-all duration-200 hover:border-zinc-300 hover:bg-white"
+          className="flex h-10 w-full items-center gap-2 overflow-hidden rounded-full border border-zinc-200/80 bg-white/88 px-2.5 text-sm font-medium text-zinc-950 shadow-[0_16px_54px_-44px_rgba(24,24,27,0.5)] backdrop-blur transition-all duration-200 hover:border-zinc-300 hover:bg-white"
           onClick={() => setOpen(true)}
           aria-label="Open feature request widget"
         >
           <HelpCircle className="size-5 shrink-0" aria-hidden="true" />
           <span className="whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-            Features
+            Features?
           </span>
         </button>
       )}

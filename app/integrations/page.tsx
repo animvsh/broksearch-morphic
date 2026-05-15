@@ -326,11 +326,11 @@ export default async function IntegrationsPage() {
 
   return (
     <div className="dashboard-shell min-h-full w-full p-3 sm:p-4">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-3">
         <section className="morphic-surface rounded-2xl px-4 py-4 sm:px-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-border/70 bg-white/70 px-2.5 py-1 text-xs text-muted-foreground">
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-zinc-200/80 bg-white/70 px-2.5 py-1 text-xs text-zinc-500">
                 <Link2 className="size-3.5" />
                 {providerLabel}
               </div>
@@ -342,22 +342,22 @@ export default async function IntegrationsPage() {
                 operate with approval.
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-3 lg:w-[520px]">
+            <div className="grid gap-2 sm:grid-cols-3 lg:w-[430px]">
               {statCards.map(card => {
                 const Icon = card.icon
                 return (
                   <div
                     key={card.label}
-                    className="rounded-xl border border-border/70 bg-white/70 p-3"
+                    className="rounded-xl border border-zinc-200/70 bg-white/68 px-3 py-2.5"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-zinc-500">
                         {card.label}
                       </span>
-                      <Icon className="size-4 text-muted-foreground" />
+                      <Icon className="size-3.5 text-zinc-400" />
                     </div>
                     <p className="mt-1 text-2xl font-semibold">{card.value}</p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">
                       {card.detail}
                     </p>
                   </div>
@@ -367,10 +367,10 @@ export default async function IntegrationsPage() {
           </div>
         </section>
 
-        <Card className="morphic-surface rounded-2xl border-border/70 shadow-none">
+        <Card className="morphic-surface rounded-2xl border-zinc-200/70 shadow-none">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Available Integrations</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-base">Available integrations</CardTitle>
+            <CardDescription className="text-sm">
               Featured configured toolkits appear first, followed by every
               toolkit returned by Composio.
             </CardDescription>
@@ -396,7 +396,7 @@ export default async function IntegrationsPage() {
           </CardContent>
         </Card>
 
-        <Card className="morphic-surface rounded-2xl border-border/70 shadow-none">
+        <Card className="morphic-surface rounded-2xl border-zinc-200/70 shadow-none">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Runtime Behavior</CardTitle>
           </CardHeader>

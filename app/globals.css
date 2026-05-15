@@ -497,7 +497,7 @@
     --accent: oklch(0.93 0.035 295);
     --accent-foreground: oklch(0.32 0.16 295);
     color: var(--foreground);
-    background: oklch(0.985 0.002 285);
+    background: linear-gradient(180deg, #ffffff 0%, #fafafa 42%, #f6f6f7 100%);
   }
 
   .dashboard-shell::before {
@@ -645,10 +645,12 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid color-mix(in oklab, var(--border) 88%, transparent);
+    border: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
     background: #ffffff;
     color: #09090b;
-    box-shadow: 0 10px 26px -24px rgba(9, 9, 11, 0.5);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.88) inset,
+      0 10px 26px -24px rgba(9, 9, 11, 0.42);
   }
 
   .brand-wordmark {
@@ -703,8 +705,8 @@
   .brand-halo {
     position: relative;
     box-shadow:
-      0 0 0 1px color-mix(in oklab, var(--border) 86%, transparent),
-      0 14px 30px -24px rgba(9, 9, 11, 0.42);
+      0 0 0 1px color-mix(in oklab, var(--border) 78%, transparent),
+      0 14px 34px -28px rgba(9, 9, 11, 0.34);
   }
 
   .brand-status-pulse {
@@ -803,19 +805,23 @@
   }
 
   .morphic-surface {
-    background: color-mix(in oklab, white 92%, var(--background));
-    border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
+    background: color-mix(in oklab, white 94%, var(--background));
+    border: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
     box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.82) inset,
-      0 12px 34px -30px rgba(15, 23, 42, 0.18);
+      0 1px 0 rgba(255, 255, 255, 0.9) inset,
+      0 22px 62px -54px rgba(15, 23, 42, 0.34);
   }
 
   .composio-connect-card {
     position: relative;
     overflow: hidden;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.86) inset;
+  }
+
+  .composio-connect-card:hover {
     box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.86) inset,
-      0 14px 38px -34px rgba(15, 23, 42, 0.22);
+      0 1px 0 rgba(255, 255, 255, 0.9) inset,
+      0 18px 46px -44px rgba(15, 23, 42, 0.32);
   }
 
   .composio-connect-card::before {

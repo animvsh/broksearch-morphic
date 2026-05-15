@@ -448,43 +448,44 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-2">
-      <div className="contents">
-        {tableRows.map(row => {
-          const current = rowsBySlug.get(row.slug) || row
+    <div className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200/70 bg-white/70">
+      {tableRows.map(row => {
+        const current = rowsBySlug.get(row.slug) || row
 
-          return (
-            <div
-              key={current.slug}
-              className={cn(
-                'composio-connect-card rounded-xl border border-border/70 bg-background/86 p-3 transition-all duration-200 hover:border-zinc-300 hover:bg-white/90',
-                current.featured ? 'ring-1 ring-primary/10' : '',
-                connectingToolkit === current.slug && 'is-connecting'
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
+        return (
+          <div
+            key={current.slug}
+            className={cn(
+              'composio-connect-card flex flex-col gap-3 bg-white/76 p-3 transition-all duration-200 hover:bg-white sm:flex-row sm:items-center sm:justify-between sm:p-4',
+              current.featured ? 'ring-1 ring-inset ring-primary/10' : '',
+              connectingToolkit === current.slug && 'is-connecting'
+            )}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-3 sm:hidden">
                 {renderRowSummary(current)}
                 {renderStatus(current)}
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                <div className="rounded-md bg-muted/40 p-2">
-                  <div className="text-muted-foreground">Toolkit</div>
-                  <div className="mt-1 break-all font-mono">{current.slug}</div>
-                </div>
-                <div className="rounded-md bg-muted/40 p-2">
-                  <div className="text-muted-foreground">Configs</div>
-                  <div className="mt-1">{current.authConfigCount}</div>
-                </div>
-                <div className="rounded-md bg-muted/40 p-2">
-                  <div className="text-muted-foreground">Accounts</div>
-                  <div className="mt-1">{current.connectedCount}</div>
-                </div>
+              <div className="hidden sm:block">{renderRowSummary(current)}</div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500">
+                <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 font-mono">
+                  {current.slug}
+                </span>
+                <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5">
+                  {current.authConfigCount} configs
+                </span>
+                <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5">
+                  {current.connectedCount} accounts
+                </span>
               </div>
-              <div className="mt-3">{renderActions(current)}</div>
             </div>
-          )
-        })}
-      </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">
+              <div className="hidden sm:block">{renderStatus(current)}</div>
+              {renderActions(current)}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
