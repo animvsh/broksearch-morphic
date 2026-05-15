@@ -739,7 +739,7 @@ export function BrokCodeApp({
       id: 'welcome',
       role: 'assistant',
       content:
-        'I am Brok Code. You are signed in, so the cloud chat is ready. Connect GitHub for repo work, or add a Brok API key when you want CLI/TUI sync and external agent access.'
+        'I am Brok Code. You are signed in, so browser runs are ready. Connect GitHub for repo work, or add a Brok API key only when you want CLI/TUI sync and external agent access.'
     }
   ])
 
@@ -874,7 +874,7 @@ export function BrokCodeApp({
     (apiKey && isValidBrokApiKey(apiKey)) || savedRuntimeKey
   )
   const hasAccountRuntime = Boolean(accountEmail)
-  const hasLiveRuntime = hasLiveKey
+  const hasLiveRuntime = hasAccountRuntime || hasLiveKey
   const maskedKey =
     apiKey && isValidBrokApiKey(apiKey)
       ? maskBrokApiKey(apiKey)
@@ -1572,7 +1572,9 @@ export function BrokCodeApp({
         checkMessages.push('- Usage endpoint check failed.')
       }
     } else {
-      checkMessages.push('- Usage endpoint skipped (no Brok key set).')
+      checkMessages.push(
+        '- Usage endpoint skipped for browser session (no CLI/TUI key set).'
+      )
     }
 
     if (modelsOk) {
@@ -2023,15 +2025,15 @@ export function BrokCodeApp({
       return
     }
 
-    if (!hasLiveKey) {
-      setRuntimeError('Add a Brok API key before starting a real run.')
+    if (!hasLiveRuntime) {
+      setRuntimeError('Sign in before starting a real BrokCode run.')
       setMessages(current => [
         ...current,
         {
           id: createId('system'),
           role: 'system',
           content:
-            'Real BrokCode execution requires a signed-in Brok account and an account-owned brok_sk_ API key. Create or paste your key, then run this command again.'
+            'Real BrokCode execution requires a signed-in Brok account. API keys are only needed for CLI/TUI sync and external agent access.'
         }
       ])
       return
@@ -2327,7 +2329,7 @@ export function BrokCodeApp({
         return
       }
 
-      if (!hasLiveKey) {
+      if (!hasLiveRuntime) {
         pendingCloudStartPromptRef.current = prompt
         setMessages(current => [
           ...current,
@@ -2335,7 +2337,7 @@ export function BrokCodeApp({
             id: createId('system'),
             role: 'system',
             content:
-              'BrokCode Cloud is queued. Sign in and add an account-owned Brok API key to start this cloud run.',
+              'BrokCode Cloud is queued. Sign in to start this browser run.',
             actions: ['connect-github']
           }
         ])
@@ -2352,14 +2354,13 @@ export function BrokCodeApp({
     autoStart,
     connectGithub,
     githubStatus,
-    hasLiveKey,
     hasLiveRuntime,
     initialPrompt,
     runtimeBootstrapped
   ])
 
   useEffect(() => {
-    if (!hasLiveKey || !hasLiveRuntime || isRunning) return
+    if (!hasLiveRuntime || isRunning) return
     if (connectGithub && githubStatus !== 'connected') return
 
     const prompt = pendingCloudStartPromptRef.current
@@ -2367,7 +2368,7 @@ export function BrokCodeApp({
 
     pendingCloudStartPromptRef.current = null
     void runCommandRef.current?.(buildCloudStartCommand(prompt, connectGithub))
-  }, [connectGithub, githubStatus, hasLiveKey, hasLiveRuntime, isRunning])
+  }, [connectGithub, githubStatus, hasLiveRuntime, isRunning])
 
   return (
     <div className="dashboard-shell brokcode-shell flex h-full w-full flex-col text-foreground">
@@ -2400,7 +2401,7 @@ export function BrokCodeApp({
               {hasLiveKey
                 ? 'Key ready'
                 : hasAccountRuntime
-                  ? 'Key required'
+                  ? 'Browser ready'
                   : 'Sign in required'}
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/70 px-2 py-1">
@@ -2532,7 +2533,7 @@ export function BrokCodeApp({
                   <KeyRound className="size-4" />
                   {hasLiveKey
                     ? `API key ${maskedKey ?? 'ready'}`
-                    : 'Add key in Setup'}
+                    : 'CLI/TUI key optional'}
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled>
                   <Globe className="size-4" />
@@ -2939,7 +2940,7 @@ export function BrokCodeApp({
                     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px] xl:items-end">
                       <div>
                         <Label htmlFor="brok-code-key" className="text-xs">
-                          Brok account API key
+                          Optional CLI/TUI API key
                           <span className="ml-1 font-normal text-muted-foreground">
                             encrypted key vault
                           </span>
@@ -3012,7 +3013,7 @@ export function BrokCodeApp({
                           ? savedRuntimeKey
                             ? `Using saved ${savedRuntimeKey.name} (${savedRuntimeKey.prefix})`
                             : `Using ${maskedKey}`
-                          : `Using signed-in account (${accountEmail})`}
+                          : `Browser runs use signed-in account (${accountEmail})`}
                       </p>
                       {savedRuntimeKey && (
                         <p className="mt-1 text-muted-foreground">

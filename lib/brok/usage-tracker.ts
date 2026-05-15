@@ -10,7 +10,7 @@ export interface UsageRecord {
   requestId: string
   workspaceId: string
   userId: string
-  apiKeyId: string
+  apiKeyId: string | null
   endpoint: 'chat' | 'search' | 'code' | 'agents'
   model: string
   provider: string

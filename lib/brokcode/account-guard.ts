@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import type { User } from '@supabase/supabase-js'
+import { asc, eq } from 'drizzle-orm'
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { type AuthResult, verifyRequestAuth } from '@/lib/brok/auth'
@@ -8,9 +9,16 @@ import {
   decryptRuntimeKey,
   getLatestSavedBrokCodeRuntimeKeyForUser
 } from '@/lib/brokcode/key-vault'
+import { db } from '@/lib/db'
+import { apiKeys, workspaces } from '@/lib/db/schema'
 
 const LOCAL_FALLBACK_API_KEY_ID = '00000000-0000-0000-0000-000000000001'
 const LOCAL_FALLBACK_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000'
+const BROWSER_SESSION_API_KEY_ID = '00000000-0000-0000-0000-000000000002'
+
+export type BrokCodeAuthResult = Extract<AuthResult, { success: true }> & {
+  isBrowserSession?: boolean
+}
 
 export async function getRequiredBrokAccountUser(): Promise<User | null> {
   return getCurrentUser()
@@ -54,9 +62,65 @@ export async function verifyBrokCodeRequestAuth(request: Request): Promise<{
   }
 }
 
+export async function getBrokCodeBrowserSessionAuth(): Promise<BrokCodeAuthResult | null> {
+  const user = await getCurrentUser()
+  if (!user) return null
+
+  const [existingWorkspace] = await db
+    .select()
+    .from(workspaces)
+    .where(eq(workspaces.ownerUserId, user.id))
+    .orderBy(asc(workspaces.createdAt))
+    .limit(1)
+
+  const workspace =
+    existingWorkspace ??
+    (
+      await db
+        .insert(workspaces)
+        .values({
+          name: 'Personal Workspace',
+          ownerUserId: user.id
+        })
+        .returning()
+    )[0]
+
+  if (!workspace || workspace.status !== 'active') {
+    return null
+  }
+
+  return {
+    success: true,
+    isBrowserSession: true,
+    apiKey: {
+      id: BROWSER_SESSION_API_KEY_ID,
+      workspaceId: workspace.id,
+      userId: user.id,
+      name: 'BrokCode Browser Session',
+      keyPrefix: 'browser_session',
+      keyHash: 'browser_session',
+      environment: 'live',
+      status: 'active',
+      scopes: ['code:write', 'agents:write', 'usage:read'],
+      allowedModels: [],
+      rpmLimit: 60,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: 0,
+      lastUsedAt: null,
+      createdAt: new Date(),
+      revokedAt: null
+    } satisfies typeof apiKeys.$inferSelect,
+    workspace
+  }
+}
+
 export async function enforceBrokCodeAccountOwnership(
-  authResult: Extract<AuthResult, { success: true }>
+  authResult: BrokCodeAuthResult
 ) {
+  if (authResult.isBrowserSession) {
+    return null
+  }
+
   const isLocalFallbackKey =
     authResult.apiKey.id === LOCAL_FALLBACK_API_KEY_ID ||
     authResult.workspace.id === LOCAL_FALLBACK_WORKSPACE_ID

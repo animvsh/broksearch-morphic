@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import {
   apiKeyHasScope,
-  AuthResult,
   forbiddenScopeResponse,
   unauthorizedResponse,
   verifyRequestAuth
@@ -16,7 +15,11 @@ import {
   recordUsage,
   usageLimitResponse
 } from '@/lib/brok/usage-tracker'
-import { enforceBrokCodeAccountOwnership } from '@/lib/brokcode/account-guard'
+import {
+  BrokCodeAuthResult,
+  enforceBrokCodeAccountOwnership,
+  getBrokCodeBrowserSessionAuth
+} from '@/lib/brokcode/account-guard'
 import {
   decryptRuntimeKey,
   getLatestSavedBrokCodeRuntimeKeyForUser
@@ -40,7 +43,7 @@ type OpenAiMessage = {
   content: string
 }
 
-type SuccessfulAuth = Extract<AuthResult, { success: true }>
+type SuccessfulAuth = BrokCodeAuthResult
 
 const DEFAULT_BROKCODE_MODEL = 'brok-code'
 
@@ -234,7 +237,7 @@ async function recordCodeExecutionUsage({
     requestId,
     workspaceId: auth.workspace.id,
     userId: auth.apiKey.userId,
-    apiKeyId: auth.apiKey.id,
+    apiKeyId: auth.isBrowserSession ? null : auth.apiKey.id,
     endpoint: 'code',
     model,
     provider,
@@ -877,6 +880,7 @@ export async function POST(request: NextRequest) {
   const xApiKey = request.headers.get('x-api-key')
   let inboundApiKey = xApiKey ?? extractBearerToken(request)
   let authRequest: Request = request
+  let browserSessionAuth: SuccessfulAuth | null = null
 
   if (!authorization && !xApiKey) {
     const user = await getCurrentUser()
@@ -891,24 +895,35 @@ export async function POST(request: NextRequest) {
           method: request.method,
           headers
         })
+      } else if (codeUsageContext.source === 'browser') {
+        browserSessionAuth = await getBrokCodeBrowserSessionAuth()
       }
     }
   }
 
-  const authResult = await verifyRequestAuth(authRequest)
+  const rawAuthResult =
+    browserSessionAuth ?? (await verifyRequestAuth(authRequest))
 
-  if (!authResult.success) {
-    return unauthorizedResponse(authResult)
+  if (!rawAuthResult.success) {
+    return unauthorizedResponse(rawAuthResult)
   }
 
+  const authResult: SuccessfulAuth = rawAuthResult
   const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
   if (accountMismatch) return accountMismatch
 
-  if (!apiKeyHasScope(authResult.apiKey, 'code:write')) {
+  if (
+    !authResult.isBrowserSession &&
+    !apiKeyHasScope(authResult.apiKey, 'code:write')
+  ) {
     return forbiddenScopeResponse('code:write')
   }
   const allowedModels = authResult.apiKey.allowedModels as string[]
-  if (allowedModels.length > 0 && !allowedModels.includes(model)) {
+  if (
+    !authResult.isBrowserSession &&
+    allowedModels.length > 0 &&
+    !allowedModels.includes(model)
+  ) {
     return NextResponse.json(
       {
         error: {
@@ -920,12 +935,14 @@ export async function POST(request: NextRequest) {
       { status: 403 }
     )
   }
-  const usageLimit = await checkUsageLimits({
-    apiKey: authResult.apiKey,
-    workspace: authResult.workspace
-  })
-  if (!usageLimit.allowed) {
-    return usageLimitResponse(usageLimit)
+  if (!authResult.isBrowserSession) {
+    const usageLimit = await checkUsageLimits({
+      apiKey: authResult.apiKey,
+      workspace: authResult.workspace
+    })
+    if (!usageLimit.allowed) {
+      return usageLimitResponse(usageLimit)
+    }
   }
 
   if (isDeepSecSecurityScanCommand(command)) {
