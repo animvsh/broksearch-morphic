@@ -89,22 +89,37 @@ function buildSessionFromRows({
   session: typeof brokCodeSessions.$inferSelect
   events: (typeof brokCodeSessionEvents.$inferSelect)[]
 }): BrokCodeSession {
+  const orderedEvents = [...events].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  )
+
   return {
     id: session.sessionId,
     title: session.title,
     sources: sourcesFrom(session.sources),
     createdAt: toIso(session.createdAt),
     updatedAt: toIso(session.updatedAt),
-    events: events.map(event => ({
-      id: event.id,
-      sessionId: event.sessionId,
-      source: event.source as BrokCodeSessionSource,
-      role: event.role as BrokCodeSessionRole,
-      type: event.type,
-      content: event.content,
-      createdAt: toIso(event.createdAt),
-      ...(event.metadata ? { metadata: event.metadata } : {})
-    }))
+    events: orderedEvents.map(event => {
+      const metadata = {
+        ...(event.metadata ?? {}),
+        workspaceId:
+          event.metadata?.workspaceId ??
+          event.workspaceId ??
+          session.workspaceId,
+        userId: event.metadata?.userId ?? event.userId ?? session.userId
+      }
+
+      return {
+        id: event.id,
+        sessionId: event.sessionId,
+        source: event.source as BrokCodeSessionSource,
+        role: event.role as BrokCodeSessionRole,
+        type: event.type,
+        content: event.content,
+        createdAt: toIso(event.createdAt),
+        metadata
+      }
+    })
   }
 }
 
@@ -169,7 +184,7 @@ export async function listBrokCodeSessions({
             .select()
             .from(brokCodeSessionEvents)
             .where(eq(brokCodeSessionEvents.sessionRowId, session.rowId))
-            .orderBy(brokCodeSessionEvents.createdAt)
+            .orderBy(desc(brokCodeSessionEvents.createdAt))
             .limit(MAX_EVENTS_PER_SESSION)
 
           return buildSessionFromRows({ session, events })
@@ -210,7 +225,7 @@ export async function getBrokCodeSession(
         .select()
         .from(brokCodeSessionEvents)
         .where(eq(brokCodeSessionEvents.sessionRowId, session.rowId))
-        .orderBy(brokCodeSessionEvents.createdAt)
+        .orderBy(desc(brokCodeSessionEvents.createdAt))
         .limit(MAX_EVENTS_PER_SESSION)
 
       return buildSessionFromRows({ session, events })

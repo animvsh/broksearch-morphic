@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { BrokCalendarEvent } from '@/lib/brokmail/google-calendar-client'
+import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
   executeComposioTool,
   isComposioConfigured,
@@ -58,25 +59,10 @@ function getString(value: unknown) {
 }
 
 function summarizeComposioToolError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
-
-  if (
-    message.includes('GOOGLECALENDAR_LIST_EVENTS') ||
-    message.includes('GOOGLE_CALENDAR_LIST_EVENTS') ||
-    /tool.+not found/i.test(message)
-  ) {
-    return 'Calendar event listing is not enabled for the active Composio toolkit.'
-  }
-
-  if (/connected account/i.test(message)) {
-    return 'The connected Google Calendar account could not be used. Reconnect Calendar and try again.'
-  }
-
-  if (/unauthorized|forbidden|permission/i.test(message)) {
-    return 'Google Calendar permission was denied. Reconnect Calendar with event read access.'
-  }
-
-  return 'Composio Calendar request failed.'
+  return summarizeBrokMailIntegrationError(
+    error,
+    'Composio Calendar request failed.'
+  )
 }
 
 function extractEvents(payload: unknown): Record<string, unknown>[] {

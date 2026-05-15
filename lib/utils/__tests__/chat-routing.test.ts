@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   getLatestUserMessage,
   getSimpleUtilityReplyForMessage,
+  hasUploadedFileContext,
   isSimpleUtilityText,
+  shouldForceInitialWebSearchForMessage,
   shouldForceSearchForText,
   shouldUseQuickReplyForMessage
 } from '../chat-routing'
@@ -64,6 +66,12 @@ describe('chat routing', () => {
     expect(shouldForceSearchForText('who is animesh alang')).toBe(true)
     expect(shouldForceSearchForText('search recent funding news')).toBe(true)
     expect(shouldForceSearchForText('https://example.com')).toBe(true)
+    expect(
+      shouldForceSearchForText('where else has his name been mentioned')
+    ).toBe(true)
+    expect(shouldForceSearchForText('should i invest in this founder')).toBe(
+      true
+    )
     expect(shouldForceSearchForText('test')).toBe(false)
     expect(shouldForceSearchForText('help me rewrite this paragraph')).toBe(
       false
@@ -82,6 +90,26 @@ describe('chat routing', () => {
         ]
       })
     ).toBe(false)
+
+    const message = {
+      role: 'user' as const,
+      parts: [
+        { type: 'text' as const, text: 'what is this' },
+        {
+          type: 'text' as const,
+          text: '<uploaded_file name="notes.pdf">private file text</uploaded_file>'
+        }
+      ]
+    }
+
+    expect(hasUploadedFileContext(message)).toBe(true)
+    expect(shouldForceInitialWebSearchForMessage(message)).toBe(false)
+    expect(
+      shouldForceInitialWebSearchForMessage({
+        role: 'user',
+        parts: [{ type: 'text', text: 'who is animesh alang' }]
+      })
+    ).toBe(true)
   })
 
   it('finds the newest user message', () => {

@@ -61,6 +61,22 @@ const SEARCH_CONFIG = {
   deep: { sources: 20, maxTokens: 32000, queries: 5 }
 }
 
+function getSearchFetchTimeoutMs() {
+  const configured = Number.parseInt(
+    process.env.BROK_SEARCH_TIMEOUT_MS || '',
+    10
+  )
+  return Number.isFinite(configured) && configured > 0 ? configured : 8000
+}
+
+function getAnswerSynthesisTimeoutMs() {
+  const configured = Number.parseInt(
+    process.env.BROK_SEARCH_SYNTHESIS_TIMEOUT_MS || '',
+    10
+  )
+  return Number.isFinite(configured) && configured > 0 ? configured : 10000
+}
+
 export async function runSearchPipeline(
   request: SearchRequest
 ): Promise<SearchResponse> {
@@ -241,6 +257,7 @@ async function searchDuckDuckGo(
   const response = await fetch(
     `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
     {
+      signal: AbortSignal.timeout(getSearchFetchTimeoutMs()),
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; BrokSearch/1.0)'
       }
@@ -423,6 +440,7 @@ async function synthesizeAnswerFromResults(
 
   const response = await fetch(`${MINIMAX_BASE_URL}/chat/completions`, {
     method: 'POST',
+    signal: AbortSignal.timeout(getAnswerSynthesisTimeoutMs()),
     headers: {
       Authorization: `Bearer ${MINIMAX_API_KEY}`,
       'Content-Type': 'application/json'

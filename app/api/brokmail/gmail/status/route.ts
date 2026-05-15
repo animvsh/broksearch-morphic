@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
   isComposioConfigured,
   isComposioConnectMode,
@@ -80,10 +81,10 @@ export async function GET() {
         configured: true,
         connected: false,
         provider: 'unavailable',
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Could not check Composio Gmail connection.'
+        message: summarizeBrokMailIntegrationError(
+          error,
+          'Could not check Composio Gmail connection.'
+        )
       },
       { status: 200 }
     )

@@ -12,7 +12,10 @@ import { ResearchProcessSection } from '../research-process-section'
 vi.mock('../reasoning-section', () => ({
   ReasoningSection: ({ content, isOpen, onOpenChange }: any) => (
     <div data-testid="reasoning-section">
-      <button onClick={() => onOpenChange(!isOpen)}>
+      <button
+        aria-label={isOpen ? 'Collapse' : 'Expand'}
+        onClick={() => onOpenChange(!isOpen)}
+      >
         {isOpen ? 'Close' : 'Open'} Reasoning
       </button>
       {isOpen && <div>{content.reasoning}</div>}
@@ -23,7 +26,10 @@ vi.mock('../reasoning-section', () => ({
 vi.mock('../tool-section', () => ({
   ToolSection: ({ tool, isOpen, onOpenChange }: any) => (
     <div data-testid="tool-section">
-      <button onClick={() => onOpenChange(!isOpen)}>
+      <button
+        aria-label={isOpen ? 'Collapse' : 'Expand'}
+        onClick={() => onOpenChange(!isOpen)}
+      >
         {isOpen ? 'Close' : 'Open'} Tool
       </button>
       {isOpen && <div>{tool.type}</div>}

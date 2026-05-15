@@ -29,21 +29,25 @@ export async function verifyBrokCodeRequestAuth(request: Request): Promise<{
   authorization: string | null
   xApiKey: string | null
   apiKey: string | null
+  usedSavedRuntimeKey: boolean
 }> {
   let authorization = request.headers.get('authorization')
   const xApiKey = request.headers.get('x-api-key')
+  const hasExplicitCredential = Boolean(authorization || xApiKey)
   let apiKey =
     xApiKey ??
     (authorization?.startsWith('Bearer ') ? authorization.slice(7) : null)
   let authRequest = request
+  let usedSavedRuntimeKey = false
 
-  if (!authorization && !xApiKey) {
+  if (!hasExplicitCredential) {
     const user = await getCurrentUser()
     if (user) {
       const savedKey = await getLatestSavedBrokCodeRuntimeKeyForUser(user.id)
       if (savedKey) {
         apiKey = decryptRuntimeKey(savedKey)
         authorization = `Bearer ${apiKey}`
+        usedSavedRuntimeKey = true
         const headers = new Headers(request.headers)
         headers.set('authorization', authorization)
         authRequest = new Request(request.url, {
@@ -58,7 +62,8 @@ export async function verifyBrokCodeRequestAuth(request: Request): Promise<{
     authResult: await verifyRequestAuth(authRequest),
     authorization,
     xApiKey,
-    apiKey
+    apiKey,
+    usedSavedRuntimeKey
   }
 }
 
@@ -70,6 +75,23 @@ export async function resolveBrokCodeRequestAuth(
     allowBrowserSession?: boolean
   } = {}
 ) {
+  const hasExplicitCredential = Boolean(
+    request.headers.get('authorization') || request.headers.get('x-api-key')
+  )
+
+  if (allowBrowserSession && !hasExplicitCredential) {
+    const browserSessionAuth = await getBrokCodeBrowserSessionAuth()
+    if (browserSessionAuth) {
+      return {
+        authResult: browserSessionAuth,
+        authorization: null,
+        xApiKey: null,
+        apiKey: null,
+        usedSavedRuntimeKey: false
+      }
+    }
+  }
+
   const auth = await verifyBrokCodeRequestAuth(request)
   if (
     auth.authResult.success ||

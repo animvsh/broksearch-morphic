@@ -373,21 +373,16 @@ async function triggerRailwayDeployment({
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}))
-  const { authResult: verifiedAuthResult } =
-    await verifyBrokCodeRequestAuth(request)
-  let authResult = verifiedAuthResult
-  if (
-    !authResult.success &&
-    (body?.source === 'browser' || body?.browser_session === true)
-  ) {
-    authResult =
-      (await getBrokCodeBrowserSessionAuth()) ??
-      ({
-        success: false,
-        error: 'missing_authorization',
-        status: 401
-      } as typeof authResult)
-  }
+  const hasExplicitCredential = Boolean(
+    request.headers.get('authorization') || request.headers.get('x-api-key')
+  )
+  const browserSessionRequested =
+    body?.source === 'browser' || body?.browser_session === true
+  const authResult =
+    !hasExplicitCredential && browserSessionRequested
+      ? ((await getBrokCodeBrowserSessionAuth()) ??
+        (await verifyBrokCodeRequestAuth(request)).authResult)
+      : (await verifyBrokCodeRequestAuth(request)).authResult
 
   if (!authResult.success) {
     return unauthorizedResponse(authResult)

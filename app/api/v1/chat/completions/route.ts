@@ -94,12 +94,7 @@ export async function POST(request: NextRequest) {
     tools,
     tool_choice
   } = body
-  const providerToolChoice =
-    typeof tool_choice === 'string'
-      ? tool_choice === 'none'
-        ? undefined
-        : { type: tool_choice }
-      : tool_choice
+  const providerToolChoice = normalizeProviderToolChoice(tool_choice)
   const providerTools = filterProviderTools(tools)
 
   if (typeof modelId !== 'string') {
@@ -439,7 +434,43 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function isWebSearchToolRequest(
+const WEB_SEARCH_TOOL_TYPES = new Set([
+  'web_search',
+  'web_search_preview',
+  'web_search_preview_2025_03_11'
+])
+
+export function isBrokWebSearchToolType(type: unknown) {
+  return typeof type === 'string' && WEB_SEARCH_TOOL_TYPES.has(type)
+}
+
+export function normalizeProviderToolChoice(
+  toolChoice?: string | { type?: string }
+) {
+  if (!toolChoice || toolChoice === 'none') {
+    return undefined
+  }
+
+  if (typeof toolChoice === 'string') {
+    if (toolChoice === 'auto' || toolChoice === 'required') {
+      return toolChoice
+    }
+
+    return isBrokWebSearchToolType(toolChoice)
+      ? undefined
+      : { type: toolChoice }
+  }
+
+  if (typeof toolChoice.type !== 'string') {
+    return undefined
+  }
+
+  return isBrokWebSearchToolType(toolChoice.type)
+    ? undefined
+    : (toolChoice as { type: string })
+}
+
+export function isWebSearchToolRequest(
   tools?: Array<{ type: string }>,
   toolChoice?: string | { type?: string }
 ) {
@@ -450,14 +481,21 @@ function isWebSearchToolRequest(
     return false
   }
 
-  return (
-    toolChoiceType === 'web_search' ||
-    tools?.some(tool => tool.type === 'web_search') === true
-  )
+  if (
+    toolChoiceType &&
+    toolChoiceType !== 'auto' &&
+    toolChoiceType !== 'required'
+  ) {
+    return isBrokWebSearchToolType(toolChoiceType)
+  }
+
+  return tools?.some(tool => isBrokWebSearchToolType(tool.type)) === true
 }
 
-function filterProviderTools(tools?: Array<{ type: string }>) {
-  const providerTools = tools?.filter(tool => tool.type !== 'web_search')
+export function filterProviderTools(tools?: Array<{ type: string }>) {
+  const providerTools = tools?.filter(
+    tool => !isBrokWebSearchToolType(tool.type)
+  )
   return providerTools && providerTools.length > 0 ? providerTools : undefined
 }
 

@@ -928,11 +928,16 @@ export async function POST(request: NextRequest) {
 
   let authorization = request.headers.get('authorization')
   const xApiKey = request.headers.get('x-api-key')
+  const hasExplicitCredential = Boolean(authorization || xApiKey)
   let inboundApiKey = xApiKey ?? extractBearerToken(request)
   let authRequest: Request = request
   let browserSessionAuth: SuccessfulAuth | null = null
 
-  if (!authorization && !xApiKey) {
+  if (!hasExplicitCredential && codeUsageContext.source === 'browser') {
+    browserSessionAuth = await getBrokCodeBrowserSessionAuth()
+  }
+
+  if (!hasExplicitCredential && !browserSessionAuth) {
     const user = await getCurrentUser()
     if (user) {
       const savedKey = await getLatestSavedBrokCodeRuntimeKeyForUser(user.id)
@@ -945,8 +950,6 @@ export async function POST(request: NextRequest) {
           method: request.method,
           headers
         })
-      } else if (codeUsageContext.source === 'browser') {
-        browserSessionAuth = await getBrokCodeBrowserSessionAuth()
       }
     }
   }

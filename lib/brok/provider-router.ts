@@ -23,12 +23,14 @@ export interface ProviderRequest {
       top_n?: number
     }
   }>
-  toolChoice?: {
-    type: string
-    web_search?: {
-      top_n?: number
-    }
-  }
+  toolChoice?:
+    | string
+    | {
+        type: string
+        web_search?: {
+          top_n?: number
+        }
+      }
 }
 
 export interface ProviderResponse {

@@ -4,6 +4,10 @@ import { randomUUID } from 'crypto'
 import { Langfuse } from 'langfuse'
 
 import { researcher } from '@/lib/agents/researcher'
+import {
+  getLatestUserMessage,
+  shouldForceInitialWebSearchForMessage
+} from '@/lib/utils/chat-routing'
 import { isTracingEnabled } from '@/lib/utils/telemetry'
 
 import {
@@ -85,7 +89,11 @@ export async function createEphemeralChatStreamResponse(
       modelConfig: model,
       parentTraceId,
       searchMode,
-      chatId
+      chatId,
+      forceInitialSearch:
+        searchMode === 'search' ||
+        (searchMode === 'quick' &&
+          shouldForceInitialWebSearchForMessage(getLatestUserMessage(messages)))
     })
 
     const result = await researchAgent.stream({

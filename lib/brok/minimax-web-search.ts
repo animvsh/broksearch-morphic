@@ -32,6 +32,14 @@ function getMiniMaxSearchUrl(): string {
   return `${host}/v1/coding_plan/search`
 }
 
+function getSearchTimeoutMs() {
+  const configured = Number.parseInt(
+    process.env.BROK_SEARCH_TIMEOUT_MS || '',
+    10
+  )
+  return Number.isFinite(configured) && configured > 0 ? configured : 8000
+}
+
 function normalizeOrganicResults(organic: unknown): MiniMaxWebSearchResult[] {
   if (!Array.isArray(organic)) {
     return []
@@ -59,6 +67,7 @@ export async function searchWithMiniMaxWebSearch(
 
   const response = await fetch(getMiniMaxSearchUrl(), {
     method: 'POST',
+    signal: AbortSignal.timeout(getSearchTimeoutMs()),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json'

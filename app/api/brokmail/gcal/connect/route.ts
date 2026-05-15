@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
   createConnectedAccountLink,
   isComposioConfigured
@@ -100,9 +101,7 @@ export async function POST(request: NextRequest) {
         )
       } catch (error) {
         errors.push(
-          `${toolkitSlug}: ${
-            error instanceof Error ? error.message : 'unknown error'
-          }`
+          `${toolkitSlug}: ${summarizeBrokMailIntegrationError(error, 'Could not create a Calendar connection link.')}`
         )
       }
     }
@@ -127,10 +126,10 @@ export async function POST(request: NextRequest) {
         provider: 'unavailable',
         connectionUrl: null,
         redirectUrl,
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Could not create Composio Calendar connection link.'
+        message: summarizeBrokMailIntegrationError(
+          error,
+          'Could not create Composio Calendar connection link.'
+        )
       },
       { status: 502 }
     )

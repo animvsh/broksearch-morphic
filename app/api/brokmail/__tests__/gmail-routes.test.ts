@@ -24,6 +24,7 @@ import {
 import { GET as getCalendarEvents } from '../gcal/events/route'
 import { POST as connectGmail } from '../gmail/connect/route'
 import { GET as getGmailStatus } from '../gmail/status/route'
+import { GET as getGmailThreads } from '../gmail/threads/route'
 
 describe('BrokMail Gmail routes', () => {
   beforeEach(() => {
@@ -245,5 +246,36 @@ describe('BrokMail Gmail routes', () => {
       'GOOGLE_CALENDAR_LIST_EVENTS'
     ])
     expect(executeComposioTool).toHaveBeenCalledTimes(2)
+  })
+
+  it('summarizes raw Gmail Composio tool failures before returning them', async () => {
+    vi.mocked(listConnectedAccounts).mockResolvedValue([
+      {
+        id: 'acct_gmail',
+        status: 'active',
+        toolkit_slug: 'gmail'
+      }
+    ] as any)
+    vi.mocked(executeComposioTool).mockRejectedValue(
+      new Error(
+        'Composio request failed (404): {"message":"Tool GMAIL_LIST_MESSAGES not found","request_id":"req_123"}'
+      )
+    )
+
+    const response = await getGmailThreads()
+    const body = await response.json()
+
+    expect(response.status).toBe(502)
+    expect(body.error).toContain('Could not load Gmail through Composio')
+    expect(body.error).toContain(
+      'Gmail is connected, but Composio mail sync is missing the right Gmail tool.'
+    )
+    expect(body.error).not.toContain('request_id')
+    expect(body.error).not.toContain('{')
+    expect(body.attemptedTools).toEqual([
+      'GMAIL_FETCH_EMAILS',
+      'GMAIL_LIST_MESSAGES',
+      'GMAIL_LIST_THREADS'
+    ])
   })
 })

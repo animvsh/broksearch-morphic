@@ -12,7 +12,7 @@ const SIMPLE_CHAT_PATTERNS = [
 
 const URL_PATTERN = /\bhttps?:\/\/\S+|\bwww\.\S+/i
 const SEARCH_INTENT_PATTERN =
-  /\b(search|look\s*up|find\s+(?:me\s+)?(?:sources|results|info|information|articles|news)|web|internet|sources?|latest|today|current|recent|who\s+is|what\s+is|where\s+is|when\s+is|founder|founded|company|startup|news|price|stock|weather|score|benchmark|research)\b/i
+  /\b(search|look\s*up|find\s+(?:me\s+)?(?:sources|results|info|information|articles|news)|web|internet|sources?|latest|today|current|recent|who\s+is|what\s+is|what\s+(?:companies|company|startups?)|where\s+(?:is|else)|when\s+is|founder|founded|company|startup|news|price|stock|weather|score|benchmark|research|invest|investment|traction|funding|mentioned)\b/i
 
 export function isSimpleUtilityText(text: string) {
   const normalized = text.trim()
@@ -29,6 +29,29 @@ export function shouldForceSearchForText(text: string | null | undefined) {
   return URL_PATTERN.test(normalized) || SEARCH_INTENT_PATTERN.test(normalized)
 }
 
+export function hasUploadedFileContext(
+  message: Pick<UIMessage, 'parts' | 'role'> | null | undefined
+) {
+  if (!message || message.role !== 'user') return false
+
+  return message.parts.some(part => {
+    if (part.type === 'text') {
+      return part.text.includes('<uploaded_file')
+    }
+
+    return part.type === 'file'
+  })
+}
+
+export function shouldForceInitialWebSearchForMessage(
+  message: Pick<UIMessage, 'parts' | 'role'> | null | undefined
+) {
+  if (!message || message.role !== 'user') return false
+  if (hasUploadedFileContext(message)) return false
+
+  return shouldForceSearchForText(getVisibleTextFromParts(message.parts))
+}
+
 export function shouldUseQuickReplyForMessage(
   message: Pick<UIMessage, 'parts' | 'role'> | null | undefined
 ) {
@@ -38,11 +61,9 @@ export function shouldUseQuickReplyForMessage(
   if (!text || URL_PATTERN.test(text)) return false
 
   const hasNonTextContext = message.parts.some(part => {
-    if (part.type === 'text') {
-      return part.text.includes('<uploaded_file')
-    }
-
-    return part.type !== 'step-start'
+    if (part.type === 'step-start') return false
+    if (part.type === 'text') return part.text.includes('<uploaded_file')
+    return true
   })
 
   if (hasNonTextContext) return false

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { MailThread } from '@/lib/brokmail/data'
+import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
   executeComposioTool,
   isComposioConfigured,
@@ -336,7 +337,7 @@ export async function GET() {
       })
     } catch (error) {
       errors.push(
-        `${toolSlug}: ${error instanceof Error ? error.message : 'unknown error'}`
+        `${toolSlug}: ${summarizeBrokMailIntegrationError(error, 'Composio Gmail request failed.')}`
       )
     }
   }
@@ -344,8 +345,10 @@ export async function GET() {
   return NextResponse.json(
     {
       error:
-        errors.at(-1) ??
-        'Composio Gmail tools did not return messages for this account.'
+        errors.length > 0
+          ? `Could not load Gmail through Composio. ${Array.from(new Set(errors.map(error => error.replace(/^[^:]+:\s*/, '')))).join(' ')}`
+          : 'Composio Gmail tools did not return messages for this account.',
+      attemptedTools: resolveFetchToolSlugs()
     },
     { status: 502 }
   )

@@ -12,6 +12,7 @@ import {
   verifyBrokMailApproval
 } from '@/lib/brokmail/action-approval'
 import { consumeBrokMailApproval } from '@/lib/brokmail/approval-consumption'
+import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
   executeComposioTool,
   isComposioConfigured,
@@ -325,7 +326,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       attempted.push({
         slug: toolSlug,
-        error: error instanceof Error ? error.message : 'Composio tool failed.'
+        error: summarizeBrokMailIntegrationError(error, 'Composio tool failed.')
       })
     }
   }

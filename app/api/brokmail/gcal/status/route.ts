@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
   isComposioConfigured,
   isComposioConnectMode,
@@ -88,10 +89,10 @@ export async function GET() {
         configured: true,
         connected: false,
         provider: isComposioConnectMode() ? 'composio-connect' : 'composio',
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Could not check Google Calendar connection.'
+        message: summarizeBrokMailIntegrationError(
+          error,
+          'Could not check Google Calendar connection.'
+        )
       },
       { status: 200 }
     )

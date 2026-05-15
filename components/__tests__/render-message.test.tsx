@@ -15,9 +15,9 @@ vi.mock('../answer-section', () => ({
 
 vi.mock('../research-process-section', () => ({
   __esModule: true,
-  default: ({ parts }: { parts: Array<{ type: string }> }) => (
+  default: ({ parts }: { parts: Array<{ text?: string; type: string }> }) => (
     <div data-testid="research-process">
-      {parts.map(part => part.type).join(',')}
+      {parts.map(part => part.text ?? part.type).join(',')}
     </div>
   )
 }))

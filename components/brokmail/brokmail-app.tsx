@@ -47,6 +47,7 @@ import {
   MailThread
 } from '@/lib/brokmail/data'
 import { BrokCalendarEvent } from '@/lib/brokmail/google-calendar-client'
+import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import { openComposioPopup } from '@/lib/composio-popup'
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
@@ -147,35 +148,17 @@ function cleanIntegrationError(
   message: unknown,
   fallback = 'This integration is not available right now.'
 ) {
-  if (typeof message !== 'string' || !message.trim()) return fallback
+  const summarized = summarizeBrokMailIntegrationError(message, fallback)
 
-  const text = message.trim()
-  const lower = text.toLowerCase()
-
-  if (
-    lower.includes('googlecalendar_list_events') ||
-    lower.includes('google_calendar_list_events') ||
-    (lower.includes('tool') && lower.includes('not found'))
-  ) {
-    return 'Calendar is connected, but Composio event sync is missing the right Calendar tool. Gmail can still be used.'
-  }
-
-  if (lower.includes('connect google calendar')) {
+  if (summarized.toLowerCase().includes('connect google calendar')) {
     return 'Connect Google Calendar through Composio to load events.'
   }
 
-  if (lower.includes('connect gmail')) {
+  if (summarized.toLowerCase().includes('connect gmail')) {
     return 'Connect Gmail through Composio to load your inbox.'
   }
 
-  if (lower.includes('composio request failed')) {
-    return fallback
-  }
-
-  return text
-    .replace(/\s*\{[\s\S]*$/, '')
-    .replace(/\s*\|[\s\S]*$/, '')
-    .slice(0, 180)
+  return summarized
 }
 
 function hasLabel(thread: MailThread, label: string) {
@@ -663,6 +646,7 @@ export function BrokMailApp() {
   })
 
   async function loadComposioGmailThreads() {
+    setIsSyncingMail(true)
     setConnectionStatus('Loading live Gmail through Composio...')
     try {
       const response = await fetch('/api/brokmail/gmail/threads')
@@ -679,7 +663,7 @@ export function BrokMailApp() {
         : []
 
       setThreads(liveThreads)
-      if (liveThreads[0]) setSelectedThreadId(liveThreads[0].id)
+      setSelectedThreadId(liveThreads[0]?.id)
       if (liveThreads.length) setView(preferredViewForThreads(liveThreads))
       setConnected(true)
       setConnectionMode('composio')
@@ -711,8 +695,11 @@ export function BrokMailApp() {
         'Could not load Gmail threads through Composio.'
       )
       setThreads([])
+      setSelectedThreadId(undefined)
       setConnectionStatus(message)
       toast.error(message)
+    } finally {
+      setIsSyncingMail(false)
     }
   }
 
@@ -1447,9 +1434,7 @@ export function BrokMailApp() {
           return
         }
       } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : 'Could not archive in Gmail.'
-        )
+        toast.error(cleanIntegrationError(error, 'Could not archive in Gmail.'))
         return
       }
       setThreads(current =>
@@ -1492,9 +1477,7 @@ export function BrokMailApp() {
         }
       } catch (error) {
         toast.error(
-          error instanceof Error
-            ? error.message
-            : 'Could not create Gmail draft.'
+          cleanIntegrationError(error, 'Could not create Gmail draft.')
         )
         return
       }
@@ -1524,9 +1507,7 @@ export function BrokMailApp() {
           return
         }
       } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : 'Could not create event.'
-        )
+        toast.error(cleanIntegrationError(error, 'Could not create event.'))
         return
       }
     }
@@ -1555,9 +1536,7 @@ export function BrokMailApp() {
           return
         }
       } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : 'Could not remove event.'
-        )
+        toast.error(cleanIntegrationError(error, 'Could not remove event.'))
         return
       }
     }
@@ -1967,6 +1946,7 @@ export function BrokMailApp() {
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />
                 <Input
+                  aria-label="Search BrokMail"
                   ref={searchInputRef}
                   value={query}
                   onChange={event => setQuery(event.target.value)}
@@ -2026,11 +2006,13 @@ export function BrokMailApp() {
                       )}
                     >
                       <button
+                        aria-label={`Open ${thread.subject} from ${thread.sender}`}
+                        data-selected={selectedThread?.id === thread.id}
                         className="block w-full px-3 py-3 text-left"
                         onClick={() => setSelectedThreadId(thread.id)}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <p
                                 className={cn(
@@ -2047,7 +2029,7 @@ export function BrokMailApp() {
                                 <Paperclip className="size-3.5 text-muted-foreground" />
                               )}
                             </div>
-                            <p className="mt-1 truncate text-sm font-medium">
+                            <p className="mt-1 line-clamp-2 text-sm font-medium leading-snug">
                               {thread.subject}
                             </p>
                           </div>
@@ -2826,6 +2808,8 @@ function CalendarEventList({
     <div className="space-y-2 p-2">
       {events.map(event => (
         <button
+          aria-label={`Open calendar event ${event.summary}`}
+          data-selected={selectedEventId === event.id}
           key={event.id}
           className={cn(
             'dashboard-card block w-full p-3 text-left transition-colors hover:bg-muted/70',
@@ -2833,7 +2817,9 @@ function CalendarEventList({
           )}
           onClick={() => onSelect(event.id)}
         >
-          <p className="truncate text-sm font-medium">{event.summary}</p>
+          <p className="line-clamp-2 text-sm font-medium leading-snug">
+            {event.summary}
+          </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {formatCalendarTimestamp(event.startAt, event.isAllDay)}
           </p>
