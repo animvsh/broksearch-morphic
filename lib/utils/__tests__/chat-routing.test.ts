@@ -4,6 +4,7 @@ import {
   getLatestUserMessage,
   getSimpleUtilityReplyForMessage,
   isSimpleUtilityText,
+  shouldForceSearchForText,
   shouldUseQuickReplyForMessage
 } from '../chat-routing'
 
@@ -57,6 +58,16 @@ describe('chat routing', () => {
         parts: [{ type: 'text', text: 'https://example.com' }]
       })
     ).toBe(false)
+  })
+
+  it('detects prompts that should force an initial web search', () => {
+    expect(shouldForceSearchForText('who is animesh alang')).toBe(true)
+    expect(shouldForceSearchForText('search recent funding news')).toBe(true)
+    expect(shouldForceSearchForText('https://example.com')).toBe(true)
+    expect(shouldForceSearchForText('test')).toBe(false)
+    expect(shouldForceSearchForText('help me rewrite this paragraph')).toBe(
+      false
+    )
   })
 
   it('does not downgrade uploaded-file questions', () => {

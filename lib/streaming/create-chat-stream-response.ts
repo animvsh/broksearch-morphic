@@ -8,12 +8,16 @@ import { isTracingEnabled } from '@/lib/utils/telemetry'
 
 import { loadChat } from '../actions/chat'
 import { generateChatTitle } from '../agents/title-generator'
+import { shouldForceSearchForText } from '../utils/chat-routing'
 import {
   getMaxAllowedTokens,
   shouldTruncateMessages,
   truncateMessages
 } from '../utils/context-window'
-import { getVisibleTextFromParts } from '../utils/message-utils'
+import {
+  getTextFromParts,
+  getVisibleTextFromParts
+} from '../utils/message-utils'
 import { perfLog, perfTime } from '../utils/perf-logging'
 
 import { persistStreamResults } from './helpers/persist-stream-results'
@@ -126,7 +130,11 @@ export async function createChatStreamResponse(
       parentTraceId,
       searchMode,
       userId,
-      chatId
+      chatId,
+      forceInitialSearch:
+        searchMode === 'search' ||
+        (searchMode === 'quick' &&
+          shouldForceSearchForText(getTextFromParts(message?.parts)))
     })
 
     // For OpenAI models, strip reasoning parts from UIMessages before conversion

@@ -118,7 +118,8 @@ export function createResearcher({
   parentTraceId,
   searchMode = 'deep',
   userId,
-  chatId
+  chatId,
+  forceInitialSearch = false
 }: {
   model: string
   modelConfig?: Model
@@ -126,6 +127,7 @@ export function createResearcher({
   searchMode?: SearchMode
   userId?: string
   chatId?: string
+  forceInitialSearch?: boolean
 }) {
   try {
     const currentDate = new Date().toLocaleString()
@@ -217,6 +219,16 @@ export function createResearcher({
       instructions: `${systemPrompt}\nCurrent date and time: ${currentDate}`,
       tools,
       activeTools: activeToolsList,
+      prepareStep: ({ stepNumber }) => {
+        if (forceInitialSearch && stepNumber === 0) {
+          return {
+            activeTools: ['search'],
+            toolChoice: { type: 'tool', toolName: 'search' }
+          }
+        }
+
+        return undefined
+      },
       stopWhen: stepCountIs(maxSteps),
       ...(modelConfig?.providerOptions && {
         providerOptions: modelConfig.providerOptions

@@ -22,9 +22,7 @@ function resolveAllowedOrigins() {
         .split(',')
         .map(value => value.trim()),
       ...derivedPreviewUrls
-    ]
-      .map(value => normalizeOrigin(value))
-      .filter((value): value is string => Boolean(value))
+    ].flatMap(value => originVariants(value))
   )
 }
 
@@ -41,6 +39,27 @@ function normalizeOrigin(value: unknown) {
   } catch {
     return null
   }
+}
+
+function originVariants(value: unknown) {
+  const origin = normalizeOrigin(value)
+  if (!origin) return []
+
+  const variants = new Set([origin])
+  try {
+    const url = new URL(origin)
+    if (url.hostname.startsWith('www.')) {
+      url.hostname = url.hostname.slice(4)
+      variants.add(url.origin)
+    } else if (!isLocalPreviewHost(url.hostname)) {
+      url.hostname = `www.${url.hostname}`
+      variants.add(url.origin)
+    }
+  } catch {
+    return [origin]
+  }
+
+  return [...variants]
 }
 
 function isLocalPreviewHost(hostname: string) {

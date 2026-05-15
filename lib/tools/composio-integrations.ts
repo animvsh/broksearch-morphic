@@ -65,6 +65,10 @@ const composioIntegrationInputSchema = z.object({
     .describe('Specific Composio connected account id to run the tool with.')
 })
 
+function canExecuteComposioAgentTools() {
+  return process.env.COMPOSIO_AGENT_EXECUTE_TOOLS === 'true'
+}
+
 export function createComposioIntegrationTool(userId?: string) {
   return tool({
     description:
@@ -156,6 +160,20 @@ export function createComposioIntegrationTool(userId?: string) {
         }
 
         if (action === 'execute_tool') {
+          if (!canExecuteComposioAgentTools()) {
+            yield {
+              state: 'complete' as const,
+              success: false,
+              configured: true,
+              action,
+              toolSlug: toolSlug || null,
+              approvalRequired: true,
+              message:
+                'Connected-app actions require an approval-safe product surface before Brok can execute them from chat. I can still inspect connection status or help prepare the action.'
+            }
+            return
+          }
+
           if (!userId) {
             yield {
               state: 'complete' as const,

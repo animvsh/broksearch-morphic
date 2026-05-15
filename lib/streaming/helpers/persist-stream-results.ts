@@ -3,6 +3,7 @@ import { UIMessage } from 'ai'
 import { createChatWithFirstMessage, upsertMessage } from '@/lib/actions/chat'
 import { updateChatTitle } from '@/lib/db/actions'
 import { SearchMode } from '@/lib/types/search'
+import { stripUploadedFileContext } from '@/lib/utils/message-utils'
 import { perfTime } from '@/lib/utils/perf-logging'
 import { retryDatabaseOperation } from '@/lib/utils/retry'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
@@ -12,7 +13,10 @@ const DEFAULT_CHAT_TITLE = 'Untitled'
 function sanitizeMessageTextParts(message: UIMessage): UIMessage {
   const parts = message.parts?.map(part => {
     if (part.type === 'text' && typeof part.text === 'string') {
-      return { ...part, text: stripThinkingBlocks(part.text) }
+      return {
+        ...part,
+        text: stripUploadedFileContext(stripThinkingBlocks(part.text))
+      }
     }
 
     return part

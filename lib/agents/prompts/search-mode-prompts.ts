@@ -118,7 +118,7 @@ Fetch tool usage:
 Composio integrations:
 - If the user asks to connect or check integrations (Gmail, GitHub, Slack, Linear, etc.), use the \`composioIntegrations\` tool.
 - Prefer \`status\` or \`list_connected_accounts\` first, then use \`create_connection_link\` when they ask to connect an account.
-- If the user asks you to do something through a connected app, use \`execute_tool\` with the relevant Composio tool slug, toolkit, and instruction. For risky external actions, prefer safe variants such as drafts over sending/deleting unless the user explicitly requested the action.
+- Connected-app actions may require product approval before execution. If \`execute_tool\` returns \`approvalRequired\`, explain that the action was prepared but not executed.
 
 Document artifacts:
 - If the user asks to create, draft, export, or generate a PDF, document, memo, report, brief, Markdown file, HTML file, or text file, use the \`documentArtifacts\` tool.
@@ -281,7 +281,7 @@ Fetch tool usage:
 Composio integrations:
 - If the user asks to connect, inspect, or enable third-party integrations, call the \`composioIntegrations\` tool.
 - For integration setup flow, run \`status\` (or \`list_connected_accounts\`) first, then \`create_connection_link\` if the user needs a new OAuth connection.
-- If the user asks you to manipulate a connected app, call \`execute_tool\` with the relevant Composio tool slug, toolkit, and natural-language instruction. Prefer safe actions like creating drafts or preparing records unless the user explicitly requests an externally visible/destructive action.
+- Connected-app actions may require product approval before execution. If \`execute_tool\` returns \`approvalRequired\`, explain that the action was prepared but not executed.
 
 Document artifacts:
 - If the user asks to create, draft, export, or generate a PDF, document, memo, report, brief, Markdown file, HTML file, or text file, call the \`documentArtifacts\` tool.

@@ -13,6 +13,7 @@ import { mergeStreamdownSpecRenderer } from '@/lib/render/streamdown-spec'
 import type { SearchResultItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { processCitations } from '@/lib/utils/citation'
+import { stripUploadedFileContext } from '@/lib/utils/message-utils'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 import { CitationProvider } from './citation-context'
@@ -39,7 +40,7 @@ export function MarkdownMessage({
 }) {
   // Process citations to replace [number](#toolCallId) with [number](actual-url)
   const processedMessage = processCitations(
-    stripThinkingBlocks(message || ''),
+    stripUploadedFileContext(stripThinkingBlocks(message || '')),
     citationMaps || {}
   )
   const sanitizedMessage = processedMessage.replace(

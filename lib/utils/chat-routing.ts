@@ -11,12 +11,22 @@ const SIMPLE_CHAT_PATTERNS = [
 ]
 
 const URL_PATTERN = /\bhttps?:\/\/\S+|\bwww\.\S+/i
+const SEARCH_INTENT_PATTERN =
+  /\b(search|look\s*up|find\s+(?:me\s+)?(?:sources|results|info|information|articles|news)|web|internet|sources?|latest|today|current|recent|who\s+is|what\s+is|where\s+is|when\s+is|founder|founded|company|startup|news|price|stock|weather|score|benchmark|research)\b/i
 
 export function isSimpleUtilityText(text: string) {
   const normalized = text.trim()
   if (!normalized || URL_PATTERN.test(normalized)) return false
 
   return SIMPLE_CHAT_PATTERNS.some(pattern => pattern.test(normalized))
+}
+
+export function shouldForceSearchForText(text: string | null | undefined) {
+  const normalized = (text ?? '').trim()
+  if (!normalized) return false
+  if (isSimpleUtilityText(normalized)) return false
+
+  return URL_PATTERN.test(normalized) || SEARCH_INTENT_PATTERN.test(normalized)
 }
 
 export function shouldUseQuickReplyForMessage(

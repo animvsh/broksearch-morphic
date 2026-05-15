@@ -8,7 +8,22 @@ function parseList(value: string | undefined): string[] {
 }
 
 export async function requireAdminAccess() {
+  const adminUserIds = parseList(process.env.ADMIN_USER_IDS)
+  const adminEmails = parseList(process.env.ADMIN_EMAILS).map(email =>
+    email.toLowerCase()
+  )
+  const hasExplicitAdminAllowlist =
+    adminUserIds.length > 0 || adminEmails.length > 0
+
   if (process.env.ENABLE_AUTH === 'false') {
+    if (!hasExplicitAdminAllowlist && process.env.NODE_ENV === 'production') {
+      return {
+        ok: false as const,
+        status: 403,
+        error: 'Admin allowlist is required in production'
+      }
+    }
+
     return { ok: true as const, user: null }
   }
 
@@ -22,12 +37,15 @@ export async function requireAdminAccess() {
     }
   }
 
-  const adminUserIds = parseList(process.env.ADMIN_USER_IDS)
-  const adminEmails = parseList(process.env.ADMIN_EMAILS).map(email =>
-    email.toLowerCase()
-  )
+  if (!hasExplicitAdminAllowlist) {
+    if (process.env.NODE_ENV === 'production') {
+      return {
+        ok: false as const,
+        status: 403,
+        error: 'Admin allowlist is required in production'
+      }
+    }
 
-  if (adminUserIds.length === 0 && adminEmails.length === 0) {
     return { ok: true as const, user }
   }
 
