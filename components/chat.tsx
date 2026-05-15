@@ -74,6 +74,7 @@ export function Chat({
   }
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const isAtBottomRef = useRef(true)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [input, setInput] = useState('')
@@ -320,7 +321,9 @@ export function Chat({
     const updateIsAtBottom = () => {
       const { scrollTop, scrollHeight, clientHeight } = container
       const threshold = 50 // threshold in pixels
-      setIsAtBottom(scrollHeight - scrollTop - clientHeight < threshold)
+      const nextIsAtBottom = scrollHeight - scrollTop - clientHeight < threshold
+      isAtBottomRef.current = nextIsAtBottom
+      setIsAtBottom(nextIsAtBottom)
     }
 
     const handleScroll = () => {
@@ -344,11 +347,27 @@ export function Chat({
     const frame = requestAnimationFrame(() => {
       const { scrollTop, scrollHeight, clientHeight } = container
       const threshold = 50
-      setIsAtBottom(scrollHeight - scrollTop - clientHeight < threshold)
+      const nextIsAtBottom = scrollHeight - scrollTop - clientHeight < threshold
+      isAtBottomRef.current = nextIsAtBottom
+      setIsAtBottom(nextIsAtBottom)
     })
 
     return () => cancelAnimationFrame(frame)
   }, [messages])
+
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container || !isAtBottomRef.current) return
+
+    const frame = requestAnimationFrame(() => {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: status === 'streaming' ? 'auto' : 'smooth'
+      })
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [messages, status])
 
   // Scroll to the section when a new user message is sent
   useEffect(() => {
@@ -363,8 +382,14 @@ export function Chat({
         // If the last message is from user, find the corresponding section
         const sectionId = lastMessage.id
         requestAnimationFrame(() => {
+          const container = scrollContainerRef.current
           const sectionElement = document.getElementById(`section-${sectionId}`)
-          sectionElement?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          if (!container || !sectionElement) return
+
+          container.scrollTo({
+            top: Math.max(sectionElement.offsetTop - 16, 0),
+            behavior: 'smooth'
+          })
         })
       }
     }

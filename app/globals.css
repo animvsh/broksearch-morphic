@@ -812,6 +812,23 @@
       0 22px 62px -54px rgba(15, 23, 42, 0.34);
   }
 
+  .scroll-area,
+  .app-scroll-root,
+  #scroll-container,
+  .brokcode-shell .overflow-y-auto,
+  .brokmail-shell .overflow-y-auto,
+  .playground-shell .overflow-y-auto,
+  .dashboard-shell.overflow-y-auto {
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  #scroll-container {
+    overflow-anchor: auto;
+  }
+
   .composio-connect-card {
     position: relative;
     overflow: hidden;
