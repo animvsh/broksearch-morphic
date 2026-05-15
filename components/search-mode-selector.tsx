@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState } from 'react'
 
 import { Check, ChevronDown } from 'lucide-react'
 
@@ -11,11 +11,9 @@ import {
 } from '@/lib/config/search-modes'
 import { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
-import {
-  getCookie,
-  setCookie,
-  subscribeToCookieChange
-} from '@/lib/utils/cookies'
+import { getCookie, setCookie } from '@/lib/utils/cookies'
+
+import { useSearchMode } from '@/hooks/use-search-mode'
 
 import { Button } from './ui/button'
 import {
@@ -30,11 +28,7 @@ export function SearchModeSelector() {
   const visibleModeConfigs = SEARCH_MODE_CONFIGS.filter(
     config => config.value !== 'code'
   )
-  const value = useSyncExternalStore(
-    subscribeToCookieChange,
-    () => normalizeSearchMode(getCookie('searchMode')),
-    () => DEFAULT_SEARCH_MODE
-  )
+  const { value, selectedMode } = useSearchMode()
   const [openHoverCard, setOpenHoverCard] = useState<string | null>(null)
   const [justSelected, setJustSelected] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -69,7 +63,6 @@ export function SearchModeSelector() {
     }, 500)
   }
 
-  const selectedMode = visibleModeConfigs.find(config => config.value === value)
   const SelectedIcon = selectedMode?.icon
   const selectedIndex = Math.max(
     visibleModeConfigs.findIndex(config => config.value === value),
@@ -86,7 +79,7 @@ export function SearchModeSelector() {
             <Button
               variant="outline"
               size="sm"
-              className="text-xs rounded-full shadow-none gap-1 transition-all"
+              className="gap-1 rounded-full text-xs shadow-none transition-all"
             >
               {SelectedIcon && (
                 <SelectedIcon
@@ -99,7 +92,7 @@ export function SearchModeSelector() {
               <span className="text-xs font-medium">{selectedMode?.label}</span>
               <ChevronDown
                 className={cn(
-                  'size-3 ml-0.5 opacity-50 transition-transform duration-200',
+                  'ml-0.5 size-3 opacity-50 transition-transform duration-200',
                   dropdownOpen && 'rotate-180'
                 )}
               />
@@ -113,7 +106,7 @@ export function SearchModeSelector() {
                 <DropdownMenuItem
                   key={config.value}
                   onClick={() => handleModeSelect(config.value)}
-                  className="relative flex flex-col items-start gap-1 py-2 pl-8 pr-2 cursor-pointer focus:outline-none"
+                  className="relative flex cursor-pointer flex-col items-start gap-1 py-2 pl-8 pr-2 focus:outline-none"
                 >
                   {isSelected && (
                     <Check className="absolute left-2 top-2.5 size-4" />
@@ -124,7 +117,7 @@ export function SearchModeSelector() {
                     />
                     <span className="text-sm font-medium">{config.label}</span>
                   </div>
-                  <div className="flex flex-col gap-0.5 ml-6">
+                  <div className="ml-6 flex flex-col gap-0.5">
                     <span className="text-xs text-muted-foreground">
                       {config.description}
                     </span>
@@ -138,7 +131,7 @@ export function SearchModeSelector() {
 
       {/* Desktop Toggle */}
       <div className="hidden sm:block">
-        <div className="relative inline-flex items-center rounded-full bg-background border p-1">
+        <div className="relative inline-flex items-center rounded-full border border-zinc-200/80 bg-white/70 p-1 shadow-[0_10px_30px_-28px_rgba(24,24,27,0.42)] backdrop-blur">
           {/* Animated background indicator */}
           <div
             className="absolute inset-1 rounded-full bg-muted transition-all duration-200 ease-out"
@@ -171,7 +164,7 @@ export function SearchModeSelector() {
                       type="button"
                       onClick={() => handleModeSelect(config.value)}
                       className={cn(
-                        'relative z-10 flex-1 items-center justify-center rounded-full px-3 py-2 transition-colors duration-200',
+                        'relative z-10 inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition-colors duration-200',
                         isSelected
                           ? 'text-foreground'
                           : 'text-muted-foreground hover:text-foreground/80'
@@ -181,10 +174,13 @@ export function SearchModeSelector() {
                     >
                       <Icon
                         className={cn(
-                          'h-3.5 w-3.5 transition-colors',
+                          'size-3.5 shrink-0 transition-colors',
                           isSelected ? config.color : ''
                         )}
                       />
+                      <span className="hidden max-w-24 truncate lg:inline">
+                        {config.label}
+                      </span>
                     </button>
                   </HoverCardTrigger>
 

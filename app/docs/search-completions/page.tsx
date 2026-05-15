@@ -34,7 +34,7 @@ POST https://api.brok.ai/v1/search/completions
 - Faster response times
 - Best for simple factual queries
 
-### Deep Search
+### Deep Research
 - Returns 10-20 source citations
 - Comprehensive research synthesis
 - Best for complex research questions
@@ -259,7 +259,7 @@ export default function SearchCompletionsPage() {
           <li>Best for simple factual queries</li>
         </ul>
 
-        <h3>Deep Search</h3>
+        <h3>Deep Research</h3>
         <ul>
           <li>Returns 10-20 source citations</li>
           <li>Comprehensive research synthesis</li>

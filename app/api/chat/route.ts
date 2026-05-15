@@ -143,7 +143,7 @@ export async function POST(req: Request) {
       return new Response(
         JSON.stringify({
           error:
-            'Sign in to use Deep Search mode. Quick modes remain available without an account.',
+            'Sign in to use Deep Research mode. Quick modes remain available without an account.',
           mode: 'deep',
           authRequired: true
         }),

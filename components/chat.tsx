@@ -175,7 +175,7 @@ export function Chat({
 
         const details =
           parsedError.mode === 'deep'
-            ? 'The limit resets at midnight UTC. You can continue in Quick Answer, Search, or Code mode.'
+            ? 'The limit resets at midnight UTC. You can continue in Quick, Search, or Code mode.'
             : 'The limit resets at midnight UTC.'
 
         setErrorModal({

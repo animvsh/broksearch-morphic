@@ -23,9 +23,9 @@ const THEME_CYCLE: Record<Theme, Theme> = {
 }
 
 const SEARCH_MODE_LABELS: Record<SearchMode, string> = {
-  quick: 'Quick Answer',
+  quick: 'Quick',
   search: 'Search',
-  deep: 'Deep Search',
+  deep: 'Deep Research',
   code: 'Code'
 }
 

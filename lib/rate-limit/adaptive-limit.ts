@@ -135,7 +135,7 @@ export async function checkAndEnforceAdaptiveLimit(
     return new Response(
       JSON.stringify({
         error:
-          'Daily limit for Deep Search mode reached. Please try again tomorrow, or continue in Quick Answer, Search, or Code mode.',
+          'Daily limit for Deep Research mode reached. Please try again tomorrow, or continue in Quick, Search, or Code mode.',
         remaining: 0,
         resetAt: result.resetAt,
         limit: result.limit,

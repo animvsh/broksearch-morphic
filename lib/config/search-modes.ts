@@ -22,8 +22,8 @@ export const VALID_SEARCH_MODES: SearchMode[] = [
 export const SEARCH_MODE_CONFIGS: SearchModeConfig[] = [
   {
     value: 'quick',
-    label: 'Quick Answer',
-    description: 'Instant answer with minimal tool hops',
+    label: 'Quick',
+    description: 'Fast web-backed answers with minimal tool hops',
     icon: Zap,
     color: 'text-zinc-900'
   },
@@ -36,8 +36,9 @@ export const SEARCH_MODE_CONFIGS: SearchModeConfig[] = [
   },
   {
     value: 'deep',
-    label: 'Deep Search',
-    description: 'Deep research with comprehensive analysis',
+    label: 'Deep Research',
+    description:
+      'Longer research runs with broader search, source reading, and synthesis',
     icon: Brain,
     color: 'text-zinc-900'
   },

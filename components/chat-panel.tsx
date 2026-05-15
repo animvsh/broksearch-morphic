@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { UseChatHelpers } from '@ai-sdk/react'
 import {
   ArrowUp,
+  Brain,
   ChevronDown,
   Clock3,
   MessageCirclePlus,
@@ -22,6 +23,7 @@ import type { ModelSelectorData } from '@/lib/types/model-selector'
 import { cn } from '@/lib/utils'
 import { isSimpleUtilityText } from '@/lib/utils/chat-routing'
 
+import { useSearchMode } from '@/hooks/use-search-mode'
 import { useTypewriterCycle } from '@/hooks/use-typewriter-cycle'
 
 import { useArtifact } from './artifact/artifact-context'
@@ -109,6 +111,7 @@ export function ChatPanel({
   const [isInputFocused, setIsInputFocused] = useState(false) // Track input focus
   const [recentTasks, setRecentTasks] = useState<BackgroundTaskSummary[]>([])
   const { close: closeArtifact } = useArtifact()
+  const { value: searchMode, selectedMode } = useSearchMode()
   const isLoading = status === 'submitted' || status === 'streaming'
   const hasUploadedFiles = uploadedFiles.some(
     file => file.status === 'uploaded'
@@ -131,6 +134,7 @@ export function ChatPanel({
   const activeTasks = recentTasks.filter(
     task => task.status === 'queued' || task.status === 'running'
   )
+  const isDeepResearchMode = searchMode === 'deep'
 
   const loadRecentTasks = useCallback(async () => {
     if (isGuest) return
@@ -506,6 +510,26 @@ export function ChatPanel({
           />
 
           {/* Bottom menu area */}
+          {isDeepResearchMode && (
+            <div className="mx-2 mb-1 flex items-center justify-between gap-3 rounded-xl border border-zinc-200/70 bg-zinc-50/72 px-3 py-2 text-xs text-zinc-600 md:mx-3">
+              <span className="inline-flex min-w-0 items-center gap-2">
+                <Brain className="size-3.5 shrink-0 text-zinc-900" />
+                <span className="truncate">
+                  Deep Research reads more sources and may take longer.
+                </span>
+              </span>
+              {!isGuest && input.trim().length > 0 ? (
+                <button
+                  type="button"
+                  className="shrink-0 rounded-lg px-2 py-1 font-medium text-zinc-900 hover:bg-white"
+                  onClick={() => void startDeepResearch()}
+                  disabled={isLoading}
+                >
+                  Run in background
+                </button>
+              ) : null}
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100/90 bg-white/48 p-2.5 md:p-3">
             <div className="flex items-center gap-2">
               <FileUploadButton
@@ -514,7 +538,7 @@ export function ChatPanel({
                 }}
               />
               <SearchModeSelector />
-              {!isGuest && input.trim().length > 0 && (
+              {!isGuest && input.trim().length > 0 && !isDeepResearchMode && (
                 <Button
                   type="button"
                   variant="outline"
@@ -525,13 +549,15 @@ export function ChatPanel({
                   title="Run this as background deep research"
                 >
                   <Sparkles className="size-3.5 md:mr-1" />
-                  <span className="hidden md:inline">Research</span>
+                  <span className="hidden md:inline">
+                    {isDeepResearchMode ? 'Background' : 'Research'}
+                  </span>
                 </Button>
               )}
             </div>
             <div className="flex items-center gap-2">
               <span className="hidden text-[11px] text-muted-foreground md:inline">
-                Shift+Enter for newline
+                {selectedMode?.label || 'Quick'} mode
               </span>
               {!isCloudDeployment && modelSelectorData && (
                 <ModelSelectorClient data={modelSelectorData} />
