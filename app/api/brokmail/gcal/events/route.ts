@@ -57,6 +57,28 @@ function getString(value: unknown) {
   return typeof value === 'string' ? value : ''
 }
 
+function summarizeComposioToolError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+
+  if (
+    message.includes('GOOGLECALENDAR_LIST_EVENTS') ||
+    message.includes('GOOGLE_CALENDAR_LIST_EVENTS') ||
+    /tool.+not found/i.test(message)
+  ) {
+    return 'Calendar event listing is not enabled for the active Composio toolkit.'
+  }
+
+  if (/connected account/i.test(message)) {
+    return 'The connected Google Calendar account could not be used. Reconnect Calendar and try again.'
+  }
+
+  if (/unauthorized|forbidden|permission/i.test(message)) {
+    return 'Google Calendar permission was denied. Reconnect Calendar with event read access.'
+  }
+
+  return 'Composio Calendar request failed.'
+}
+
 function extractEvents(payload: unknown): Record<string, unknown>[] {
   if (!isRecord(payload)) return []
 
@@ -192,9 +214,7 @@ export async function GET() {
         events
       })
     } catch (error) {
-      errors.push(
-        `${toolSlug}: ${error instanceof Error ? error.message : 'unknown error'}`
-      )
+      errors.push(`${toolSlug}: ${summarizeComposioToolError(error)}`)
     }
   }
 
@@ -202,7 +222,7 @@ export async function GET() {
     {
       error:
         errors.length > 0
-          ? `Could not list Google Calendar events through Composio. ${errors.join(' | ')}`
+          ? `Could not list Google Calendar events through Composio. ${Array.from(new Set(errors.map(error => error.replace(/^[^:]+:\s*/, '')))).join(' ')}`
           : 'Composio Google Calendar list tools did not return events for this account.',
       attemptedTools: resolveEventToolSlugs()
     },

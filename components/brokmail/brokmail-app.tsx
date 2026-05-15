@@ -143,6 +143,41 @@ const sortOptions: Array<{ id: MailSortMode; label: string }> = [
   { id: 'sender', label: 'Sender' }
 ]
 
+function cleanIntegrationError(
+  message: unknown,
+  fallback = 'This integration is not available right now.'
+) {
+  if (typeof message !== 'string' || !message.trim()) return fallback
+
+  const text = message.trim()
+  const lower = text.toLowerCase()
+
+  if (
+    lower.includes('googlecalendar_list_events') ||
+    lower.includes('google_calendar_list_events') ||
+    (lower.includes('tool') && lower.includes('not found'))
+  ) {
+    return 'Calendar is connected, but Composio event sync is missing the right Calendar tool. Gmail can still be used.'
+  }
+
+  if (lower.includes('connect google calendar')) {
+    return 'Connect Google Calendar through Composio to load events.'
+  }
+
+  if (lower.includes('connect gmail')) {
+    return 'Connect Gmail through Composio to load your inbox.'
+  }
+
+  if (lower.includes('composio request failed')) {
+    return fallback
+  }
+
+  return text
+    .replace(/\s*\{[\s\S]*$/, '')
+    .replace(/\s*\|[\s\S]*$/, '')
+    .slice(0, 180)
+}
+
 function hasLabel(thread: MailThread, label: string) {
   const normalized = label.toLowerCase()
   return thread.labels.some(item => item.toLowerCase() === normalized)
@@ -671,10 +706,10 @@ export function BrokMailApp() {
         })
       }
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Could not load Gmail threads through Composio.'
+      const message = cleanIntegrationError(
+        error instanceof Error ? error.message : null,
+        'Could not load Gmail threads through Composio.'
+      )
       setThreads([])
       setConnectionStatus(message)
       toast.error(message)
@@ -715,13 +750,15 @@ export function BrokMailApp() {
         toast.success('Loaded live Calendar through Composio')
       return liveEvents
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Could not load Google Calendar events through Composio.'
+      const message = cleanIntegrationError(
+        error instanceof Error ? error.message : null,
+        'Could not load Google Calendar events through Composio.'
+      )
       setCalendarEvents([])
       setCalendarConnectionStatus(message)
-      toast.error(message)
+      toast.error('Calendar sync paused', {
+        description: message
+      })
       return []
     } finally {
       setIsSyncingCalendar(false)
@@ -1765,8 +1802,8 @@ export function BrokMailApp() {
           runPriorityBrief={runPriorityBrief}
         />
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col 2xl:flex-row">
-          <aside className="dashboard-rail hidden w-48 shrink-0 border-r border-zinc-200/80 bg-white/45 2xl:flex 2xl:flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
+          <aside className="dashboard-rail hidden w-56 shrink-0 border-r border-zinc-200/80 bg-white/58 lg:flex lg:flex-col">
             <div className="border-b border-zinc-100 p-3">
               <Button
                 className="h-9 w-full gap-2"
@@ -1858,7 +1895,7 @@ export function BrokMailApp() {
             </div>
           </aside>
 
-          <div className="dashboard-rail border-b border-zinc-200/80 px-3 py-3 2xl:hidden">
+          <div className="dashboard-rail border-b border-zinc-200/80 px-3 py-3 lg:hidden">
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Button
@@ -1925,7 +1962,7 @@ export function BrokMailApp() {
             </div>
           </div>
 
-          <div className="flex max-h-[34dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white/45 2xl:max-h-none 2xl:w-[360px] 2xl:border-b-0 2xl:border-r">
+          <div className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white/52 lg:max-h-none lg:w-[400px] lg:border-b-0 lg:border-r xl:w-[430px]">
             <div className="border-b border-zinc-100 bg-white/60 p-3 backdrop-blur">
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />
@@ -1989,7 +2026,7 @@ export function BrokMailApp() {
                       )}
                     >
                       <button
-                        className="block w-full p-3 text-left"
+                        className="block w-full px-3 py-3 text-left"
                         onClick={() => setSelectedThreadId(thread.id)}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -2035,31 +2072,6 @@ export function BrokMailApp() {
                           {thread.aiSummary}
                         </p>
                       </button>
-                      <div className="flex items-center gap-1 px-3 pb-3">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1 px-2 text-xs"
-                          onClick={() => toggleThreadStar(thread.id)}
-                        >
-                          <Star
-                            className={cn(
-                              'size-3.5',
-                              thread.starred && 'fill-amber-400 text-amber-500'
-                            )}
-                          />
-                          Focus
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1 px-2 text-xs"
-                          onClick={() => markThreadDone(thread.id)}
-                        >
-                          <CheckCircle2 className="size-3.5" />
-                          Done
-                        </Button>
-                      </div>
                     </article>
                   )
                 })
@@ -2131,7 +2143,7 @@ export function BrokMailApp() {
 
 function modeLabel(mode: IntegrationConnectionMode) {
   if (mode === 'composio') return 'Composio'
-  return 'Ready'
+  return 'off'
 }
 
 function BrokMailStatusBar({
@@ -2165,28 +2177,41 @@ function BrokMailStatusBar({
   runPriorityBrief: () => void
 }) {
   return (
-    <div className="dashboard-rail border-b border-zinc-200/80 bg-white/78 px-3 py-2 backdrop-blur-xl sm:px-4">
+    <div className="dashboard-rail border-b border-zinc-200/80 bg-white/82 px-3 py-2 backdrop-blur-xl sm:px-4">
       <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="mr-1 hidden min-w-0 sm:block">
             <p className="truncate text-sm font-semibold">BrokMail</p>
             <p className="truncate text-xs text-muted-foreground">
-              Inbox, drafts, and calendar actions
+              Fast inbox, drafts, and calendar actions
             </p>
           </div>
           <Badge
-            variant={connected ? 'default' : 'outline'}
-            className="h-7 gap-1.5 rounded-md"
+            variant="outline"
+            className="h-7 gap-1.5 rounded-full border-border/70 bg-background/70 px-2.5"
           >
+            <span
+              className={cn(
+                'size-1.5 rounded-full',
+                connected ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+              )}
+            />
             <MailCheck className="size-3.5" />
-            Gmail {modeLabel(connectionMode)}
+            Gmail {connected ? 'ready' : modeLabel(connectionMode)}
           </Badge>
           <Badge
-            variant={calendarConnected ? 'default' : 'outline'}
-            className="h-7 gap-1.5 rounded-md"
+            variant="outline"
+            className="h-7 gap-1.5 rounded-full border-border/70 bg-background/70 px-2.5"
           >
+            <span
+              className={cn(
+                'size-1.5 rounded-full',
+                calendarConnected ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+              )}
+            />
             <CalendarDays className="size-3.5" />
-            Calendar {modeLabel(calendarConnectionMode)}
+            Calendar{' '}
+            {calendarConnected ? 'ready' : modeLabel(calendarConnectionMode)}
           </Badge>
           <span className="hidden rounded-lg border border-border/70 bg-background/65 px-2.5 py-1.5 text-xs text-muted-foreground md:inline-flex">
             {counts['needs-reply']} replies · {counts['follow-ups']} follow-ups
@@ -2214,7 +2239,7 @@ function BrokMailStatusBar({
           </Button>
         </div>
       </div>
-      <div className="mt-1 hidden min-w-0 gap-3 text-[11px] text-muted-foreground 2xl:flex">
+      <div className="mt-1 hidden min-w-0 gap-3 text-[11px] text-muted-foreground xl:flex">
         <span className="truncate">{connectionStatus}</span>
         <span className="truncate">{calendarConnectionStatus}</span>
         <span className="shrink-0">
@@ -2275,7 +2300,7 @@ function ThreadView({
               )}
               {isSyncingMail && <span>Syncing...</span>}
             </div>
-            <h1 className="mt-1 truncate text-lg font-semibold sm:text-xl">
+            <h1 className="mt-1 line-clamp-2 max-w-4xl text-lg font-semibold leading-snug sm:text-xl">
               {thread.subject}
             </h1>
           </div>
@@ -2323,7 +2348,7 @@ function ThreadView({
           </div>
         </div>
 
-        <div className="mt-3 rounded-lg border border-border/70 bg-background/70 p-3">
+        <div className="mt-3 rounded-lg border border-border/60 bg-background/64 p-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -2358,11 +2383,11 @@ function ThreadView({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
-        <div className="mx-auto max-w-3xl space-y-3">
+        <div className="mx-auto max-w-4xl space-y-3">
           {thread.messages.map(message => (
             <article
               key={message.id}
-              className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm"
+              className="rounded-lg border border-border/60 bg-white/72 p-4 shadow-sm"
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
