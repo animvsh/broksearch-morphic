@@ -40,11 +40,11 @@ import { IconBlinkingLogo } from './ui/icons'
 export default function AppSidebar() {
   const pathname = usePathname()
   const navButtonClass =
-    'group/sidebar relative h-9 rounded-xl border border-transparent px-2 text-[13px] font-medium text-zinc-500 transition-all duration-150 hover:bg-zinc-100/80 hover:text-zinc-950 data-[active=true]:border-zinc-200/80 data-[active=true]:bg-white data-[active=true]:text-zinc-950 data-[active=true]:shadow-[0_12px_28px_-26px_rgba(24,24,27,0.36)]'
+    'group/sidebar relative h-8 rounded-lg border border-transparent px-2 text-[13px] font-medium text-zinc-500 transition-all duration-150 hover:bg-zinc-100/80 hover:text-zinc-950 data-[active=true]:border-zinc-200/80 data-[active=true]:bg-white data-[active=true]:text-zinc-950'
   const subButtonClass =
-    'group/subnav rounded-xl border border-transparent px-2 text-zinc-400 transition-all duration-150 hover:bg-zinc-100/80 hover:text-zinc-950 data-[active=true]:bg-white data-[active=true]:text-zinc-950'
+    'group/subnav h-7 rounded-lg border border-transparent px-2 text-[12px] text-zinc-400 transition-all duration-150 hover:bg-zinc-100/80 hover:text-zinc-950 data-[active=true]:bg-white data-[active=true]:text-zinc-950'
   const iconShellClass =
-    'flex size-7 items-center justify-center rounded-lg border border-transparent text-zinc-400 transition-all duration-150 group-data-[active=true]/sidebar:bg-zinc-950 group-data-[active=true]/sidebar:text-white group-hover/sidebar:bg-white group-hover/sidebar:text-zinc-900'
+    'flex size-6 items-center justify-center rounded-md border border-transparent text-zinc-400 transition-all duration-150 group-data-[active=true]/sidebar:bg-zinc-950 group-data-[active=true]/sidebar:text-white group-hover/sidebar:bg-white group-hover/sidebar:text-zinc-900'
   const subIconShellClass =
     'flex size-6 items-center justify-center rounded-lg border border-transparent text-zinc-400 transition-colors duration-100 group-data-[active=true]/subnav:bg-zinc-900 group-data-[active=true]/subnav:text-white group-hover/subnav:bg-white group-hover/subnav:text-zinc-900'
   const isActive = (href: string) =>
@@ -53,15 +53,17 @@ export default function AppSidebar() {
       : pathname === href || pathname.startsWith(`${href}/`)
   const isCodeActive =
     pathname.startsWith('/brokcode') && !pathname.startsWith('/brokcode/tui')
+  const isBrokCodeGroupActive =
+    pathname.startsWith('/brokcode') || pathname.startsWith('/playground')
 
   return (
     <Sidebar
       side="left"
       variant="sidebar"
       collapsible="icon"
-      className="border-r border-zinc-200/70 bg-white/72 text-zinc-950 shadow-none backdrop-blur-xl"
+      className="border-r border-zinc-200/80 bg-white/95 text-zinc-950 shadow-none backdrop-blur-md"
     >
-      <SidebarHeader className="flex flex-row items-center justify-between border-b border-zinc-200/70 bg-white/65 backdrop-blur-xl">
+      <SidebarHeader className="flex flex-row items-center justify-between border-b border-zinc-200/80 bg-white/95 backdrop-blur-md">
         <Link href="/" className="flex items-center gap-2 px-2 py-2.5">
           <span className="brand-mark rounded-full p-1.5">
             <IconBlinkingLogo className={cn('size-5')} />
@@ -72,7 +74,10 @@ export default function AppSidebar() {
         </Link>
       </SidebarHeader>
       <SidebarContent className="flex h-full flex-col px-2 py-2.5">
-        <SidebarMenu>
+        <SidebarMenu className="gap-1">
+          <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-data-[collapsible=icon]:hidden">
+            Search
+          </div>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
@@ -149,6 +154,9 @@ export default function AppSidebar() {
               </SidebarMenuSubItem>
             </SidebarMenuSub>
           </SidebarMenuItem>
+          <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-data-[collapsible=icon]:hidden">
+            Products
+          </div>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
@@ -169,7 +177,7 @@ export default function AppSidebar() {
               asChild
               tooltip="Brok Code"
               className={navButtonClass}
-              isActive={isCodeActive}
+              isActive={isBrokCodeGroupActive}
             >
               <Link href="/brokcode" className="flex items-center gap-2">
                 <span className={iconShellClass}>
@@ -178,22 +186,60 @@ export default function AppSidebar() {
                 <span className="flex-1">Brok Code</span>
               </Link>
             </SidebarMenuButton>
+            <SidebarMenuSub>
+              <SidebarMenuSubItem>
+                <SidebarMenuSubButton
+                  asChild
+                  size="sm"
+                  className={subButtonClass}
+                  isActive={isCodeActive}
+                >
+                  <Link href="/brokcode" className="flex items-center gap-2">
+                    <span className={subIconShellClass}>
+                      <Code2 className="size-4" />
+                    </span>
+                    <span className="flex-1">Builder</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+              <SidebarMenuSubItem>
+                <SidebarMenuSubButton
+                  asChild
+                  size="sm"
+                  className={subButtonClass}
+                  isActive={isActive('/playground')}
+                >
+                  <Link href="/playground" className="flex items-center gap-2">
+                    <span className={subIconShellClass}>
+                      <FlaskConical className="size-4" />
+                    </span>
+                    <span className="flex-1">API</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+              <SidebarMenuSubItem>
+                <SidebarMenuSubButton
+                  asChild
+                  size="sm"
+                  className={subButtonClass}
+                  isActive={isActive('/brokcode/tui')}
+                >
+                  <Link
+                    href="/brokcode/tui"
+                    className="flex items-center gap-2"
+                  >
+                    <span className={subIconShellClass}>
+                      <TerminalSquare className="size-4" />
+                    </span>
+                    <span className="flex-1">TUI</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            </SidebarMenuSub>
           </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="BrokCode API"
-              className={navButtonClass}
-              isActive={isActive('/playground')}
-            >
-              <Link href="/playground" className="flex items-center gap-2">
-                <span className={iconShellClass}>
-                  <FlaskConical className="size-4" />
-                </span>
-                <span className="flex-1">BrokCode API</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-data-[collapsible=icon]:hidden">
+            Workspace
+          </div>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
@@ -206,21 +252,6 @@ export default function AppSidebar() {
                   <PenLine className="size-4" />
                 </span>
                 <span className="flex-1">Tools</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip="TUI"
-              className={navButtonClass}
-              isActive={isActive('/brokcode/tui')}
-            >
-              <Link href="/brokcode/tui" className="flex items-center gap-2">
-                <span className={iconShellClass}>
-                  <TerminalSquare className="size-4" />
-                </span>
-                <span className="flex-1">TUI</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

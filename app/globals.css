@@ -521,10 +521,8 @@
   }
 
   .dashboard-card {
-    @apply rounded-xl border border-zinc-200/80 bg-white/90 backdrop-blur-sm;
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.9) inset,
-      0 14px 34px -32px rgba(23, 23, 23, 0.16);
+    @apply rounded-lg border border-zinc-200/80 bg-white/92 backdrop-blur-sm;
+    box-shadow: 0 10px 26px -24px rgba(23, 23, 23, 0.16);
   }
 
   .prose pre {
@@ -570,8 +568,8 @@
   .brokcode-shell .rounded-md.border.bg-background,
   .brokmail-shell .rounded-md.border.bg-background,
   .playground-shell .rounded-md.border.bg-background {
-    @apply rounded-lg border border-border/60 bg-card/72 backdrop-blur-sm;
-    box-shadow: 0 8px 20px -18px rgba(15, 23, 42, 0.22);
+    @apply rounded-lg border border-border/60 bg-card/78 backdrop-blur-sm;
+    box-shadow: none;
   }
 
   .brokcode-shell .rounded-md.border.bg-muted\/10,
@@ -596,7 +594,7 @@
     inset: 0;
     pointer-events: none;
     z-index: -1;
-    background: linear-gradient(180deg, #ffffff 0%, #f7f7f8 46%, #f1f2f4 100%);
+    background: linear-gradient(180deg, #ffffff 0%, #f8f8f9 58%, #f4f4f5 100%);
     opacity: 1;
   }
 

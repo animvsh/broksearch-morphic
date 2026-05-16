@@ -342,13 +342,13 @@ export default async function IntegrationsPage() {
                 operate with approval.
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-3 lg:w-[430px]">
+            <div className="grid gap-2 sm:grid-cols-3 lg:w-[390px]">
               {statCards.map(card => {
                 const Icon = card.icon
                 return (
                   <div
                     key={card.label}
-                    className="rounded-xl border border-zinc-200/70 bg-white/68 px-3 py-2.5"
+                    className="rounded-lg border border-zinc-200/70 bg-white/72 px-3 py-2"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs text-zinc-500">
@@ -356,10 +356,7 @@ export default async function IntegrationsPage() {
                       </span>
                       <Icon className="size-3.5 text-zinc-400" />
                     </div>
-                    <p className="mt-1 text-2xl font-semibold">{card.value}</p>
-                    <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">
-                      {card.detail}
-                    </p>
+                    <p className="mt-1 text-xl font-semibold">{card.value}</p>
                   </div>
                 )
               })}
@@ -372,7 +369,10 @@ export default async function IntegrationsPage() {
             <CardTitle className="text-base">Available integrations</CardTitle>
             <CardDescription className="text-sm">
               Featured configured toolkits appear first, followed by every
-              toolkit returned by Composio.
+              toolkit returned by Composio.{' '}
+              {connectMode
+                ? 'Connect mode opens provider approval in a popup and polls until the account is active.'
+                : 'Backend mode creates Composio connection links from configured auth configs.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
@@ -396,24 +396,11 @@ export default async function IntegrationsPage() {
           </CardContent>
         </Card>
 
-        <Card className="morphic-surface rounded-2xl border-zinc-200/70 shadow-none">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Runtime Behavior</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <p className="text-sm text-muted-foreground">
-              {connectMode
-                ? 'Connect mode opens provider approval in a popup and polls Composio until the account becomes active.'
-                : 'Backend mode uses configured auth configs to create Composio connection links.'}{' '}
-              Product tools still require their own approval-safe runtime before
-              sending, deleting, or mutating external data.
-            </p>
-            <p className="mt-2 inline-flex items-center gap-2 text-xs text-muted-foreground">
-              <Link2 className="size-3.5" />
-              Agent access is exposed through the composioIntegrations tool.
-            </p>
-          </CardContent>
-        </Card>
+        <p className="inline-flex items-center gap-2 px-1 text-xs text-muted-foreground">
+          <Link2 className="size-3.5" />
+          Product tools still require approval before sending, deleting, or
+          mutating external data.
+        </p>
       </div>
     </div>
   )

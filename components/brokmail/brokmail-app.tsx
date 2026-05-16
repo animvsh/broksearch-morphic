@@ -1784,7 +1784,7 @@ export function BrokMailApp() {
         />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
-          <aside className="dashboard-rail hidden w-56 shrink-0 border-r border-zinc-200/80 bg-white/58 lg:flex lg:flex-col">
+          <aside className="dashboard-rail hidden w-56 shrink-0 border-r border-zinc-200/80 bg-white/78 lg:flex lg:flex-col">
             <div className="border-b border-zinc-100 p-3">
               <Button
                 className="h-9 w-full gap-2"
@@ -1819,59 +1819,32 @@ export function BrokMailApp() {
               })}
             </nav>
 
-            <div className="border-t border-zinc-100 p-3">
-              <div className="space-y-2">
-                <div className="rounded-lg border border-border/70 bg-background/70 p-2.5">
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="font-medium">Gmail</span>
-                    <Badge variant={connected ? 'default' : 'outline'}>
-                      {modeLabel(connectionMode)}
-                    </Badge>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 h-8 w-full gap-2"
-                    onClick={connectGmail}
-                    disabled={isConnecting}
-                  >
-                    <UserRoundCheck className="size-4" />
-                    {isConnecting ? 'Connecting...' : 'Connect Gmail'}
-                  </Button>
-                  {connectionMode === 'composio' && (
-                    <Button
-                      size="sm"
-                      className="mt-2 h-8 w-full gap-2"
-                      onClick={() => {
-                        void loadComposioGmailThreads()
-                      }}
-                      disabled={isConnecting}
-                    >
-                      <MailCheck className="size-4" />
-                      Load Composio Inbox
-                    </Button>
-                  )}
-                </div>
-                <div className="rounded-lg border border-border/70 bg-background/70 p-2.5">
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="font-medium">Calendar</span>
-                    <Badge variant={calendarConnected ? 'default' : 'outline'}>
-                      {modeLabel(calendarConnectionMode)}
-                    </Badge>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 h-8 w-full gap-2"
-                    onClick={connectCalendar}
-                    disabled={isConnectingCalendar}
-                  >
-                    <CalendarDays className="size-4" />
-                    {isConnectingCalendar
-                      ? 'Connecting...'
-                      : 'Connect Calendar'}
-                  </Button>
-                </div>
+            <div className="border-t border-zinc-100 p-2">
+              <div className="grid grid-cols-2 gap-1.5">
+                <Button
+                  variant={connected ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="h-8 gap-1.5 px-2 text-xs"
+                  onClick={connected ? loadComposioGmailThreads : connectGmail}
+                  disabled={isConnecting}
+                >
+                  <MailCheck className="size-3.5" />
+                  {isConnecting ? '...' : connected ? 'Refresh' : 'Gmail'}
+                </Button>
+                <Button
+                  variant={calendarConnected ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="h-8 gap-1.5 px-2 text-xs"
+                  onClick={connectCalendar}
+                  disabled={isConnectingCalendar}
+                >
+                  <CalendarDays className="size-3.5" />
+                  {isConnectingCalendar
+                    ? '...'
+                    : calendarConnected
+                      ? 'Calendar'
+                      : 'Connect'}
+                </Button>
               </div>
             </div>
           </aside>
@@ -1943,7 +1916,7 @@ export function BrokMailApp() {
             </div>
           </div>
 
-          <div className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white/52 lg:max-h-none lg:w-[400px] lg:border-b-0 lg:border-r xl:w-[430px]">
+          <div className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white/72 lg:max-h-none lg:w-[380px] lg:border-b-0 lg:border-r xl:w-[420px]">
             <div className="border-b border-zinc-100 bg-white/60 p-3 backdrop-blur">
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />
@@ -1956,30 +1929,27 @@ export function BrokMailApp() {
                   className="h-9 min-w-0"
                 />
               </div>
-              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+              <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
                 <span>
                   {listCount} {listLabel}
                 </span>
-                <span className="flex items-center gap-1">
-                  <Command className="size-3" /> Command ready
-                </span>
-              </div>
-              <div className="mt-3 flex items-center gap-2 overflow-x-auto">
-                <ArrowDownUp className="size-3.5 shrink-0 text-muted-foreground" />
-                {sortOptions.map(option => (
-                  <button
-                    key={option.id}
-                    className={cn(
-                      'h-7 shrink-0 rounded-md border px-2 text-xs transition-colors hover:bg-muted/70',
-                      sortMode === option.id
-                        ? 'dashboard-pill-active font-medium'
-                        : 'border-border/70 text-muted-foreground'
-                    )}
-                    onClick={() => setSortMode(option.id)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+                <div className="flex items-center gap-1 rounded-md border border-border/60 bg-white/70 p-0.5">
+                  <ArrowDownUp className="ml-1 size-3.5 shrink-0 text-muted-foreground" />
+                  {sortOptions.map(option => (
+                    <button
+                      key={option.id}
+                      className={cn(
+                        'h-6 shrink-0 rounded px-2 text-xs transition-colors hover:bg-muted/70',
+                        sortMode === option.id
+                          ? 'bg-zinc-950 text-white'
+                          : 'text-muted-foreground'
+                      )}
+                      onClick={() => setSortMode(option.id)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -2039,21 +2009,13 @@ export function BrokMailApp() {
                             <span className="block text-xs text-muted-foreground">
                               {thread.receivedAt}
                             </span>
-                            <Badge
-                              variant={
-                                priorityScore >= 36 ? 'default' : 'secondary'
-                              }
-                              className="mt-1 rounded-md px-1.5 py-0 text-[10px]"
-                            >
-                              {priorityLabel(priorityScore)}
-                            </Badge>
+                            {priorityScore >= 36 && (
+                              <span className="mt-1 inline-flex size-2 rounded-full bg-zinc-950" />
+                            )}
                           </div>
                         </div>
                         <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                           {thread.snippet}
-                        </p>
-                        <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                          {thread.aiSummary}
                         </p>
                       </button>
                     </article>
@@ -2161,18 +2123,19 @@ function BrokMailStatusBar({
   runPriorityBrief: () => void
 }) {
   return (
-    <div className="dashboard-rail border-b border-zinc-200/80 bg-white/82 px-3 py-2 backdrop-blur-xl sm:px-4">
-      <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div className="mr-1 hidden min-w-0 sm:block">
+    <div className="dashboard-rail border-b border-zinc-200/80 bg-white/95 px-3 py-2 backdrop-blur-md sm:px-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="min-w-0">
             <p className="truncate text-sm font-semibold">BrokMail</p>
-            <p className="truncate text-xs text-muted-foreground">
-              Fast inbox, drafts, and calendar actions
+            <p className="hidden truncate text-xs text-muted-foreground sm:block">
+              Inbox, drafts, and calendar actions
             </p>
           </div>
+          <span className="hidden h-5 w-px bg-zinc-200 sm:block" />
           <Badge
             variant="outline"
-            className="h-7 gap-1.5 rounded-full border-border/70 bg-background/70 px-2.5"
+            className="h-7 gap-1.5 rounded-full border-border/70 bg-background/80 px-2.5"
           >
             <span
               className={cn(
@@ -2185,7 +2148,7 @@ function BrokMailStatusBar({
           </Badge>
           <Badge
             variant="outline"
-            className="h-7 gap-1.5 rounded-full border-border/70 bg-background/70 px-2.5"
+            className="hidden h-7 gap-1.5 rounded-full border-border/70 bg-background/80 px-2.5 md:inline-flex"
           >
             <span
               className={cn(
@@ -2197,23 +2160,25 @@ function BrokMailStatusBar({
             Calendar{' '}
             {calendarConnected ? 'ready' : modeLabel(calendarConnectionMode)}
           </Badge>
-          <span className="hidden rounded-lg border border-border/70 bg-background/65 px-2.5 py-1.5 text-xs text-muted-foreground md:inline-flex">
+          <span className="hidden text-xs text-muted-foreground lg:inline-flex">
             {counts['needs-reply']} replies · {counts['follow-ups']} follow-ups
             · {insights.unread} unread
           </span>
-          <button
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/70 bg-background/65 px-2.5 text-xs font-medium transition-colors hover:bg-muted/70 disabled:opacity-60"
+        </div>
+
+        <div className="flex shrink-0 gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-2 rounded-md px-3 text-xs"
             onClick={runPriorityBrief}
             disabled={isRunning}
           >
             <Flame className="size-3.5" />
-            Focus brief
-          </button>
-        </div>
-
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 xl:mx-0 xl:pb-0">
+            Brief
+          </Button>
           <Button
-            variant="outline"
+            variant="default"
             size="sm"
             className="h-8 shrink-0 gap-2 rounded-md px-3 text-xs"
             onClick={onOpenAgent}
@@ -2222,13 +2187,6 @@ function BrokMailStatusBar({
             Ask BrokMail
           </Button>
         </div>
-      </div>
-      <div className="mt-1 hidden min-w-0 gap-3 text-[11px] text-muted-foreground xl:flex">
-        <span className="truncate">{connectionStatus}</span>
-        <span className="truncate">{calendarConnectionStatus}</span>
-        <span className="shrink-0">
-          {isRunning ? 'Pi runtime active' : 'Ready'}
-        </span>
       </div>
     </div>
   )
@@ -2271,7 +2229,7 @@ function ThreadView({
 
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="border-b bg-card/30 px-3 py-3 sm:px-4">
+      <div className="border-b bg-white/80 px-3 py-3 sm:px-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -2332,15 +2290,12 @@ function ThreadView({
           </div>
         </div>
 
-        <div className="mt-3 rounded-lg border border-border/60 bg-background/64 p-3">
+        <div className="mt-3 rounded-lg border border-border/60 bg-background/70 p-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex flex-wrap items-center gap-2">
-                <Badge variant={thread.needsReply ? 'default' : 'secondary'}>
-                  {thread.needsReply ? 'Reply needed' : 'Monitor'}
-                </Badge>
                 <span className="text-xs text-muted-foreground">
-                  {priorityLabel(priorityScore)} · score {priorityScore}
+                  Assistant summary · {priorityLabel(priorityScore)}
                 </span>
               </div>
               <p className="text-sm leading-6 text-muted-foreground">
@@ -2390,7 +2345,7 @@ function ThreadView({
             </article>
           ))}
 
-          <section className="sticky bottom-0 rounded-xl border border-border/70 bg-card/95 p-3 shadow-[0_-18px_42px_-34px_rgba(24,24,27,0.5)] backdrop-blur sm:p-4">
+          <section className="sticky bottom-0 rounded-lg border border-border/70 bg-card/95 p-3 shadow-[0_-12px_32px_-30px_rgba(24,24,27,0.45)] backdrop-blur sm:p-4">
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <PenLine className="size-4" />

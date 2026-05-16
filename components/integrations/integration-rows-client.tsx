@@ -432,7 +432,10 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="truncate font-medium">{row.name}</span>
           {row.featured ? (
-            <Badge variant="outline" className="shrink-0">
+            <Badge
+              variant="secondary"
+              className="h-5 shrink-0 rounded-md px-1.5 text-[10px]"
+            >
               Featured
             </Badge>
           ) : null}
@@ -448,7 +451,7 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
   }
 
   return (
-    <div className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200/70 bg-white/70">
+    <div className="divide-y divide-zinc-100 overflow-hidden rounded-lg border border-zinc-200/80 bg-white/82">
       {tableRows.map(row => {
         const current = rowsBySlug.get(row.slug) || row
 
@@ -456,8 +459,8 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
           <div
             key={current.slug}
             className={cn(
-              'composio-connect-card flex flex-col gap-3 bg-white/76 p-3 transition-all duration-200 hover:bg-white sm:flex-row sm:items-center sm:justify-between sm:p-4',
-              current.featured ? 'ring-1 ring-inset ring-primary/10' : '',
+              'flex flex-col gap-3 bg-transparent p-3 transition-colors duration-150 hover:bg-zinc-50/80 sm:flex-row sm:items-center sm:justify-between sm:p-4',
+              current.featured ? 'bg-white/40' : '',
               connectingToolkit === current.slug && 'is-connecting'
             )}
           >
@@ -467,16 +470,10 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
                 {renderStatus(current)}
               </div>
               <div className="hidden sm:block">{renderRowSummary(current)}</div>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500">
-                <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 font-mono">
-                  {current.slug}
-                </span>
-                <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5">
-                  {current.authConfigCount} configs
-                </span>
-                <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5">
-                  {current.connectedCount} accounts
-                </span>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+                <span className="font-mono">{current.slug}</span>
+                <span>{current.authConfigCount} configs</span>
+                <span>{current.connectedCount} accounts</span>
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">
