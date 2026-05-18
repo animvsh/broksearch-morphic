@@ -19,7 +19,7 @@ export function openComposioPopup(
   const left = Math.max(0, dualScreenLeft + (viewportWidth - width) / 2)
   const top = Math.max(0, dualScreenTop + (viewportHeight - height) / 2)
 
-  return window.open(
+  const popup = window.open(
     url,
     name,
     [
@@ -29,9 +29,13 @@ export function openComposioPopup(
       `left=${Math.round(left)}`,
       `top=${Math.round(top)}`,
       'resizable=yes',
-      'scrollbars=yes',
-      'noopener=yes',
-      'noreferrer=yes'
+      'scrollbars=yes'
     ].join(',')
   )
+
+  try {
+    if (popup) popup.opener = null
+  } catch {}
+
+  return popup
 }

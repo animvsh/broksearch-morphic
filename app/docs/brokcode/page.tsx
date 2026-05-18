@@ -62,6 +62,23 @@ npm run brokcode`}</code>
           log from <code>/api/brokcode/sessions</code>.
         </p>
 
+        <h2>Saved Projects And Files</h2>
+        <p>
+          Brok Code projects store generated app files against your Brok account
+          instead of leaving work trapped in one chat transcript. The TUI can
+          create a project, select it, list its files, and push local files into
+          the managed project store. Use a real <code>brok_sk_</code> key; these
+          commands call the same account-owned project APIs as Brok Code Cloud.
+        </p>
+
+        <pre className="rounded-lg bg-muted p-4">
+          <code>{`/project new Contract Genie --username contract-genie
+/projects
+/project select contract-genie
+/file put app/page.tsx ./app/page.tsx
+/files`}</code>
+        </pre>
+
         <h2>Core Commands</h2>
         <ul>
           <li>
@@ -76,6 +93,24 @@ npm run brokcode`}</code>
           <li>
             <code>/session</code> - show the active shared session id and sync
             origin
+          </li>
+          <li>
+            <code>/projects</code> - list saved Brok Code projects
+          </li>
+          <li>
+            <code>/project new Contract Genie --username contract-genie</code> -
+            create and select a project
+          </li>
+          <li>
+            <code>/project select contract-genie</code> - select a project by
+            id, slug, or name
+          </li>
+          <li>
+            <code>/files</code> - list files in the selected project
+          </li>
+          <li>
+            <code>/file put app/page.tsx ./app/page.tsx</code> - save a local
+            file into the selected project
           </li>
           <li>
             <code>/worktree feature/my-branch</code> - create an isolated Git
@@ -155,6 +190,22 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
           <li>
             <code>POST /api/brokcode/deploy</code> - trigger configured Railway
             deployment
+          </li>
+          <li>
+            <code>GET /api/brokcode/projects</code> - list account-owned
+            BrokCode projects
+          </li>
+          <li>
+            <code>POST /api/brokcode/projects</code> - create a saved project
+            with optional username
+          </li>
+          <li>
+            <code>GET /api/brokcode/projects/[id]/files</code> - list files for
+            one saved project
+          </li>
+          <li>
+            <code>PUT /api/brokcode/projects/[id]/files</code> - upsert a saved
+            project file
           </li>
           <li>
             <code>POST /api/brokcode/github/connect</code> - open the Composio

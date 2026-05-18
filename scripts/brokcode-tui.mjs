@@ -42,6 +42,11 @@ const syncBaseUrl = (
 const sessionId =
   process.env.BROKCODE_SESSION_ID || storedConfig.sessionId || 'default'
 const model = process.env.BROK_MODEL || storedConfig.model || 'brok-code'
+let activeProjectId =
+  process.env.BROKCODE_PROJECT_ID ||
+  storedConfig.activeProjectId ||
+  storedConfig.projectId ||
+  ''
 const legacyRuntimeName = ['open', 'code'].join('')
 const legacyRuntimeEnvKey = `BROKCODE_REQUIRE_${legacyRuntimeName.toUpperCase()}`
 const requireCloudRuntime =
@@ -79,6 +84,20 @@ function readArgValue(flag) {
   if (index === -1) return undefined
 
   return process.argv[index + 1]
+}
+
+function saveRuntimeConfig(overrides = {}) {
+  writeConfig({
+    ...readConfig(),
+    apiKey,
+    baseUrl,
+    syncUrl: syncBaseUrl,
+    sessionId,
+    model,
+    activeProjectId,
+    ...overrides,
+    updatedAt: new Date().toISOString()
+  })
 }
 
 function assertBrokKey() {
@@ -126,6 +145,7 @@ function printBanner() {
       `model ${model}`,
       `api ${baseUrl}`,
       `session ${sessionId}`,
+      `project ${activeProjectId || 'none'}`,
       `runtime ${requireCloudRuntime ? 'brokcode-cloud' : 'Brok fallback allowed'}`
     ])}${colors.reset}\n\n`
   )
@@ -139,6 +159,12 @@ function printHelp() {
   /usage [day|week|month]      Show Brok API usage stats
   /sync                        Pull the shared cloud/TUI session
   /session [id]                Show session info or switch session
+  /projects                    List saved BrokCode projects
+  /project new <name>          Create a saved project
+  /project select <id|slug>    Select a project for file commands
+  /project show                Show the selected project
+  /files [id|slug]             List files in a project
+  /file put <path> <local>     Save a local file into the selected project
   /ai-default                  Explain the default AI app layer
   /worktree <branch>           Create an isolated git worktree
   /securityscan [phase]        Run DeepSec security scanning for this repo
@@ -159,6 +185,260 @@ function getSyncEndpoint(session = sessionId) {
     url.searchParams.set('session_id', session)
   }
   return url
+}
+
+function getProjectsEndpoint() {
+  return new URL('/api/brokcode/projects', syncBaseUrl)
+}
+
+function getProjectFilesEndpoint(projectId) {
+  return new URL(
+    `/api/brokcode/projects/${encodeURIComponent(projectId)}/files`,
+    syncBaseUrl
+  )
+}
+
+async function requestJson(url, options = {}) {
+  if (!assertBrokKey()) return null
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...options.headers
+    }
+  })
+  const body = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    const message =
+      typeof body?.error === 'string'
+        ? body.error
+        : `Request failed: ${response.status}`
+    output.write(`${colors.red}${message}${colors.reset}\n`)
+    return null
+  }
+
+  return body
+}
+
+function formatProject(project) {
+  const selected = project.id === activeProjectId ? '*' : ' '
+  const username = project.username ? ` @${project.username}` : ''
+  return `${selected} ${project.name}${username} ${colors.dim}${project.slug} ${project.id}${colors.reset}`
+}
+
+async function loadProjects() {
+  const body = await requestJson(getProjectsEndpoint())
+  return Array.isArray(body?.projects) ? body.projects : []
+}
+
+function findProject(projects, value) {
+  const target = String(value || '')
+    .trim()
+    .toLowerCase()
+  if (!target) return null
+
+  return (
+    projects.find(project => project.id.toLowerCase() === target) ||
+    projects.find(project => project.slug?.toLowerCase() === target) ||
+    projects.find(project => project.name?.toLowerCase() === target) ||
+    null
+  )
+}
+
+async function showProjects() {
+  const projects = await loadProjects()
+  if (!projects.length) {
+    output.write(
+      `${colors.yellow}No BrokCode projects yet. Create one with /project new <name>.${colors.reset}\n`
+    )
+    return
+  }
+
+  output.write(`${colors.cyan}BrokCode projects${colors.reset}\n`)
+  for (const project of projects) {
+    output.write(`${formatProject(project)}\n`)
+  }
+}
+
+function parseProjectCreate(raw) {
+  const value = raw.replace(/^\/project\s+new\s*/i, '').trim()
+  const usernameMatch = value.match(/\s+--username\s+([a-zA-Z0-9._-]+)\s*$/)
+  const username = usernameMatch?.[1] || null
+  const name = usernameMatch
+    ? value.slice(0, usernameMatch.index).trim()
+    : value.trim()
+
+  return { name, username }
+}
+
+async function createProject(raw) {
+  const { name, username } = parseProjectCreate(raw)
+  if (!name) {
+    output.write(
+      `${colors.red}Usage: /project new <name> [--username handle]${colors.reset}\n`
+    )
+    return
+  }
+
+  const body = await requestJson(getProjectsEndpoint(), {
+    method: 'POST',
+    body: JSON.stringify({ name, username })
+  })
+  const project = body?.project
+  if (!project) return
+
+  activeProjectId = project.id
+  saveRuntimeConfig({ activeProjectId })
+  output.write(
+    `${colors.green}Created and selected ${project.name} (${project.slug}).${colors.reset}\n`
+  )
+}
+
+async function selectProject(value) {
+  if (!value) {
+    output.write(
+      `${colors.red}Usage: /project select <id|slug>${colors.reset}\n`
+    )
+    return
+  }
+
+  const projects = await loadProjects()
+  const project = findProject(projects, value)
+  if (!project) {
+    output.write(
+      `${colors.red}Project not found. Run /projects to see available projects.${colors.reset}\n`
+    )
+    return
+  }
+
+  activeProjectId = project.id
+  saveRuntimeConfig({ activeProjectId })
+  output.write(
+    `${colors.green}Selected ${project.name} (${project.slug}).${colors.reset}\n`
+  )
+}
+
+async function showSelectedProject() {
+  if (!activeProjectId) {
+    output.write(
+      `${colors.yellow}No project selected. Run /projects or /project new <name>.${colors.reset}\n`
+    )
+    return
+  }
+
+  const projects = await loadProjects()
+  const project = findProject(projects, activeProjectId)
+  if (!project) {
+    output.write(
+      `${colors.red}Selected project was not found. Run /projects and select again.${colors.reset}\n`
+    )
+    return
+  }
+
+  output.write(
+    `${colors.cyan}${box([
+      `Project: ${project.name}`,
+      `Slug: ${project.slug}`,
+      `ID: ${project.id}`,
+      `Username: ${project.username || 'none'}`,
+      `Updated: ${project.updatedAt || 'unknown'}`
+    ])}${colors.reset}\n`
+  )
+}
+
+async function resolveProjectId(value) {
+  if (value) {
+    const projects = await loadProjects()
+    const project = findProject(projects, value)
+    if (!project) {
+      output.write(
+        `${colors.red}Project not found. Run /projects to see available projects.${colors.reset}\n`
+      )
+      return null
+    }
+    return project.id
+  }
+
+  if (!activeProjectId) {
+    output.write(
+      `${colors.red}Select a project first with /project select <id|slug>.${colors.reset}\n`
+    )
+    return null
+  }
+
+  return activeProjectId
+}
+
+async function showProjectFiles(value) {
+  const projectId = await resolveProjectId(value)
+  if (!projectId) return
+
+  const body = await requestJson(getProjectFilesEndpoint(projectId))
+  if (!body) return
+
+  const files = Array.isArray(body.files) ? body.files : []
+  output.write(
+    `${colors.cyan}${body.project?.name || 'Project'} files${colors.reset}\n`
+  )
+
+  if (!files.length) {
+    output.write(
+      `${colors.yellow}No files yet. Save one with /file put <path> <local-file>.${colors.reset}\n`
+    )
+    return
+  }
+
+  for (const file of files) {
+    output.write(
+      `${file.path} ${colors.dim}${file.language || 'text'} ${file.updatedAt || ''}${colors.reset}\n`
+    )
+  }
+}
+
+async function putProjectFile(args) {
+  const projectPath = args[1]
+  const localPath = args[2]
+  const projectFlagIndex = args.indexOf('--project')
+  const projectRef =
+    projectFlagIndex >= 0 && args[projectFlagIndex + 1]
+      ? args[projectFlagIndex + 1]
+      : null
+
+  if (!projectPath || !localPath) {
+    output.write(
+      `${colors.red}Usage: /file put <project-path> <local-file> [--project id|slug]${colors.reset}\n`
+    )
+    return
+  }
+
+  const projectId = await resolveProjectId(projectRef)
+  if (!projectId) return
+
+  let content
+  try {
+    content = readFileSync(path.resolve(process.cwd(), localPath), 'utf8')
+  } catch (error) {
+    output.write(
+      `${colors.red}Could not read ${localPath}: ${error.message}${colors.reset}\n`
+    )
+    return
+  }
+
+  const body = await requestJson(getProjectFilesEndpoint(projectId), {
+    method: 'PUT',
+    body: JSON.stringify({
+      path: projectPath,
+      content
+    })
+  })
+  if (!body?.file) return
+
+  output.write(
+    `${colors.green}Saved ${body.file.path} (${content.length} chars).${colors.reset}\n`
+  )
 }
 
 async function syncEvent({ role, content, type = 'message', metadata }) {
@@ -374,15 +654,7 @@ async function handleCommand(raw) {
     }
 
     apiKey = nextKey
-    writeConfig({
-      ...storedConfig,
-      apiKey: nextKey,
-      baseUrl,
-      syncUrl: syncBaseUrl,
-      sessionId,
-      model,
-      updatedAt: new Date().toISOString()
-    })
+    saveRuntimeConfig({ apiKey: nextKey })
     output.write(
       `${colors.green}Saved Brok API key to ${configPath}.${colors.reset}\n`
     )
@@ -398,6 +670,26 @@ async function handleCommand(raw) {
         `${colors.yellow}Switch by restarting with BROKCODE_SESSION_ID=${args[0]}.${colors.reset}\n`
       )
     }
+    return
+  }
+  if (name === '/projects') return showProjects()
+  if (name === '/project') {
+    if (args[0] === 'new') return createProject(raw)
+    if (args[0] === 'select') return selectProject(args[1])
+    if (args[0] === 'show' || !args[0]) return showSelectedProject()
+
+    output.write(
+      `${colors.red}Usage: /project new <name>, /project select <id|slug>, or /project show.${colors.reset}\n`
+    )
+    return
+  }
+  if (name === '/files') return showProjectFiles(args[0])
+  if (name === '/file') {
+    if (args[0] === 'put') return putProjectFile(args)
+
+    output.write(
+      `${colors.red}Usage: /file put <project-path> <local-file> [--project id|slug]${colors.reset}\n`
+    )
     return
   }
   if (name === '/ai-default') {

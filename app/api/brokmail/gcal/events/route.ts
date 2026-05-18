@@ -23,6 +23,10 @@ const DEFAULT_GCAL_TOOLKITS = [
 ]
 
 const DEFAULT_EVENT_TOOL_SLUGS = [
+  'GOOGLECALENDAR_EVENTS_LIST',
+  'GOOGLESUPER_EVENTS_LIST',
+  'GOOGLECALENDAR_EVENTS_LIST_ALL_CALENDARS',
+  'GOOGLESUPER_EVENTS_LIST_ALL_CALENDARS',
   'GOOGLECALENDAR_LIST_EVENTS',
   'GOOGLE_CALENDAR_LIST_EVENTS'
 ]
@@ -191,12 +195,12 @@ export async function GET() {
         userId: user.id,
         connectedAccountId: account.id,
         arguments: {
-          calendar_id: 'primary',
-          max_results: 25,
-          single_events: true,
-          order_by: 'startTime',
-          time_min: timeMin,
-          time_max: timeMax
+          calendarId: 'primary',
+          maxResults: 25,
+          singleEvents: true,
+          orderBy: 'startTime',
+          timeMin,
+          timeMax
         }
       })
       const events = extractEvents(payload)

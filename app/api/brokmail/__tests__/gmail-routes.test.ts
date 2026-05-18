@@ -231,7 +231,7 @@ describe('BrokMail Gmail routes', () => {
     expect(body).toMatchObject({
       provider: 'composio',
       connectedAccountId: 'acct_calendar',
-      toolSlug: 'GOOGLECALENDAR_LIST_EVENTS',
+      toolSlug: 'GOOGLECALENDAR_EVENTS_LIST',
       events: [
         {
           id: 'event_123',
@@ -243,9 +243,15 @@ describe('BrokMail Gmail routes', () => {
     })
     expect(executeComposioTool).toHaveBeenCalledWith(
       expect.objectContaining({
-        toolSlug: 'GOOGLECALENDAR_LIST_EVENTS',
+        toolSlug: 'GOOGLECALENDAR_EVENTS_LIST',
         userId: 'user_123',
-        connectedAccountId: 'acct_calendar'
+        connectedAccountId: 'acct_calendar',
+        arguments: expect.objectContaining({
+          calendarId: 'primary',
+          maxResults: 25,
+          orderBy: 'startTime',
+          singleEvents: true
+        })
       })
     )
   })
@@ -268,10 +274,14 @@ describe('BrokMail Gmail routes', () => {
     expect(response.status).toBe(502)
     expect(body.error).toContain('Could not list Google Calendar events')
     expect(body.attemptedTools).toEqual([
+      'GOOGLECALENDAR_EVENTS_LIST',
+      'GOOGLESUPER_EVENTS_LIST',
+      'GOOGLECALENDAR_EVENTS_LIST_ALL_CALENDARS',
+      'GOOGLESUPER_EVENTS_LIST_ALL_CALENDARS',
       'GOOGLECALENDAR_LIST_EVENTS',
       'GOOGLE_CALENDAR_LIST_EVENTS'
     ])
-    expect(executeComposioTool).toHaveBeenCalledTimes(2)
+    expect(executeComposioTool).toHaveBeenCalledTimes(6)
   })
 
   it('summarizes raw Gmail Composio tool failures before returning them', async () => {
