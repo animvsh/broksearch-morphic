@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { requireAppAccessForApi } from '@/lib/auth/app-access'
 import {
   appendBackgroundTaskEvent,
   getBackgroundTask,
@@ -16,13 +16,11 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const access = await requireAppAccessForApi()
+  if (!access.ok) return access.response
 
   const { id } = await params
-  const existing = await getBackgroundTask({ userId: user.id, id })
+  const existing = await getBackgroundTask({ userId: access.user.id, id })
   if (!existing) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
@@ -33,7 +31,7 @@ export async function POST(
 
   await appendBackgroundTaskEvent({
     id,
-    userId: user.id,
+    userId: access.user.id,
     message: 'Task cancelled by user',
     progress:
       typeof existing.metadata?.progress === 'number'
@@ -43,7 +41,7 @@ export async function POST(
 
   const task = await updateBackgroundTask({
     id,
-    userId: user.id,
+    userId: access.user.id,
     status: 'cancelled',
     error: 'Cancelled by user'
   })

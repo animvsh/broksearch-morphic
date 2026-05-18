@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { FolderKanban, Loader2, MessageSquareText } from 'lucide-react'
 
 import { getWorkspaceKnowledgeData } from '@/lib/actions/platform-dashboard'
+import { requireAppAccess } from '@/lib/auth/app-access'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -25,6 +26,7 @@ function formatDate(value: Date | string | null) {
 }
 
 export default async function SpacesPage() {
+  await requireAppAccess('/spaces')
   const data = await getWorkspaceKnowledgeData()
 
   return (

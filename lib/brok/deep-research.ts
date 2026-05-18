@@ -44,6 +44,15 @@ export interface DeepResearchFinding {
   searchQueries: string[]
 }
 
+export interface DeepResearchSourceReading {
+  citationId: string
+  title: string
+  url: string
+  publisher?: string
+  excerpt: string
+  status: 'read' | 'failed'
+}
+
 export interface DeepResearchResult {
   answer: string
   citations: SearchResult[]
@@ -51,7 +60,9 @@ export interface DeepResearchResult {
   resolvedQuery: string
   classification: SearchResponse['classification']
   researchPlan: DeepResearchPlanItem[]
+  adaptivePlan: DeepResearchPlanItem[]
   findings: DeepResearchFinding[]
+  sourceReadings: DeepResearchSourceReading[]
   gaps: string[]
   confidence: 'low' | 'medium' | 'high'
   usage: {
@@ -108,7 +119,10 @@ export async function runDeepResearch(
 
     const response = await runSearchPipeline({
       query: item.query,
-      depth: item.intent === 'source-check' ? 'standard' : 'lite',
+      depth:
+        item.intent === 'source-check' || item.intent === 'counter-evidence'
+          ? 'deep'
+          : 'standard',
       recencyDays: request.recencyDays,
       domains: request.domains
     })
@@ -117,24 +131,85 @@ export async function runDeepResearch(
   }
 
   await stopIfCancelled(request)
-  await emitProgress(request, {
-    message: 'Cross-checking sources and resolving conflicts',
-    progress: 80,
-    metadata: { completedPasses: passResults.length, totalPasses }
-  })
-
-  const citations = rankAndDedupeSources(
+  let citations = rankAndDedupeSources(
     passResults.flatMap(({ response }) => response.citations),
     resolvedQuery,
     24
   )
-  const findings = buildFindings(passResults, citations)
-  const gaps = identifyEvidenceGaps({
+  let findings = buildFindings(passResults, citations)
+  let gaps = identifyEvidenceGaps({
     query: resolvedQuery,
     citations,
     findings
   })
-  const confidence = scoreConfidence(citations, findings, gaps)
+  const adaptivePlan = buildAdaptiveFollowUpPlan({
+    query: resolvedQuery,
+    gaps,
+    findings,
+    recencyDays: request.recencyDays,
+    domains: request.domains
+  })
+
+  if (adaptivePlan.length > 0) {
+    await emitProgress(request, {
+      message: `Following up on ${adaptivePlan.length} evidence gaps`,
+      progress: 74,
+      metadata: { adaptivePlan, gaps }
+    })
+
+    for (let index = 0; index < adaptivePlan.length; index += 1) {
+      await stopIfCancelled(request)
+      const item = adaptivePlan[index]
+
+      await emitProgress(request, {
+        message: `Deepening ${item.label.toLowerCase()}`,
+        progress: Math.round(76 + (index / adaptivePlan.length) * 8),
+        metadata: {
+          activeResearchPass: item,
+          completedPasses: passResults.length,
+          totalPasses: researchPlan.length + adaptivePlan.length
+        }
+      })
+
+      const response = await runSearchPipeline({
+        query: item.query,
+        depth: item.intent === 'counter-evidence' ? 'deep' : 'standard',
+        recencyDays: request.recencyDays,
+        domains: request.domains
+      })
+
+      passResults.push({ item, response })
+    }
+
+    citations = rankAndDedupeSources(
+      passResults.flatMap(({ response }) => response.citations),
+      resolvedQuery,
+      24
+    )
+    findings = buildFindings(passResults, citations)
+    gaps = identifyEvidenceGaps({
+      query: resolvedQuery,
+      citations,
+      findings
+    })
+  }
+
+  await stopIfCancelled(request)
+  await emitProgress(request, {
+    message: 'Reading top sources directly',
+    progress: 84,
+    metadata: { citationCount: citations.length }
+  })
+  const sourceReadings = await readTopSources(citations, 8)
+
+  await stopIfCancelled(request)
+  await emitProgress(request, {
+    message: 'Cross-checking sources and resolving conflicts',
+    progress: 87,
+    metadata: { completedPasses: passResults.length, totalPasses }
+  })
+
+  const confidence = scoreConfidence(citations, findings, gaps, sourceReadings)
 
   await emitProgress(request, {
     message: 'Writing the final research brief',
@@ -151,6 +226,7 @@ export async function runDeepResearch(
     classificationType: classification.type,
     researchPlan,
     findings,
+    sourceReadings,
     citations,
     gaps,
     confidence
@@ -171,7 +247,9 @@ export async function runDeepResearch(
     resolvedQuery,
     classification,
     researchPlan,
+    adaptivePlan,
     findings,
+    sourceReadings,
     gaps,
     confidence,
     usage: {
@@ -258,6 +336,72 @@ export function buildDeepResearchPlan({
   }
 
   return dedupePlan(plan).slice(0, 6)
+}
+
+export function buildAdaptiveFollowUpPlan({
+  query,
+  gaps,
+  findings,
+  recencyDays,
+  domains
+}: {
+  query: string
+  gaps: string[]
+  findings: DeepResearchFinding[]
+  recencyDays?: number
+  domains?: string[]
+}): DeepResearchPlanItem[] {
+  const domainConstraint = domains?.length
+    ? ` site:${domains.join(' OR site:')}`
+    : ''
+  const freshness = recencyDays ? ` within ${recencyDays} days` : ''
+  const weakFindings = findings
+    .filter(finding => finding.citationIds.length < 2)
+    .slice(0, 2)
+  const plan: DeepResearchPlanItem[] = []
+
+  if (
+    gaps.some(gap => /primary source|small source set|narrow set/i.test(gap))
+  ) {
+    plan.push({
+      id: 'adaptive-primary-verification',
+      label: 'Primary verification',
+      query: `${query} official documentation primary source data report${freshness}${domainConstraint}`,
+      intent: 'source-check'
+    })
+  }
+
+  if (gaps.some(gap => /freshness/i.test(gap))) {
+    plan.push({
+      id: 'adaptive-freshness',
+      label: 'Freshness verification',
+      query: `${query} latest updated release announcement 2026 2025${freshness}${domainConstraint}`,
+      intent: 'freshness-check'
+    })
+  }
+
+  for (const finding of weakFindings) {
+    plan.push({
+      id: `adaptive-${finding.label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')}`,
+      label: `${finding.label} follow-up`,
+      query: `${finding.query} evidence sources verification${freshness}${domainConstraint}`,
+      intent: 'evidence'
+    })
+  }
+
+  if (plan.length === 0 && findings.length > 0) {
+    plan.push({
+      id: 'adaptive-conflict-check',
+      label: 'Conflict check',
+      query: `${query} conflicting evidence criticism limitations${freshness}${domainConstraint}`,
+      intent: 'counter-evidence'
+    })
+  }
+
+  return dedupePlan(plan).slice(0, 3)
 }
 
 async function emitProgress(
@@ -370,10 +514,116 @@ function identifyEvidenceGaps({
   return Array.from(new Set(gaps)).slice(0, 5)
 }
 
+async function readTopSources(
+  citations: SearchResult[],
+  limit: number
+): Promise<DeepResearchSourceReading[]> {
+  const targets = citations
+    .filter(source => /^https?:\/\//i.test(source.url))
+    .slice(0, limit)
+
+  const reads = await Promise.all(
+    targets.map(async source => {
+      try {
+        const response = await fetch(source.url, {
+          headers: {
+            Accept:
+              'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8',
+            'User-Agent':
+              'BrokDeepResearch/1.0 (+https://brok.fyi; research citation reader)'
+          },
+          signal: AbortSignal.timeout(4500)
+        })
+
+        if (!response.ok) {
+          throw new Error(`Source returned ${response.status}`)
+        }
+
+        const contentType = response.headers.get('content-type') ?? ''
+        const raw = await response.text()
+        const text = contentType.includes('text/plain')
+          ? normalizeWhitespace(raw)
+          : extractReadableText(raw)
+        const excerpt = selectRelevantExcerpt(text, source.snippet)
+
+        if (excerpt.length < 120) {
+          throw new Error('Readable excerpt too short')
+        }
+
+        return {
+          citationId: source.id,
+          title: source.title,
+          url: source.url,
+          publisher: source.publisher,
+          excerpt,
+          status: 'read' as const
+        }
+      } catch {
+        return {
+          citationId: source.id,
+          title: source.title,
+          url: source.url,
+          publisher: source.publisher,
+          excerpt: source.snippet,
+          status: 'failed' as const
+        }
+      }
+    })
+  )
+
+  return reads
+}
+
+function extractReadableText(html: string) {
+  return normalizeWhitespace(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+      .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+      .replace(/<\/(p|div|section|article|li|h[1-6]|tr)>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+  )
+}
+
+function normalizeWhitespace(value: string) {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function selectRelevantExcerpt(text: string, snippet: string) {
+  const cleaned = normalizeWhitespace(text)
+  if (cleaned.length <= 2400) return cleaned
+
+  const snippetTerms = snippet
+    .toLowerCase()
+    .split(/[^a-z0-9]+/i)
+    .filter(term => term.length > 4)
+    .slice(0, 8)
+  const lower = cleaned.toLowerCase()
+  const matchIndex = snippetTerms
+    .map(term => lower.indexOf(term))
+    .filter(index => index >= 0)
+    .sort((a, b) => a - b)[0]
+
+  if (matchIndex === undefined) {
+    return cleaned.slice(0, 2400)
+  }
+
+  const start = Math.max(matchIndex - 500, 0)
+  return cleaned.slice(start, start + 2400)
+}
+
 function scoreConfidence(
   citations: SearchResult[],
   findings: DeepResearchFinding[],
-  gaps: string[]
+  gaps: string[],
+  sourceReadings: DeepResearchSourceReading[] = []
 ): DeepResearchResult['confidence'] {
   const averageQuality =
     citations.reduce((sum, source) => sum + (source.qualityScore ?? 0), 0) /
@@ -381,11 +631,15 @@ function scoreConfidence(
   const citedFindings = findings.filter(
     finding => finding.citationIds.length > 0
   ).length
+  const readSources = sourceReadings.filter(
+    reading => reading.status === 'read'
+  ).length
   const score =
     averageQuality +
     Math.min(citations.length, 12) * 2 +
     citedFindings * 5 -
-    gaps.length * 10
+    gaps.length * 10 +
+    Math.min(readSources, 8) * 2
 
   if (score >= 75) return 'high'
   if (score >= 45) return 'medium'
@@ -397,6 +651,7 @@ async function synthesizeDeepResearchAnswer({
   classificationType,
   researchPlan,
   findings,
+  sourceReadings,
   citations,
   gaps,
   confidence
@@ -405,6 +660,7 @@ async function synthesizeDeepResearchAnswer({
   classificationType: string
   researchPlan: DeepResearchPlanItem[]
   findings: DeepResearchFinding[]
+  sourceReadings: DeepResearchSourceReading[]
   citations: SearchResult[]
   gaps: string[]
   confidence: DeepResearchResult['confidence']
@@ -417,6 +673,7 @@ async function synthesizeDeepResearchAnswer({
     return fallbackDeepResearchAnswer({
       query,
       findings,
+      sourceReadings,
       citations,
       gaps,
       confidence
@@ -441,6 +698,15 @@ async function synthesizeDeepResearchAnswer({
         }\nFinding draft:\n${finding.answer}`
     )
     .join('\n\n')
+  const sourceReadingContext = sourceReadings
+    .filter(reading => reading.status === 'read')
+    .map(
+      reading =>
+        `Citation: ${reading.citationId}\nTitle: ${reading.title}\nURL: ${reading.url}\nPublisher: ${
+          reading.publisher ?? 'unknown'
+        }\nDirect excerpt:\n${reading.excerpt}`
+    )
+    .join('\n\n')
 
   const response = await fetch(`${MINIMAX_BASE_URL}/chat/completions`, {
     method: 'POST',
@@ -455,7 +721,7 @@ async function synthesizeDeepResearchAnswer({
         {
           role: 'system',
           content:
-            'You are Brok Deep Research. Produce a rigorous research brief using only the provided findings and citations. Be direct, concrete, and source-grounded. Start with the answer. Include sections: Answer, Evidence, Caveats, What to verify next. Cite factual claims with [1], [2], etc. Do not use generic filler, hype, or "let me know" endings. If evidence conflicts, explain the conflict.'
+            'You are Brok Deep Research. Produce a rigorous research brief using only the provided findings, citations, and direct source excerpts. Be direct, concrete, and source-grounded. Start with the answer. Include sections: Answer, Evidence, Caveats, What to verify next. Cite factual claims with [1], [2], etc. Do not use generic filler, hype, or "let me know" endings. If evidence conflicts, explain the conflict.'
         },
         {
           role: 'user',
@@ -463,7 +729,9 @@ async function synthesizeDeepResearchAnswer({
             .map(item => `${item.label}: ${item.query}`)
             .join(' | ')}\nEvidence gaps: ${
             gaps.length ? gaps.join('; ') : 'none'
-          }\n\nResearch findings:\n${findingContext}\n\nCitations:\n${citationContext}`
+          }\n\nResearch findings:\n${findingContext}\n\nDirect source excerpts:\n${
+            sourceReadingContext || 'No direct source excerpts were readable.'
+          }\n\nCitations:\n${citationContext}`
         }
       ]
     })
@@ -473,6 +741,7 @@ async function synthesizeDeepResearchAnswer({
     return fallbackDeepResearchAnswer({
       query,
       findings,
+      sourceReadings,
       citations,
       gaps,
       confidence
@@ -485,6 +754,7 @@ async function synthesizeDeepResearchAnswer({
       fallbackDeepResearchAnswer({
         query,
         findings,
+        sourceReadings,
         citations,
         gaps,
         confidence
@@ -495,12 +765,14 @@ async function synthesizeDeepResearchAnswer({
 function fallbackDeepResearchAnswer({
   query,
   findings,
+  sourceReadings,
   citations,
   gaps,
   confidence
 }: {
   query: string
   findings: DeepResearchFinding[]
+  sourceReadings?: DeepResearchSourceReading[]
   citations: SearchResult[]
   gaps: string[]
   confidence: DeepResearchResult['confidence']
@@ -520,11 +792,19 @@ function fallbackDeepResearchAnswer({
         `${index + 1}. ${source.title} - ${source.publisher ?? source.url}`
     )
     .join('\n')
+  const directReads = (sourceReadings ?? [])
+    .filter(reading => reading.status === 'read')
+    .slice(0, 5)
+    .map(
+      reading => `- ${reading.title}: ${reading.excerpt.slice(0, 420).trim()}`
+    )
+    .join('\n')
 
   return [
     `Answer\nDeep research for: ${query}`,
     `Confidence: ${confidence}`,
     `Evidence\n${evidence}`,
+    directReads ? `Direct source reads\n${directReads}` : '',
     gaps.length ? `Caveats\n${gaps.map(gap => `- ${gap}`).join('\n')}` : '',
     `Sources checked\n${sourceList}`
   ]

@@ -1,6 +1,6 @@
 import { after, NextResponse } from 'next/server'
 
-import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { requireAppAccessForApi } from '@/lib/auth/app-access'
 import {
   DeepResearchCancelled,
   runDeepResearch
@@ -102,6 +102,7 @@ async function runDeepResearchTask({
         citationCount: result.citations.length,
         searchQueries: result.searchQueryList,
         researchPlan: result.researchPlan,
+        adaptivePlan: result.adaptivePlan,
         confidence: result.confidence,
         gaps: result.gaps,
         researchPasses: result.usage.researchPasses
@@ -113,7 +114,9 @@ async function runDeepResearchTask({
         resolvedQuery: result.resolvedQuery,
         classification: result.classification,
         researchPlan: result.researchPlan,
+        adaptivePlan: result.adaptivePlan,
         findings: result.findings,
+        sourceReadings: result.sourceReadings,
         gaps: result.gaps,
         confidence: result.confidence,
         usage: {
@@ -165,10 +168,8 @@ function scheduleBackgroundTask(task: Promise<void>) {
 }
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const access = await requireAppAccessForApi()
+  if (!access.ok) return access.response
 
   const body = (await request
     .json()
@@ -193,7 +194,7 @@ export async function POST(request: Request) {
     : undefined
 
   const task = await createBackgroundTask({
-    userId: user.id,
+    userId: access.user.id,
     kind: 'deep-research',
     title: taskTitle(query),
     metadata: {
@@ -215,7 +216,7 @@ export async function POST(request: Request) {
   scheduleBackgroundTask(
     runDeepResearchTask({
       taskId: task.id,
-      userId: user.id,
+      userId: access.user.id,
       query,
       recencyDays,
       domains

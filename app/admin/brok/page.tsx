@@ -1,10 +1,17 @@
 import Link from 'next/link'
 
-import { getBrokStats } from '@/lib/actions/admin-brok'
+import {
+  addAppAccessAllowlistEmail,
+  getAppAccessAllowlist,
+  getBrokStats,
+  revokeAppAccessAllowlistEmail
+} from '@/lib/actions/admin-brok'
 import { requirePageAuth } from '@/lib/auth/require-page-auth'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 
 export const dynamic = 'force-dynamic'
 
@@ -185,7 +192,10 @@ function SplitBars({
 
 export default async function BrokAdminPage() {
   await requirePageAuth('/admin/brok')
-  const stats = await getBrokStats()
+  const [stats, allowlist] = await Promise.all([
+    getBrokStats(),
+    getAppAccessAllowlist()
+  ])
   const brokCode = stats.brokCode
 
   return (
@@ -218,6 +228,98 @@ export default async function BrokAdminPage() {
           </Link>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Private App Access</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Only active allowlisted emails can use Brok when the production gate
+            is enabled. Admin emails stay allowed through environment config.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form
+            action={addAppAccessAllowlistEmail}
+            className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_auto]"
+          >
+            <Input
+              name="email"
+              type="email"
+              placeholder="founder@company.com"
+              required
+              className="h-10"
+            />
+            <Input
+              name="note"
+              placeholder="Invite note or account context"
+              className="h-10"
+            />
+            <Button type="submit" className="h-10">
+              Allow Email
+            </Button>
+          </form>
+
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40 text-muted-foreground">
+                  <th className="px-3 py-2 text-left font-medium">Email</th>
+                  <th className="px-3 py-2 text-left font-medium">Status</th>
+                  <th className="px-3 py-2 text-left font-medium">Note</th>
+                  <th className="px-3 py-2 text-left font-medium">Added</th>
+                  <th className="px-3 py-2 text-right font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allowlist.length === 0 ? (
+                  <tr>
+                    <td
+                      className="px-3 py-6 text-center text-muted-foreground"
+                      colSpan={5}
+                    >
+                      No allowlisted emails yet.
+                    </td>
+                  </tr>
+                ) : (
+                  allowlist.map(entry => (
+                    <tr key={entry.id} className="border-b last:border-0">
+                      <td className="px-3 py-2 font-medium">{entry.email}</td>
+                      <td className="px-3 py-2">
+                        <Badge
+                          variant={
+                            entry.status === 'active' ? 'default' : 'secondary'
+                          }
+                        >
+                          {entry.status}
+                        </Badge>
+                      </td>
+                      <td className="max-w-[280px] truncate px-3 py-2 text-muted-foreground">
+                        {entry.note || '-'}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {formatDateTime(entry.createdAt)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <form action={revokeAppAccessAllowlistEmail}>
+                          <input name="id" type="hidden" value={entry.id} />
+                          <Button
+                            type="submit"
+                            size="sm"
+                            variant="outline"
+                            disabled={entry.status !== 'active'}
+                          >
+                            Revoke
+                          </Button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
       <section className="space-y-4">
         <div>

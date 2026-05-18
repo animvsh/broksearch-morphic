@@ -26,7 +26,6 @@ import { cn } from '@/lib/utils'
 import { isSimpleUtilityText } from '@/lib/utils/chat-routing'
 
 import { useSearchMode } from '@/hooks/use-search-mode'
-import { useTypewriterCycle } from '@/hooks/use-typewriter-cycle'
 
 import { useArtifact } from './artifact/artifact-context'
 import { Button } from './ui/button'
@@ -36,14 +35,6 @@ import { MessageNavigationDots } from './message-navigation-dots'
 import { ModelSelectorClient } from './model-selector-client'
 import { SearchModeSelector } from './search-mode-selector'
 import { UploadedFileList } from './uploaded-file-list'
-
-const LOADING_TAGLINES = [
-  'Reading the thread',
-  'Checking tools',
-  'Searching sources',
-  'Composing answer',
-  'Preparing next steps'
-]
 
 interface ChatPanelProps {
   input: string
@@ -141,14 +132,6 @@ export function ChatPanel({
     isCloudDeployment || modelSelectorData?.hasAvailableModels !== false
   const canSubmitWithoutModel =
     input.trim().length > 0 && isSimpleUtilityText(input)
-  const { displayText: loadingTagline } = useTypewriterCycle(LOADING_TAGLINES, {
-    firstDuration: 1200,
-    itemDuration: 1300,
-    idleDuration: 80,
-    charInterval: 18,
-    initialDelay: 60,
-    erase: false
-  })
   const activeTasks = recentTasks.filter(
     task => task.status === 'queued' || task.status === 'running'
   )
@@ -245,23 +228,31 @@ export function ChatPanel({
     }
   }, [isGuest, isLoading, loadRecentTasks])
 
-  const isToolInvocationInProgress = () => {
-    if (!messages.length) return false
+  const getActiveToolLabel = () => {
+    if (!messages.length) return null
 
     const lastMessage = messages[messages.length - 1]
-    if (lastMessage.role !== 'assistant' || !lastMessage.parts) return false
+    if (lastMessage.role !== 'assistant' || !lastMessage.parts) return null
 
-    const parts = lastMessage.parts
-    const lastPart = parts[parts.length - 1]
+    for (let index = lastMessage.parts.length - 1; index >= 0; index -= 1) {
+      const part = lastMessage.parts[index]
+      const state = (part as any)?.state ?? (part as any)?.output?.state
+      const isActive =
+        state === 'input-streaming' ||
+        state === 'input-available' ||
+        state === 'searching' ||
+        state === 'loading' ||
+        state === 'reading'
 
-    return (
-      (lastPart?.type === 'tool-search' ||
-        lastPart?.type === 'tool-fetch' ||
-        lastPart?.type === 'tool-askQuestion' ||
-        lastPart?.type === 'tool-composioIntegrations') &&
-      ((lastPart as any)?.state === 'input-streaming' ||
-        (lastPart as any)?.state === 'input-available')
-    )
+      if (!isActive) continue
+
+      if (part.type === 'tool-fetch') return 'Reading page'
+      if (part.type === 'tool-composioIntegrations') return 'Using connector'
+      if (part.type === 'tool-askQuestion') return 'Clarifying request'
+      if (part.type === 'tool-search') return 'Searching sources'
+    }
+
+    return null
   }
 
   const sendProgrammaticPrompt = useCallback(
@@ -388,6 +379,9 @@ export function ChatPanel({
       })
     }
   }
+  const activeToolLabel = getActiveToolLabel()
+  const hasActiveToolInvocation = Boolean(activeToolLabel)
+  const loadingLabel = activeToolLabel ?? 'Composing answer'
 
   return (
     <div
@@ -469,11 +463,8 @@ export function ChatPanel({
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <IconBlinkingLogo className="size-3.5" />
                 <span className="inline-flex min-w-0 items-center gap-1">
-                  {isToolInvocationInProgress()
-                    ? 'Working through tools:'
-                    : 'Thinking:'}
-                  <span className="thinking-text truncate font-medium text-foreground/80">
-                    {loadingTagline}
+                  <span className="font-medium text-foreground/80">
+                    {loadingLabel}
                   </span>
                   <span className="typing-dots" aria-hidden>
                     <span />
@@ -593,7 +584,7 @@ export function ChatPanel({
             }
             spellCheck={false}
             value={input}
-            disabled={isLoading || isToolInvocationInProgress()}
+            disabled={isLoading || hasActiveToolInvocation}
             className="min-h-14 w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-7 placeholder:text-zinc-400 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 md:min-h-16 md:p-5"
             onChange={handleInputChange}
             onKeyDown={e => {

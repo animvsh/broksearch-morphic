@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 
+import { requireAppAccess } from '@/lib/auth/app-access'
 import { getRequiredBrokAccountUser } from '@/lib/brokcode/account-guard'
 
 import { BrokCodeApp } from '@/components/brokcode/brokcode-app'
@@ -12,6 +13,7 @@ export default async function BrokCodePage(props: {
   }>
 }) {
   const searchParams = await props.searchParams
+  await requireAppAccess('/brokcode')
   const user = await getRequiredBrokAccountUser()
 
   if (!user) {

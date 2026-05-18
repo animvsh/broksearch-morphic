@@ -113,9 +113,9 @@ export function LoginForm({
             </form>
           </div>
           <div className="mt-6 text-center text-sm">
-            Don&apos;t have an account?{' '}
+            Need access?{' '}
             <Link href={signUpHref} className="underline underline-offset-4">
-              Sign Up
+              Request invite
             </Link>
           </div>
         </CardContent>

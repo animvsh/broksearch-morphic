@@ -9,6 +9,8 @@ import {
   TerminalSquare
 } from 'lucide-react'
 
+import { requireAppAccess } from '@/lib/auth/app-access'
+
 import { Button } from '@/components/ui/button'
 
 import { ChatPlayground } from '@/components/playground/chat-playground'
@@ -19,7 +21,8 @@ export const metadata: Metadata = {
     'Test the BrokCode API with streaming chat, model routing, API keys, and OpenAI-compatible integration snippets.'
 }
 
-export default function PlaygroundPage() {
+export default async function PlaygroundPage() {
+  await requireAppAccess('/playground')
   const docLinks = [
     { href: '/docs/quickstart', label: 'Quickstart', icon: BookOpen },
     { href: '/docs/api-keys', label: 'API Keys', icon: KeyRound },

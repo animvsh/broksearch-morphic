@@ -43,15 +43,10 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const isPublicPath =
     pathname === '/' ||
-    pathname === '/discover' ||
-    pathname === '/library' ||
-    pathname === '/spaces' ||
-    pathname === '/playground' ||
-    pathname.startsWith('/brokcode/shared') ||
-    pathname.startsWith('/tools') ||
     pathname.startsWith('/auth') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/docs') ||
+    pathname.startsWith('/brokcode/shared') ||
     pathname.startsWith('/search') ||
     pathname.startsWith('/share')
 

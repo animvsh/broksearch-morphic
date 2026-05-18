@@ -3,6 +3,8 @@ import Link from 'next/link'
 
 import { ArrowLeft, PenLine } from 'lucide-react'
 
+import { requireAppAccess } from '@/lib/auth/app-access'
+
 import { Button } from '@/components/ui/button'
 
 import { AiHumanizerTool } from '@/components/tools/ai-humanizer-tool'
@@ -13,7 +15,9 @@ export const metadata: Metadata = {
     'Humanize AI-generated writing by removing common AI phrasing, inflated language, chatbot artifacts, and awkward formatting.'
 }
 
-export default function HumanizerPage() {
+export default async function HumanizerPage() {
+  await requireAppAccess('/tools/humanizer')
+
   return (
     <div className="dashboard-shell min-h-full w-full p-3 sm:p-4">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">

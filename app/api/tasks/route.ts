@@ -1,16 +1,14 @@
 import { NextResponse } from 'next/server'
 
-import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { requireAppAccessForApi } from '@/lib/auth/app-access'
 import { listBackgroundTasks } from '@/lib/tasks/background-tasks'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const user = await getCurrentUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const access = await requireAppAccessForApi()
+  if (!access.ok) return access.response
 
   const url = new URL(request.url)
   const limit = Math.min(
@@ -19,6 +17,10 @@ export async function GET(request: Request) {
   )
   const chatId = url.searchParams.get('chatId')?.trim() || null
 
-  const tasks = await listBackgroundTasks({ userId: user.id, limit, chatId })
+  const tasks = await listBackgroundTasks({
+    userId: access.user.id,
+    limit,
+    chatId
+  })
   return NextResponse.json({ tasks })
 }

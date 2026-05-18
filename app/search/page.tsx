@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 
-import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import { requireAppAccess } from '@/lib/auth/app-access'
 import { getModelSelectorData } from '@/lib/model-selector/get-model-selector-data'
 import { generateUUID } from '@/lib/utils'
 
@@ -17,7 +17,7 @@ export default async function SearchPage(props: {
   }
 
   const id = generateUUID()
-  const userId = await getCurrentUserId()
+  await requireAppAccess(`/search?q=${encodeURIComponent(q)}`)
   const isCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT === 'true'
   const modelSelectorData = await getModelSelectorData()
 
@@ -25,7 +25,7 @@ export default async function SearchPage(props: {
     <Chat
       id={id}
       query={q}
-      isGuest={!userId}
+      isGuest={false}
       isCloudDeployment={isCloudDeployment}
       modelSelectorData={modelSelectorData}
     />

@@ -46,6 +46,26 @@ export const workspaces = pgTable('workspaces', {
   createdAt: timestamp('created_at').defaultNow().notNull()
 })
 
+export const appAccessAllowlist = pgTable(
+  'app_access_allowlist',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: text('email').notNull(),
+    status: text('status').default('active').notNull(),
+    note: text('note'),
+    createdBy: text('created_by'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    revokedAt: timestamp('revoked_at')
+  },
+  table => ({
+    emailUniqueIdx: uniqueIndex('app_access_allowlist_email_unique_idx').on(
+      table.email
+    ),
+    statusIdx: index('app_access_allowlist_status_idx').on(table.status)
+  })
+)
+
 // API Keys
 export const apiKeys = pgTable(
   'api_keys',
@@ -280,6 +300,94 @@ export const brokCodeVersions = pgTable(
   })
 )
 
+export const brokCodeProjects = pgTable(
+  'brokcode_projects',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    username: text('username'),
+    status: text('status').default('draft').notNull(),
+    previewUrl: text('preview_url'),
+    deploymentUrl: text('deployment_url'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => ({
+    workspaceSlugUniqueIdx: uniqueIndex(
+      'brokcode_projects_workspace_slug_unique_idx'
+    ).on(table.workspaceId, table.slug),
+    workspaceIdx: index('brokcode_projects_workspace_idx').on(
+      table.workspaceId
+    ),
+    userIdx: index('brokcode_projects_user_idx').on(table.userId),
+    usernameIdx: index('brokcode_projects_username_idx').on(table.username)
+  })
+)
+
+export const brokCodeProjectFiles = pgTable(
+  'brokcode_project_files',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .references(() => brokCodeProjects.id)
+      .notNull(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    path: text('path').notNull(),
+    content: text('content').notNull(),
+    language: text('language'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => ({
+    projectPathUniqueIdx: uniqueIndex(
+      'brokcode_project_files_project_path_unique_idx'
+    ).on(table.projectId, table.path),
+    projectIdx: index('brokcode_project_files_project_idx').on(table.projectId),
+    workspaceIdx: index('brokcode_project_files_workspace_idx').on(
+      table.workspaceId
+    )
+  })
+)
+
+export const brokCodeDeployments = pgTable(
+  'brokcode_deployments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .references(() => brokCodeProjects.id)
+      .notNull(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    provider: text('provider').default('railway').notNull(),
+    status: text('status').default('queued').notNull(),
+    url: text('url'),
+    subdomain: text('subdomain'),
+    logs: jsonb('logs').$type<Array<Record<string, unknown>>>(),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => ({
+    projectIdx: index('brokcode_deployments_project_idx').on(table.projectId),
+    workspaceIdx: index('brokcode_deployments_workspace_idx').on(
+      table.workspaceId
+    ),
+    subdomainIdx: index('brokcode_deployments_subdomain_idx').on(
+      table.subdomain
+    )
+  })
+)
+
 export const brokMailApprovalConsumptions = pgTable(
   'brokmail_approval_consumptions',
   {
@@ -307,7 +415,8 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
   usageEvents: many(usageEvents),
   brokCodeRuntimeKeys: many(brokCodeRuntimeKeys),
   brokCodeSessions: many(brokCodeSessions),
-  brokCodeVersions: many(brokCodeVersions)
+  brokCodeVersions: many(brokCodeVersions),
+  brokCodeProjects: many(brokCodeProjects)
 }))
 
 export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
@@ -340,6 +449,46 @@ export const brokCodeSessionsRelations = relations(
       references: [workspaces.id]
     }),
     events: many(brokCodeSessionEvents)
+  })
+)
+
+export const brokCodeProjectsRelations = relations(
+  brokCodeProjects,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [brokCodeProjects.workspaceId],
+      references: [workspaces.id]
+    }),
+    files: many(brokCodeProjectFiles),
+    deployments: many(brokCodeDeployments)
+  })
+)
+
+export const brokCodeProjectFilesRelations = relations(
+  brokCodeProjectFiles,
+  ({ one }) => ({
+    project: one(brokCodeProjects, {
+      fields: [brokCodeProjectFiles.projectId],
+      references: [brokCodeProjects.id]
+    }),
+    workspace: one(workspaces, {
+      fields: [brokCodeProjectFiles.workspaceId],
+      references: [workspaces.id]
+    })
+  })
+)
+
+export const brokCodeDeploymentsRelations = relations(
+  brokCodeDeployments,
+  ({ one }) => ({
+    project: one(brokCodeProjects, {
+      fields: [brokCodeDeployments.projectId],
+      references: [brokCodeProjects.id]
+    }),
+    workspace: one(workspaces, {
+      fields: [brokCodeDeployments.workspaceId],
+      references: [workspaces.id]
+    })
   })
 )
 

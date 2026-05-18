@@ -129,8 +129,9 @@ export function ChatMessages({
       if (toolCount > 1) {
         return false
       }
-      // Single tool results stay open even if more content follows
-      return true
+      // Once the answer starts, keep the tool compact so sources do not crowd
+      // the actual response. Users can still expand the process row.
+      return !hasNextPart
     }
 
     // For tool-invocations, default to open

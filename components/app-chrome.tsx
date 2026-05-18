@@ -24,6 +24,7 @@ export function AppChrome({
   const pathname = usePathname()
   const isAuthRoute = pathname?.startsWith('/auth')
   const isDocsRoute = pathname?.startsWith('/docs')
+  const isPublicLanding = pathname === '/' && !user
   const usesPageScroll =
     isDocsRoute ||
     pathname === '/playground' ||
@@ -32,7 +33,7 @@ export function AppChrome({
     pathname?.startsWith('/brokcode') ||
     pathname?.startsWith('/brokmail')
 
-  if (isAuthRoute) {
+  if (isAuthRoute || isPublicLanding) {
     return (
       <main className="flex min-h-svh w-full overflow-y-auto bg-background">
         {children}

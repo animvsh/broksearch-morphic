@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowUpRight, Clock3, Compass, Search, Sparkles } from 'lucide-react'
 
 import { getWorkspaceKnowledgeData } from '@/lib/actions/platform-dashboard'
+import { requireAppAccess } from '@/lib/auth/app-access'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -30,6 +31,7 @@ function makePrompt(title: string) {
 }
 
 export default async function DiscoverPage() {
+  await requireAppAccess('/discover')
   const data = await getWorkspaceKnowledgeData()
   const featuredThreads = data.threads.slice(0, 8)
   const prompts = [

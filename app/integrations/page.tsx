@@ -1,9 +1,8 @@
 import type { Metadata } from 'next'
-import { redirect } from 'next/navigation'
 
 import { CheckCircle2, Link2, PlugZap, ShieldAlert } from 'lucide-react'
 
-import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { requireAppAccess } from '@/lib/auth/app-access'
 import {
   isComposioConfigured,
   isComposioConnectMode,
@@ -290,10 +289,7 @@ async function loadIntegrationRows(userId: string): Promise<{
 }
 
 export default async function IntegrationsPage() {
-  const user = await getCurrentUser()
-  if (!user) {
-    redirect(`/auth/login?redirectTo=${encodeURIComponent('/integrations')}`)
-  }
+  const user = await requireAppAccess('/integrations')
 
   const { configured, connectMode, rows, error } = await loadIntegrationRows(
     user.id

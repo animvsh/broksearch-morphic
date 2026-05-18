@@ -38,20 +38,20 @@ const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3001'
 const smokeUserId = process.env.ANONYMOUS_USER_ID || 'anonymous-user'
 
 const uiChecks: UiCheck[] = [
-  { path: '/', expectedText: 'Quick mode' },
+  { path: '/', expectedText: 'Private beta' },
   { path: '/docs', expectedText: 'Brok Documentation' },
   { path: '/docs/quickstart', expectedText: 'Quickstart' },
-  { path: '/docs/api-keys', expectedText: 'API Keys' },
-  { path: '/playground', expectedText: 'BrokCode API' },
-  { path: '/tools', expectedText: 'AI Humanizer' },
-  { path: '/tools/humanizer', expectedText: 'Humanized Output' }
+  { path: '/docs/api-keys', expectedText: 'API Keys' }
 ]
 
 const protectedUiChecks: ProtectedUiCheck[] = [
   { path: '/admin/brok' },
   { path: '/brokcode' },
   { path: '/brokmail' },
-  { path: '/integrations' }
+  { path: '/integrations' },
+  { path: '/playground' },
+  { path: '/tools' },
+  { path: '/tools/humanizer' }
 ]
 
 const apiChecks: ApiCheck[] = [

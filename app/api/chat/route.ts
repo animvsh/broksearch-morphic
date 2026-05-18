@@ -3,6 +3,10 @@ import { cookies } from 'next/headers'
 
 import { loadChat } from '@/lib/actions/chat'
 import { calculateConversationTurn, trackChatEvent } from '@/lib/analytics'
+import {
+  getCurrentAppAccess,
+  isAppAccessGateEnabled
+} from '@/lib/auth/app-access'
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
 import { normalizeSearchMode } from '@/lib/config/search-modes'
 import { checkAndEnforceAdaptiveLimit } from '@/lib/rate-limit/adaptive-limit'
@@ -70,6 +74,23 @@ export async function POST(req: Request) {
         status: 403,
         statusText: 'Forbidden'
       })
+    }
+
+    if (isAppAccessGateEnabled()) {
+      const access = await getCurrentAppAccess()
+      if (!access.user) {
+        return new Response('Authentication required', {
+          status: 401,
+          statusText: 'Unauthorized'
+        })
+      }
+
+      if (!access.allowed) {
+        return new Response('Access pending', {
+          status: 403,
+          statusText: 'Forbidden'
+        })
+      }
     }
 
     const guestChatEnabled = process.env.ENABLE_GUEST_CHAT === 'true'

@@ -9,6 +9,7 @@ import { BROK_MODELS } from '@/lib/brok/models'
 import { db } from '@/lib/db'
 import {
   apiKeys,
+  appAccessAllowlist,
   providerRoutes,
   rateLimitEvents,
   usageEvents,
@@ -223,6 +224,90 @@ async function assertAdminAccess() {
   if (!access.ok) {
     throw new Error(access.error)
   }
+}
+
+async function getAdminActorId() {
+  const access = await requireAdminAccess()
+
+  if (!access.ok) {
+    throw new Error(access.error)
+  }
+
+  return access.user?.id ?? 'admin'
+}
+
+function normalizeEmailForAllowlist(email: string) {
+  return email.trim().toLowerCase()
+}
+
+export async function getAppAccessAllowlist() {
+  await assertAdminAccess()
+
+  return db
+    .select({
+      id: appAccessAllowlist.id,
+      email: appAccessAllowlist.email,
+      status: appAccessAllowlist.status,
+      note: appAccessAllowlist.note,
+      createdBy: appAccessAllowlist.createdBy,
+      createdAt: appAccessAllowlist.createdAt,
+      updatedAt: appAccessAllowlist.updatedAt,
+      revokedAt: appAccessAllowlist.revokedAt
+    })
+    .from(appAccessAllowlist)
+    .orderBy(asc(appAccessAllowlist.email))
+}
+
+export async function addAppAccessAllowlistEmail(formData: FormData) {
+  const actorId = await getAdminActorId()
+  const email = normalizeEmailForAllowlist(String(formData.get('email') ?? ''))
+  const note = String(formData.get('note') ?? '').trim()
+
+  if (!email || !email.includes('@')) {
+    throw new Error('A valid email is required')
+  }
+
+  await db
+    .insert(appAccessAllowlist)
+    .values({
+      email,
+      status: 'active',
+      note: note || null,
+      createdBy: actorId,
+      updatedAt: new Date(),
+      revokedAt: null
+    })
+    .onConflictDoUpdate({
+      target: appAccessAllowlist.email,
+      set: {
+        status: 'active',
+        note: note || null,
+        updatedAt: new Date(),
+        revokedAt: null
+      }
+    })
+
+  revalidateAdminPaths()
+}
+
+export async function revokeAppAccessAllowlistEmail(formData: FormData) {
+  await assertAdminAccess()
+  const id = String(formData.get('id') ?? '')
+
+  if (!id) {
+    throw new Error('Allowlist row is required')
+  }
+
+  await db
+    .update(appAccessAllowlist)
+    .set({
+      status: 'revoked',
+      updatedAt: new Date(),
+      revokedAt: new Date()
+    })
+    .where(eq(appAccessAllowlist.id, id))
+
+  revalidateAdminPaths()
 }
 
 export async function getBrokStats() {

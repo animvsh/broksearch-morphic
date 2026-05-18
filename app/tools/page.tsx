@@ -3,6 +3,8 @@ import Link from 'next/link'
 
 import { ArrowRight, PenLine, Sparkles } from 'lucide-react'
 
+import { requireAppAccess } from '@/lib/auth/app-access'
+
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -18,7 +20,9 @@ export const metadata: Metadata = {
     'Production-ready Brok tools for writing, research, code, email, and connected workflows.'
 }
 
-export default function ToolsPage() {
+export default async function ToolsPage() {
+  await requireAppAccess('/tools')
+
   return (
     <div className="dashboard-shell min-h-full w-full p-3 sm:p-4">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">

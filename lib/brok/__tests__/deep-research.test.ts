@@ -68,6 +68,15 @@ describe('deep research workflow', () => {
         runSearchPipeline
       }
     })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => ({
+        ok: true,
+        headers: new Headers({ 'content-type': 'text/html' }),
+        text: async () =>
+          `<html><body><main><h1>Source</h1><p>Direct source evidence for ${url}. This page contains detailed pricing, release, and verification information that Brok can quote in a research brief.</p></main></body></html>`
+      })) as any
+    )
 
     const { runDeepResearch } = await import('@/lib/brok/deep-research')
     const progressEvents: string[] = []
@@ -79,9 +88,15 @@ describe('deep research workflow', () => {
       }
     })
 
-    expect(runSearchPipeline).toHaveBeenCalledTimes(result.researchPlan.length)
+    expect(runSearchPipeline).toHaveBeenCalledTimes(
+      result.researchPlan.length + result.adaptivePlan.length
+    )
     expect(result.usage.researchPasses).toBeGreaterThanOrEqual(5)
+    expect(result.adaptivePlan.length).toBeGreaterThan(0)
     expect(result.citations.length).toBeGreaterThan(1)
+    expect(
+      result.sourceReadings.some(reading => reading.status === 'read')
+    ).toBe(true)
     expect(result.findings[0].citationIds.length).toBeGreaterThan(0)
     expect(result.answer).toContain('Deep research for:')
     expect(progressEvents).toContain('Writing the final research brief')
