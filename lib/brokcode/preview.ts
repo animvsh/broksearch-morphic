@@ -107,7 +107,7 @@ function buildGeneratedIndexHtml({
     <main>
       <section>
         <h1>${safeName}</h1>
-        <p>This managed BrokCode preview is live. Add an <code>index.html</code> file to render the generated app directly.</p>
+        <p>BrokCode Cloud preview is ready. Ask Brok to build the first screen, and it will render here automatically.</p>
         <ul>${fileList || '<li>No saved project files yet.</li>'}</ul>
       </section>
     </main>

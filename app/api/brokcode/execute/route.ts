@@ -575,7 +575,7 @@ function createExecutionStream({
 
         try {
           send('status', {
-            message: 'Planning BrokCode Cloud execution.'
+            message: 'Planning the build.'
           })
 
           let piFailure: string | null = null
@@ -599,7 +599,7 @@ function createExecutionStream({
           if (preferPi || requirePi) {
             try {
               send('status', {
-                message: 'Running Pi coding-agent runtime.'
+                message: 'Building with the coding agent.'
               })
               const result = await runPiAgentPrompt({
                 mode: 'brokcode',
@@ -613,7 +613,7 @@ function createExecutionStream({
                 content: result.content,
                 usage: null,
                 preview_url: extractPreviewUrl(`${command}\n${result.content}`),
-                note: `Executed through Pi coding-agent (${result.provider}).`
+                note: 'Built with BrokCode Cloud.'
               })
               await recordCodeExecutionUsage({
                 ...usageContext,
@@ -685,7 +685,7 @@ function createExecutionStream({
 
           if (opencodeBase) {
             send('status', {
-              message: 'Connecting to brokcode-cloud runtime.'
+              message: 'Opening the cloud builder.'
             })
 
             const endpoint = buildOpenCodeEndpoint(opencodeBase)
@@ -709,7 +709,7 @@ function createExecutionStream({
 
             if (opencodeResponse.ok) {
               send('status', {
-                message: 'Streaming from brokcode-cloud runtime.'
+                message: 'Writing the app.'
               })
 
               const contentType =
@@ -880,8 +880,8 @@ function createExecutionStream({
           send('status', {
             message:
               piFailure || opencodeFailure
-                ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} Falling back to Brok runtime.`
-                : 'Streaming from Brok runtime.'
+                ? 'Switching to the backup builder.'
+                : 'Writing the app.'
           })
 
           let content = ''
@@ -1307,7 +1307,7 @@ export async function POST(request: NextRequest) {
         content: result.content,
         usage: null,
         preview_url: extractPreviewUrl(`${command}\n${result.content}`),
-        note: `Executed through Pi coding-agent (${result.provider}).`
+        note: 'Built with BrokCode Cloud.'
       })
     } catch (error) {
       piFailure =

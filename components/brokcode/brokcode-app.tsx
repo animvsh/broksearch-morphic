@@ -508,8 +508,11 @@ function maskBrokApiKey(value: string) {
 
 function buildCommandPrompt(command: string) {
   return [
-    'You are Brok Code, a coding agent for repository tasks.',
-    'Answer with clear execution-focused output.',
+    'You are Brok Code, a coding agent and no-code app builder for nontechnical users.',
+    'Keep responses short, plain, and product-focused. Do not expose runtime plumbing unless it is needed to unblock the user.',
+    'When building a website, app, landing page, or UI, return previewable files as fenced code blocks with filenames, especially a complete `index.html` file.',
+    'Use this exact format for generated files: ```html filename=index.html followed by the full file content.',
+    'When you can produce a single-file static preview, include all CSS and JS inside index.html so Brok can load it in the cloud preview immediately.',
     'When the user is building an app or feature with AI, default to Brok API as the AI layer unless they explicitly request another provider.',
     'For AI app work, suggest the Brok API model path first, use Brok API compatible env names, and avoid introducing OpenAI/Anthropic/etc. as the default integration.',
     'If the task is risky (merge, delete, deploy, external write), require explicit approval.',
@@ -607,6 +610,91 @@ function isBrokCodeWorkspaceUrl(value: string) {
 function extractPreviewUrlFromText(text: string) {
   const match = text.match(/https?:\/\/(?:127\.0\.0\.1|localhost|[^\s"'<>]+)/i)
   return match?.[0] ?? null
+}
+
+type GeneratedPreviewFile = {
+  path: string
+  content: string
+  language: string | null
+}
+
+function makeProjectNameFromPrompt(prompt: string) {
+  const cleaned = prompt
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/[^a-z0-9\s-]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!cleaned) return 'BrokCode app'
+
+  const words = cleaned.split(' ').slice(0, 6).join(' ')
+  return words.length > 48 ? `${words.slice(0, 45)}...` : words
+}
+
+function filePathFromFenceInfo(info: string, language: string | null) {
+  const filenameMatch = info.match(
+    /(?:^|\s)(?:file|filename|path)=["']?([^"'\s]+)["']?/i
+  )
+  if (filenameMatch?.[1]) return filenameMatch[1]
+
+  const tokenPath = info
+    .split(/\s+/)
+    .map(token => token.trim())
+    .find(token => /[./\\][\w.-]+$/.test(token) || /\.[a-z0-9]+$/i.test(token))
+  if (tokenPath) return tokenPath
+
+  if (language === 'html') return 'index.html'
+  if (language === 'css') return 'styles.css'
+  if (language === 'javascript' || language === 'js') return 'app.js'
+  if (language === 'json') return 'data.json'
+  if (language === 'svg') return 'asset.svg'
+  return null
+}
+
+function normalizeGeneratedFilePath(path: string) {
+  return path.trim().replace(/\\/g, '/').replace(/^\/+/, '')
+}
+
+function extractGeneratedPreviewFiles(text: string): GeneratedPreviewFile[] {
+  const files = new Map<string, GeneratedPreviewFile>()
+  const fencePattern = /```([^\n`]*)\n([\s\S]*?)```/g
+  let match: RegExpExecArray | null
+
+  while ((match = fencePattern.exec(text)) !== null) {
+    const info = match[1]?.trim() ?? ''
+    const content = match[2]?.trim() ?? ''
+    if (!content) continue
+
+    const language = info.split(/\s+/)[0]?.toLowerCase() || null
+    const rawPath = filePathFromFenceInfo(info, language)
+    if (!rawPath) continue
+
+    const path = normalizeGeneratedFilePath(rawPath)
+    if (!path || path.includes('..') || path.includes('\0')) continue
+
+    files.set(path, { path, content, language })
+  }
+
+  if (
+    files.size === 0 &&
+    /<!doctype html|<html[\s>]/i.test(text) &&
+    /<\/html>/i.test(text)
+  ) {
+    files.set('index.html', {
+      path: 'index.html',
+      content: text.trim(),
+      language: 'html'
+    })
+  }
+
+  return [...files.values()]
+}
+
+function cleanAssistantContentForBuilder(content: string) {
+  return content
+    .replace(/^Live \([^)]+\)\s*/i, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 async function readBrokCodeExecutionStream(
@@ -722,7 +810,7 @@ async function readBrokCodeExecutionStream(
     content:
       accumulated.trim() ||
       (typeof result?.content === 'string' ? result.content.trim() : '') ||
-      'Pi coding-agent completed the run but returned no text output.',
+      'The build finished, but Brok did not return a written summary.',
     usage: result?.usage,
     preview_url:
       typeof result?.preview_url === 'string' ? result.preview_url : null,
@@ -1174,6 +1262,88 @@ export function BrokCodeApp({
     },
     [apiKey, getAuthHeaders]
   )
+
+  async function ensureProjectForRun(command: string) {
+    if (activeProject) return activeProject
+
+    const response = await fetch('/api/brokcode/projects', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(apiKey),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: makeProjectNameFromPrompt(command)
+      })
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(body?.error?.message ?? 'Could not create project.')
+    }
+
+    const project = body?.project as BrokCodeProject | undefined
+    if (!project?.id) {
+      throw new Error('Project creation did not return a project.')
+    }
+
+    setProjects(current => [project, ...current])
+    setActiveProjectId(project.id)
+    return project
+  }
+
+  async function saveGeneratedPreviewFiles({
+    files,
+    projectId
+  }: {
+    files: GeneratedPreviewFile[]
+    projectId: string
+  }) {
+    await Promise.all(
+      files.map(file =>
+        fetch(`/api/brokcode/projects/${projectId}/files`, {
+          method: 'PUT',
+          headers: {
+            ...getAuthHeaders(apiKey),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(file)
+        }).then(async response => {
+          if (response.ok) return
+          const body = await response.json().catch(() => null)
+          throw new Error(body?.error ?? `Could not save ${file.path}`)
+        })
+      )
+    )
+  }
+
+  async function openCloudProjectPreview(projectId: string) {
+    const response = await fetch(
+      `/api/brokcode/projects/${projectId}/preview`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders(apiKey)
+      }
+    )
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(body?.error?.message ?? 'Could not start preview.')
+    }
+
+    const previewCandidate =
+      body?.previewUrl ??
+      body?.deploymentPreviewUrl ??
+      body?.project?.previewUrl
+    const loadedPreviewUrl = loadPreviewUrlIfAllowed(previewCandidate)
+    if (body?.project?.id) {
+      const project = body.project as BrokCodeProject
+      setProjects(current => [
+        project,
+        ...current.filter(item => item.id !== project.id)
+      ])
+      setActiveProjectId(project.id)
+    }
+    return loadedPreviewUrl
+  }
 
   useEffect(() => {
     void refreshGithubStatus()
@@ -1968,17 +2138,20 @@ export function BrokCodeApp({
         body?.deployment?.deploymentUrl ??
         body?.deployment?.url
       const loadedPreviewUrl = loadPreviewUrlIfAllowed(previewCandidate)
-      const message =
-        typeof body?.message === 'string'
+      const message = loadedPreviewUrl
+        ? 'Preview is live.'
+        : typeof body?.message === 'string'
           ? body.message
-          : 'Deployment triggered.'
+          : 'Deployment started.'
 
       setMessages(current => [
         ...current,
         {
           id: createId('assistant'),
           role: 'assistant',
-          content: `${message}\nStrategy: ${strategy}${deploymentId ? `\nDeployment ID: ${deploymentId}` : ''}${loadedPreviewUrl ? `\nPreview: ${loadedPreviewUrl}` : ''}`
+          content: loadedPreviewUrl
+            ? `${message} I opened it on the right.`
+            : `${message}${deploymentId ? `\nDeployment ID: ${deploymentId}` : ''}`
         }
       ])
       void persistVersionSnapshot({
@@ -2408,12 +2581,12 @@ export function BrokCodeApp({
       {
         id: createId('system'),
         role: 'system',
-        content: 'Starting a real BrokCode run...'
+        content: 'Building in BrokCode Cloud...'
       },
       {
         id: assistantMessageId,
         role: 'assistant',
-        content: 'Connecting to BrokCode runtime...'
+        content: 'I am setting up the project and preview...'
       }
     ])
     setRuntimeError(null)
@@ -2440,12 +2613,7 @@ export function BrokCodeApp({
         ? ['run-checks', 'open-pr', 'connect-github']
         : ['run-checks']
 
-    updateExecutionStep(
-      run.id,
-      'parse',
-      'done',
-      'Intent parsed and command accepted.'
-    )
+    updateExecutionStep(run.id, 'parse', 'done', 'Request understood.')
     updateExecutionStep(
       run.id,
       'plan',
@@ -2454,12 +2622,14 @@ export function BrokCodeApp({
     )
 
     try {
-      updateExecutionStep(run.id, 'plan', 'done', 'Runtime request prepared.')
+      const runProject = await ensureProjectForRun(trimmed)
+
+      updateExecutionStep(run.id, 'plan', 'done', 'Project is ready.')
       updateExecutionStep(
         run.id,
         'execute',
         'running',
-        'Sending command to BrokCode runtime.'
+        'Building the requested changes.'
       )
 
       const response = await fetch('/api/brokcode/execute', {
@@ -2477,7 +2647,7 @@ export function BrokCodeApp({
           session_id: syncSessionId,
           stream: true,
           prefer_pi: true,
-          project_id: activeProject?.id ?? null,
+          project_id: runProject.id,
           backend_provider: activeBackend.provider,
           backend_status: activeBackend.status,
           backend_project_url:
@@ -2487,7 +2657,7 @@ export function BrokCodeApp({
           messages: [
             {
               role: 'system',
-              content: `${buildCommandPrompt(trimmed)}\n\nProject context: ${activeProject ? `${activeProject.name} (${activeProject.id})` : 'No saved BrokCode project selected'}.\nBackend context: ${activeBackend.provider === 'insforge' ? `InsForge ${activeBackend.status}; project URL ${activeBackend.projectUrl ?? 'not set'}; database/auth/storage/functions are available when configured. Never ask the browser for the InsForge admin key.` : 'No backend provider configured yet.'}`
+              content: `${buildCommandPrompt(trimmed)}\n\nProject context: ${runProject.name} (${runProject.id}).\nBackend context: ${activeBackend.provider === 'insforge' ? `InsForge ${activeBackend.status}; project URL ${activeBackend.projectUrl ?? 'not set'}; database/auth/storage/functions are available when configured. Never ask the browser for the InsForge admin key.` : 'No backend provider configured yet.'}`
             },
             { role: 'user', content: trimmed }
           ]
@@ -2507,10 +2677,10 @@ export function BrokCodeApp({
               setMessages(current =>
                 current.map(message =>
                   message.id === assistantMessageId &&
-                  message.content.startsWith('Connecting')
+                  message.content.startsWith('I am setting up')
                     ? {
                         ...message,
-                        content: `${event.message}\n\nWaiting for the first token...`
+                        content: `${event.message}\n\nI will open the preview when it is ready.`
                       }
                     : message
                 )
@@ -2523,7 +2693,9 @@ export function BrokCodeApp({
                 message.id === assistantMessageId
                   ? {
                       ...message,
-                      content: `Live (${selectedModel})\n\n${event.accumulated}`
+                      content: cleanAssistantContentForBuilder(
+                        event.accumulated
+                      )
                     }
                   : message
               )
@@ -2534,32 +2706,46 @@ export function BrokCodeApp({
       const content = body?.content
       const assistantContent =
         typeof content === 'string' && content.trim().length > 0
-          ? content.trim()
-          : 'BrokCode Cloud completed the run but returned no text output.'
-      const discoveredPreviewUrl =
+          ? cleanAssistantContentForBuilder(content)
+          : 'The build finished, but Brok did not return a written summary.'
+      const externalPreviewUrl =
         typeof body?.preview_url === 'string'
           ? body.preview_url
           : extractPreviewUrlFromText(assistantContent)
+      const generatedFiles = extractGeneratedPreviewFiles(assistantContent)
+
+      let managedPreviewUrl: string | null = null
+      if (generatedFiles.length > 0) {
+        updateExecutionStep(
+          run.id,
+          'validate',
+          'running',
+          `Saving ${generatedFiles.length} generated file${
+            generatedFiles.length === 1 ? '' : 's'
+          }.`
+        )
+        await saveGeneratedPreviewFiles({
+          projectId: runProject.id,
+          files: generatedFiles
+        })
+        managedPreviewUrl = await openCloudProjectPreview(runProject.id)
+      } else if (!externalPreviewUrl) {
+        managedPreviewUrl = await openCloudProjectPreview(runProject.id)
+      }
+
+      const discoveredPreviewUrl = externalPreviewUrl ?? managedPreviewUrl
 
       setActiveRuntime(runtime)
-      updateExecutionStep(
-        run.id,
-        'execute',
-        'done',
-        `Completed with ${getRuntimeLabel(runtime)}.`
-      )
+      updateExecutionStep(run.id, 'execute', 'done', 'Build finished.')
       updateExecutionStep(
         run.id,
         'validate',
         'done',
-        'Response and usage payload validated.'
+        discoveredPreviewUrl
+          ? 'Cloud preview is open.'
+          : 'Run completed without a preview URL.'
       )
-      updateExecutionStep(
-        run.id,
-        'summarize',
-        'done',
-        'Assistant response is ready.'
-      )
+      updateExecutionStep(run.id, 'summarize', 'done', 'Summary is ready.')
       finalizeExecutionRun(run.id, {
         runtime,
         status: 'done',
@@ -2579,7 +2765,9 @@ export function BrokCodeApp({
           message.id === assistantMessageId
             ? {
                 ...message,
-                content: `Live (${selectedModel} via ${getRuntimeLabel(runtime)})\n\n${assistantContent}`,
+                content: discoveredPreviewUrl
+                  ? `Done. I opened the preview on the right.\n\n${assistantContent}`
+                  : `Done.\n\n${assistantContent}`,
                 actions
               }
             : message
@@ -2592,7 +2780,7 @@ export function BrokCodeApp({
         metadata: {
           runtime,
           model: selectedModel,
-          projectId: activeProject?.id ?? null,
+          projectId: runProject.id,
           backendProvider: activeBackend.provider,
           backendStatus: activeBackend.status,
           backendUrl:
@@ -4288,11 +4476,6 @@ function BrowserPreviewPanel({
   onReload: () => void
   runtimeError: string | null
 }) {
-  const previewShortcuts = [
-    { label: 'localhost:3000', value: 'http://localhost:3000' },
-    { label: 'localhost:5173', value: 'http://localhost:5173' },
-    { label: '127.0.0.1:8080', value: 'http://127.0.0.1:8080' }
-  ]
   const hasPreviewUrl = Boolean(previewUrl.trim())
   const isBlockedPreview = isBrokCodeWorkspaceUrl(previewUrl)
   const previewStatus =
@@ -4318,10 +4501,18 @@ function BrowserPreviewPanel({
           <span className="size-3 rounded-full bg-[#febc2e]" />
           <span className="size-3 rounded-full bg-[#28c840]" />
         </div>
+        <div className="min-w-0 px-1 sm:w-36">
+          <p className="truncate text-xs font-semibold text-zinc-950">
+            Cloud Preview
+          </p>
+          <p className="truncate text-[11px] text-zinc-500">
+            {hasPreviewUrl ? 'Auto-opened' : 'Waiting for build'}
+          </p>
+        </div>
         <Input
           value={previewInput}
           onChange={event => onPreviewInputChange(event.target.value)}
-          placeholder="Paste your app preview URL"
+          placeholder="Preview opens automatically after Brok builds"
           className="h-9 min-w-0 flex-1 rounded-full border-zinc-200 bg-white px-4 text-sm shadow-inner"
         />
         <div className="flex items-center gap-1.5">
@@ -4352,15 +4543,19 @@ function BrowserPreviewPanel({
                 variant="outline"
                 size="icon"
                 className="size-9 shrink-0 rounded-full"
-                title="Preview shortcuts"
+                title="Preview options"
               >
                 <Globe className="size-4" />
-                <span className="sr-only">Preview shortcuts</span>
+                <span className="sr-only">Preview options</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Preview shortcuts</DropdownMenuLabel>
-              {previewShortcuts.map(shortcut => (
+              <DropdownMenuLabel>Load custom preview</DropdownMenuLabel>
+              {[
+                { label: 'localhost:3000', value: 'http://localhost:3000' },
+                { label: 'localhost:5173', value: 'http://localhost:5173' },
+                { label: '127.0.0.1:8080', value: 'http://127.0.0.1:8080' }
+              ].map(shortcut => (
                 <DropdownMenuItem
                   key={shortcut.label}
                   onClick={() => onDirectLoad(shortcut.value)}
@@ -4451,11 +4646,11 @@ function BrowserPreviewPanel({
                 <Monitor className="size-5 text-zinc-500" />
               </div>
               <p className="mt-3 text-sm font-medium text-zinc-950">
-                Preview is ready
+                Tell Brok what to build
               </p>
               <p className="mt-1 text-xs leading-5 text-zinc-500">
-                Paste a localhost or deployed app URL, or run Brok Code and open
-                the preview it returns.
+                The cloud preview opens here automatically when the first build
+                finishes.
               </p>
             </div>
           </div>
