@@ -10,7 +10,7 @@ import {
   hashApiKey,
   maskApiKey
 } from '@/lib/api-key'
-import { getRequiredBrokAccountUser } from '@/lib/brokcode/account-guard'
+import { getCurrentAppAccess, hasFeatureAccess } from '@/lib/auth/app-access'
 import { db } from '@/lib/db'
 import { apiKeys, workspaces } from '@/lib/db/schema'
 
@@ -47,12 +47,26 @@ export async function ensureWorkspaceForUser(userId: string) {
   return createdWorkspace
 }
 
+async function requireApiPlatformUser() {
+  const access = await getCurrentAppAccess()
+
+  if (!access.user) {
+    throw new Error('Sign in to your Brok account before managing API keys.')
+  }
+
+  if (!hasFeatureAccess(access, 'api_platform')) {
+    throw new Error('Your account does not have Brok API Platform access.')
+  }
+
+  return access.user
+}
+
 export async function createApiKey(
   userId: string,
   workspaceId: string,
   input: CreateApiKeyInput
 ) {
-  const user = await getRequiredBrokAccountUser()
+  const user = await requireApiPlatformUser()
   if (!user || user.id !== userId) {
     throw new Error('Sign in to your Brok account before creating API keys.')
   }
@@ -105,10 +119,7 @@ export async function createApiKey(
 }
 
 export async function listApiKeys(workspaceId: string) {
-  const user = await getRequiredBrokAccountUser()
-  if (!user) {
-    throw new Error('Sign in to your Brok account before viewing API keys.')
-  }
+  const user = await requireApiPlatformUser()
 
   const [workspace] = await db
     .select()
@@ -143,10 +154,7 @@ export async function listApiKeys(workspaceId: string) {
 }
 
 async function requireOwnedApiKey(keyId: string) {
-  const user = await getRequiredBrokAccountUser()
-  if (!user) {
-    throw new Error('Sign in to your Brok account before managing API keys.')
-  }
+  const user = await requireApiPlatformUser()
 
   const [key] = await db
     .select()

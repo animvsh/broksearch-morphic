@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
   canExecuteComposioTools,
@@ -38,18 +38,9 @@ export async function GET() {
   }
 
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json(
-        {
-          configured: true,
-          connected: false,
-          provider: isComposioConnectMode() ? 'composio-connect' : 'composio',
-          message: 'Sign in to Brok before checking Gmail status.'
-        },
-        { status: 401 }
-      )
-    }
+    const access = await requireFeatureAccessForApi('brokmail')
+    if (!access.ok) return access.response
+    const user = access.user
 
     const settledAccountsByToolkit = await Promise.allSettled(
       resolveToolkitCandidates().map(async toolkit => {

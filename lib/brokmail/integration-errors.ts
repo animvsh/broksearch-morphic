@@ -16,6 +16,18 @@ export function summarizeBrokMailIntegrationError(
 
   const lower = message.toLowerCase()
 
+  if (/unauthorized|forbidden|permission|scope/.test(lower)) {
+    return 'Google permission was denied. Reconnect with the required Gmail and Calendar access.'
+  }
+
+  if (lower.includes('connected account')) {
+    return 'The connected Google account could not be used. Reconnect it and try again.'
+  }
+
+  if (lower.includes('auth config not found')) {
+    return 'The Composio auth config is not visible to this Brok environment.'
+  }
+
   if (
     lower.includes('gmail_fetch_emails') ||
     lower.includes('gmail_list_messages') ||
@@ -37,18 +49,6 @@ export function summarizeBrokMailIntegrationError(
 
   if (lower.includes('tool') && lower.includes('not found')) {
     return 'The required Composio tool is not enabled for this integration.'
-  }
-
-  if (lower.includes('auth config not found')) {
-    return 'The Composio auth config is not visible to this Brok environment.'
-  }
-
-  if (lower.includes('connected account')) {
-    return 'The connected Google account could not be used. Reconnect it and try again.'
-  }
-
-  if (/unauthorized|forbidden|permission|scope/.test(lower)) {
-    return 'Google permission was denied. Reconnect with the required Gmail and Calendar access.'
   }
 
   if (lower.includes('composio request failed')) return fallback

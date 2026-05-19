@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 
 import { CheckCircle2, Link2, PlugZap, ShieldAlert } from 'lucide-react'
 
-import { requireAppAccess } from '@/lib/auth/app-access'
+import { requireFeatureAccess } from '@/lib/auth/app-access'
 import {
   isComposioConfigured,
   isComposioConnectMode,
@@ -289,7 +289,7 @@ async function loadIntegrationRows(userId: string): Promise<{
 }
 
 export default async function IntegrationsPage() {
-  const user = await requireAppAccess('/integrations')
+  const user = await requireFeatureAccess('/integrations', 'tools')
 
   const { configured, connectMode, rows, error } = await loadIntegrationRows(
     user.id

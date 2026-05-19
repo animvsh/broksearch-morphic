@@ -4,6 +4,7 @@ import {
   enforceBrokCodeAccountOwnership,
   resolveBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
+import { publicBrokCodeBackendMetadata } from '@/lib/brokcode/backend-provider'
 import {
   getBrokCodeProject,
   listBrokCodeProjectFiles,
@@ -12,6 +13,18 @@ import {
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+function publicProject<T extends { metadata?: Record<string, unknown> | null }>(
+  project: T
+) {
+  return {
+    ...project,
+    metadata: {
+      ...(project.metadata ?? {}),
+      backend: publicBrokCodeBackendMetadata(project.metadata?.backend)
+    }
+  }
+}
 
 async function authorizeProject(request: Request, id: string) {
   const { authResult } = await resolveBrokCodeRequestAuth(request, {
@@ -63,7 +76,7 @@ export async function GET(
     workspaceId: access.authResult.workspace.id
   })
 
-  return NextResponse.json({ project: access.project, files })
+  return NextResponse.json({ project: publicProject(access.project), files })
 }
 
 export async function PUT(
@@ -91,13 +104,21 @@ export async function PUT(
     )
   }
 
-  const file = await upsertBrokCodeProjectFile({
-    projectId: access.project.id,
-    workspaceId: access.authResult.workspace.id,
-    path,
-    content,
-    language
-  })
+  let file
+  try {
+    file = await upsertBrokCodeProjectFile({
+      projectId: access.project.id,
+      workspaceId: access.authResult.workspace.id,
+      path,
+      content,
+      language
+    })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Invalid file path') {
+      return NextResponse.json({ error: 'Invalid file path' }, { status: 400 })
+    }
+    throw error
+  }
 
   return NextResponse.json({ file })
 }

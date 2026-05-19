@@ -48,6 +48,12 @@ const coreCommands = [
   '/usage month',
   '/sync',
   '/session',
+  '/projects',
+  '/project show',
+  '/backend status',
+  '/backend insforge https://your-project.insforge.app',
+  '/backend provision',
+  '/backend check',
   '/ai-default',
   '/worktree feature/my-branch',
   '/securityscan',
@@ -83,6 +89,10 @@ const workflowCards = [
   {
     title: 'Cloud + Terminal Sync',
     body: 'Use the same BROKCODE_SESSION_ID in Brok Code Cloud and terminal. /sync pulls the shared log from /api/brokcode/sessions.'
+  },
+  {
+    title: 'InsForge backend',
+    body: '/backend status, /backend insforge, /backend provision, and /backend check manage the same encrypted project backend used by Brok Code Cloud.'
   },
   {
     title: 'Worktrees',

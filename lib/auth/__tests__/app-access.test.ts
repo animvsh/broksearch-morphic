@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { getAppAccessForUser, isAppAccessGateEnabled } from '../app-access'
+import {
+  getAppAccessForUser,
+  hasFeatureAccess,
+  isAppAccessGateEnabled
+} from '../app-access'
 
 const dbMocks = vi.hoisted(() => ({
   select: vi.fn(),
@@ -17,7 +21,8 @@ vi.mock('@/lib/db/schema', () => ({
   appAccessAllowlist: {
     id: 'id',
     email: 'email',
-    status: 'status'
+    status: 'status',
+    features: 'features'
   }
 }))
 
@@ -54,7 +59,9 @@ describe('app access gate', () => {
 
   it('allows active database allowlist rows', async () => {
     vi.stubEnv('BROK_CLOUD_DEPLOYMENT', 'true')
-    dbMocks.limit.mockResolvedValue([{ id: 'row_1', status: 'active' }])
+    dbMocks.limit.mockResolvedValue([
+      { id: 'row_1', status: 'active', features: null }
+    ])
     dbMocks.where.mockReturnValue({ limit: dbMocks.limit })
     dbMocks.from.mockReturnValue({ where: dbMocks.where })
     dbMocks.select.mockReturnValue({ from: dbMocks.from })
@@ -66,6 +73,30 @@ describe('app access gate', () => {
         app_metadata: {}
       } as any)
     ).resolves.toMatchObject({ allowed: true, source: 'database' })
+  })
+
+  it('preserves feature scopes from database allowlist rows', async () => {
+    vi.stubEnv('BROK_CLOUD_DEPLOYMENT', 'true')
+    dbMocks.limit.mockResolvedValue([
+      { id: 'row_1', status: 'active', features: ['search'] }
+    ])
+    dbMocks.where.mockReturnValue({ limit: dbMocks.limit })
+    dbMocks.from.mockReturnValue({ where: dbMocks.where })
+    dbMocks.select.mockReturnValue({ from: dbMocks.from })
+
+    const access = await getAppAccessForUser({
+      id: 'user_1',
+      email: 'user@example.com',
+      app_metadata: {}
+    } as any)
+
+    expect(access).toMatchObject({
+      allowed: true,
+      source: 'database',
+      features: ['search']
+    })
+    expect(hasFeatureAccess(access, 'search')).toBe(true)
+    expect(hasFeatureAccess(access, 'brokcode')).toBe(false)
   })
 
   it('denies signed-in users who are not allowlisted in cloud mode', async () => {

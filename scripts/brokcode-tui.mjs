@@ -163,6 +163,11 @@ function printHelp() {
   /project new <name>          Create a saved project
   /project select <id|slug>    Select a project for file commands
   /project show                Show the selected project
+  /backend status              Show selected project backend
+  /backend insforge <url>      Link existing InsForge backend
+  /backend provision           Create an InsForge trial backend
+  /backend check               Check selected backend health
+  /backend clear               Remove backend metadata
   /files [id|slug]             List files in a project
   /file put <path> <local>     Save a local file into the selected project
   /ai-default                  Explain the default AI app layer
@@ -198,6 +203,24 @@ function getProjectFilesEndpoint(projectId) {
   )
 }
 
+function getProjectBackendEndpoint(projectId) {
+  return new URL(
+    `/api/brokcode/projects/${encodeURIComponent(projectId)}/backend`,
+    syncBaseUrl
+  )
+}
+
+function getProjectBackendHealthEndpoint(projectId) {
+  return new URL(
+    `/api/brokcode/projects/${encodeURIComponent(projectId)}/backend/health`,
+    syncBaseUrl
+  )
+}
+
+function getInsForgeProvisionEndpoint() {
+  return new URL('/api/brokcode/projects/insforge/provision', syncBaseUrl)
+}
+
 async function requestJson(url, options = {}) {
   if (!assertBrokKey()) return null
 
@@ -226,7 +249,12 @@ async function requestJson(url, options = {}) {
 function formatProject(project) {
   const selected = project.id === activeProjectId ? '*' : ' '
   const username = project.username ? ` @${project.username}` : ''
-  return `${selected} ${project.name}${username} ${colors.dim}${project.slug} ${project.id}${colors.reset}`
+  const backend = project.metadata?.backend
+  const backendLabel =
+    backend?.provider === 'insforge'
+      ? ` InsForge:${backend.health || backend.status}`
+      : ''
+  return `${selected} ${project.name}${username}${backendLabel} ${colors.dim}${project.slug} ${project.id}${colors.reset}`
 }
 
 async function loadProjects() {
@@ -344,9 +372,117 @@ async function showSelectedProject() {
       `Slug: ${project.slug}`,
       `ID: ${project.id}`,
       `Username: ${project.username || 'none'}`,
+      `Backend: ${formatBackendSummary(project.metadata?.backend)}`,
       `Updated: ${project.updatedAt || 'unknown'}`
     ])}${colors.reset}\n`
   )
+}
+
+function formatBackendSummary(backend) {
+  if (!backend || backend.provider !== 'insforge') return 'none'
+
+  return [
+    'InsForge',
+    backend.status || 'unknown',
+    backend.health ? `health=${backend.health}` : null,
+    backend.projectUrl || null,
+    backend.adminKeyConfigured ? 'admin-key=configured' : 'admin-key=missing'
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+async function showBackendStatus() {
+  const projectId = await resolveProjectId()
+  if (!projectId) return
+
+  const body = await requestJson(getProjectBackendEndpoint(projectId))
+  if (!body) return
+
+  const backend = body.backend
+  output.write(
+    `${colors.cyan}${box([
+      `Project: ${body.project?.name || projectId}`,
+      `Backend: ${formatBackendSummary(backend)}`,
+      `Dashboard: ${backend?.dashboardUrl || 'none'}`,
+      `Claim: ${backend?.claimUrl || 'none'}`,
+      `Last check: ${backend?.lastHealthCheckedAt || 'never'}`
+    ])}${colors.reset}\n`
+  )
+}
+
+async function linkInsForgeBackend(args) {
+  const projectId = await resolveProjectId()
+  if (!projectId) return
+
+  const projectUrl = args[1]
+  if (!projectUrl) {
+    output.write(
+      `${colors.red}Usage: /backend insforge <project-url> [admin-key]${colors.reset}\n`
+    )
+    return
+  }
+
+  const body = await requestJson(getProjectBackendEndpoint(projectId), {
+    method: 'PUT',
+    body: JSON.stringify({
+      backend: {
+        provider: 'insforge',
+        mode: 'existing',
+        projectUrl,
+        adminKey: args[2] || undefined
+      }
+    })
+  })
+  if (!body?.backend) return
+
+  output.write(
+    `${colors.green}Linked ${formatBackendSummary(body.backend)}.${colors.reset}\n`
+  )
+}
+
+async function provisionInsForgeBackend() {
+  const body = await requestJson(getInsForgeProvisionEndpoint(), {
+    method: 'POST',
+    body: JSON.stringify({
+      project_id: activeProjectId || undefined,
+      projectName: activeProjectId ? undefined : 'BrokCode TUI app'
+    })
+  })
+  if (!body?.project) return
+
+  activeProjectId = body.project.id
+  saveRuntimeConfig({ activeProjectId })
+  output.write(
+    `${colors.green}Provisioned ${formatBackendSummary(body.backend)}.${colors.reset}\n`
+  )
+}
+
+async function checkBackendHealth() {
+  const projectId = await resolveProjectId()
+  if (!projectId) return
+
+  const body = await requestJson(getProjectBackendHealthEndpoint(projectId), {
+    method: 'POST'
+  })
+  if (!body?.backend) return
+
+  output.write(
+    `${colors.green}Backend check: ${formatBackendSummary(body.backend)}.${colors.reset}\n`
+  )
+}
+
+async function clearBackend() {
+  const projectId = await resolveProjectId()
+  if (!projectId) return
+
+  const body = await requestJson(getProjectBackendEndpoint(projectId), {
+    method: 'PUT',
+    body: JSON.stringify({ provider: 'none' })
+  })
+  if (!body?.backend) return
+
+  output.write(`${colors.green}Backend cleared.${colors.reset}\n`)
 }
 
 async function resolveProjectId(value) {
@@ -680,6 +816,18 @@ async function handleCommand(raw) {
 
     output.write(
       `${colors.red}Usage: /project new <name>, /project select <id|slug>, or /project show.${colors.reset}\n`
+    )
+    return
+  }
+  if (name === '/backend') {
+    if (args[0] === 'status' || !args[0]) return showBackendStatus()
+    if (args[0] === 'insforge') return linkInsForgeBackend(args)
+    if (args[0] === 'provision') return provisionInsForgeBackend()
+    if (args[0] === 'check') return checkBackendHealth()
+    if (args[0] === 'clear') return clearBackend()
+
+    output.write(
+      `${colors.red}Usage: /backend status, /backend insforge <url> [admin-key], /backend provision, /backend check, or /backend clear.${colors.reset}\n`
     )
     return
   }

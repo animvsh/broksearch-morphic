@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { UIMessage } from 'ai'
 
 import { loadChat } from '@/lib/actions/chat'
-import { requireAppAccess } from '@/lib/auth/app-access'
+import { requireFeatureAccess } from '@/lib/auth/app-access'
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { getModelSelectorData } from '@/lib/model-selector/get-model-selector-data'
 
@@ -41,7 +41,7 @@ export default async function SearchPage(props: {
   }
 
   if (chat.visibility === 'private') {
-    await requireAppAccess(`/search/${id}`)
+    await requireFeatureAccess(`/search/${id}`, 'search')
   }
 
   const messages: UIMessage[] = chat.messages

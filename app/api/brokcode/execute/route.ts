@@ -21,9 +21,21 @@ import {
   getBrokCodeBrowserSessionAuth
 } from '@/lib/brokcode/account-guard'
 import {
+  decryptInsForgeAdminKey,
+  publicBrokCodeBackendMetadata
+} from '@/lib/brokcode/backend-provider'
+import {
+  fetchInsForgeBackendContext,
+  formatInsForgeBackendContextForPrompt
+} from '@/lib/brokcode/insforge'
+import {
   decryptRuntimeKey,
   getLatestSavedBrokCodeRuntimeKeyForUser
 } from '@/lib/brokcode/key-vault'
+import {
+  getBrokCodeProject,
+  getBrokCodeProjectBackend
+} from '@/lib/brokcode/project-store'
 import {
   isDeepSecSecurityScanCommand,
   runDeepSecSecurityScan
@@ -240,7 +252,11 @@ async function recordCodeExecutionUsage({
   toolCalls,
   source,
   sessionId,
-  commandType
+  commandType,
+  projectId,
+  backendProvider,
+  backendStatus,
+  backendProjectUrl
 }: {
   auth: SuccessfulAuth
   requestId: string
@@ -256,6 +272,10 @@ async function recordCodeExecutionUsage({
   source?: string
   sessionId?: string
   commandType?: string
+  projectId?: string | null
+  backendProvider?: string
+  backendStatus?: string
+  backendProjectUrl?: string | null
 }) {
   const inputTokens =
     usageNumber(usage, ['prompt_tokens', 'input_tokens']) ||
@@ -285,7 +305,11 @@ async function recordCodeExecutionUsage({
     status,
     errorCode,
     metadata: {
-      commandType
+      commandType,
+      projectId,
+      backendProvider,
+      backendStatus,
+      backendProjectUrl
     }
   })
 }
@@ -414,6 +438,55 @@ function buildDefaultMessages(command: string): OpenAiMessage[] {
       content: command
     }
   ]
+}
+
+async function buildBrokCodeProjectContext({
+  auth,
+  projectId
+}: {
+  auth: SuccessfulAuth
+  projectId: string | null
+}) {
+  if (!projectId) return ''
+
+  const project = await getBrokCodeProject({
+    id: projectId,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId
+  }).catch(error => {
+    console.error('BrokCode project context lookup failed:', error)
+    return null
+  })
+  if (!project) return ''
+
+  const backend = getBrokCodeProjectBackend(project)
+  const projectLines = [
+    'Saved BrokCode project context:',
+    `Project: ${project.name} (${project.id})`,
+    `Slug: ${project.slug}`,
+    project.username ? `Username/subdomain handle: ${project.username}` : null,
+    `Backend: ${backend.provider} (${backend.status}; health ${backend.health})`
+  ].filter(Boolean)
+
+  if (backend.provider !== 'insforge' || !backend.projectUrl) {
+    return projectLines.join('\n')
+  }
+
+  const liveContext = await fetchInsForgeBackendContext({
+    projectUrl: backend.projectUrl,
+    adminKey: decryptInsForgeAdminKey(backend)
+  }).catch(error => {
+    console.error('InsForge context fetch failed:', error)
+    return null
+  })
+
+  return [
+    ...projectLines,
+    `Backend public metadata: ${JSON.stringify(publicBrokCodeBackendMetadata(backend))}`,
+    formatInsForgeBackendContextForPrompt(liveContext)
+  ]
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 function buildPiPrompt(messages: OpenAiMessage[]) {
@@ -920,7 +993,18 @@ export async function POST(request: NextRequest) {
   const codeUsageContext = {
     source: normalizeUsageText(body?.source, 'api'),
     sessionId: normalizeUsageText(body?.session_id, 'default'),
-    commandType: command ? classifyCommandType(command) : 'unknown'
+    commandType: command ? classifyCommandType(command) : 'unknown',
+    projectId:
+      typeof body?.project_id === 'string' && body.project_id.trim()
+        ? body.project_id.trim()
+        : null,
+    backendProvider: normalizeUsageText(body?.backend_provider, 'none'),
+    backendStatus: normalizeUsageText(body?.backend_status, 'not_configured'),
+    backendProjectUrl:
+      typeof body?.backend_project_url === 'string' &&
+      body.backend_project_url.trim()
+        ? body.backend_project_url.trim()
+        : null
   }
 
   if (!command) {
@@ -1063,10 +1147,23 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const messages =
+  const brokCodeProjectContext = await buildBrokCodeProjectContext({
+    auth: authResult,
+    projectId: codeUsageContext.projectId
+  })
+  const baseMessages =
     inboundMessages && inboundMessages.length > 0
       ? inboundMessages
       : buildDefaultMessages(command)
+  const messages = brokCodeProjectContext
+    ? [
+        {
+          role: 'system' as const,
+          content: brokCodeProjectContext
+        },
+        ...baseMessages
+      ]
+    : baseMessages
 
   const configuredOpenCodeBase = process.env.BROKCODE_OPENCODE_BASE_URL
   const selfBrokApiEndpoint = isSelfBrokApiEndpoint(

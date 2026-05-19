@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import type { User } from '@supabase/supabase-js'
 import { asc, eq } from 'drizzle-orm'
 
-import { getAppAccessForUser } from '@/lib/auth/app-access'
+import { getAppAccessForUser, hasFeatureAccess } from '@/lib/auth/app-access'
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { type AuthResult, verifyRequestAuth } from '@/lib/brok/auth'
 import {
@@ -184,7 +184,7 @@ export async function getBrokCodeBrowserSessionAuth(): Promise<BrokCodeAuthResul
   if (!user) return null
 
   const access = await getAppAccessForUser(user)
-  if (!access.allowed) return null
+  if (!hasFeatureAccess(access, 'brokcode')) return null
 
   try {
     const [existingWorkspace] = await db

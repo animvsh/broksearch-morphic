@@ -1,6 +1,6 @@
 import { after, NextResponse } from 'next/server'
 
-import { requireAppAccessForApi } from '@/lib/auth/app-access'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import {
   DeepResearchCancelled,
   runDeepResearch
@@ -168,7 +168,7 @@ function scheduleBackgroundTask(task: Promise<void>) {
 }
 
 export async function POST(request: Request) {
-  const access = await requireAppAccessForApi()
+  const access = await requireFeatureAccessForApi('search')
   if (!access.ok) return access.response
 
   const body = (await request

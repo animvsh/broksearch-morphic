@@ -4,8 +4,10 @@ import {
   addAppAccessAllowlistEmail,
   getAppAccessAllowlist,
   getBrokStats,
-  revokeAppAccessAllowlistEmail
+  revokeAppAccessAllowlistEmail,
+  updateAppAccessAllowlistFeatures
 } from '@/lib/actions/admin-brok'
+import { APP_FEATURES, AppFeature } from '@/lib/auth/app-access'
 import { requirePageAuth } from '@/lib/auth/require-page-auth'
 
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +16,24 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 
 export const dynamic = 'force-dynamic'
+
+const FEATURE_LABELS: Record<AppFeature, string> = {
+  search: 'Search',
+  brokmail: 'BrokMail',
+  brokcode: 'BrokCode',
+  tools: 'Tools',
+  api_platform: 'API platform'
+}
+
+function getEntryFeatures(features: string[] | null | undefined) {
+  if (!Array.isArray(features)) return new Set<AppFeature>(APP_FEATURES)
+
+  return new Set(
+    features.filter((feature): feature is AppFeature =>
+      APP_FEATURES.includes(feature as AppFeature)
+    )
+  )
+}
 
 function formatCompact(value: number) {
   return new Intl.NumberFormat('en', {
@@ -240,7 +260,7 @@ export default async function BrokAdminPage() {
         <CardContent className="space-y-4">
           <form
             action={addAppAccessAllowlistEmail}
-            className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_auto]"
+            className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_auto]"
           >
             <Input
               name="email"
@@ -254,17 +274,39 @@ export default async function BrokAdminPage() {
               placeholder="Invite note or account context"
               className="h-10"
             />
-            <Button type="submit" className="h-10">
-              Allow Email
-            </Button>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap gap-2">
+                {APP_FEATURES.map(feature => (
+                  <label
+                    key={feature}
+                    className="inline-flex h-8 items-center gap-2 rounded-md border bg-background px-2.5 text-xs font-medium text-muted-foreground"
+                  >
+                    <input
+                      name="features"
+                      type="checkbox"
+                      value={feature}
+                      defaultChecked
+                      className="size-3.5 accent-primary"
+                    />
+                    {FEATURE_LABELS[feature]}
+                  </label>
+                ))}
+              </div>
+              <Button type="submit" className="h-10 self-start">
+                Allow Email
+              </Button>
+            </div>
           </form>
 
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[980px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/40 text-muted-foreground">
                   <th className="px-3 py-2 text-left font-medium">Email</th>
                   <th className="px-3 py-2 text-left font-medium">Status</th>
+                  <th className="px-3 py-2 text-left font-medium">
+                    Feature access
+                  </th>
                   <th className="px-3 py-2 text-left font-medium">Note</th>
                   <th className="px-3 py-2 text-left font-medium">Added</th>
                   <th className="px-3 py-2 text-right font-medium">Action</th>
@@ -275,45 +317,82 @@ export default async function BrokAdminPage() {
                   <tr>
                     <td
                       className="px-3 py-6 text-center text-muted-foreground"
-                      colSpan={5}
+                      colSpan={6}
                     >
                       No allowlisted emails yet.
                     </td>
                   </tr>
                 ) : (
-                  allowlist.map(entry => (
-                    <tr key={entry.id} className="border-b last:border-0">
-                      <td className="px-3 py-2 font-medium">{entry.email}</td>
-                      <td className="px-3 py-2">
-                        <Badge
-                          variant={
-                            entry.status === 'active' ? 'default' : 'secondary'
-                          }
-                        >
-                          {entry.status}
-                        </Badge>
-                      </td>
-                      <td className="max-w-[280px] truncate px-3 py-2 text-muted-foreground">
-                        {entry.note || '-'}
-                      </td>
-                      <td className="px-3 py-2 text-muted-foreground">
-                        {formatDateTime(entry.createdAt)}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <form action={revokeAppAccessAllowlistEmail}>
-                          <input name="id" type="hidden" value={entry.id} />
-                          <Button
-                            type="submit"
-                            size="sm"
-                            variant="outline"
-                            disabled={entry.status !== 'active'}
+                  allowlist.map(entry => {
+                    const entryFeatures = getEntryFeatures(entry.features)
+
+                    return (
+                      <tr key={entry.id} className="border-b last:border-0">
+                        <td className="px-3 py-2 font-medium">{entry.email}</td>
+                        <td className="px-3 py-2">
+                          <Badge
+                            variant={
+                              entry.status === 'active'
+                                ? 'default'
+                                : 'secondary'
+                            }
                           >
-                            Revoke
-                          </Button>
-                        </form>
-                      </td>
-                    </tr>
-                  ))
+                            {entry.status}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2">
+                          <form
+                            action={updateAppAccessAllowlistFeatures}
+                            className="flex flex-wrap items-center gap-2"
+                          >
+                            <input name="id" type="hidden" value={entry.id} />
+                            {APP_FEATURES.map(feature => (
+                              <label
+                                key={feature}
+                                className="inline-flex h-8 items-center gap-2 rounded-md border bg-background px-2.5 text-xs font-medium text-muted-foreground"
+                              >
+                                <input
+                                  name="features"
+                                  type="checkbox"
+                                  value={feature}
+                                  defaultChecked={entryFeatures.has(feature)}
+                                  className="size-3.5 accent-primary"
+                                />
+                                {FEATURE_LABELS[feature]}
+                              </label>
+                            ))}
+                            <Button
+                              type="submit"
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                            >
+                              Save
+                            </Button>
+                          </form>
+                        </td>
+                        <td className="max-w-[280px] truncate px-3 py-2 text-muted-foreground">
+                          {entry.note || '-'}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {formatDateTime(entry.createdAt)}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <form action={revokeAppAccessAllowlistEmail}>
+                            <input name="id" type="hidden" value={entry.id} />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              variant="outline"
+                              disabled={entry.status !== 'active'}
+                            >
+                              Revoke
+                            </Button>
+                          </form>
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>

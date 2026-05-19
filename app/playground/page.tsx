@@ -9,7 +9,7 @@ import {
   TerminalSquare
 } from 'lucide-react'
 
-import { requireAppAccess } from '@/lib/auth/app-access'
+import { requireFeatureAccess } from '@/lib/auth/app-access'
 
 import { Button } from '@/components/ui/button'
 
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 }
 
 export default async function PlaygroundPage() {
-  await requireAppAccess('/playground')
+  await requireFeatureAccess('/playground', 'api_platform')
   const docLinks = [
     { href: '/docs/quickstart', label: 'Quickstart', icon: BookOpen },
     { href: '/docs/api-keys', label: 'API Keys', icon: KeyRound },

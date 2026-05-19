@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { runPiAgentPrompt } from '@/lib/pi/coding-agent'
 
 export const runtime = 'nodejs'
@@ -49,18 +49,13 @@ function compactEvent(event: any) {
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user) {
-    return NextResponse.json(
-      {
-        error: 'Sign in to Brok before using the Pi-powered BrokMail assistant.'
-      },
-      { status: 401 }
-    )
-  }
+  const access = await requireFeatureAccessForApi('brokmail')
+  if (!access.ok) return access.response
+  const user = access.user
 
   const body = await request.json().catch(() => null)
   const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : ''
+  const concise = body?.concise !== false
 
   if (!prompt) {
     return NextResponse.json({ error: 'prompt is required.' }, { status: 400 })
@@ -86,6 +81,9 @@ export async function POST(request: NextRequest) {
     'You are BrokMail, powered by Pi coding-agent. You are operating inside a real email client, not a demo.',
     'Use only the provided live mailbox/calendar context. If the context is empty, say Gmail or Calendar must be connected before you can answer.',
     'Do not claim you sent, archived, deleted, labeled, or created anything. For writes, produce reviewable content or say an approval card is required.',
+    concise
+      ? 'Keep the response concise (ideally 2-5 short bullets or 1-2 short paragraphs). Avoid long rambling intros.'
+      : 'Keep the response readable but do not exceed practical email draft length. For replies, still return only the draft body.',
     'For reply drafts, output only the email draft body unless the user asked for explanation.',
     '',
     `User command: ${prompt}`,

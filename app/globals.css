@@ -1309,6 +1309,54 @@
   }
 }
 
+.brokcode-lovable,
+.brokcode-lovable [class*='bg-[#191918]'],
+.brokcode-lovable [class*='bg-[#1f1f1d]'],
+.brokcode-lovable [class*='bg-[#1c1c1a]'],
+.brokcode-lovable [class*='bg-[#20201e]'],
+.brokcode-lovable [class*='bg-[#242421]'] {
+  background: #fbfaf8 !important;
+  color: #18181b !important;
+}
+
+.brokcode-lovable [class*='bg-white/[0.04]'],
+.brokcode-lovable [class*='bg-white/[0.05]'],
+.brokcode-lovable [class*='bg-white/[0.06]'],
+.brokcode-lovable [class*='bg-white/[0.07]'],
+.brokcode-lovable [class*='bg-white/[0.08]'],
+.brokcode-lovable [class*='bg-white/[0.12]'] {
+  background: #ffffff !important;
+}
+
+.brokcode-lovable [class*='border-white/10'],
+.brokcode-lovable [class*='border-white/[0.15]'],
+.brokcode-lovable [class*='border-white/50'],
+.brokcode-lovable [class*='border-white/80'],
+.brokcode-lovable [class*='border-white/90'] {
+  border-color: rgb(228 228 231 / 0.9) !important;
+}
+
+.brokcode-lovable [class*='text-white'],
+.brokcode-lovable [class*='text-zinc-50'],
+.brokcode-lovable [class*='text-zinc-100'],
+.brokcode-lovable [class*='text-zinc-200'],
+.brokcode-lovable [class*='text-zinc-300'] {
+  color: #18181b !important;
+}
+
+.brokcode-lovable [class*='text-zinc-400'],
+.brokcode-lovable [class*='text-zinc-500'] {
+  color: #71717a !important;
+}
+
+.brokcode-lovable textarea {
+  color: #18181b !important;
+}
+
+.brokcode-lovable textarea::placeholder {
+  color: #71717a !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-shell-gradient::before,
   .brand-gradient-text,

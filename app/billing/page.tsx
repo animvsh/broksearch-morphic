@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { CreditCard, Gauge, KeyRound, ShieldCheck } from 'lucide-react'
 
 import { getUsageDashboardData } from '@/lib/actions/platform-dashboard'
-import { getRequiredBrokAccountUser } from '@/lib/brokcode/account-guard'
+import { requireFeatureAccess } from '@/lib/auth/app-access'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -50,7 +50,7 @@ function cents(value: number | null | undefined) {
 }
 
 export default async function BillingPage() {
-  const user = await getRequiredBrokAccountUser()
+  const user = await requireFeatureAccess('/billing', 'api_platform')
   if (!user) {
     redirect(`/auth/login?redirectTo=${encodeURIComponent('/billing')}`)
   }

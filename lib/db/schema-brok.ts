@@ -52,6 +52,7 @@ export const appAccessAllowlist = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     email: text('email').notNull(),
     status: text('status').default('active').notNull(),
+    features: jsonb('features').$type<string[]>(),
     note: text('note'),
     createdBy: text('created_by'),
     createdAt: timestamp('created_at').defaultNow().notNull(),

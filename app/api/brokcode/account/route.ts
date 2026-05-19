@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { unauthorizedResponse } from '@/lib/brok/auth'
 import {
   enforceBrokCodeAccountOwnership,
@@ -11,6 +12,9 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
+  const access = await requireFeatureAccessForApi('brokcode')
+  if (!access.ok) return access.response
+
   const user = await getRequiredBrokAccountUser()
   if (!user) {
     return NextResponse.json(

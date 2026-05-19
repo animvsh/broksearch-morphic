@@ -3,7 +3,7 @@ import Link from 'next/link'
 
 import { ArrowLeft, PenLine } from 'lucide-react'
 
-import { requireAppAccess } from '@/lib/auth/app-access'
+import { requireFeatureAccess } from '@/lib/auth/app-access'
 
 import { Button } from '@/components/ui/button'
 
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 }
 
 export default async function HumanizerPage() {
-  await requireAppAccess('/tools/humanizer')
+  await requireFeatureAccess('/tools/humanizer', 'tools')
 
   return (
     <div className="dashboard-shell min-h-full w-full p-3 sm:p-4">

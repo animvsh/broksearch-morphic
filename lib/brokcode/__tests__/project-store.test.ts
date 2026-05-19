@@ -1,0 +1,135 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
+import {
+  createBrokCodeProject,
+  listBrokCodeProjects,
+  recordBrokCodeProjectDeployment,
+  updateBrokCodeProjectPreview,
+  upsertBrokCodeProjectFile
+} from '../project-store'
+
+const workspaceId = 'workspace_test'
+const userId = 'user_test'
+
+let syncDir: string
+
+describe('BrokCode project file store', () => {
+  beforeEach(async () => {
+    syncDir = await mkdtemp(path.join(tmpdir(), 'brokcode-projects-'))
+    process.env.BROKCODE_PROJECT_STORAGE = 'file'
+    process.env.BROKCODE_SYNC_DIR = syncDir
+  })
+
+  afterEach(async () => {
+    delete process.env.BROKCODE_PROJECT_STORAGE
+    delete process.env.BROKCODE_SYNC_DIR
+    await rm(syncDir, { recursive: true, force: true })
+  })
+
+  it('creates unique slugs in fallback storage', async () => {
+    const first = await createBrokCodeProject({
+      workspaceId,
+      userId,
+      name: 'Demo App'
+    })
+    const second = await createBrokCodeProject({
+      workspaceId,
+      userId,
+      name: 'Demo App'
+    })
+
+    expect(first.slug).toBe('demo-app')
+    expect(second.slug).toBe('demo-app-2')
+  })
+
+  it('tracks triggered deploys as deploying until a real URL is available', async () => {
+    const project = await createBrokCodeProject({
+      workspaceId,
+      userId,
+      name: 'Deploy App'
+    })
+
+    await recordBrokCodeProjectDeployment({
+      projectId: project.id,
+      workspaceId,
+      userId,
+      provider: 'railway',
+      status: 'triggered'
+    })
+
+    const [deployingProject] = await listBrokCodeProjects({
+      workspaceId,
+      userId
+    })
+    expect(deployingProject?.status).toBe('deploying')
+    expect(deployingProject?.previewUrl).toBeNull()
+
+    await recordBrokCodeProjectDeployment({
+      projectId: project.id,
+      workspaceId,
+      userId,
+      provider: 'railway',
+      status: 'deployed',
+      url: 'https://demo.brok.fyi'
+    })
+
+    const [deployedProject] = await listBrokCodeProjects({
+      workspaceId,
+      userId
+    })
+    expect(deployedProject?.status).toBe('deployed')
+    expect(deployedProject?.previewUrl).toBe('https://demo.brok.fyi')
+  })
+
+  it('rejects unsafe project file paths', async () => {
+    const project = await createBrokCodeProject({
+      workspaceId,
+      userId,
+      name: 'Files App'
+    })
+
+    await expect(
+      upsertBrokCodeProjectFile({
+        projectId: project.id,
+        workspaceId,
+        path: '../.env',
+        content: 'SECRET=value'
+      })
+    ).rejects.toThrow('Invalid file path')
+  })
+
+  it('updates managed preview URLs without requiring a Railway deploy', async () => {
+    const project = await createBrokCodeProject({
+      workspaceId,
+      userId,
+      name: 'Preview App'
+    })
+
+    await updateBrokCodeProjectPreview({
+      projectId: project.id,
+      workspaceId,
+      userId,
+      previewUrl: 'https://www.brok.fyi/api/brokcode/previews/demo/index.html',
+      metadata: {
+        mode: 'managed_static',
+        fileCount: 1
+      }
+    })
+
+    const [updatedProject] = await listBrokCodeProjects({
+      workspaceId,
+      userId
+    })
+    expect(updatedProject?.status).toBe('preview_ready')
+    expect(updatedProject?.previewUrl).toBe(
+      'https://www.brok.fyi/api/brokcode/previews/demo/index.html'
+    )
+    expect(updatedProject?.metadata?.preview).toMatchObject({
+      mode: 'managed_static',
+      fileCount: 1
+    })
+  })
+})

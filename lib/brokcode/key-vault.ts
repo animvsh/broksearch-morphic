@@ -34,7 +34,7 @@ function getEncryptionSecret() {
   return createHash('sha256').update(secret).digest()
 }
 
-function encryptSecret(value: string) {
+export function encryptBrokCodeSecret(value: string) {
   const iv = randomBytes(12)
   const cipher = createCipheriv('aes-256-gcm', getEncryptionSecret(), iv)
   const encrypted = Buffer.concat([
@@ -51,7 +51,7 @@ function encryptSecret(value: string) {
   ].join(':')
 }
 
-function decryptSecret(value: string) {
+export function decryptBrokCodeSecret(value: string) {
   const [version, iv, tag, encrypted] = value.split(':')
   if (version !== ENCRYPTION_PREFIX || !iv || !tag || !encrypted) {
     throw new Error('Saved BrokCode key is not in a supported format.')
@@ -98,7 +98,7 @@ export function serializeRuntimeKey(
 export function decryptRuntimeKey(
   row: typeof brokCodeRuntimeKeys.$inferSelect
 ) {
-  return decryptSecret(row.encryptedKey)
+  return decryptBrokCodeSecret(row.encryptedKey)
 }
 
 export async function getSavedBrokCodeRuntimeKey({
@@ -149,7 +149,7 @@ export async function saveBrokCodeRuntimeKey({
       apiKeyId: apiKey.id,
       keyName: apiKey.name,
       keyPrefix: apiKey.keyPrefix,
-      encryptedKey: encryptSecret(rawKey),
+      encryptedKey: encryptBrokCodeSecret(rawKey),
       environment: apiKey.environment,
       scopes: apiKey.scopes,
       defaultSessionId: normalizeSessionId(defaultSessionId),
@@ -162,7 +162,7 @@ export async function saveBrokCodeRuntimeKey({
         apiKeyId: apiKey.id,
         keyName: apiKey.name,
         keyPrefix: apiKey.keyPrefix,
-        encryptedKey: encryptSecret(rawKey),
+        encryptedKey: encryptBrokCodeSecret(rawKey),
         environment: apiKey.environment,
         scopes: apiKey.scopes,
         defaultSessionId: normalizeSessionId(defaultSessionId),

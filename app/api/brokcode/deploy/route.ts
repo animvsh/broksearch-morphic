@@ -12,6 +12,13 @@ import {
   getBrokCodeBrowserSessionAuth,
   verifyBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
+import { makeManagedPreviewUrl } from '@/lib/brokcode/preview'
+import {
+  getBrokCodeProject,
+  listBrokCodeProjectFiles,
+  recordBrokCodeProjectDeployment,
+  updateBrokCodeProjectPreview
+} from '@/lib/brokcode/project-store'
 
 export const runtime = 'nodejs'
 
@@ -78,20 +85,126 @@ function findPreviewUrlFromPayload(payload: unknown): string | null {
   return null
 }
 
-function resolveDeployPreviewUrl(request: NextRequest, payload?: unknown) {
+function resolveDeployPreviewUrl(payload?: unknown) {
   return (
     findPreviewUrlFromPayload(payload) ??
     normalizeDeployPreviewUrl(process.env.BROKCODE_PREVIEW_URL) ??
     normalizeDeployPreviewUrl(process.env.BROKCODE_DEPLOY_PREVIEW_URL) ??
-    normalizeDeployPreviewUrl(process.env.NEXT_PUBLIC_BROKCODE_PREVIEW_URL) ??
-    normalizeDeployPreviewUrl(process.env.NEXT_PUBLIC_APP_URL) ??
-    normalizeDeployPreviewUrl(process.env.NEXT_PUBLIC_BASE_URL) ??
-    normalizeDeployPreviewUrl(process.env.BASE_URL) ??
-    normalizeDeployPreviewUrl(process.env.RAILWAY_PUBLIC_DOMAIN) ??
-    normalizeDeployPreviewUrl(process.env.RAILWAY_STATIC_URL) ??
-    normalizeDeployPreviewUrl(process.env.NEXT_PUBLIC_SITE_URL) ??
-    request.nextUrl.origin
+    normalizeDeployPreviewUrl(process.env.NEXT_PUBLIC_BROKCODE_PREVIEW_URL)
   )
+}
+
+function getProjectIdFromBody(body: Record<string, unknown>) {
+  return typeof body.project_id === 'string' && body.project_id.trim()
+    ? body.project_id.trim()
+    : typeof body.projectId === 'string' && body.projectId.trim()
+      ? body.projectId.trim()
+      : null
+}
+
+async function persistDeploymentIfProjectSelected({
+  projectId,
+  auth,
+  provider,
+  status,
+  url,
+  metadata
+}: {
+  projectId: string | null
+  auth: BrokCodeAuthResult
+  provider: string
+  status: string
+  url: string | null
+  metadata?: Record<string, unknown>
+}) {
+  if (!projectId) return null
+
+  const project = await getBrokCodeProject({
+    id: projectId,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId
+  })
+  if (!project) {
+    throw new Error('Selected BrokCode project was not found.')
+  }
+
+  return recordBrokCodeProjectDeployment({
+    projectId,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId,
+    provider,
+    status,
+    url,
+    metadata
+  })
+}
+
+async function triggerManagedPreviewDeployment({
+  auth,
+  projectId,
+  request
+}: {
+  auth: BrokCodeAuthResult
+  projectId: string
+  request: NextRequest
+}) {
+  const project = await getBrokCodeProject({
+    id: projectId,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId
+  })
+  if (!project) {
+    throw new Error('Selected BrokCode project was not found.')
+  }
+
+  const files = await listBrokCodeProjectFiles({
+    projectId: project.id,
+    workspaceId: auth.workspace.id
+  })
+  const previewUrl = makeManagedPreviewUrl({
+    origin: request.nextUrl.origin,
+    projectId: project.id
+  })
+  const generatedAt = new Date().toISOString()
+  const updatedProject = await updateBrokCodeProjectPreview({
+    projectId: project.id,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId,
+    previewUrl,
+    deploymentUrl: previewUrl,
+    status: 'preview_ready',
+    metadata: {
+      mode: 'managed_static',
+      fileCount: files.length,
+      generatedAt
+    }
+  })
+  const persistedDeployment = await recordBrokCodeProjectDeployment({
+    projectId: project.id,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId,
+    provider: 'managed_preview',
+    status: 'deployed',
+    url: previewUrl,
+    subdomain: project.username ?? project.slug,
+    metadata: {
+      strategy: 'managed_static_preview',
+      fileCount: files.length,
+      generatedAt
+    }
+  })
+
+  return {
+    status: 'deployed',
+    strategy: 'managed_static_preview',
+    message: 'Managed BrokCode preview is ready.',
+    deploymentId: persistedDeployment?.id ?? null,
+    persistedDeployment,
+    project: updatedProject ?? project,
+    previewUrl,
+    deploymentPreviewUrl: previewUrl,
+    fileCount: files.length
+  }
 }
 
 function summarizeGraphqlErrors(errors: GraphqlError[] | undefined) {
@@ -374,6 +487,7 @@ async function triggerRailwayDeployment({
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}))
+  const projectId = getProjectIdFromBody(body as Record<string, unknown>)
   const hasExplicitCredential = Boolean(
     request.headers.get('authorization') || request.headers.get('x-api-key')
   )
@@ -392,7 +506,7 @@ export async function POST(request: NextRequest) {
   const accountMismatch = await enforceBrokCodeAccountOwnership(successfulAuth)
   if (accountMismatch) return accountMismatch
   if (successfulAuth.isBrowserSession) {
-    const admin = await requireAdminAccess()
+    const admin = projectId ? { ok: true as const } : await requireAdminAccess()
     if (!admin.ok) {
       return NextResponse.json(
         {
@@ -416,6 +530,37 @@ export async function POST(request: NextRequest) {
 
   const commitSha =
     typeof body?.commit_sha === 'string' ? body.commit_sha.trim() : null
+  const deployStrategy =
+    typeof body?.strategy === 'string' ? body.strategy.trim() : ''
+
+  if (
+    projectId &&
+    deployStrategy !== 'railway' &&
+    deployStrategy !== 'webhook'
+  ) {
+    try {
+      return NextResponse.json(
+        await triggerManagedPreviewDeployment({
+          auth: successfulAuth,
+          projectId,
+          request
+        })
+      )
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error: {
+            type: 'deploy_error',
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Managed preview deployment failed.'
+          }
+        },
+        { status: 502 }
+      )
+    }
+  }
 
   const webhookUrl = process.env.BROKCODE_DEPLOY_WEBHOOK_URL?.trim()
   const webhookBearer = process.env.BROKCODE_DEPLOY_WEBHOOK_BEARER?.trim()
@@ -450,13 +595,26 @@ export async function POST(request: NextRequest) {
 
     const payload = await response.json().catch(() => null)
 
-    const previewUrl = resolveDeployPreviewUrl(request, payload)
+    const previewUrl = resolveDeployPreviewUrl(payload)
+    const persistedDeployment = await persistDeploymentIfProjectSelected({
+      projectId,
+      auth: successfulAuth,
+      provider: 'webhook',
+      status: 'triggered',
+      url: previewUrl,
+      metadata: {
+        strategy: 'webhook',
+        commitSha,
+        deployment: payload
+      }
+    })
 
     return NextResponse.json({
       status: 'triggered',
       strategy: 'webhook',
       message: 'Deployment triggered via configured webhook.',
       deployment: payload,
+      persistedDeployment,
       previewUrl,
       deploymentPreviewUrl: previewUrl
     })
@@ -495,7 +653,20 @@ export async function POST(request: NextRequest) {
       commitSha
     })
 
-    const previewUrl = resolveDeployPreviewUrl(request)
+    const previewUrl = resolveDeployPreviewUrl()
+    const persistedDeployment = await persistDeploymentIfProjectSelected({
+      projectId,
+      auth: successfulAuth,
+      provider: 'railway',
+      status: 'triggered',
+      url: previewUrl,
+      metadata: {
+        strategy: deployment.strategy,
+        deploymentId: deployment.deploymentId,
+        railway: target,
+        commitSha
+      }
+    })
 
     return NextResponse.json({
       status: 'triggered',
@@ -503,6 +674,7 @@ export async function POST(request: NextRequest) {
       message: deployment.message,
       deploymentId: deployment.deploymentId,
       railway: target,
+      persistedDeployment,
       previewUrl,
       deploymentPreviewUrl: previewUrl
     })

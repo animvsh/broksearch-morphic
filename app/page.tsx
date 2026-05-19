@@ -1,8 +1,9 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
 import { ArrowRight, Code2, Mail, Search, ShieldCheck } from 'lucide-react'
 
-import { getAppAccessForUser } from '@/lib/auth/app-access'
+import { getAppAccessForUser, hasFeatureAccess } from '@/lib/auth/app-access'
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { getModelSelectorData } from '@/lib/model-selector/get-model-selector-data'
 
@@ -16,6 +17,15 @@ export default async function Page() {
   const isCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT === 'true'
 
   if (!access.allowed) {
+    return <BrokLanding isSignedIn={Boolean(user)} />
+  }
+
+  if (!hasFeatureAccess(access, 'search')) {
+    if (hasFeatureAccess(access, 'brokcode')) redirect('/brokcode')
+    if (hasFeatureAccess(access, 'brokmail')) redirect('/brokmail')
+    if (hasFeatureAccess(access, 'tools')) redirect('/tools')
+    if (hasFeatureAccess(access, 'api_platform')) redirect('/playground')
+
     return <BrokLanding isSignedIn={Boolean(user)} />
   }
 

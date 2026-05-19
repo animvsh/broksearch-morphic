@@ -296,10 +296,15 @@ async function composioManageConnectionsConnect(params: {
     action?: ComposioConnectToolkitAction
   }>
   sessionId?: string
+  redirectUrl?: string
 }) {
   const args: Record<string, unknown> = { toolkits: params.toolkits }
   if (params.sessionId) {
     args.session_id = params.sessionId
+  }
+  if (params.redirectUrl) {
+    args.redirect_url = params.redirectUrl
+    args.callback_url = params.redirectUrl
   }
 
   const result = await composioConnectMcpRequest('tools/call', {
@@ -702,7 +707,8 @@ export async function createConnectedAccountLink(params: {
 
     const payload = await composioManageConnectionsConnect({
       toolkits: [{ name: toolkitSlug, action: 'add' }],
-      sessionId: buildConnectSessionId(params.userId, toolkitSlug)
+      sessionId: buildConnectSessionId(params.userId, toolkitSlug),
+      ...(params.redirectUrl ? { redirectUrl: params.redirectUrl } : {})
     })
 
     const toolkitResults = extractToolkitResultsFromConnect(payload)

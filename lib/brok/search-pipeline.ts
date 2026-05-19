@@ -106,14 +106,51 @@ export async function runSearchPipeline(
     )
   } catch (error) {
     console.warn('Falling back to HTML search pipeline:', error)
-    return runHtmlSearchPipeline(
-      resolvedQuery,
-      classification,
-      searchQueryList,
-      config.sources,
-      config.maxTokens,
-      domainHints
-    )
+    try {
+      return await runHtmlSearchPipeline(
+        resolvedQuery,
+        classification,
+        searchQueryList,
+        config.sources,
+        config.maxTokens,
+        domainHints
+      )
+    } catch (fallbackError) {
+      console.warn('Search providers unavailable; returning fallback:', {
+        primaryError: error,
+        fallbackError
+      })
+      return buildUnavailableSearchResponse(
+        resolvedQuery,
+        classification,
+        searchQueryList
+      )
+    }
+  }
+}
+
+function buildUnavailableSearchResponse(
+  resolvedQuery: string,
+  classification: QueryClassification,
+  searchQueryList: string[]
+): SearchResponse {
+  const answer =
+    'Search is temporarily unavailable for this request. Try again in a moment, or narrow the query to a specific source or domain.'
+
+  return {
+    answer,
+    citations: [],
+    searchQueries: searchQueryList.length,
+    searchQueryList,
+    tokensUsed: Math.round((resolvedQuery.length + answer.length) / 4),
+    resolvedQuery,
+    classification,
+    followUps: [
+      {
+        label: 'Try the same search again',
+        query: resolvedQuery
+      }
+    ]
   }
 }
 
@@ -190,7 +227,16 @@ async function runHtmlSearchPipeline(
     searchQueryList.map(searchQuery =>
       searchDuckDuckGo(searchQuery, numResults)
     )
-  )
+  ).catch(error => {
+    if (domainHints.length) {
+      console.warn(
+        'HTML search unavailable; trying domain homepage fallback:',
+        error
+      )
+      return []
+    }
+    throw error
+  })
   const rankedSourceInputs: Array<
     Omit<SearchResult, 'id' | 'qualityScore'> | SearchResult
   > = resultBatches.flat()
@@ -438,40 +484,47 @@ async function synthesizeAnswerFromResults(
     )
     .join('\n\n')
 
-  const response = await fetch(`${MINIMAX_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    signal: AbortSignal.timeout(getAnswerSynthesisTimeoutMs()),
-    headers: {
-      Authorization: `Bearer ${MINIMAX_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: MINIMAX_CHAT_MODEL,
-      max_tokens: Math.min(maxTokens, 1200),
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are Brok, a fast answer engine. Answer using only the provided search results. Start with the direct answer. Keep simple factual questions concise. Use bullets or tables only when they make the answer clearer. Cite factual claims with [1], [2], etc. matching the source order. Mention uncertainty when evidence is weak. For investment, medical, legal, or other high-stakes advice, do not decide for the user; give a brief due-diligence checklist. End naturally without generic "let me know" language.'
-        },
-        {
-          role: 'user',
-          content: `Question: ${query}\nQuestion type: ${classification.type}\nSearch decision: ${classification.reason}\n\nSearch results:\n${context}`
-        }
-      ]
+  try {
+    const response = await fetch(`${MINIMAX_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(getAnswerSynthesisTimeoutMs()),
+      headers: {
+        Authorization: `Bearer ${MINIMAX_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: MINIMAX_CHAT_MODEL,
+        max_tokens: Math.min(maxTokens, 1200),
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are Brok, a fast answer engine. Answer using only the provided search results. Start with the direct answer. Keep simple factual questions concise. Use bullets or tables only when they make the answer clearer. Cite factual claims with [1], [2], etc. matching the source order. Mention uncertainty when evidence is weak. For investment, medical, legal, or other high-stakes advice, do not decide for the user; give a brief due-diligence checklist. End naturally without generic "let me know" language.'
+          },
+          {
+            role: 'user',
+            content: `Question: ${query}\nQuestion type: ${classification.type}\nSearch decision: ${classification.reason}\n\nSearch results:\n${context}`
+          }
+        ]
+      })
     })
-  })
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return citations
+        .map(citation => `${citation.title}: ${citation.snippet}`.trim())
+        .join('\n')
+    }
+
+    const data = await response.json()
+    return stripThinkingBlocks(
+      data.choices?.[0]?.message?.content || 'No answer generated.'
+    )
+  } catch (error) {
+    console.warn('Answer synthesis failed; using source snippets:', error)
     return citations
       .map(citation => `${citation.title}: ${citation.snippet}`.trim())
       .join('\n')
   }
-
-  const data = await response.json()
-  return stripThinkingBlocks(
-    data.choices?.[0]?.message?.content || 'No answer generated.'
-  )
 }
 
 export function classifyQuery(query: string): QueryClassification {

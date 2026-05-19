@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 
-import { requireAppAccess } from '@/lib/auth/app-access'
+import { requireFeatureAccess } from '@/lib/auth/app-access'
 import { getModelSelectorData } from '@/lib/model-selector/get-model-selector-data'
 import { generateUUID } from '@/lib/utils'
 
@@ -17,7 +17,7 @@ export default async function SearchPage(props: {
   }
 
   const id = generateUUID()
-  await requireAppAccess(`/search?q=${encodeURIComponent(q)}`)
+  await requireFeatureAccess(`/search?q=${encodeURIComponent(q)}`, 'search')
   const isCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT === 'true'
   const modelSelectorData = await getModelSelectorData()
 

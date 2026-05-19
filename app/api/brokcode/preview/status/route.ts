@@ -130,6 +130,19 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  if (
+    url.origin === request.nextUrl.origin &&
+    url.pathname.startsWith('/api/brokcode/previews/')
+  ) {
+    return jsonNoStore({
+      ok: true,
+      status: 200,
+      url: url.toString(),
+      checkedAt: new Date().toISOString(),
+      message: 'Managed BrokCode preview is ready.'
+    })
+  }
+
   if (!isAllowedPreviewUrl(url, request.nextUrl.origin)) {
     return jsonNoStore(
       {

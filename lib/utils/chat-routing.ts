@@ -15,6 +15,13 @@ const QUESTION_LIKE_PATTERN =
   /\b(who|what|when|where|why|how|which|can|should|does|do|did|is|are|was|were)\b/i
 const SEARCH_INTENT_PATTERN =
   /\b(search|look\s*up|find\s+(?:me\s+)?(?:sources|results|info|information|articles|news)|web|internet|sources?|latest|today|current|recent|who\s+is|what\s+is|what\s+(?:companies|company|startups?)|where\s+(?:is|else)|when\s+is|founder|founded|company|startup|news|price|stock|weather|score|benchmark|research|invest|investment|traction|funding|mentioned)\b/i
+const SHALLOW_SEARCH_PATTERNS = [
+  /^(who|what|which|when|where|how|who's|what's|where's)\s/i,
+  /^(what is|who is|who was|what was|who founded|who started)\b/i,
+  /^(where else|how many|how can|how to)\b/i
+]
+const DEEP_TRIGGER_PATTERN =
+  /\b(deep|analyze|analysis|comparative|compare|comparison|tradeoff|trade-offs|evaluation|long[- ]form|roadmap|strategy|benchmark|trend|tradeoffs|risks|limitations|architecture|scalability)\b/i
 
 export function isSimpleUtilityText(text: string) {
   const normalized = text.trim()
@@ -76,6 +83,31 @@ export function shouldUseQuickReplyForMessage(
   if (hasNonTextContext) return false
 
   return isSimpleUtilityText(text)
+}
+
+export function shouldUseQuickSearchModeForMessage(
+  message: Pick<UIMessage, 'parts' | 'role'> | null | undefined
+) {
+  if (!message || message.role !== 'user') return false
+
+  const text = getVisibleTextFromParts(message.parts)
+  if (!text || URL_PATTERN.test(text)) return false
+
+  const hasNonTextContext = message.parts.some(part => {
+    if (part.type === 'step-start') return false
+    if (part.type === 'text') return part.text.includes('<uploaded_file')
+    return true
+  })
+  if (hasNonTextContext) return false
+
+  const normalized = text.trim().replace(/\s+/g, ' ')
+  if (normalized.length > 140) return false
+  if (DEEP_TRIGGER_PATTERN.test(normalized)) return false
+  if (!QUESTION_LIKE_PATTERN.test(normalized)) return false
+  if (!SHALLOW_SEARCH_PATTERNS.some(pattern => pattern.test(normalized)))
+    return false
+
+  return !isSimpleUtilityText(normalized)
 }
 
 export function createSimpleUtilityReply(text: string) {

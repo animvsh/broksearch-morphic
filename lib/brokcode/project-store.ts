@@ -1,7 +1,124 @@
 import { and, asc, eq } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 
+import {
+  BrokCodeBackendMetadata,
+  emptyBrokCodeBackendMetadata,
+  mergeBrokCodeProjectBackendMetadata,
+  normalizeBrokCodeBackendMetadata
+} from '@/lib/brokcode/backend-provider'
 import { db } from '@/lib/db'
-import { brokCodeProjectFiles, brokCodeProjects } from '@/lib/db/schema'
+import {
+  brokCodeDeployments,
+  brokCodeProjectFiles,
+  brokCodeProjects
+} from '@/lib/db/schema'
+
+type BrokCodeProject = typeof brokCodeProjects.$inferSelect
+type BrokCodeProjectFile = typeof brokCodeProjectFiles.$inferSelect
+type BrokCodeDeployment = typeof brokCodeDeployments.$inferSelect
+
+type BrokCodeProjectStoreFile = {
+  projects: BrokCodeProject[]
+  files: BrokCodeProjectFile[]
+  deployments: BrokCodeDeployment[]
+}
+
+let projectWriteQueue: Promise<unknown> = Promise.resolve()
+
+function canUseDatabaseStore() {
+  return (
+    process.env.BROKCODE_PROJECT_STORAGE !== 'file' &&
+    !!process.env.DATABASE_URL
+  )
+}
+
+function getProjectStorePath() {
+  return path.join(
+    process.env.BROKCODE_SYNC_DIR ??
+      path.join(process.cwd(), '.brokcode', 'sync'),
+    'projects.json'
+  )
+}
+
+function asDate(value: Date | string | null | undefined) {
+  if (value instanceof Date) return value
+  const parsed = value ? new Date(value) : new Date()
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed
+}
+
+function normalizeProject(project: BrokCodeProject): BrokCodeProject {
+  return {
+    ...project,
+    createdAt: asDate(project.createdAt),
+    updatedAt: asDate(project.updatedAt)
+  }
+}
+
+function normalizeProjectFile(file: BrokCodeProjectFile): BrokCodeProjectFile {
+  return {
+    ...file,
+    createdAt: asDate(file.createdAt),
+    updatedAt: asDate(file.updatedAt)
+  }
+}
+
+function normalizeDeployment(
+  deployment: BrokCodeDeployment
+): BrokCodeDeployment {
+  return {
+    ...deployment,
+    createdAt: asDate(deployment.createdAt),
+    updatedAt: asDate(deployment.updatedAt)
+  }
+}
+
+async function readProjectStore(): Promise<BrokCodeProjectStoreFile> {
+  try {
+    const raw = await readFile(getProjectStorePath(), 'utf8')
+    const parsed = JSON.parse(raw) as BrokCodeProjectStoreFile
+    return {
+      projects: Array.isArray(parsed.projects)
+        ? parsed.projects.map(normalizeProject)
+        : [],
+      files: Array.isArray(parsed.files)
+        ? parsed.files.map(normalizeProjectFile)
+        : [],
+      deployments: Array.isArray(parsed.deployments)
+        ? parsed.deployments.map(normalizeDeployment)
+        : []
+    }
+  } catch {}
+
+  return { projects: [], files: [], deployments: [] }
+}
+
+async function writeProjectStore(store: BrokCodeProjectStoreFile) {
+  const filePath = getProjectStorePath()
+  await mkdir(path.dirname(filePath), { recursive: true })
+  await writeFile(filePath, JSON.stringify(store, null, 2), 'utf8')
+}
+
+function queueProjectStoreWrite(
+  updater: (store: BrokCodeProjectStoreFile) => BrokCodeProjectStoreFile
+) {
+  projectWriteQueue = projectWriteQueue.then(async () => {
+    const store = await readProjectStore()
+    await writeProjectStore(updater(store))
+  })
+
+  return projectWriteQueue
+}
+
+function fallbackProjectStatus(status: string) {
+  if (status === 'failed') return 'deploy_failed'
+  if (status === 'queued' || status === 'triggered' || status === 'deploying') {
+    return 'deploying'
+  }
+  return 'deployed'
+}
 
 export function makeBrokCodeSlug(value: string) {
   const slug = value
@@ -21,46 +138,211 @@ export async function listBrokCodeProjects({
   workspaceId: string
   userId: string
 }) {
-  return db
-    .select()
-    .from(brokCodeProjects)
-    .where(
-      and(
-        eq(brokCodeProjects.workspaceId, workspaceId),
-        eq(brokCodeProjects.userId, userId)
-      )
+  if (canUseDatabaseStore()) {
+    try {
+      return await db
+        .select()
+        .from(brokCodeProjects)
+        .where(
+          and(
+            eq(brokCodeProjects.workspaceId, workspaceId),
+            eq(brokCodeProjects.userId, userId)
+          )
+        )
+        .orderBy(asc(brokCodeProjects.createdAt))
+    } catch (error) {
+      console.error('BrokCode project DB list failed; using file store:', error)
+    }
+  }
+
+  const store = await readProjectStore()
+  return store.projects
+    .filter(
+      project =>
+        project.workspaceId === workspaceId && project.userId === userId
     )
-    .orderBy(asc(brokCodeProjects.createdAt))
+    .sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    )
+}
+
+function createProjectValue({
+  workspaceId,
+  userId,
+  name,
+  username,
+  backend,
+  slug
+}: {
+  workspaceId: string
+  userId: string
+  name: string
+  username?: string | null
+  backend?: BrokCodeBackendMetadata
+  slug?: string
+}) {
+  const metadata = mergeBrokCodeProjectBackendMetadata({
+    metadata: {
+      previewMode: 'managed',
+      hotReload: 'pending-worker'
+    },
+    backend: backend ?? emptyBrokCodeBackendMetadata()
+  })
+
+  return {
+    workspaceId,
+    userId,
+    name,
+    slug: slug ?? makeBrokCodeSlug(name),
+    username: username ? makeBrokCodeSlug(username) : null,
+    metadata
+  }
+}
+
+async function makeUniqueProjectSlug(workspaceId: string, desiredSlug: string) {
+  const existingSlugs = new Set<string>()
+
+  if (canUseDatabaseStore()) {
+    try {
+      const rows = await db
+        .select({ slug: brokCodeProjects.slug })
+        .from(brokCodeProjects)
+        .where(eq(brokCodeProjects.workspaceId, workspaceId))
+      rows.forEach(row => existingSlugs.add(row.slug))
+    } catch (error) {
+      console.error(
+        'BrokCode project slug lookup failed; using file store:',
+        error
+      )
+    }
+  }
+
+  const store = await readProjectStore()
+  store.projects
+    .filter(project => project.workspaceId === workspaceId)
+    .forEach(project => existingSlugs.add(project.slug))
+
+  if (!existingSlugs.has(desiredSlug)) return desiredSlug
+
+  for (let index = 2; index < 100; index += 1) {
+    const candidate = `${desiredSlug.slice(0, 42)}-${index}`
+    if (!existingSlugs.has(candidate)) return candidate
+  }
+
+  return `${desiredSlug.slice(0, 36)}-${Date.now().toString(36)}`
+}
+
+function createFallbackProject(
+  value: ReturnType<typeof createProjectValue>
+): BrokCodeProject {
+  const now = new Date()
+  return {
+    id: randomUUID(),
+    workspaceId: value.workspaceId,
+    userId: value.userId,
+    name: value.name,
+    slug: value.slug,
+    username: value.username,
+    status: 'draft',
+    previewUrl: null,
+    deploymentUrl: null,
+    metadata: value.metadata,
+    createdAt: now,
+    updatedAt: now
+  }
+}
+
+async function saveFallbackProject(project: BrokCodeProject) {
+  await queueProjectStoreWrite(store => {
+    const withoutProject = store.projects.filter(item => item.id !== project.id)
+    return {
+      ...store,
+      projects: [...withoutProject, project]
+    }
+  })
+
+  return project
+}
+
+async function updateFallbackProject(
+  projectId: string,
+  updater: (project: BrokCodeProject) => BrokCodeProject
+) {
+  let updatedProject: BrokCodeProject | null = null
+
+  await queueProjectStoreWrite(store => ({
+    ...store,
+    projects: store.projects.map(project => {
+      if (project.id !== projectId) return project
+      updatedProject = updater(project)
+      return updatedProject
+    })
+  }))
+
+  return updatedProject
+}
+
+async function getFallbackProject({
+  id,
+  workspaceId,
+  userId
+}: {
+  id: string
+  workspaceId: string
+  userId: string
+}) {
+  const store = await readProjectStore()
+  return (
+    store.projects.find(
+      project =>
+        project.id === id &&
+        project.workspaceId === workspaceId &&
+        project.userId === userId
+    ) ?? null
+  )
 }
 
 export async function createBrokCodeProject({
   workspaceId,
   userId,
   name,
-  username
+  username,
+  backend
 }: {
   workspaceId: string
   userId: string
   name: string
   username?: string | null
+  backend?: BrokCodeBackendMetadata
 }) {
-  const slug = makeBrokCodeSlug(name)
-  const [project] = await db
-    .insert(brokCodeProjects)
-    .values({
-      workspaceId,
-      userId,
-      name,
-      slug,
-      username: username ? makeBrokCodeSlug(username) : null,
-      metadata: {
-        previewMode: 'managed',
-        hotReload: 'pending-worker'
-      }
-    })
-    .returning()
+  const slug = await makeUniqueProjectSlug(workspaceId, makeBrokCodeSlug(name))
+  const value = createProjectValue({
+    workspaceId,
+    userId,
+    name,
+    username,
+    backend,
+    slug
+  })
 
-  return project
+  if (canUseDatabaseStore()) {
+    try {
+      const [project] = await db
+        .insert(brokCodeProjects)
+        .values(value)
+        .returning()
+
+      return project
+    } catch (error) {
+      console.error(
+        'BrokCode project DB create failed; using file store:',
+        error
+      )
+    }
+  }
+
+  return saveFallbackProject(createFallbackProject(value))
 }
 
 export async function getBrokCodeProject({
@@ -72,19 +354,236 @@ export async function getBrokCodeProject({
   workspaceId: string
   userId: string
 }) {
-  const [project] = await db
-    .select()
-    .from(brokCodeProjects)
-    .where(
-      and(
-        eq(brokCodeProjects.id, id),
-        eq(brokCodeProjects.workspaceId, workspaceId),
-        eq(brokCodeProjects.userId, userId)
-      )
-    )
-    .limit(1)
+  if (canUseDatabaseStore()) {
+    try {
+      const [project] = await db
+        .select()
+        .from(brokCodeProjects)
+        .where(
+          and(
+            eq(brokCodeProjects.id, id),
+            eq(brokCodeProjects.workspaceId, workspaceId),
+            eq(brokCodeProjects.userId, userId)
+          )
+        )
+        .limit(1)
 
-  return project ?? null
+      return project ?? null
+    } catch (error) {
+      console.error('BrokCode project DB get failed; using file store:', error)
+    }
+  }
+
+  return getFallbackProject({ id, workspaceId, userId })
+}
+
+export async function updateBrokCodeProjectBackend({
+  projectId,
+  workspaceId,
+  userId,
+  backend
+}: {
+  projectId: string
+  workspaceId: string
+  userId: string
+  backend: BrokCodeBackendMetadata
+}) {
+  const project = await getBrokCodeProject({
+    id: projectId,
+    workspaceId,
+    userId
+  })
+  if (!project) return null
+
+  const metadata = mergeBrokCodeProjectBackendMetadata({
+    metadata: project.metadata,
+    backend
+  })
+  if (canUseDatabaseStore()) {
+    try {
+      const [updatedProject] = await db
+        .update(brokCodeProjects)
+        .set({
+          metadata,
+          updatedAt: new Date()
+        })
+        .where(eq(brokCodeProjects.id, projectId))
+        .returning()
+
+      return updatedProject ?? null
+    } catch (error) {
+      console.error(
+        'BrokCode project DB backend update failed; using file store:',
+        error
+      )
+    }
+  }
+
+  return updateFallbackProject(projectId, current => ({
+    ...current,
+    metadata,
+    updatedAt: new Date()
+  }))
+}
+
+export async function updateBrokCodeProjectPreview({
+  projectId,
+  workspaceId,
+  userId,
+  previewUrl,
+  deploymentUrl,
+  status = 'preview_ready',
+  metadata
+}: {
+  projectId: string
+  workspaceId: string
+  userId: string
+  previewUrl: string
+  deploymentUrl?: string | null
+  status?: string
+  metadata?: Record<string, unknown> | null
+}) {
+  const project = await getBrokCodeProject({
+    id: projectId,
+    workspaceId,
+    userId
+  })
+  if (!project) return null
+
+  const nextMetadata = metadata
+    ? {
+        ...(project.metadata ?? {}),
+        preview: {
+          ...((project.metadata?.preview as Record<string, unknown>) ?? {}),
+          ...metadata
+        }
+      }
+    : project.metadata
+
+  if (canUseDatabaseStore()) {
+    try {
+      const [updatedProject] = await db
+        .update(brokCodeProjects)
+        .set({
+          status,
+          previewUrl,
+          deploymentUrl: deploymentUrl ?? project.deploymentUrl,
+          metadata: nextMetadata,
+          updatedAt: new Date()
+        })
+        .where(eq(brokCodeProjects.id, projectId))
+        .returning()
+
+      return updatedProject ?? null
+    } catch (error) {
+      console.error(
+        'BrokCode project DB preview update failed; using file store:',
+        error
+      )
+    }
+  }
+
+  return updateFallbackProject(projectId, current => ({
+    ...current,
+    status,
+    previewUrl,
+    deploymentUrl: deploymentUrl ?? current.deploymentUrl,
+    metadata: nextMetadata,
+    updatedAt: new Date()
+  }))
+}
+
+export function getBrokCodeProjectBackend(
+  project: { metadata?: Record<string, unknown> | null } | null | undefined
+) {
+  return normalizeBrokCodeBackendMetadata(project?.metadata?.backend)
+}
+
+export async function recordBrokCodeProjectDeployment({
+  projectId,
+  workspaceId,
+  userId,
+  provider,
+  status,
+  url,
+  subdomain,
+  logs,
+  metadata
+}: {
+  projectId: string
+  workspaceId: string
+  userId: string
+  provider: string
+  status: string
+  url?: string | null
+  subdomain?: string | null
+  logs?: Array<Record<string, unknown>> | null
+  metadata?: Record<string, unknown> | null
+}) {
+  const now = new Date()
+  const value = {
+    projectId,
+    workspaceId,
+    userId,
+    provider,
+    status,
+    url: url ?? null,
+    subdomain: subdomain ?? null,
+    logs: logs ?? null,
+    metadata: metadata ?? null,
+    updatedAt: now
+  }
+
+  if (canUseDatabaseStore()) {
+    try {
+      const [deployment] = await db
+        .insert(brokCodeDeployments)
+        .values(value)
+        .returning()
+
+      await db
+        .update(brokCodeProjects)
+        .set({
+          status: fallbackProjectStatus(status),
+          deploymentUrl: url ?? null,
+          previewUrl: url ?? null,
+          updatedAt: now
+        })
+        .where(eq(brokCodeProjects.id, projectId))
+
+      return deployment
+    } catch (error) {
+      console.error(
+        'BrokCode project DB deployment failed; using file store:',
+        error
+      )
+    }
+  }
+
+  const deployment: BrokCodeDeployment = {
+    id: randomUUID(),
+    ...value,
+    createdAt: now,
+    updatedAt: now
+  }
+
+  await queueProjectStoreWrite(store => ({
+    ...store,
+    deployments: [...store.deployments, deployment],
+    projects: store.projects.map(project =>
+      project.id === projectId
+        ? {
+            ...project,
+            status: fallbackProjectStatus(status),
+            deploymentUrl: url ?? null,
+            previewUrl: url ?? null,
+            updatedAt: now
+          }
+        : project
+    )
+  }))
+
+  return deployment
 }
 
 export async function listBrokCodeProjectFiles({
@@ -94,16 +593,32 @@ export async function listBrokCodeProjectFiles({
   projectId: string
   workspaceId: string
 }) {
-  return db
-    .select()
-    .from(brokCodeProjectFiles)
-    .where(
-      and(
-        eq(brokCodeProjectFiles.projectId, projectId),
-        eq(brokCodeProjectFiles.workspaceId, workspaceId)
+  if (canUseDatabaseStore()) {
+    try {
+      return await db
+        .select()
+        .from(brokCodeProjectFiles)
+        .where(
+          and(
+            eq(brokCodeProjectFiles.projectId, projectId),
+            eq(brokCodeProjectFiles.workspaceId, workspaceId)
+          )
+        )
+        .orderBy(asc(brokCodeProjectFiles.path))
+    } catch (error) {
+      console.error(
+        'BrokCode project file DB list failed; using file store:',
+        error
       )
+    }
+  }
+
+  const store = await readProjectStore()
+  return store.files
+    .filter(
+      file => file.projectId === projectId && file.workspaceId === workspaceId
     )
-    .orderBy(asc(brokCodeProjectFiles.path))
+    .sort((a, b) => a.path.localeCompare(b.path))
 }
 
 export async function upsertBrokCodeProjectFile({
@@ -119,41 +634,88 @@ export async function upsertBrokCodeProjectFile({
   content: string
   language?: string | null
 }) {
-  const cleanPath = path
-    .trim()
-    .replace(/^\/+/, '')
-    .replace(/\.\.(\/|\\)/g, '')
+  const rawPath = path.trim()
+  const cleanPath = rawPath.replace(/\\/g, '/')
 
-  if (!cleanPath) {
-    throw new Error('File path is required')
+  if (
+    !cleanPath ||
+    cleanPath.startsWith('/') ||
+    cleanPath.split('/').some(part => !part || part === '.' || part === '..')
+  ) {
+    throw new Error('Invalid file path')
   }
 
-  const [file] = await db
-    .insert(brokCodeProjectFiles)
-    .values({
-      projectId,
-      workspaceId,
-      path: cleanPath,
-      content,
-      language: language ?? inferLanguage(cleanPath),
-      updatedAt: new Date()
-    })
-    .onConflictDoUpdate({
-      target: [brokCodeProjectFiles.projectId, brokCodeProjectFiles.path],
-      set: {
-        content,
-        language: language ?? inferLanguage(cleanPath),
-        updatedAt: new Date()
-      }
-    })
-    .returning()
+  const now = new Date()
+  const fileValue = {
+    projectId,
+    workspaceId,
+    path: cleanPath,
+    content,
+    language: language ?? inferLanguage(cleanPath),
+    updatedAt: now
+  }
 
-  await db
-    .update(brokCodeProjects)
-    .set({ updatedAt: new Date() })
-    .where(eq(brokCodeProjects.id, projectId))
+  if (canUseDatabaseStore()) {
+    try {
+      const [file] = await db
+        .insert(brokCodeProjectFiles)
+        .values(fileValue)
+        .onConflictDoUpdate({
+          target: [brokCodeProjectFiles.projectId, brokCodeProjectFiles.path],
+          set: {
+            content,
+            language: language ?? inferLanguage(cleanPath),
+            updatedAt: now
+          }
+        })
+        .returning()
 
-  return file
+      await db
+        .update(brokCodeProjects)
+        .set({ updatedAt: now })
+        .where(eq(brokCodeProjects.id, projectId))
+
+      return file
+    } catch (error) {
+      console.error(
+        'BrokCode project file DB upsert failed; using file store:',
+        error
+      )
+    }
+  }
+
+  let upsertedFile: BrokCodeProjectFile | null = null
+
+  await queueProjectStoreWrite(store => {
+    const existing = store.files.find(
+      file => file.projectId === projectId && file.path === cleanPath
+    )
+    upsertedFile = {
+      id: existing?.id ?? randomUUID(),
+      ...fileValue,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now
+    }
+
+    return {
+      ...store,
+      files: [
+        ...store.files.filter(
+          file => !(file.projectId === projectId && file.path === cleanPath)
+        ),
+        upsertedFile
+      ],
+      projects: store.projects.map(project =>
+        project.id === projectId ? { ...project, updatedAt: now } : project
+      )
+    }
+  })
+
+  if (!upsertedFile) {
+    throw new Error('Failed to store project file')
+  }
+
+  return upsertedFile
 }
 
 function inferLanguage(path: string) {

@@ -5,6 +5,7 @@ import { loadChat } from '@/lib/actions/chat'
 import { calculateConversationTurn, trackChatEvent } from '@/lib/analytics'
 import {
   getCurrentAppAccess,
+  hasFeatureAccess,
   isAppAccessGateEnabled
 } from '@/lib/auth/app-access'
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
@@ -20,7 +21,8 @@ import { SearchMode } from '@/lib/types/search'
 import {
   getLatestUserMessage,
   getSimpleUtilityReplyForMessage,
-  shouldUseQuickReplyForMessage
+  shouldUseQuickReplyForMessage,
+  shouldUseQuickSearchModeForMessage
 } from '@/lib/utils/chat-routing'
 import { selectModel } from '@/lib/utils/model-selection'
 import { perfLog, perfTime } from '@/lib/utils/perf-logging'
@@ -91,6 +93,13 @@ export async function POST(req: Request) {
           statusText: 'Forbidden'
         })
       }
+
+      if (!hasFeatureAccess(access, 'search')) {
+        return new Response('Search access denied', {
+          status: 403,
+          statusText: 'Forbidden'
+        })
+      }
     }
 
     const guestChatEnabled = process.env.ENABLE_GUEST_CHAT === 'true'
@@ -120,11 +129,19 @@ export async function POST(req: Request) {
       normalizeSearchMode(searchModeCookie)
     const currentUserMessage =
       message ?? getLatestUserMessage(Array.isArray(messages) ? messages : [])
+    const shouldUseQuickSearchMode =
+      shouldUseQuickSearchModeForMessage(currentUserMessage)
+    const isExplicitMode =
+      requestedSearchMode === 'deep' || requestedSearchMode === 'code'
     const searchMode: SearchMode = shouldUseQuickReplyForMessage(
       currentUserMessage
     )
       ? 'quick'
-      : requestedSearchMode
+      : isExplicitMode
+        ? requestedSearchMode
+        : shouldUseQuickSearchMode
+          ? 'quick'
+          : requestedSearchMode
     const simpleReply = getSimpleUtilityReplyForMessage(currentUserMessage)
     if (simpleReply && trigger === 'submit-message') {
       return createSimpleChatStreamResponse({

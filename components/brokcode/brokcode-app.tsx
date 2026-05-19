@@ -106,6 +106,54 @@ type BrokUsage = {
 type BrokCodeRuntime = 'pi' | 'opencode' | 'brok' | 'not_connected'
 type GithubConnectionStatus = 'checking' | 'connected' | 'ready' | 'unavailable'
 type PreviewHealthStatus = 'idle' | 'checking' | 'online' | 'offline'
+type BrokCodeBackendProvider = 'none' | 'insforge'
+type BrokCodeBackendHealthStatus =
+  | 'unknown'
+  | 'checking'
+  | 'online'
+  | 'offline'
+  | 'auth_error'
+  | 'not_found'
+  | 'expired_or_limited'
+  | 'error'
+
+type BrokCodeBackendMetadata = {
+  provider: BrokCodeBackendProvider
+  mode?: 'trial' | 'existing' | 'self_hosted'
+  status: 'not_configured' | 'provisioning' | 'ready' | 'error' | 'expired'
+  projectUrl?: string | null
+  dashboardUrl?: string | null
+  claimUrl?: string | null
+  projectId?: string | null
+  appkey?: string | null
+  region?: string | null
+  trialExpiresAt?: string | null
+  health: BrokCodeBackendHealthStatus
+  lastHealthStatus?: number | null
+  lastHealthCheckedAt?: string | null
+  adminKeyConfigured: boolean
+  error?: string | null
+  capabilities?: {
+    database: boolean
+    auth: boolean
+    storage: boolean
+    functions: boolean
+    realtime: boolean
+  }
+}
+
+type BrokCodeProject = {
+  id: string
+  name: string
+  slug: string
+  username?: string | null
+  previewUrl?: string | null
+  deploymentUrl?: string | null
+  metadata?: {
+    backend?: BrokCodeBackendMetadata
+    [key: string]: unknown
+  } | null
+}
 
 type ExecutionStepStatus = 'queued' | 'running' | 'done' | 'error'
 
@@ -353,42 +401,42 @@ function createRuntimeSubagents(runs: ExecutionRun[]): BrokCodeSubagent[] {
 const executionStepTemplate: ExecutionStep[] = [
   {
     id: 'parse',
-    label: 'Parse Command',
-    detail: 'Reading intent and scope.',
+    label: 'Understands the request',
+    detail: 'Reads the command, project context, and selected backend.',
     status: 'queued'
   },
   {
     id: 'plan',
-    label: 'Plan + Subagents',
-    detail: 'Selecting subagents and execution plan.',
+    label: 'Chooses the next move',
+    detail: 'Decides whether this needs code, preview, deploy, or GitHub work.',
     status: 'queued'
   },
   {
     id: 'execute',
-    label: 'Execute Runtime',
-    detail: 'Sending command to runtime.',
+    label: 'Works in the coding agent',
+    detail: 'Runs the Pi/BrokCode runtime and streams back useful output.',
     status: 'queued'
   },
   {
     id: 'validate',
-    label: 'Validate Output',
-    detail: 'Checking response shape and usage.',
+    label: 'Checks the result',
+    detail: 'Looks for preview URLs, errors, usage, and next actions.',
     status: 'queued'
   },
   {
     id: 'summarize',
-    label: 'Summarize',
-    detail: 'Preparing operator-facing result.',
+    label: 'Reports what changed',
+    detail: 'Turns runtime output into a short, usable answer.',
     status: 'queued'
   }
 ]
 
 const runStreamingHints = [
-  'Understanding your command',
-  'Planning subagents',
-  'Executing in Pi coding-agent',
-  'Collecting runtime output',
-  'Preparing final response'
+  'Reading the project and request',
+  'Choosing the next useful action',
+  'Working through the coding runtime',
+  'Checking output and preview state',
+  'Preparing the answer'
 ]
 
 const integrationConnectMatchers: Array<{ toolkit: string; pattern: RegExp }> =
@@ -523,9 +571,12 @@ function normalizePreviewUrl(value: string) {
   const trimmed = value.trim()
   if (!trimmed) return null
 
-  const candidate = /^https?:\/\//i.test(trimmed)
-    ? trimmed
-    : `http://${trimmed}`
+  const candidate =
+    trimmed.startsWith('/') && typeof window !== 'undefined'
+      ? new URL(trimmed, window.location.origin).toString()
+      : /^https?:\/\//i.test(trimmed)
+        ? trimmed
+        : `http://${trimmed}`
 
   try {
     const parsed = new URL(candidate)
@@ -744,6 +795,15 @@ export function BrokCodeApp({
   const [githubHeadBranch, setGithubHeadBranch] = useState('')
   const [versions, setVersions] = useState<BrokCodeVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
+  const [projects, setProjects] = useState<BrokCodeProject[]>([])
+  const [activeProjectId, setActiveProjectId] = useState('')
+  const [backendSaving, setBackendSaving] = useState(false)
+  const [backendProvisioning, setBackendProvisioning] = useState(false)
+  const [backendChecking, setBackendChecking] = useState(false)
+  const [backendProjectName, setBackendProjectName] = useState('BrokCode app')
+  const [insForgeProjectUrl, setInsForgeProjectUrl] = useState('')
+  const [insForgeDashboardUrl, setInsForgeDashboardUrl] = useState('')
+  const [insForgeAdminKey, setInsForgeAdminKey] = useState('')
   const [isSharing, startShareTransition] = useTransition()
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -873,6 +933,21 @@ export function BrokCodeApp({
   )
   const selectedAgent =
     runtimeAgents.find(agent => agent.id === selectedId) ?? null
+  const activeProject = useMemo(
+    () =>
+      projects.find(project => project.id === activeProjectId) ??
+      projects[0] ??
+      null,
+    [activeProjectId, projects]
+  )
+  const activeBackend =
+    activeProject?.metadata?.backend ??
+    ({
+      provider: 'none',
+      status: 'not_configured',
+      health: 'unknown',
+      adminKeyConfigured: false
+    } satisfies BrokCodeBackendMetadata)
   const activeSyncSession = useMemo(
     () =>
       syncedSessions.find(session => session.id === syncSessionId) ??
@@ -1008,6 +1083,40 @@ export function BrokCodeApp({
     [apiKey, getAuthHeaders, syncSessionId]
   )
 
+  const refreshProjects = useCallback(
+    async (key = apiKey) => {
+      if (key && !isValidBrokApiKey(key)) {
+        setProjects([])
+        return
+      }
+
+      try {
+        const response = await fetch('/api/brokcode/projects', {
+          headers: getAuthHeaders(key)
+        })
+        const body = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(body?.error?.message ?? 'Project lookup failed.')
+        }
+
+        const nextProjects = Array.isArray(body?.projects)
+          ? (body.projects as BrokCodeProject[])
+          : []
+        setProjects(nextProjects)
+        setActiveProjectId(current =>
+          current && nextProjects.some(project => project.id === current)
+            ? current
+            : (nextProjects[0]?.id ?? '')
+        )
+      } catch (error) {
+        setRuntimeError(
+          error instanceof Error ? error.message : 'Could not load projects.'
+        )
+      }
+    },
+    [apiKey, getAuthHeaders]
+  )
+
   const refreshRepoContext = useCallback(
     async (key = apiKey) => {
       if (key && !isValidBrokApiKey(key)) {
@@ -1076,6 +1185,7 @@ export function BrokCodeApp({
       setSyncedSessions([])
       setVersions([])
       setRepoContext(null)
+      setProjects([])
       return
     }
 
@@ -1087,10 +1197,12 @@ export function BrokCodeApp({
     void refreshSyncedSessions(apiKey)
     void refreshVersions(apiKey)
     void refreshRepoContext(apiKey)
+    void refreshProjects(apiKey)
   }, [
     apiKey,
     hasLiveKey,
     hasLiveRuntime,
+    refreshProjects,
     refreshRepoContext,
     refreshSyncedSessions,
     refreshVersions
@@ -1110,6 +1222,198 @@ export function BrokCodeApp({
 
     return () => window.clearInterval(timer)
   }, [apiKey, hasLiveRuntime, refreshSyncedSessions])
+
+  useEffect(() => {
+    if (!activeProject) return
+    setBackendProjectName(activeProject.name)
+    if (activeBackend.provider === 'insforge') {
+      setInsForgeProjectUrl(activeBackend.projectUrl ?? '')
+      setInsForgeDashboardUrl(activeBackend.dashboardUrl ?? '')
+    } else {
+      setInsForgeProjectUrl('')
+      setInsForgeDashboardUrl('')
+    }
+    setInsForgeAdminKey('')
+  }, [activeBackend, activeProject])
+
+  async function saveInsForgeBackend() {
+    if (!hasLiveRuntime) {
+      setRuntimeError('Sign in before configuring a BrokCode backend.')
+      return
+    }
+
+    const projectUrl = insForgeProjectUrl.trim()
+    if (!projectUrl) {
+      setRuntimeError('Add an InsForge project URL before saving backend.')
+      return
+    }
+
+    setBackendSaving(true)
+    setRuntimeError(null)
+    try {
+      const backend = {
+        provider: 'insforge',
+        mode: 'existing',
+        projectUrl,
+        dashboardUrl: insForgeDashboardUrl.trim() || undefined,
+        adminKey: insForgeAdminKey.trim() || undefined
+      }
+      const response = activeProject
+        ? await fetch(`/api/brokcode/projects/${activeProject.id}/backend`, {
+            method: 'PUT',
+            headers: {
+              ...getAuthHeaders(),
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ backend })
+          })
+        : await fetch('/api/brokcode/projects', {
+            method: 'POST',
+            headers: {
+              ...getAuthHeaders(),
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: backendProjectName.trim() || 'BrokCode app',
+              backend
+            })
+          })
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.error?.message ?? 'Backend save failed.')
+      }
+
+      await refreshProjects(apiKey)
+      const project = body?.project as BrokCodeProject | undefined
+      if (project?.id) setActiveProjectId(project.id)
+      setInsForgeAdminKey('')
+      toast.success('InsForge backend saved')
+    } catch (error) {
+      setRuntimeError(
+        error instanceof Error
+          ? error.message
+          : 'Could not save InsForge backend.'
+      )
+    } finally {
+      setBackendSaving(false)
+    }
+  }
+
+  async function provisionInsForgeBackend() {
+    if (!hasLiveRuntime) {
+      setRuntimeError('Sign in before provisioning an InsForge backend.')
+      return
+    }
+
+    setBackendProvisioning(true)
+    setRuntimeError(null)
+    try {
+      const response = await fetch(
+        '/api/brokcode/projects/insforge/provision',
+        {
+          method: 'POST',
+          headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            project_id: activeProject?.id ?? undefined,
+            projectName:
+              activeProject?.name || backendProjectName.trim() || 'BrokCode app'
+          })
+        }
+      )
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.error ?? 'InsForge provisioning failed.')
+      }
+
+      await refreshProjects(apiKey)
+      const project = body?.project as BrokCodeProject | undefined
+      if (project?.id) setActiveProjectId(project.id)
+      toast.success(
+        body?.backend?.health === 'online'
+          ? 'InsForge backend is ready'
+          : 'InsForge backend was created and is still warming up'
+      )
+    } catch (error) {
+      setRuntimeError(
+        error instanceof Error
+          ? error.message
+          : 'Could not provision InsForge backend.'
+      )
+    } finally {
+      setBackendProvisioning(false)
+    }
+  }
+
+  async function clearBackend() {
+    if (!activeProject) return
+    setBackendSaving(true)
+    setRuntimeError(null)
+    try {
+      const response = await fetch(
+        `/api/brokcode/projects/${activeProject.id}/backend`,
+        {
+          method: 'PUT',
+          headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ provider: 'none' })
+        }
+      )
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.error?.message ?? 'Backend reset failed.')
+      }
+
+      await refreshProjects(apiKey)
+      toast.success('Backend cleared')
+    } catch (error) {
+      setRuntimeError(
+        error instanceof Error ? error.message : 'Could not clear backend.'
+      )
+    } finally {
+      setBackendSaving(false)
+    }
+  }
+
+  async function checkBackendHealth() {
+    if (!activeProject) {
+      setRuntimeError('Create or select a BrokCode project first.')
+      return
+    }
+
+    setBackendChecking(true)
+    setRuntimeError(null)
+    try {
+      const response = await fetch(
+        `/api/brokcode/projects/${activeProject.id}/backend/health`,
+        {
+          method: 'POST',
+          headers: getAuthHeaders()
+        }
+      )
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.error?.message ?? 'Backend health check failed.')
+      }
+
+      await refreshProjects(apiKey)
+      toast.success(
+        body?.backend?.health === 'online'
+          ? 'InsForge backend is online'
+          : 'InsForge backend check finished'
+      )
+    } catch (error) {
+      setRuntimeError(
+        error instanceof Error ? error.message : 'Could not check backend.'
+      )
+    } finally {
+      setBackendChecking(false)
+    }
+  }
 
   async function appendSyncEvent({
     role,
@@ -1225,7 +1529,7 @@ export function BrokCodeApp({
   function loadPreviewTarget(rawTarget: string) {
     const normalized = normalizePreviewUrl(rawTarget)
     if (!normalized) {
-      setRuntimeError('Enter a valid preview URL (http or https).')
+      setRuntimeError('Enter a valid preview URL or BrokCode preview path.')
       return
     }
     if (isBrokCodeWorkspaceUrl(normalized)) {
@@ -1640,7 +1944,10 @@ export function BrokCodeApp({
           ...getAuthHeaders(apiKey),
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ source: 'browser' })
+        body: JSON.stringify({
+          source: 'browser',
+          project_id: activeProject?.id ?? null
+        })
       })
 
       const body = await response.json().catch(() => null)
@@ -1674,6 +1981,17 @@ export function BrokCodeApp({
           content: `${message}\nStrategy: ${strategy}${deploymentId ? `\nDeployment ID: ${deploymentId}` : ''}${loadedPreviewUrl ? `\nPreview: ${loadedPreviewUrl}` : ''}`
         }
       ])
+      void persistVersionSnapshot({
+        command: '1-click deploy',
+        summary: `${message} Strategy: ${strategy}`,
+        runtime: activeRuntime === 'not_connected' ? 'brok' : activeRuntime,
+        status: 'done',
+        previewUrl: loadedPreviewUrl,
+        prUrl: null
+      })
+      if (activeProject?.id) {
+        void refreshProjects(apiKey)
+      }
       toast.success(
         loadedPreviewUrl
           ? 'Deployment triggered and preview loaded'
@@ -2105,7 +2423,14 @@ export function BrokCodeApp({
       content: trimmed,
       metadata: {
         runtime: 'cloud',
-        model: selectedModel
+        model: selectedModel,
+        projectId: activeProject?.id ?? null,
+        backendProvider: activeBackend.provider,
+        backendStatus: activeBackend.status,
+        backendUrl:
+          activeBackend.provider === 'insforge'
+            ? activeBackend.projectUrl
+            : null
       }
     })
 
@@ -2152,8 +2477,18 @@ export function BrokCodeApp({
           session_id: syncSessionId,
           stream: true,
           prefer_pi: true,
+          project_id: activeProject?.id ?? null,
+          backend_provider: activeBackend.provider,
+          backend_status: activeBackend.status,
+          backend_project_url:
+            activeBackend.provider === 'insforge'
+              ? activeBackend.projectUrl
+              : null,
           messages: [
-            { role: 'system', content: buildCommandPrompt(trimmed) },
+            {
+              role: 'system',
+              content: `${buildCommandPrompt(trimmed)}\n\nProject context: ${activeProject ? `${activeProject.name} (${activeProject.id})` : 'No saved BrokCode project selected'}.\nBackend context: ${activeBackend.provider === 'insforge' ? `InsForge ${activeBackend.status}; project URL ${activeBackend.projectUrl ?? 'not set'}; database/auth/storage/functions are available when configured. Never ask the browser for the InsForge admin key.` : 'No backend provider configured yet.'}`
+            },
             { role: 'user', content: trimmed }
           ]
         })
@@ -2256,7 +2591,14 @@ export function BrokCodeApp({
         content: assistantContent,
         metadata: {
           runtime,
-          model: selectedModel
+          model: selectedModel,
+          projectId: activeProject?.id ?? null,
+          backendProvider: activeBackend.provider,
+          backendStatus: activeBackend.status,
+          backendUrl:
+            activeBackend.provider === 'insforge'
+              ? activeBackend.projectUrl
+              : null
         }
       })
       void persistVersionSnapshot({
@@ -2308,7 +2650,14 @@ export function BrokCodeApp({
         content: message,
         metadata: {
           runtime: 'error',
-          model: selectedModel
+          model: selectedModel,
+          projectId: activeProject?.id ?? null,
+          backendProvider: activeBackend.provider,
+          backendStatus: activeBackend.status,
+          backendUrl:
+            activeBackend.provider === 'insforge'
+              ? activeBackend.projectUrl
+              : null
         }
       })
       void persistVersionSnapshot({
@@ -2455,6 +2804,21 @@ export function BrokCodeApp({
                 : githubStatus === 'checking'
                   ? 'checking'
                   : 'off'}
+              <span className="text-zinc-600">/</span>
+              <span
+                className={cn(
+                  'size-1.5 rounded-full',
+                  activeBackend.provider === 'insforge' &&
+                    activeBackend.health === 'online'
+                    ? 'bg-emerald-400'
+                    : activeBackend.provider === 'insforge'
+                      ? 'bg-cyan-500'
+                      : 'bg-zinc-600'
+                )}
+              />
+              {activeBackend.provider === 'insforge'
+                ? `InsForge ${activeBackend.health === 'online' ? 'online' : activeBackend.status}`
+                : 'Backend off'}
             </span>
             {isConnectingIntegration && (
               <span className="truncate rounded-full border border-white/10 bg-white/[0.06] px-2 py-1">
@@ -2861,13 +3225,37 @@ export function BrokCodeApp({
                     : previewHealth.status === 'offline' && previewUrl.trim()
                       ? 'Loaded'
                       : previewHealth.status === 'offline'
-                      ? 'Offline'
-                      : 'Ready'}
+                        ? 'Offline'
+                        : 'Ready'}
               </Badge>
             </div>
           </div>
 
           <div className="min-h-0 flex-1 p-2">
+            <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-xs text-zinc-300">
+              <div className="min-w-0">
+                <p className="font-medium text-white">
+                  {activeBackend.provider === 'insforge'
+                    ? 'InsForge backend'
+                    : 'Backend not configured'}
+                </p>
+                <p className="truncate text-zinc-400">
+                  {activeBackend.provider === 'insforge'
+                    ? activeBackend.projectUrl || 'Project URL not set'
+                    : 'Configure database, auth, storage, and functions in Setup.'}
+                </p>
+              </div>
+              <Badge
+                variant="outline"
+                className="shrink-0 rounded-full border-white/10 bg-white/[0.06] text-zinc-200"
+              >
+                {activeBackend.provider === 'insforge'
+                  ? activeBackend.health === 'online'
+                    ? 'Online'
+                    : activeBackend.status
+                  : 'Off'}
+              </Badge>
+            </div>
             <BrowserPreviewPanel
               previewInput={previewInput}
               previewUrl={previewUrl}
@@ -2883,377 +3271,585 @@ export function BrokCodeApp({
           </div>
 
           {(isRunning || executionRuns.length > 0) && (
-          <div className="max-h-[260px] overflow-hidden border-t border-white/10 bg-[#20201e]/95 p-2 backdrop-blur">
-            <Tabs defaultValue="run">
-              <TabsList className="h-9 w-full justify-start rounded-lg bg-white/[0.06] p-1">
-                <TabsTrigger value="run" className="gap-1.5 rounded-sm">
-                  <Activity className="size-4" />
-                  Run
-                </TabsTrigger>
-                <TabsTrigger value="agents" className="gap-1.5 rounded-sm">
-                  <Bot className="size-4" />
-                  Agents
-                </TabsTrigger>
-                <TabsTrigger value="history" className="gap-1.5 rounded-sm">
-                  <Clock3 className="size-4" />
-                  History
-                </TabsTrigger>
-                <TabsTrigger value="setup" className="gap-1.5 rounded-sm">
-                  <KeyRound className="size-4" />
-                  Setup
-                </TabsTrigger>
-              </TabsList>
+            <div className="max-h-[260px] overflow-hidden border-t border-white/10 bg-[#20201e]/95 p-2 backdrop-blur">
+              <Tabs defaultValue="run">
+                <TabsList className="h-9 w-full justify-start rounded-lg bg-white/[0.06] p-1">
+                  <TabsTrigger value="run" className="gap-1.5 rounded-sm">
+                    <Activity className="size-4" />
+                    Run
+                  </TabsTrigger>
+                  <TabsTrigger value="agents" className="gap-1.5 rounded-sm">
+                    <Bot className="size-4" />
+                    Agents
+                  </TabsTrigger>
+                  <TabsTrigger value="history" className="gap-1.5 rounded-sm">
+                    <Clock3 className="size-4" />
+                    History
+                  </TabsTrigger>
+                  <TabsTrigger value="setup" className="gap-1.5 rounded-sm">
+                    <KeyRound className="size-4" />
+                    Setup
+                  </TabsTrigger>
+                </TabsList>
 
-              <TabsContent
-                value="run"
-                className="mt-3 max-h-[205px] overflow-y-auto"
-              >
-                <ExecutionVisualizer runs={executionRuns} />
-                <div className="mt-3">
-                  <SyncedSessionPanel
-                    session={activeSyncSession}
-                    sessionId={syncSessionId}
-                    loading={syncLoading}
-                    onRefresh={() => {
-                      void refreshSyncedSessions()
-                    }}
-                  />
-                </div>
-              </TabsContent>
-
-              <TabsContent
-                value="agents"
-                className="mt-3 max-h-[205px] overflow-y-auto"
-              >
-                <div className="grid gap-2">
-                  {runtimeAgents.map(agent => (
-                    <SubagentCard
-                      key={agent.id}
-                      agent={agent}
-                      livePulse={livePulse}
-                      selected={agent.id === selectedAgent?.id}
-                      onSelect={() => setSelectedId(agent.id)}
-                    />
-                  ))}
-                </div>
-                {runtimeAgents.length === 0 && (
-                  <p className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
-                    No real subagent events reported yet.
-                  </p>
-                )}
-                {selectedAgent && (
+                <TabsContent
+                  value="run"
+                  className="mt-3 max-h-[205px] overflow-y-auto"
+                >
+                  <ExecutionVisualizer runs={executionRuns} />
                   <div className="mt-3">
-                    <SubagentDetail
-                      agent={selectedAgent}
-                      livePulse={livePulse}
-                      onFocus={focusAgent}
+                    <SyncedSessionPanel
+                      session={activeSyncSession}
+                      sessionId={syncSessionId}
+                      loading={syncLoading}
+                      onRefresh={() => {
+                        void refreshSyncedSessions()
+                      }}
                     />
                   </div>
-                )}
-              </TabsContent>
+                </TabsContent>
 
-              <TabsContent
-                value="history"
-                className="mt-3 max-h-[205px] overflow-y-auto"
-              >
-                <VersionHistoryPanel
-                  versions={versions}
-                  loading={versionsLoading}
-                  onRefresh={() => {
-                    if (apiKey) {
-                      void refreshVersions(apiKey)
-                    }
-                  }}
-                />
-              </TabsContent>
-
-              <TabsContent
-                value="setup"
-                className="mt-3 max-h-[205px] overflow-y-auto p-1"
-              >
-                <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px] xl:items-end">
-                  <div>
-                    <Label htmlFor="brok-code-key" className="text-xs">
-                      Optional CLI/TUI API key
-                      <span className="ml-1 font-normal text-muted-foreground">
-                        encrypted key vault
-                      </span>
-                    </Label>
-                    <div className="mt-1 flex items-center gap-2">
-                      <KeyRound className="size-4 text-muted-foreground" />
-                      <Input
-                        id="brok-code-key"
-                        value={apiKeyInput}
-                        onChange={event => {
-                          setApiKeyInput(event.target.value)
-                          if (apiKeyError) setApiKeyError(null)
-                        }}
-                        placeholder="brok_sk_live_..."
-                        className="h-9"
+                <TabsContent
+                  value="agents"
+                  className="mt-3 max-h-[205px] overflow-y-auto"
+                >
+                  <div className="grid gap-2">
+                    {runtimeAgents.map(agent => (
+                      <SubagentCard
+                        key={agent.id}
+                        agent={agent}
+                        livePulse={livePulse}
+                        selected={agent.id === selectedAgent?.id}
+                        onSelect={() => setSelectedId(agent.id)}
+                      />
+                    ))}
+                  </div>
+                  {runtimeAgents.length === 0 && (
+                    <p className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
+                      No real subagent events reported yet.
+                    </p>
+                  )}
+                  {selectedAgent && (
+                    <div className="mt-3">
+                      <SubagentDetail
+                        agent={selectedAgent}
+                        livePulse={livePulse}
+                        onFocus={focusAgent}
                       />
                     </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent
+                  value="history"
+                  className="mt-3 max-h-[205px] overflow-y-auto"
+                >
+                  <VersionHistoryPanel
+                    versions={versions}
+                    loading={versionsLoading}
+                    onRefresh={() => {
+                      if (apiKey) {
+                        void refreshVersions(apiKey)
+                      }
+                    }}
+                  />
+                </TabsContent>
+
+                <TabsContent
+                  value="setup"
+                  className="mt-3 max-h-[205px] overflow-y-auto p-1"
+                >
+                  <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px] xl:items-end">
+                    <div>
+                      <Label htmlFor="brok-code-key" className="text-xs">
+                        Optional CLI/TUI API key
+                        <span className="ml-1 font-normal text-muted-foreground">
+                          encrypted key vault
+                        </span>
+                      </Label>
+                      <div className="mt-1 flex items-center gap-2">
+                        <KeyRound className="size-4 text-muted-foreground" />
+                        <Input
+                          id="brok-code-key"
+                          value={apiKeyInput}
+                          onChange={event => {
+                            setApiKeyInput(event.target.value)
+                            if (apiKeyError) setApiKeyError(null)
+                          }}
+                          placeholder="brok_sk_live_..."
+                          className="h-9"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Model</Label>
+                      <Select
+                        value={selectedModel}
+                        onValueChange={setSelectedModel}
+                      >
+                        <SelectTrigger className="mt-1 h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {codeModels.map(model => (
+                            <SelectItem key={model.id} value={model.id}>
+                              {model.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div>
-                    <Label className="text-xs">Model</Label>
-                    <Select
-                      value={selectedModel}
-                      onValueChange={setSelectedModel}
-                    >
-                      <SelectTrigger className="mt-1 h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {codeModels.map(model => (
-                          <SelectItem key={model.id} value={model.id}>
-                            {model.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <Button size="sm" className="h-9" onClick={saveApiKey}>
-                    Save Key
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9"
-                    onClick={clearApiKey}
-                    disabled={!apiKeyInput && !savedRuntimeKey && !apiKey}
-                  >
-                    Clear
-                  </Button>
-                </div>
-                <div className="mt-3 rounded-md border bg-background px-3 py-2 text-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium">Runtime</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button size="sm" className="h-9" onClick={saveApiKey}>
+                      Save Key
+                    </Button>
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-6"
-                      disabled={!hasLiveKey || !apiKey || usageLoading}
-                      onClick={() => {
-                        if (apiKey) void refreshUsage(apiKey)
-                      }}
+                      variant="outline"
+                      size="sm"
+                      className="h-9"
+                      onClick={clearApiKey}
+                      disabled={!apiKeyInput && !savedRuntimeKey && !apiKey}
                     >
-                      <RefreshCcw className="size-3.5" />
-                      <span className="sr-only">Refresh usage</span>
+                      Clear
                     </Button>
                   </div>
-                  <p className="mt-1 text-muted-foreground">
-                    {maskedKey
-                      ? savedRuntimeKey
-                        ? `Using saved ${savedRuntimeKey.name} (${savedRuntimeKey.prefix})`
-                        : `Using ${maskedKey}`
-                      : `Browser runs use signed-in account (${accountEmail})`}
-                  </p>
-                  {savedRuntimeKey && (
+                  <div className="mt-3 rounded-md border bg-background px-3 py-2 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium">Runtime</p>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-6"
+                        disabled={!hasLiveKey || !apiKey || usageLoading}
+                        onClick={() => {
+                          if (apiKey) void refreshUsage(apiKey)
+                        }}
+                      >
+                        <RefreshCcw className="size-3.5" />
+                        <span className="sr-only">Refresh usage</span>
+                      </Button>
+                    </div>
                     <p className="mt-1 text-muted-foreground">
-                      Stored for session {savedRuntimeKey.defaultSessionId} ·{' '}
-                      {savedRuntimeKey.environment} ·{' '}
-                      {savedRuntimeKey.scopes.join(', ') || 'no scopes'}
+                      {maskedKey
+                        ? savedRuntimeKey
+                          ? `Using saved ${savedRuntimeKey.name} (${savedRuntimeKey.prefix})`
+                          : `Using ${maskedKey}`
+                        : `Browser runs use signed-in account (${accountEmail})`}
                     </p>
-                  )}
-                  {usageLoading ? (
-                    <p className="mt-1 text-muted-foreground">
-                      Refreshing usage...
-                    </p>
-                  ) : usage ? (
-                    <p className="mt-1 text-muted-foreground">
-                      {usage.requests} req,{' '}
-                      {usage.input_tokens + usage.output_tokens} tokens, $
-                      {usage.billed_usd.toFixed(4)}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-muted-foreground">
-                      Usage unavailable
-                    </p>
-                  )}
-                </div>
-                <div className="mt-3 rounded-md border bg-background p-3">
-                  <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-                    <div>
-                      <Label htmlFor="brok-code-session" className="text-xs">
-                        Shared Cloud/TUI Session
+                    {savedRuntimeKey && (
+                      <p className="mt-1 text-muted-foreground">
+                        Stored for session {savedRuntimeKey.defaultSessionId} ·{' '}
+                        {savedRuntimeKey.environment} ·{' '}
+                        {savedRuntimeKey.scopes.join(', ') || 'no scopes'}
+                      </p>
+                    )}
+                    {usageLoading ? (
+                      <p className="mt-1 text-muted-foreground">
+                        Refreshing usage...
+                      </p>
+                    ) : usage ? (
+                      <p className="mt-1 text-muted-foreground">
+                        {usage.requests} req,{' '}
+                        {usage.input_tokens + usage.output_tokens} tokens, $
+                        {usage.billed_usd.toFixed(4)}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-muted-foreground">
+                        Usage unavailable
+                      </p>
+                    )}
+                  </div>
+                  <div className="mt-3 rounded-md border bg-background p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-medium">InsForge Backend</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Saved per BrokCode project for database, auth,
+                          storage, and functions.
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="shrink-0 rounded-md">
+                        {activeBackend.provider === 'insforge'
+                          ? activeBackend.health === 'online'
+                            ? 'Online'
+                            : activeBackend.status
+                          : 'Not configured'}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(0,1fr)_160px]">
+                      <div>
+                        <Label htmlFor="brokcode-project" className="text-xs">
+                          Project
+                        </Label>
+                        {projects.length > 0 ? (
+                          <Select
+                            value={activeProject?.id ?? ''}
+                            onValueChange={setActiveProjectId}
+                          >
+                            <SelectTrigger
+                              id="brokcode-project"
+                              className="mt-1 h-9"
+                            >
+                              <SelectValue placeholder="Select project" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {projects.map(project => (
+                                <SelectItem key={project.id} value={project.id}>
+                                  {project.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            id="brokcode-project"
+                            value={backendProjectName}
+                            onChange={event =>
+                              setBackendProjectName(event.target.value)
+                            }
+                            placeholder="BrokCode app"
+                            className="mt-1 h-9"
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <Label className="text-xs">Provider</Label>
+                        <div className="mt-1 flex h-9 items-center gap-2 rounded-md border px-3 text-xs">
+                          <PlugZap className="size-4 text-muted-foreground" />
+                          InsForge
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 grid gap-2 xl:grid-cols-2">
+                      <div>
+                        <Label htmlFor="insforge-url" className="text-xs">
+                          Project URL
+                        </Label>
+                        <Input
+                          id="insforge-url"
+                          value={insForgeProjectUrl}
+                          onChange={event =>
+                            setInsForgeProjectUrl(event.target.value)
+                          }
+                          placeholder="https://your-project.insforge.app"
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="insforge-dashboard" className="text-xs">
+                          Dashboard URL
+                        </Label>
+                        <Input
+                          id="insforge-dashboard"
+                          value={insForgeDashboardUrl}
+                          onChange={event =>
+                            setInsForgeDashboardUrl(event.target.value)
+                          }
+                          placeholder="https://dashboard.insforge.dev/..."
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <Label htmlFor="insforge-admin-key" className="text-xs">
+                        Admin key
+                        <span className="ml-1 font-normal text-muted-foreground">
+                          encrypted server-side, never sent back
+                        </span>
                       </Label>
                       <Input
-                        id="brok-code-session"
-                        value={syncSessionId}
-                        onChange={event => setSyncSessionId(event.target.value)}
-                        onBlur={saveSyncSessionId}
-                        placeholder="default"
+                        id="insforge-admin-key"
+                        value={insForgeAdminKey}
+                        onChange={event =>
+                          setInsForgeAdminKey(event.target.value)
+                        }
+                        placeholder={
+                          activeBackend.adminKeyConfigured
+                            ? 'Configured. Enter a new key to rotate.'
+                            : 'ik_...'
+                        }
                         className="mt-1 h-9"
                       />
                     </div>
-                    <div className="flex gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2">
                       <Button
-                        variant="outline"
                         size="sm"
                         className="h-9 gap-2"
-                        onClick={saveSyncSessionId}
+                        onClick={provisionInsForgeBackend}
+                        disabled={backendProvisioning}
                       >
-                        <Globe className="size-4" />
-                        Save
+                        {backendProvisioning ? (
+                          <RefreshCcw className="size-4 animate-spin" />
+                        ) : (
+                          <Rocket className="size-4" />
+                        )}
+                        {backendProvisioning
+                          ? 'Provisioning...'
+                          : 'Create trial'}
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         className="h-9 gap-2"
-                        disabled={!hasLiveRuntime || syncLoading}
-                        onClick={() => {
-                          void refreshSyncedSessions()
-                        }}
+                        onClick={saveInsForgeBackend}
+                        disabled={backendSaving}
+                      >
+                        {backendSaving ? (
+                          <RefreshCcw className="size-4 animate-spin" />
+                        ) : (
+                          <PlugZap className="size-4" />
+                        )}
+                        {backendSaving ? 'Saving...' : 'Save backend'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 gap-2"
+                        onClick={checkBackendHealth}
+                        disabled={
+                          backendChecking ||
+                          !activeProject ||
+                          activeBackend.provider !== 'insforge'
+                        }
                       >
                         <RefreshCcw
                           className={cn(
                             'size-4',
-                            syncLoading && 'animate-spin'
+                            backendChecking && 'animate-spin'
                           )}
                         />
-                        Sync
+                        Check
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9"
+                        onClick={clearBackend}
+                        disabled={
+                          backendSaving ||
+                          !activeProject ||
+                          activeBackend.provider === 'none'
+                        }
+                      >
+                        Clear
+                      </Button>
+                      {activeBackend.provider === 'insforge' &&
+                        activeBackend.projectUrl && (
+                          <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="h-9 gap-2"
+                          >
+                            <a
+                              href={activeBackend.projectUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <Globe className="size-4" />
+                              Open
+                            </a>
+                          </Button>
+                        )}
+                    </div>
+                    {activeBackend.provider === 'insforge' && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {activeBackend.adminKeyConfigured
+                          ? 'Admin key is configured.'
+                          : 'Admin key is not configured.'}
+                        {activeBackend.lastHealthCheckedAt
+                          ? ` Last checked ${new Date(
+                              activeBackend.lastHealthCheckedAt
+                            ).toLocaleString()}.`
+                          : ''}
+                      </p>
+                    )}
+                  </div>
+                  <div className="mt-3 rounded-md border bg-background p-3">
+                    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+                      <div>
+                        <Label htmlFor="brok-code-session" className="text-xs">
+                          Shared Cloud/TUI Session
+                        </Label>
+                        <Input
+                          id="brok-code-session"
+                          value={syncSessionId}
+                          onChange={event =>
+                            setSyncSessionId(event.target.value)
+                          }
+                          onBlur={saveSyncSessionId}
+                          placeholder="default"
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-2"
+                          onClick={saveSyncSessionId}
+                        >
+                          <Globe className="size-4" />
+                          Save
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-2"
+                          disabled={!hasLiveRuntime || syncLoading}
+                          onClick={() => {
+                            void refreshSyncedSessions()
+                          }}
+                        >
+                          <RefreshCcw
+                            className={cn(
+                              'size-4',
+                              syncLoading && 'animate-spin'
+                            )}
+                          />
+                          Sync
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Use the same value in terminal with{' '}
+                      <code>BROKCODE_SESSION_ID={syncSessionId}</code>.
+                    </p>
+                    {syncError && (
+                      <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                        {syncError}
+                      </p>
+                    )}
+                    {githubMessage && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {githubMessage}
+                      </p>
+                    )}
+                  </div>
+                  <div className="mt-3 rounded-md border bg-background p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-medium">
+                          GitHub PR Repository
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Used by Open PR so Brok Code can publish directly.
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 px-2 text-xs"
+                        disabled={!hasLiveRuntime}
+                        onClick={() => {
+                          void refreshRepoContext(apiKey)
+                        }}
+                      >
+                        <RefreshCcw className="size-3.5" />
+                        Detect
+                      </Button>
+                    </div>
+                    <div className="mt-3 grid gap-2 xl:grid-cols-3">
+                      <div className="xl:col-span-2">
+                        <Label htmlFor="brok-github-repo" className="text-xs">
+                          Repository
+                        </Label>
+                        <Input
+                          id="brok-github-repo"
+                          value={githubRepository}
+                          onChange={event =>
+                            setGithubRepository(event.target.value)
+                          }
+                          placeholder="owner/repo"
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="brok-github-base" className="text-xs">
+                          Base
+                        </Label>
+                        <Input
+                          id="brok-github-base"
+                          value={githubBaseBranch}
+                          onChange={event =>
+                            setGithubBaseBranch(event.target.value)
+                          }
+                          placeholder="main"
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <Label htmlFor="brok-github-head" className="text-xs">
+                        Head Branch
+                      </Label>
+                      <Input
+                        id="brok-github-head"
+                        value={githubHeadBranch}
+                        onChange={event =>
+                          setGithubHeadBranch(event.target.value)
+                        }
+                        placeholder="feature/my-branch"
+                        className="mt-1 h-9"
+                      />
+                    </div>
+                    {repoContext?.remoteUrl && (
+                      <p className="mt-2 truncate text-xs text-muted-foreground">
+                        Remote: {repoContext.remoteUrl}
+                      </p>
+                    )}
+                    {repoContext?.commitSha && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        HEAD: {repoContext.commitSha.slice(0, 10)}
+                      </p>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 gap-2"
+                        onClick={() => {
+                          void submitPullRequest()
+                        }}
+                        disabled={
+                          !hasLiveRuntime ||
+                          isSubmittingPr ||
+                          githubStatus !== 'connected'
+                        }
+                      >
+                        {isSubmittingPr ? (
+                          <RefreshCcw className="size-4 animate-spin" />
+                        ) : (
+                          <Rocket className="size-4" />
+                        )}
+                        {isSubmittingPr ? 'Opening PR...' : 'Open PR'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-9 gap-2"
+                        onClick={() => {
+                          void deployBrokCodeCloud()
+                        }}
+                        disabled={!hasLiveRuntime || isDeploying}
+                      >
+                        {isDeploying ? (
+                          <RefreshCcw className="size-4 animate-spin" />
+                        ) : (
+                          <Rocket className="size-4" />
+                        )}
+                        {isDeploying ? 'Deploying...' : '1-Click Deploy'}
                       </Button>
                     </div>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Use the same value in terminal with{' '}
-                    <code>BROKCODE_SESSION_ID={syncSessionId}</code>.
-                  </p>
-                  {syncError && (
-                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                      {syncError}
+                  {(apiKeyError || runtimeError) && (
+                    <p className="mt-3 text-xs text-rose-600 dark:text-rose-400">
+                      {apiKeyError ?? runtimeError}
                     </p>
                   )}
-                  {githubMessage && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {githubMessage}
-                    </p>
-                  )}
-                </div>
-                <div className="mt-3 rounded-md border bg-background p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-xs font-medium">
-                        GitHub PR Repository
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Used by Open PR so Brok Code can publish directly.
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1 px-2 text-xs"
-                      disabled={!hasLiveRuntime}
-                      onClick={() => {
-                        void refreshRepoContext(apiKey)
-                      }}
-                    >
-                      <RefreshCcw className="size-3.5" />
-                      Detect
-                    </Button>
-                  </div>
-                  <div className="mt-3 grid gap-2 xl:grid-cols-3">
-                    <div className="xl:col-span-2">
-                      <Label htmlFor="brok-github-repo" className="text-xs">
-                        Repository
-                      </Label>
-                      <Input
-                        id="brok-github-repo"
-                        value={githubRepository}
-                        onChange={event =>
-                          setGithubRepository(event.target.value)
-                        }
-                        placeholder="owner/repo"
-                        className="mt-1 h-9"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="brok-github-base" className="text-xs">
-                        Base
-                      </Label>
-                      <Input
-                        id="brok-github-base"
-                        value={githubBaseBranch}
-                        onChange={event =>
-                          setGithubBaseBranch(event.target.value)
-                        }
-                        placeholder="main"
-                        className="mt-1 h-9"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <Label htmlFor="brok-github-head" className="text-xs">
-                      Head Branch
-                    </Label>
-                    <Input
-                      id="brok-github-head"
-                      value={githubHeadBranch}
-                      onChange={event =>
-                        setGithubHeadBranch(event.target.value)
-                      }
-                      placeholder="feature/my-branch"
-                      className="mt-1 h-9"
-                    />
-                  </div>
-                  {repoContext?.remoteUrl && (
-                    <p className="mt-2 truncate text-xs text-muted-foreground">
-                      Remote: {repoContext.remoteUrl}
-                    </p>
-                  )}
-                  {repoContext?.commitSha && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      HEAD: {repoContext.commitSha.slice(0, 10)}
-                    </p>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-9 gap-2"
-                      onClick={() => {
-                        void submitPullRequest()
-                      }}
-                      disabled={
-                        !hasLiveRuntime ||
-                        isSubmittingPr ||
-                        githubStatus !== 'connected'
-                      }
-                    >
-                      {isSubmittingPr ? (
-                        <RefreshCcw className="size-4 animate-spin" />
-                      ) : (
-                        <Rocket className="size-4" />
-                      )}
-                      {isSubmittingPr ? 'Opening PR...' : 'Open PR'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="h-9 gap-2"
-                      onClick={() => {
-                        void deployBrokCodeCloud()
-                      }}
-                      disabled={!hasLiveRuntime || isDeploying}
-                    >
-                      {isDeploying ? (
-                        <RefreshCcw className="size-4 animate-spin" />
-                      ) : (
-                        <Rocket className="size-4" />
-                      )}
-                      {isDeploying ? 'Deploying...' : '1-Click Deploy'}
-                    </Button>
-                  </div>
-                </div>
-                {(apiKeyError || runtimeError) && (
-                  <p className="mt-3 text-xs text-rose-600 dark:text-rose-400">
-                    {apiKeyError ?? runtimeError}
-                  </p>
-                )}
-              </TabsContent>
-            </Tabs>
-          </div>
+                </TabsContent>
+              </Tabs>
+            </div>
           )}
         </aside>
       </main>
@@ -3457,7 +4053,9 @@ function ChatBubble({
           isUser && 'border-white/90 bg-white text-zinc-950',
           isSystem &&
             'border-dashed border-white/10 bg-white/[0.04] py-2 text-xs text-zinc-400',
-          !isUser && !isSystem && 'border-white/10 bg-white/[0.06] text-zinc-100'
+          !isUser &&
+            !isSystem &&
+            'border-white/10 bg-white/[0.06] text-zinc-100'
         )}
       >
         {!isUser && !isSystem && (
@@ -3560,8 +4158,8 @@ function ChatBubble({
 function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
   if (runs.length === 0) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3 text-xs text-zinc-400">
-        No runs yet. Send a command to watch the execution graph.
+      <div className="rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-500">
+        No agent activity yet. Send a command to see the reasoning trace.
       </div>
     )
   }
@@ -3571,17 +4169,17 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
       {runs.slice(0, 4).map(run => (
         <div
           key={run.id}
-          className="rounded-xl border border-white/10 bg-white/[0.05] p-3 text-zinc-100 shadow-[0_14px_36px_-30px_rgba(0,0,0,0.95)]"
+          className="rounded-xl border border-zinc-200 bg-white p-3 text-zinc-950 shadow-[0_16px_48px_-40px_rgba(24,24,27,0.55)]"
         >
           <div className="mb-2 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{run.command}</p>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-zinc-500">
                 {new Date(run.startedAt).toLocaleTimeString()} -{' '}
                 {run.status === 'running'
-                  ? 'Running'
+                  ? 'Thinking'
                   : run.status === 'done'
-                    ? 'Completed'
+                    ? 'Done'
                     : 'Needs attention'}
               </p>
             </div>
@@ -3599,7 +4197,7 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
             </Badge>
           </div>
 
-          <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-zinc-100">
             <div
               className={cn(
                 'h-full rounded-full transition-all duration-500',
@@ -3626,14 +4224,17 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
             />
           </div>
 
-          <div className="space-y-2">
-            {run.steps.map(step => (
-              <div key={`${run.id}-${step.id}`} className="grid gap-1">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
+          <div className="rounded-lg border border-zinc-200/80 bg-[#fbfaf8] p-3">
+            <p className="mb-2 text-xs font-medium text-zinc-950">
+              Agent reasoning trace
+            </p>
+            <div className="space-y-3">
+              {run.steps.map(step => (
+                <div key={`${run.id}-${step.id}`} className="grid gap-1">
+                  <div className="flex items-start gap-2 text-xs">
                     <span
                       className={cn(
-                        'size-2 rounded-full',
+                        'mt-1 size-2 shrink-0 rounded-full',
                         step.status === 'done'
                           ? 'bg-emerald-500'
                           : step.status === 'running'
@@ -3643,25 +4244,18 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
                               : 'bg-muted-foreground/40'
                       )}
                     />
-                    <span className="font-medium">{step.label}</span>
+                    <div className="min-w-0">
+                      <p className="font-medium text-zinc-950">{step.label}</p>
+                      <p className="text-zinc-500">{step.detail}</p>
+                    </div>
                   </div>
-                  <span className="text-zinc-400">
-                    {step.status === 'done'
-                      ? 'done'
-                      : step.status === 'running'
-                        ? 'running'
-                        : step.status === 'error'
-                          ? 'error'
-                          : 'queued'}
-                  </span>
                 </div>
-                <p className="text-xs text-zinc-400">{step.detail}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           {run.note && (
-            <p className="mt-2 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-xs text-zinc-400">
+            <p className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs text-zinc-500">
               {run.note}
             </p>
           )}
@@ -3738,9 +4332,9 @@ function BrowserPreviewPanel({
                 ? 'Checking'
                 : previewStatus === 'loaded'
                   ? 'Loaded'
-                : previewStatus === 'offline'
-                  ? 'Offline'
-                  : 'Ready'}
+                  : previewStatus === 'offline'
+                    ? 'Offline'
+                    : 'Ready'}
           </Badge>
           <Button
             variant="default"

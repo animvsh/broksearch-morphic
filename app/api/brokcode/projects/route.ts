@@ -5,6 +5,11 @@ import {
   resolveBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 import {
+  createInsForgeBackendMetadata,
+  emptyBrokCodeBackendMetadata,
+  publicBrokCodeBackendMetadata
+} from '@/lib/brokcode/backend-provider'
+import {
   createBrokCodeProject,
   listBrokCodeProjects
 } from '@/lib/brokcode/project-store'
@@ -31,7 +36,15 @@ export async function GET(request: Request) {
     userId: authResult.apiKey.userId
   })
 
-  return NextResponse.json({ projects })
+  return NextResponse.json({
+    projects: projects.map(project => ({
+      ...project,
+      metadata: {
+        ...(project.metadata ?? {}),
+        backend: publicBrokCodeBackendMetadata(project.metadata?.backend)
+      }
+    }))
+  })
 }
 
 export async function POST(request: Request) {
@@ -51,10 +64,24 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     name?: unknown
     username?: unknown
+    backend?: unknown
+    backend_provider?: unknown
   } | null
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   const username =
     typeof body?.username === 'string' ? body.username.trim() : null
+  const backendBody =
+    body?.backend && typeof body.backend === 'object'
+      ? (body.backend as Record<string, unknown>)
+      : null
+  const backendProvider =
+    backendBody?.provider ??
+    body?.backend_provider ??
+    backendBody?.backendProvider
+  const backend =
+    backendProvider === 'insforge'
+      ? createInsForgeBackendMetadata(backendBody ?? {})
+      : emptyBrokCodeBackendMetadata()
 
   if (!name) {
     return NextResponse.json(
@@ -67,8 +94,20 @@ export async function POST(request: Request) {
     workspaceId: authResult.workspace.id,
     userId: authResult.apiKey.userId,
     name,
-    username
+    username,
+    backend
   })
 
-  return NextResponse.json({ project }, { status: 201 })
+  return NextResponse.json(
+    {
+      project: {
+        ...project,
+        metadata: {
+          ...(project.metadata ?? {}),
+          backend: publicBrokCodeBackendMetadata(project.metadata?.backend)
+        }
+      }
+    },
+    { status: 201 }
+  )
 }

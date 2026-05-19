@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import {
   assertActionPayloadIsRunnable,
   isRecord,
   normalizeActionApprovalPayload,
   signBrokMailApproval
 } from '@/lib/brokmail/action-approval'
-import { isComposioConfigured } from '@/lib/integrations/composio'
+import { canExecuteComposioTools } from '@/lib/integrations/composio'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
-  if (!isComposioConfigured()) {
+  if (!canExecuteComposioTools()) {
     return NextResponse.json(
       {
         error:
@@ -23,13 +23,9 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const user = await getCurrentUser()
-  if (!user) {
-    return NextResponse.json(
-      { error: 'Sign in to Brok before approving Google actions.' },
-      { status: 401 }
-    )
-  }
+  const access = await requireFeatureAccessForApi('brokmail')
+  if (!access.ok) return access.response
+  const user = access.user
 
   const body = await request.json().catch(() => null)
   if (!isRecord(body)) {

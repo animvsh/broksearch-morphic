@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import {
   assertActionPayloadIsRunnable,
   BrokMailApprovalCalendarEvent,
@@ -157,7 +157,9 @@ function buildActionArguments({
     const threadIds = threads
       .map(thread => thread.providerThreadId || thread.id)
       .filter(Boolean)
-    const messageIds = threads.flatMap(thread => thread.providerMessageIds ?? [])
+    const messageIds = threads.flatMap(
+      thread => thread.providerMessageIds ?? []
+    )
 
     return {
       thread_ids: threadIds,
@@ -170,7 +172,11 @@ function buildActionArguments({
   }
 
   if (action === 'create_calendar_event') {
-    if (!calendarEvent?.summary || !calendarEvent.startAt || !calendarEvent.endAt)
+    if (
+      !calendarEvent?.summary ||
+      !calendarEvent.startAt ||
+      !calendarEvent.endAt
+    )
       return undefined
 
     return {
@@ -282,13 +288,9 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const user = await getCurrentUser()
-  if (!user) {
-    return NextResponse.json(
-      { error: 'Sign in to Brok before running Composio actions.' },
-      { status: 401 }
-    )
-  }
+  const access = await requireFeatureAccessForApi('brokmail')
+  if (!access.ok) return access.response
+  const user = access.user
 
   const body = await request.json().catch(() => null)
   if (!isRecord(body)) {

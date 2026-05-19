@@ -5,7 +5,7 @@ import {
   isBrokWebSearchToolType,
   isWebSearchToolRequest,
   normalizeProviderToolChoice
-} from '../chat/completions/route'
+} from '@/lib/brok/chat-tools'
 
 describe('chat completions web search compatibility', () => {
   it('recognizes OpenAI-compatible web search aliases', () => {

@@ -5,6 +5,11 @@ import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq, gte, lte, or, sql } from 'drizzle-orm'
 
 import { requireAdminAccess } from '@/lib/auth/admin'
+import {
+  APP_FEATURES,
+  AppFeature,
+  normalizeAppFeatures
+} from '@/lib/auth/app-access'
 import { BROK_MODELS } from '@/lib/brok/models'
 import { db } from '@/lib/db'
 import {
@@ -240,6 +245,17 @@ function normalizeEmailForAllowlist(email: string) {
   return email.trim().toLowerCase()
 }
 
+function parseAllowlistFeatures(formData: FormData): AppFeature[] {
+  const selected = formData
+    .getAll('features')
+    .map(value => String(value))
+    .filter((value): value is AppFeature =>
+      APP_FEATURES.includes(value as AppFeature)
+    )
+
+  return normalizeAppFeatures(selected)
+}
+
 export async function getAppAccessAllowlist() {
   await assertAdminAccess()
 
@@ -248,6 +264,7 @@ export async function getAppAccessAllowlist() {
       id: appAccessAllowlist.id,
       email: appAccessAllowlist.email,
       status: appAccessAllowlist.status,
+      features: appAccessAllowlist.features,
       note: appAccessAllowlist.note,
       createdBy: appAccessAllowlist.createdBy,
       createdAt: appAccessAllowlist.createdAt,
@@ -262,6 +279,7 @@ export async function addAppAccessAllowlistEmail(formData: FormData) {
   const actorId = await getAdminActorId()
   const email = normalizeEmailForAllowlist(String(formData.get('email') ?? ''))
   const note = String(formData.get('note') ?? '').trim()
+  const features = parseAllowlistFeatures(formData)
 
   if (!email || !email.includes('@')) {
     throw new Error('A valid email is required')
@@ -272,6 +290,7 @@ export async function addAppAccessAllowlistEmail(formData: FormData) {
     .values({
       email,
       status: 'active',
+      features,
       note: note || null,
       createdBy: actorId,
       updatedAt: new Date(),
@@ -281,11 +300,32 @@ export async function addAppAccessAllowlistEmail(formData: FormData) {
       target: appAccessAllowlist.email,
       set: {
         status: 'active',
+        features,
         note: note || null,
         updatedAt: new Date(),
         revokedAt: null
       }
     })
+
+  revalidateAdminPaths()
+}
+
+export async function updateAppAccessAllowlistFeatures(formData: FormData) {
+  await assertAdminAccess()
+  const id = String(formData.get('id') ?? '')
+  const features = parseAllowlistFeatures(formData)
+
+  if (!id) {
+    throw new Error('Allowlist row is required')
+  }
+
+  await db
+    .update(appAccessAllowlist)
+    .set({
+      features,
+      updatedAt: new Date()
+    })
+    .where(eq(appAccessAllowlist.id, id))
 
   revalidateAdminPaths()
 }

@@ -27,14 +27,22 @@ type SourceRow = {
   createdAt: Date
 }
 
-type TaskRow = {
+export type BackgroundTaskLedgerEntry = {
   id: string
   chatId: string | null
   kind: string
   status: string
   title: string
+  space: string
   createdAt: Date
   updatedAt: Date
+  startedAt: Date | null
+  completedAt: Date | null
+  error: string | null
+}
+
+type TaskLedgerRow = Omit<BackgroundTaskLedgerEntry, 'space'> & {
+  spaceTitle: string
 }
 
 type UsageRow = {
@@ -93,6 +101,7 @@ export type SourceSummary = {
   latestUrl: string
   latestChatId: string
   latestChatTitle: string
+  space: string
 }
 
 export type ResearchSpaceSummary = {
@@ -113,12 +122,14 @@ export type WorkspaceKnowledgeData = {
   publicThreads: LibraryThread[]
   sourceDomains: SourceSummary[]
   spaces: ResearchSpaceSummary[]
-  activeTasks: TaskRow[]
+  tasks: BackgroundTaskLedgerEntry[]
+  activeTasks: BackgroundTaskLedgerEntry[]
   totals: {
     threads: number
     sources: number
     files: number
     publicThreads: number
+    tasks: number
     activeTasks: number
   }
 }
@@ -271,20 +282,40 @@ async function getTaskRows(userId: string) {
   return withRLS(userId, async tx => {
     const rows = await tx.execute(sql`
       select
-        id,
-        chat_id as "chatId",
-        kind,
-        status,
-        title,
-        created_at as "createdAt",
-        updated_at as "updatedAt"
-      from background_tasks
-      where user_id = ${userId}
-      order by created_at desc
-      limit 30
+        bt.id,
+        bt.chat_id as "chatId",
+        bt.kind,
+        bt.status,
+        bt.title,
+        case
+          when bt.chat_id is not null then coalesce(c.title, bt.title)
+          else bt.title
+        end as "spaceTitle",
+        bt.started_at as "startedAt",
+        bt.completed_at as "completedAt",
+        bt.error,
+        bt.created_at as "createdAt",
+        bt.updated_at as "updatedAt"
+      from background_tasks bt
+      left join chats c on c.id = bt.chat_id and c.user_id = bt.user_id
+      where bt.user_id = ${userId}
+      order by bt.created_at desc
+      limit 80
     `)
 
-    return rows as unknown as TaskRow[]
+    return (rows as unknown as TaskLedgerRow[]).map(row => ({
+      id: row.id,
+      chatId: row.chatId,
+      kind: row.kind,
+      status: row.status,
+      title: row.title,
+      space: inferSpace(row.spaceTitle).id,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      startedAt: row.startedAt,
+      completedAt: row.completedAt,
+      error: row.error
+    }))
   })
 }
 
@@ -298,12 +329,16 @@ async function getUsageEventColumns() {
   return new Set(rows.map(row => row.name))
 }
 
-function summarizeSources(rows: SourceRow[]) {
+function summarizeSources(
+  rows: SourceRow[],
+  threadsById: Map<string, LibraryThread>
+) {
   const byDomain = new Map<string, SourceSummary>()
 
   for (const row of rows) {
     if (!row.url) continue
     const domain = getDomain(row.url)
+    const thread = threadsById.get(row.chatId)
     const existing = byDomain.get(domain)
 
     if (!existing) {
@@ -313,7 +348,8 @@ function summarizeSources(rows: SourceRow[]) {
         latestTitle: row.title || domain,
         latestUrl: row.url,
         latestChatId: row.chatId,
-        latestChatTitle: row.chatTitle
+        latestChatTitle: row.chatTitle,
+        space: thread?.space ?? inferSpace(row.chatTitle).id
       })
       continue
     }
@@ -334,12 +370,14 @@ export async function getWorkspaceKnowledgeData(): Promise<WorkspaceKnowledgeDat
       publicThreads: [],
       sourceDomains: [],
       spaces: [],
+      tasks: [],
       activeTasks: [],
       totals: {
         threads: 0,
         sources: 0,
         files: 0,
         publicThreads: 0,
+        tasks: 0,
         activeTasks: 0
       }
     }
@@ -364,7 +402,8 @@ export async function getWorkspaceKnowledgeData(): Promise<WorkspaceKnowledgeDat
   const activeTasks = taskRows.filter(task =>
     ['queued', 'running'].includes(task.status)
   )
-  const sourceDomains = summarizeSources(sourceRows)
+  const threadsById = new Map(threads.map(thread => [thread.id, thread]))
+  const sourceDomains = summarizeSources(sourceRows, threadsById)
   const spaces = SPACE_RULES.map(rule => {
     const spaceThreads = threads.filter(thread => thread.space === rule.id)
     return {
@@ -380,8 +419,7 @@ export async function getWorkspaceKnowledgeData(): Promise<WorkspaceKnowledgeDat
         (sum, thread) => sum + thread.fileCount,
         0
       ),
-      taskCount: taskRows.filter(task => inferSpace(task.title).id === rule.id)
-        .length,
+      taskCount: taskRows.filter(task => task.space === rule.id).length,
       latestAt: spaceThreads[0]?.lastActivityAt ?? null,
       threads: spaceThreads.slice(0, 5)
     }
@@ -393,6 +431,7 @@ export async function getWorkspaceKnowledgeData(): Promise<WorkspaceKnowledgeDat
     publicThreads: threads.filter(thread => thread.visibility === 'public'),
     sourceDomains,
     spaces,
+    tasks: taskRows,
     activeTasks,
     totals: {
       threads: threads.length,
@@ -400,6 +439,7 @@ export async function getWorkspaceKnowledgeData(): Promise<WorkspaceKnowledgeDat
       files: threads.reduce((sum, thread) => sum + thread.fileCount, 0),
       publicThreads: threads.filter(thread => thread.visibility === 'public')
         .length,
+      tasks: taskRows.length,
       activeTasks: activeTasks.length
     }
   }

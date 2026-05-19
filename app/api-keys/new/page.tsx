@@ -1,14 +1,14 @@
 import { redirect } from 'next/navigation'
 
 import { createApiKey, ensureWorkspaceForUser } from '@/lib/actions/api-keys'
-import { getRequiredBrokAccountUser } from '@/lib/brokcode/account-guard'
+import { requireFeatureAccess } from '@/lib/auth/app-access'
 
 import { CreateApiKeyForm } from '@/components/create-api-key-form'
 
 export const dynamic = 'force-dynamic'
 
 export default async function NewApiKeyPage() {
-  const user = await getRequiredBrokAccountUser()
+  const user = await requireFeatureAccess('/api-keys/new', 'api_platform')
   if (!user) {
     redirect(`/auth/login?redirectTo=${encodeURIComponent('/api-keys/new')}`)
   }

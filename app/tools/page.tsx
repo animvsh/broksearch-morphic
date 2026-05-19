@@ -3,7 +3,7 @@ import Link from 'next/link'
 
 import { ArrowRight, PenLine, Sparkles } from 'lucide-react'
 
-import { requireAppAccess } from '@/lib/auth/app-access'
+import { requireFeatureAccess } from '@/lib/auth/app-access'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 }
 
 export default async function ToolsPage() {
-  await requireAppAccess('/tools')
+  await requireFeatureAccess('/tools', 'tools')
 
   return (
     <div className="dashboard-shell min-h-full w-full p-3 sm:p-4">

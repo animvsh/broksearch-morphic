@@ -40,6 +40,9 @@ export default function AdminPage() {
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [updatingFeatureRequestId, setUpdatingFeatureRequestId] = useState<
+    string | null
+  >(null)
 
   useEffect(() => {
     fetchAdminData()
@@ -67,6 +70,38 @@ export default function AdminPage() {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const updateFeatureRequestStatus = async (
+    id: string,
+    status: FeatureRequest['status']
+  ) => {
+    setUpdatingFeatureRequestId(id)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/admin/feature-requests/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      })
+
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to update feature request')
+      }
+
+      const updated = data.featureRequest as FeatureRequest
+      setFeatureRequests(current =>
+        current.map(featureRequest =>
+          featureRequest.id === updated.id ? updated : featureRequest
+        )
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setUpdatingFeatureRequestId(null)
     }
   }
 
@@ -165,6 +200,7 @@ export default function AdminPage() {
                   <th className="text-left p-4 font-medium">Request</th>
                   <th className="text-left p-4 font-medium">Page</th>
                   <th className="text-left p-4 font-medium">Status</th>
+                  <th className="text-left p-4 font-medium">Triage</th>
                   <th className="text-left p-4 font-medium">Submitted</th>
                 </tr>
               </thead>
@@ -172,7 +208,7 @@ export default function AdminPage() {
                 {featureRequests.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="p-4 text-center text-muted-foreground"
                     >
                       No feature requests yet
@@ -215,6 +251,36 @@ export default function AdminPage() {
                         <span className="inline-flex rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium capitalize text-zinc-700">
                           {featureRequest.status}
                         </span>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex min-w-[220px] flex-wrap gap-2">
+                          {(
+                            [
+                              ['reviewed', 'Reviewed'],
+                              ['closed', 'Close'],
+                              ['open', 'Reopen']
+                            ] as const
+                          ).map(([status, label]) => (
+                            <button
+                              key={status}
+                              type="button"
+                              disabled={
+                                updatingFeatureRequestId ===
+                                  featureRequest.id ||
+                                featureRequest.status === status
+                              }
+                              onClick={() =>
+                                updateFeatureRequestStatus(
+                                  featureRequest.id,
+                                  status
+                                )
+                              }
+                              className="rounded-md border px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-45"
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
                       </td>
                       <td className="p-4 text-sm text-muted-foreground">
                         {new Date(featureRequest.createdAt).toLocaleString()}

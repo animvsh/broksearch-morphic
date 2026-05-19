@@ -7,7 +7,8 @@ import {
   isSimpleUtilityText,
   shouldForceInitialWebSearchForMessage,
   shouldForceSearchForText,
-  shouldUseQuickReplyForMessage
+  shouldUseQuickReplyForMessage,
+  shouldUseQuickSearchModeForMessage
 } from '../chat-routing'
 
 describe('chat routing', () => {
@@ -58,6 +59,30 @@ describe('chat routing', () => {
       shouldUseQuickReplyForMessage({
         role: 'user',
         parts: [{ type: 'text', text: 'https://example.com' }]
+      })
+    ).toBe(false)
+  })
+
+  it('routes short factual questions to quick search mode', () => {
+    const message = {
+      role: 'user' as const,
+      parts: [{ type: 'text' as const, text: 'who is animesh alang' }]
+    }
+
+    expect(shouldUseQuickSearchModeForMessage(message)).toBe(true)
+    expect(shouldUseQuickReplyForMessage(message)).toBe(false)
+  })
+
+  it('does not route long analytical prompts to quick search', () => {
+    expect(
+      shouldUseQuickSearchModeForMessage({
+        role: 'user',
+        parts: [
+          {
+            type: 'text',
+            text: 'analyze the differences between all major AI coding platforms, compare pricing, benchmarks, and long-term risks in a deep framework'
+          }
+        ]
       })
     ).toBe(false)
   })

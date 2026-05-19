@@ -39,6 +39,8 @@ export type BrokMailSignedApproval = {
 }
 
 const APPROVAL_TTL_MS = 5 * 60 * 1000
+const PROVIDER_ID_PATTERN = /^[A-Za-z0-9._:@/-]{1,256}$/
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object'
@@ -106,8 +108,15 @@ export function assertActionPayloadIsRunnable(
   payload: BrokMailActionApprovalPayload
 ) {
   if (payload.action === 'create_draft') {
-    if (!payload.threads[0] || !payload.draftBody?.trim()) {
+    const thread = payload.threads[0]
+    if (!thread || !payload.draftBody?.trim()) {
       throw new Error('A target thread and draft body are required.')
+    }
+
+    assertRunnableThread(thread)
+
+    if (!thread.senderEmail || !EMAIL_PATTERN.test(thread.senderEmail)) {
+      throw new Error('A valid recipient email is required for draft replies.')
     }
     return
   }
@@ -116,6 +125,7 @@ export function assertActionPayloadIsRunnable(
     if (payload.threads.length === 0) {
       throw new Error('At least one target thread is required.')
     }
+    payload.threads.forEach(assertRunnableThread)
     return
   }
 
@@ -127,11 +137,42 @@ export function assertActionPayloadIsRunnable(
     ) {
       throw new Error('Calendar title, start time, and end time are required.')
     }
+    assertCalendarTimeRange(
+      payload.calendarEvent.startAt,
+      payload.calendarEvent.endAt
+    )
     return
   }
 
-  if (!payload.calendarEvent?.id) {
+  if (!payload.calendarEvent?.id || !isProviderId(payload.calendarEvent.id)) {
     throw new Error('Calendar event id is required.')
+  }
+}
+
+function assertRunnableThread(thread: BrokMailApprovalThread) {
+  const hasThreadId =
+    isProviderId(thread.providerThreadId) || isProviderId(thread.id)
+  const hasMessageId = thread.providerMessageIds?.some(isProviderId) ?? false
+
+  if (!hasThreadId && !hasMessageId) {
+    throw new Error('A valid provider thread or message id is required.')
+  }
+}
+
+function isProviderId(value: string | undefined) {
+  return Boolean(value && PROVIDER_ID_PATTERN.test(value))
+}
+
+function assertCalendarTimeRange(startAt: string, endAt: string) {
+  const start = Date.parse(startAt)
+  const end = Date.parse(endAt)
+
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    throw new Error('Calendar start and end times must be valid ISO dates.')
+  }
+
+  if (end <= start) {
+    throw new Error('Calendar end time must be after the start time.')
   }
 }
 

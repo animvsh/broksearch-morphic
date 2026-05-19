@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 import { ensureWorkspaceForUser, listApiKeys } from '@/lib/actions/api-keys'
-import { getRequiredBrokAccountUser } from '@/lib/brokcode/account-guard'
+import { requireFeatureAccess } from '@/lib/auth/app-access'
 
 import { Button } from '@/components/ui/button'
 
@@ -11,7 +11,7 @@ import { ApiKeyTable } from '@/components/api-key-table'
 export const dynamic = 'force-dynamic'
 
 export default async function ApiKeysPage() {
-  const user = await getRequiredBrokAccountUser()
+  const user = await requireFeatureAccess('/api-keys', 'api_platform')
   if (!user) {
     redirect(`/auth/login?redirectTo=${encodeURIComponent('/api-keys')}`)
   }

@@ -85,8 +85,6 @@ export function createComposioIntegrationTool(userId?: string) {
       arguments: toolArguments,
       connectedAccountId
     }) {
-      const subjectUserId = userId || 'guest'
-
       yield {
         state: 'checking' as const,
         action,
@@ -106,9 +104,20 @@ export function createComposioIntegrationTool(userId?: string) {
       }
 
       try {
+        if (action !== 'list_auth_configs' && !userId) {
+          yield {
+            state: 'complete' as const,
+            success: false,
+            configured: true,
+            action,
+            message: 'Sign in to Brok before using connected app accounts.'
+          }
+          return
+        }
+
         if (action === 'status') {
           const accounts = await listConnectedAccounts(
-            subjectUserId,
+            userId,
             toolkitSlug,
             limit
           )
@@ -130,7 +139,7 @@ export function createComposioIntegrationTool(userId?: string) {
 
         if (action === 'list_connected_accounts') {
           const accounts = await listConnectedAccounts(
-            subjectUserId,
+            userId,
             toolkitSlug,
             limit
           )
@@ -158,6 +167,8 @@ export function createComposioIntegrationTool(userId?: string) {
           }
           return
         }
+
+        const subjectUserId = userId as string
 
         if (action === 'execute_tool') {
           if (!canExecuteComposioAgentTools()) {

@@ -73,7 +73,10 @@ async function resolveGitWorkingDirectory() {
   if (configured) return configured
 
   try {
-    const root = await gitOutput(['rev-parse', '--show-toplevel'], process.cwd())
+    const root = await gitOutput(
+      ['rev-parse', '--show-toplevel'],
+      process.cwd()
+    )
     return root || process.cwd()
   } catch {
     return process.cwd()

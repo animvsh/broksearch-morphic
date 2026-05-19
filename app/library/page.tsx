@@ -1,9 +1,16 @@
 import Link from 'next/link'
 
-import { Archive, Clock3, ExternalLink, FileText, Globe2 } from 'lucide-react'
+import {
+  Archive,
+  Clock3,
+  ExternalLink,
+  FileText,
+  Globe2,
+  Search
+} from 'lucide-react'
 
 import { getWorkspaceKnowledgeData } from '@/lib/actions/platform-dashboard'
-import { requireAppAccess } from '@/lib/auth/app-access'
+import { requireFeatureAccess } from '@/lib/auth/app-access'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -25,9 +32,56 @@ function formatDate(value: Date | string | null) {
   })
 }
 
-export default async function LibraryPage() {
-  await requireAppAccess('/library')
+function matchesQuery(values: Array<string | null | undefined>, query: string) {
+  if (!query) return true
+  const normalizedQuery = query.toLowerCase()
+  return values.some(value => value?.toLowerCase().includes(normalizedQuery))
+}
+
+function getStatusVariant(status: string) {
+  if (status === 'failed' || status === 'cancelled') return 'destructive'
+  if (status === 'succeeded') return 'secondary'
+  return 'default'
+}
+
+export default async function LibraryPage({
+  searchParams
+}: {
+  searchParams: Promise<{ q?: string; space?: string }>
+}) {
+  await requireFeatureAccess('/library', 'search')
   const data = await getWorkspaceKnowledgeData()
+  const params = await searchParams
+  const query = params.q?.trim() ?? ''
+  const selectedSpace = params.space?.trim() ?? 'all'
+  const validSpaceIds = new Set(data.spaces.map(space => space.id))
+  const activeSpace = validSpaceIds.has(selectedSpace) ? selectedSpace : 'all'
+  const spaceMatches = (space: string) =>
+    activeSpace === 'all' || space === activeSpace
+  const filteredThreads = data.threads.filter(
+    thread =>
+      spaceMatches(thread.space) &&
+      matchesQuery([thread.title, thread.visibility], query)
+  )
+  const filteredSources = data.sourceDomains.filter(
+    source =>
+      spaceMatches(source.space) &&
+      matchesQuery(
+        [
+          source.domain,
+          source.latestTitle,
+          source.latestUrl,
+          source.latestChatTitle
+        ],
+        query
+      )
+  )
+  const filteredTasks = data.tasks.filter(
+    task =>
+      spaceMatches(task.space) &&
+      matchesQuery([task.title, task.kind, task.status, task.error], query)
+  )
+  const hasFilters = Boolean(query) || activeSpace !== 'all'
 
   return (
     <div className="dashboard-shell min-h-svh px-4 py-6 sm:px-6 lg:px-8">
@@ -51,32 +105,87 @@ export default async function LibraryPage() {
           </Link>
         </header>
 
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           <Metric label="Threads" value={data.totals.threads} />
           <Metric label="Sources" value={data.totals.sources} />
           <Metric label="Files" value={data.totals.files} />
           <Metric label="Shared" value={data.totals.publicThreads} />
           <Metric label="Active tasks" value={data.totals.activeTasks} />
+          <Metric label="Task ledger" value={data.totals.tasks} />
         </section>
+
+        <form
+          action="/library"
+          className="grid gap-3 rounded-lg border bg-background/90 p-4 shadow-sm md:grid-cols-[1fr_220px_auto]"
+        >
+          <label className="relative block">
+            <span className="sr-only">Search library</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              name="q"
+              type="search"
+              defaultValue={query}
+              placeholder="Search threads, sources, and task ledger"
+              className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-foreground/40"
+            />
+          </label>
+          <label>
+            <span className="sr-only">Filter by space</span>
+            <select
+              name="space"
+              defaultValue={activeSpace}
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/40"
+            >
+              <option value="all">All spaces</option>
+              {data.spaces.map(space => (
+                <option key={space.id} value={space.id}>
+                  {space.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="inline-flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium hover:bg-muted"
+            >
+              Filter
+            </button>
+            {hasFilters ? (
+              <Link
+                href="/library"
+                className="inline-flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium hover:bg-muted"
+              >
+                Reset
+              </Link>
+            ) : null}
+          </div>
+        </form>
 
         <section className="grid gap-5 xl:grid-cols-[1.45fr_0.9fr]">
           <Card className="rounded-lg">
             <CardHeader>
               <CardTitle className="text-lg">Saved Threads</CardTitle>
               <CardDescription>
-                Ordered by latest message activity and linked back to the saved
-                thread.
+                {filteredThreads.length.toLocaleString()} matching saved
+                threads, ordered by latest message activity.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {data.threads.length === 0 ? (
+              {filteredThreads.length === 0 ? (
                 <EmptyState
-                  title="No saved threads yet"
-                  description="Run a search or chat while signed in and it will appear here automatically."
+                  title={
+                    hasFilters ? 'No matching threads' : 'No saved threads yet'
+                  }
+                  description={
+                    hasFilters
+                      ? 'Try a broader query or select all spaces.'
+                      : 'Run a search or chat while signed in and it will appear here automatically.'
+                  }
                 />
               ) : (
                 <div className="divide-y rounded-md border">
-                  {data.threads.slice(0, 24).map(thread => (
+                  {filteredThreads.slice(0, 24).map(thread => (
                     <Link
                       key={thread.id}
                       href={thread.href}
@@ -96,6 +205,9 @@ export default async function LibraryPage() {
                             className="capitalize"
                           >
                             {thread.visibility}
+                          </Badge>
+                          <Badge variant="outline" className="capitalize">
+                            {thread.space}
                           </Badge>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
@@ -130,14 +242,22 @@ export default async function LibraryPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {data.sourceDomains.length === 0 ? (
+                {filteredSources.length === 0 ? (
                   <EmptyState
-                    title="No cited sources yet"
-                    description="Search answers with web sources will populate this list."
+                    title={
+                      hasFilters
+                        ? 'No matching sources'
+                        : 'No cited sources yet'
+                    }
+                    description={
+                      hasFilters
+                        ? 'Try a broader query or select all spaces.'
+                        : 'Search answers with web sources will populate this list.'
+                    }
                   />
                 ) : (
                   <div className="space-y-3">
-                    {data.sourceDomains.slice(0, 10).map(source => (
+                    {filteredSources.slice(0, 10).map(source => (
                       <Link
                         key={source.domain}
                         href={`/search/${source.latestChatId}`}
@@ -190,6 +310,71 @@ export default async function LibraryPage() {
             </Card>
           </div>
         </section>
+
+        <Card className="rounded-lg">
+          <CardHeader>
+            <CardTitle className="text-lg">Background Task Ledger</CardTitle>
+            <CardDescription>
+              {filteredTasks.length.toLocaleString()} matching queued, running,
+              completed, failed, and cancelled background tasks.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {filteredTasks.length === 0 ? (
+              <EmptyState
+                title={hasFilters ? 'No matching tasks' : 'No task ledger yet'}
+                description={
+                  hasFilters
+                    ? 'Try a broader query or select all spaces.'
+                    : 'Long-running chat and BrokCode work will appear here once created.'
+                }
+              />
+            ) : (
+              <div className="divide-y rounded-md border">
+                {filteredTasks.map(task => (
+                  <div
+                    key={task.id}
+                    className="grid gap-3 p-4 text-sm md:grid-cols-[1fr_auto]"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-medium">{task.title}</p>
+                        <Badge variant="outline" className="capitalize">
+                          {task.space}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {task.kind} · created {formatDate(task.createdAt)} ·
+                        updated {formatDate(task.updatedAt)}
+                      </p>
+                      {task.error ? (
+                        <p className="mt-2 line-clamp-2 text-xs text-destructive">
+                          {task.error}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex items-start gap-2 md:justify-end">
+                      <Badge
+                        variant={getStatusVariant(task.status)}
+                        className="capitalize"
+                      >
+                        {task.status}
+                      </Badge>
+                      {task.chatId ? (
+                        <Link
+                          href={`/search/${task.chatId}`}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                        >
+                          Thread <ExternalLink className="size-3.5" />
+                        </Link>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { requireAppAccessForApi } from '@/lib/auth/app-access'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { getBackgroundTask } from '@/lib/tasks/background-tasks'
 
 export const runtime = 'nodejs'
@@ -10,7 +10,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const access = await requireAppAccessForApi()
+  const access = await requireFeatureAccessForApi('search')
   if (!access.ok) return access.response
 
   const { id } = await params

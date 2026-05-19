@@ -38,8 +38,9 @@ export function createSearchTool(fullModel: string) {
         state: 'searching' as const,
         query
       }
-      // Ensure max_results is at least 10
-      const minResults = 10
+      // Keep search responsive for short requests while still returning enough
+      // context for citation quality.
+      const minResults = 8
       const effectiveMaxResults = Math.max(
         max_results || minResults,
         minResults

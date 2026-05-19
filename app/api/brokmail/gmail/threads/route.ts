@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { MailThread } from '@/lib/brokmail/data'
 import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
@@ -208,6 +208,21 @@ function extractMessages(payload: unknown): Record<string, unknown>[] {
   return []
 }
 
+function hasMessageCollection(payload: unknown) {
+  if (!isRecord(payload)) return false
+
+  return [
+    payload.messages,
+    payload.emails,
+    payload.items,
+    payload.data,
+    isRecord(payload.data) ? payload.data.messages : undefined,
+    isRecord(payload.data) ? payload.data.emails : undefined,
+    isRecord(payload.result) ? payload.result.messages : undefined,
+    isRecord(payload.result) ? payload.result.emails : undefined
+  ].some(Array.isArray)
+}
+
 function toMailThread(message: Record<string, unknown>): MailThread {
   const labels = readLabels(message)
   const from = readHeader(message, 'From') || getString(message.from)
@@ -284,13 +299,9 @@ export async function GET() {
     )
   }
 
-  const user = await getCurrentUser()
-  if (!user) {
-    return NextResponse.json(
-      { error: 'Sign in to Brok before loading Gmail threads.' },
-      { status: 401 }
-    )
-  }
+  const access = await requireFeatureAccessForApi('brokmail')
+  if (!access.ok) return access.response
+  const user = access.user
 
   const settledAccountsByToolkit = await Promise.allSettled(
     resolveGmailToolkits().map(async toolkit => {
@@ -339,6 +350,12 @@ export async function GET() {
         }
       })
       const messages = extractMessages(payload)
+      if (messages.length === 0 && !hasMessageCollection(payload)) {
+        errors.push(
+          `${toolSlug}: Gmail returned no parseable messages for this account.`
+        )
+        continue
+      }
       return NextResponse.json({
         provider: 'composio',
         connectedAccountId: account.id,

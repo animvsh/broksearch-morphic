@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { getRequiredBrokAccountUser } from '@/lib/brokcode/account-guard'
 import {
   isComposioConfigured,
@@ -11,6 +12,9 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  const access = await requireFeatureAccessForApi('brokcode')
+  if (!access.ok) return access.response
+
   const user = await getRequiredBrokAccountUser()
   if (!user) {
     return NextResponse.json(

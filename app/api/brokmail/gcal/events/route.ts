@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { BrokCalendarEvent } from '@/lib/brokmail/google-calendar-client'
 import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
@@ -91,6 +91,20 @@ function extractEvents(payload: unknown): Record<string, unknown>[] {
   return []
 }
 
+function hasEventCollection(payload: unknown) {
+  if (!isRecord(payload)) return false
+
+  return [
+    payload.events,
+    payload.items,
+    payload.data,
+    isRecord(payload.data) ? payload.data.events : undefined,
+    isRecord(payload.data) ? payload.data.items : undefined,
+    isRecord(payload.result) ? payload.result.events : undefined,
+    isRecord(payload.result) ? payload.result.items : undefined
+  ].some(Array.isArray)
+}
+
 function readEventDate(value: unknown) {
   if (!isRecord(value)) return ''
   return getString(value.dateTime) || getString(value.date)
@@ -143,13 +157,9 @@ export async function GET() {
     )
   }
 
-  const user = await getCurrentUser()
-  if (!user) {
-    return NextResponse.json(
-      { error: 'Sign in to Brok before loading Calendar events.' },
-      { status: 401 }
-    )
-  }
+  const access = await requireFeatureAccessForApi('brokmail')
+  if (!access.ok) return access.response
+  const user = access.user
 
   const settledAccountsByToolkit = await Promise.allSettled(
     resolveCalendarToolkits().map(async toolkit => {
@@ -214,6 +224,13 @@ export async function GET() {
       const events = extractEvents(payload)
         .map(toBrokCalendarEvent)
         .filter((event): event is BrokCalendarEvent => Boolean(event))
+
+      if (events.length === 0 && !hasEventCollection(payload)) {
+        errors.push(
+          `${toolSlug}: Calendar returned no parseable events for this account.`
+        )
+        continue
+      }
 
       return NextResponse.json({
         provider: 'composio',

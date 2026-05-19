@@ -8,10 +8,21 @@ import { appAccessAllowlist } from '@/lib/db/schema'
 
 import { getCurrentUser } from './get-current-user'
 
+export const APP_FEATURES = [
+  'search',
+  'brokmail',
+  'brokcode',
+  'tools',
+  'api_platform'
+] as const
+
+export type AppFeature = (typeof APP_FEATURES)[number]
+
 type AppAccessAllowed = {
   allowed: true
   user: User
   source: 'disabled' | 'admin' | 'env' | 'metadata' | 'database' | 'dev'
+  features: AppFeature[] | 'all'
 }
 
 type AppAccessDenied = {
@@ -54,6 +65,31 @@ function hasMetadataAccess(user: User) {
   return metadata?.brok_access === true || metadata?.brokAccess === true
 }
 
+export function normalizeAppFeatures(features: unknown[]): AppFeature[] {
+  return [
+    ...new Set(
+      features.filter((feature): feature is AppFeature =>
+        APP_FEATURES.includes(feature as AppFeature)
+      )
+    )
+  ]
+}
+
+function normalizeFeatures(value: unknown): AppFeature[] | 'all' {
+  if (!Array.isArray(value)) return 'all'
+
+  const features = normalizeAppFeatures(value)
+
+  return features.length > 0 ? [...new Set(features)] : []
+}
+
+export function hasFeatureAccess(access: AppAccessResult, feature: AppFeature) {
+  return (
+    access.allowed &&
+    (access.features === 'all' || access.features.includes(feature))
+  )
+}
+
 function canFailOpenForLocalDev(error: unknown) {
   if (process.env.NODE_ENV === 'production') {
     return false
@@ -79,21 +115,21 @@ export async function getAppAccessForUser(
   }
 
   if (!isAppAccessGateEnabled()) {
-    return { allowed: true, user, source: 'disabled' }
+    return { allowed: true, user, source: 'disabled', features: 'all' }
   }
 
   const email = normalizeAccessEmail(user.email)
 
   if (email && envAdminEmails().has(email)) {
-    return { allowed: true, user, source: 'admin' }
+    return { allowed: true, user, source: 'admin', features: 'all' }
   }
 
   if (email && envAllowedEmails().has(email)) {
-    return { allowed: true, user, source: 'env' }
+    return { allowed: true, user, source: 'env', features: 'all' }
   }
 
   if (hasMetadataAccess(user)) {
-    return { allowed: true, user, source: 'metadata' }
+    return { allowed: true, user, source: 'metadata', features: 'all' }
   }
 
   if (!email) {
@@ -104,18 +140,24 @@ export async function getAppAccessForUser(
     const [allowlisted] = await db
       .select({
         id: appAccessAllowlist.id,
-        status: appAccessAllowlist.status
+        status: appAccessAllowlist.status,
+        features: appAccessAllowlist.features
       })
       .from(appAccessAllowlist)
       .where(eq(appAccessAllowlist.email, email))
       .limit(1)
 
     if (allowlisted?.status === 'active') {
-      return { allowed: true, user, source: 'database' }
+      return {
+        allowed: true,
+        user,
+        source: 'database',
+        features: normalizeFeatures(allowlisted.features)
+      }
     }
   } catch (error) {
     if (canFailOpenForLocalDev(error)) {
-      return { allowed: true, user, source: 'dev' }
+      return { allowed: true, user, source: 'dev', features: 'all' }
     }
 
     return { allowed: false, user, reason: 'allowlist_unavailable' }
@@ -142,6 +184,23 @@ export async function requireAppAccess(redirectTo: string) {
   return access.user
 }
 
+export async function requireFeatureAccess(
+  redirectTo: string,
+  feature: AppFeature
+) {
+  const access = await getCurrentAppAccess()
+
+  if (!access.user) {
+    redirect(`/auth/login?redirectTo=${encodeURIComponent(redirectTo)}`)
+  }
+
+  if (!hasFeatureAccess(access, feature)) {
+    redirect('/auth/access-pending')
+  }
+
+  return access.user
+}
+
 export async function requireAppAccessForApi() {
   const access = await getCurrentAppAccess()
 
@@ -159,6 +218,32 @@ export async function requireAppAccessForApi() {
     return {
       ok: false as const,
       response: Response.json({ error: 'Access pending' }, { status: 403 })
+    }
+  }
+
+  return { ok: true as const, user: access.user }
+}
+
+export async function requireFeatureAccessForApi(feature: AppFeature) {
+  const access = await getCurrentAppAccess()
+
+  if (!access.user) {
+    return {
+      ok: false as const,
+      response: Response.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+  }
+
+  if (!hasFeatureAccess(access, feature)) {
+    return {
+      ok: false as const,
+      response: Response.json(
+        { error: 'Feature access denied', feature },
+        { status: 403 }
+      )
     }
   }
 

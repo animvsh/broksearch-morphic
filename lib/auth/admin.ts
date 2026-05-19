@@ -19,7 +19,7 @@ export async function requireAdminAccess() {
     if (!hasExplicitAdminAllowlist && process.env.NODE_ENV === 'production') {
       return {
         ok: false as const,
-        status: 403,
+        status: 401,
         error: 'Admin allowlist is required in production'
       }
     }

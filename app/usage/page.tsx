@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { Activity, AlertTriangle, BarChart3, KeyRound } from 'lucide-react'
 
 import { getUsageDashboardData } from '@/lib/actions/platform-dashboard'
-import { getRequiredBrokAccountUser } from '@/lib/brokcode/account-guard'
+import { requireFeatureAccess } from '@/lib/auth/app-access'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -43,7 +43,7 @@ function formatDate(value: Date | string | null) {
 }
 
 export default async function UsagePage() {
-  const user = await getRequiredBrokAccountUser()
+  const user = await requireFeatureAccess('/usage', 'api_platform')
   if (!user) {
     redirect(`/auth/login?redirectTo=${encodeURIComponent('/usage')}`)
   }

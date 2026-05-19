@@ -6,10 +6,87 @@ describe('Composio integration', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     delete process.env.COMPOSIO_API_KEY
+    delete process.env.COMPOSIO_CONNECT_KEY
     delete process.env.COMPOSIO_GITHUB_AUTH_CONFIG_ID
     delete process.env.COMPOSIO_GMAIL_AUTH_CONFIG_ID
     delete process.env.COMPOSIO_GOOGLEDOCS_AUTH_CONFIG_ID
     delete process.env.COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID
+  })
+
+  it('forwards connect-mode callback urls for OAuth redirection', async () => {
+    process.env.COMPOSIO_CONNECT_KEY = 'ck_test_connect_key'
+    const redirectUrl = 'https://brok.test/integrations?integration=github'
+
+    const connectRequestPayload: {
+      jsonrpc?: string
+      method?: string
+      params?: {
+        arguments?: Record<string, unknown>
+      }
+    } = {}
+
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input, init) => {
+        const url = String(input)
+
+        if (url.includes('/mcp')) {
+          expect(url).toBe('https://connect.composio.dev/mcp')
+
+          if (typeof init?.body === 'string') {
+            const parsedBody = JSON.parse(init.body)
+            connectRequestPayload.jsonrpc = parsedBody.jsonrpc
+            connectRequestPayload.method = parsedBody.method
+            connectRequestPayload.params = parsedBody.params
+          }
+
+          return Response.json({
+            jsonrpc: '2.0',
+            id: 1,
+            result: {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    data: {
+                      results: {
+                        github: {
+                          connect_url: 'https://connect.composio.dev/github'
+                        }
+                      }
+                    }
+                  })
+                }
+              ]
+            }
+          })
+        }
+
+        return Response.json({ error: 'unexpected url' }, { status: 404 })
+      })
+
+    try {
+      const request = {
+        userId: 'user_123',
+        toolkitSlug: 'github',
+        redirectUrl
+      }
+
+      const link = await createConnectedAccountLink(request)
+
+      expect(link.url).toBe('https://connect.composio.dev/github')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(connectRequestPayload.jsonrpc).toBe('2.0')
+      expect(connectRequestPayload.method).toBe('tools/call')
+
+      const args = connectRequestPayload.params?.arguments
+      expect(args?.toolkits).toEqual([{ name: 'github', action: 'add' }])
+      expect(args?.session_id).toBe('brok_user_123_github')
+      expect(args?.redirect_url).toBe(redirectUrl)
+      expect(args?.callback_url).toBe(redirectUrl)
+    } finally {
+      fetchMock.mockRestore()
+    }
   })
 
   it('accepts v3.1 auth configs where toolkit is an object with a slug', async () => {

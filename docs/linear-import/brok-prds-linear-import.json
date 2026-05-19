@@ -1,0 +1,65 @@
+[
+  {
+    "team": "BRO",
+    "title": "PRD: BrokMail production email client",
+    "priority": 2,
+    "labels": ["prd", "brokmail", "product"],
+    "project": "Brok Platform",
+    "source_doc": "docs/prd/brokmail-prd.md",
+    "description": "Create and execute the BrokMail production PRD.\n\nSource doc: docs/prd/brokmail-prd.md\n\nScope:\n- Real Gmail and Google Calendar through Composio popup flows.\n- Pi-powered concise mail assistant using live context.\n- Inbox, needs-reply, follow-ups, drafts, sent, newsletters, receipts, calendar, and automations views.\n- Approval-gated draft, archive, create calendar, and delete calendar actions.\n- Production telemetry for connector status, fetch latency, assistant latency, approvals, and action results.\n\nAcceptance:\n- Signed-in allowlisted user opens /brokmail.\n- Gmail popup connection returns to BrokMail and loads real threads.\n- Calendar popup connection returns and loads real events.\n- Triage, search, summarize, and draft flows use live context.\n- Draft/archive/calendar writes require signed, one-use approval.\n- Errors are human-readable and never raw provider dumps."
+  },
+  {
+    "team": "BRO",
+    "title": "PRD: BrokCode Lovable-style cloud builder and TUI",
+    "priority": 1,
+    "labels": ["prd", "brokcode", "product"],
+    "project": "Brok Platform",
+    "source_doc": "docs/prd/brokcode-prd.md",
+    "description": "Create and execute the BrokCode production PRD.\n\nSource doc: docs/prd/brokcode-prd.md\n\nScope:\n- Chat-left, preview-right browser builder.\n- Durable projects, files, versions, session sync, preview URLs, deploy URLs.\n- Pi coding-agent runtime with explicit unavailable state.\n- Hot preview, one-click deploy, Brok/Railway subdomain path.\n- Composio GitHub connection, repo context, and approval-gated PR creation.\n- Local TUI sync with BROKCODE_SESSION_ID.\n\nAcceptance:\n- Signed-in user opens /brokcode without pasting a browser API key.\n- Prompt creates a project, files, execution run, and preview status.\n- Preview loads or shows precise runtime failure.\n- Deploy creates reachable URL and stores it on project/version.\n- TUI /usage works against /api/v1/usage.\n- GitHub PR flow works only after approval.\n- Usage dashboards show BrokCode endpoint/runtime telemetry."
+  },
+  {
+    "team": "BRO",
+    "title": "PRD: Composio integrations platform",
+    "priority": 2,
+    "labels": ["prd", "integrations", "composio"],
+    "project": "Brok Platform",
+    "source_doc": "docs/prd/integrations-prd.md",
+    "description": "Create and execute the integrations PRD.\n\nSource doc: docs/prd/integrations-prd.md\n\nScope:\n- Composio popup connection model.\n- Featured toolkits: Google Super, Gmail, Google Calendar, Google Docs, Google Meet, GitHub, Linear, Supabase, Slack.\n- Generic connect/status routes with authenticated Brok users.\n- Clear ready/connected/unavailable/error states.\n- Product surfaces can open connector popups from chat/actions.\n\nAcceptance:\n- /integrations shows configured toolkit status.\n- Connect opens popup and returns to Brok.\n- Status routes return deterministic JSON.\n- Failed Composio calls produce concise setup/reconnect messages.\n- No anonymous fallback IDs are used in production."
+  },
+  {
+    "team": "BRO",
+    "title": "PRD: Discover, Library, and Spaces knowledge system",
+    "priority": 3,
+    "labels": ["prd", "library", "spaces"],
+    "project": "Brok Platform",
+    "source_doc": "docs/prd/discover-library-spaces-prd.md",
+    "description": "Create and execute the Discover/Library/Spaces PRD.\n\nSource doc: docs/prd/discover-library-spaces-prd.md\n\nScope:\n- Saved threads, citations, uploaded files, background tasks, and product activity.\n- Discover feed from actual workspace data.\n- Library with saved threads, source domains, files, public/share state, and collections.\n- Spaces grouped into Research, BrokMail, BrokCode, and API Platform.\n- Long task ledger that survives tab closure.\n\nAcceptance:\n- /discover, /library, /spaces open for signed-in users.\n- Recent saved chats and sources appear from real data.\n- File counts appear after upload.\n- Active background tasks are visible while queued/running.\n- Thread links reopen the matching /search/[id].\n- RLS/user scoping prevents cross-user leakage."
+  },
+  {
+    "team": "BRO",
+    "title": "PRD: Brok API, usage, billing, and admin control plane",
+    "priority": 2,
+    "labels": ["prd", "api", "admin", "billing"],
+    "project": "Brok Platform",
+    "source_doc": "docs/prd/platform-api-usage-billing-prd.md",
+    "description": "Create and execute the Brok API platform PRD.\n\nSource doc: docs/prd/platform-api-usage-billing-prd.md\n\nScope:\n- API key creation, hashing, scopes, allowed models, RPM, daily limits, monthly budgets.\n- OpenAI-compatible chat, search completions, Anthropic messages, models, and usage routes.\n- Usage, billing, and admin dashboards with real ledger data.\n- Admin allowlist, provider routing, logs, cost, latency, and failure telemetry.\n- Playground and docs that match actual route behavior.\n\nAcceptance:\n- User creates a key and calls chat/search/models/usage.\n- Scope, model, rate, daily, and monthly budget enforcement works.\n- Usage dashboard updates after traffic.\n- Admin dashboard shows allowlist and real usage.\n- Playground streams with a valid key.\n- Docs examples match current API behavior."
+  },
+  {
+    "team": "BRO",
+    "title": "PRD: Brok Tools, AI Humanizer, and feature request widget",
+    "priority": 3,
+    "labels": ["prd", "tools", "humanizer"],
+    "project": "Brok Platform",
+    "source_doc": "docs/prd/tools-and-subproducts-prd.md",
+    "description": "Create and execute the Brok Tools PRD.\n\nSource doc: docs/prd/tools-and-subproducts-prd.md\n\nScope:\n- Production tools index.\n- AI Humanizer with pattern detection, rewrite, and optional voice calibration.\n- Fixed bottom-right feature request widget that collapses to a question mark and expands on hover.\n- Admin queue for account-linked feature requests.\n- Route metadata and safe server-rendered discoverability.\n\nAcceptance:\n- Signed-in user opens /tools and /tools/humanizer.\n- Humanizer rewrites text and shows useful pattern audit.\n- Voice sample changes output style.\n- Feature request submissions include account identity and appear in admin.\n- Route metadata exists and mobile layout is usable."
+  },
+  {
+    "team": "BRO",
+    "title": "PRD: Integrate InsForge as BrokCode backend provider",
+    "priority": 1,
+    "labels": ["prd", "brokcode", "insforge"],
+    "project": "Brok Platform",
+    "source_doc": "docs/prd/insforge-brokcode-backend-prd.md",
+    "description": "Create and execute the InsForge + BrokCode backend PRD.\n\nSource doc: docs/prd/insforge-brokcode-backend-prd.md\n\nScope:\n- Add InsForge as a first-class BrokCode backend provider.\n- Support new InsForge cloud/trial, existing InsForge, and self-hosted InsForge modes.\n- Store InsForge admin credentials server-side only.\n- Surface backend URL, dashboard URL, claim URL, provisioning status, health, and capabilities in BrokCode.\n- Use MiniMax for BrokCode planning while InsForge supplies backend primitives.\n- Generate full-stack apps using InsForge auth, database, storage, functions, realtime, and deployment where available.\n\nAcceptance:\n- Signed-in user can create a BrokCode project with InsForge selected.\n- BrokCode securely stores backend metadata and associates it with the project/workspace.\n- BrokCode polls and displays InsForge health and links.\n- MiniMax-powered run can generate a simple full-stack app using InsForge auth/database/storage.\n- Generated frontend receives only public InsForge config.\n- Errors are precise and never leak secret keys."
+  }
+]

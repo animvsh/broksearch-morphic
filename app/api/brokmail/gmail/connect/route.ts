@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { resolveBrokMailCallbackUrl } from '@/lib/brokmail/callback-url'
 import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
@@ -42,18 +42,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json(
-        {
-          provider: 'composio',
-          connectionUrl: null,
-          redirectUrl,
-          message: 'Sign in to Brok before connecting Gmail.'
-        },
-        { status: 401 }
-      )
-    }
+    const access = await requireFeatureAccessForApi('brokmail')
+    if (!access.ok) return access.response
+    const user = access.user
 
     const errors: string[] = []
 

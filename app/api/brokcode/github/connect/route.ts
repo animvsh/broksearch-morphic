@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { getRequiredBrokAccountUser } from '@/lib/brokcode/account-guard'
 import {
   createConnectedAccountLink,
@@ -27,6 +28,8 @@ export async function POST(request: NextRequest) {
   const origin = resolveRequestOrigin(request)
   const body = await request.json().catch(() => ({}))
   const prompt = typeof body.prompt === 'string' ? body.prompt : ''
+  const access = await requireFeatureAccessForApi('brokcode')
+  if (!access.ok) return access.response
   const user = await getRequiredBrokAccountUser()
   const redirectUrl = new URL('/brokcode', origin)
   redirectUrl.searchParams.set('connect', 'github')

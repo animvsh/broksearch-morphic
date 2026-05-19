@@ -200,6 +200,22 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
             with optional username
           </li>
           <li>
+            <code>GET /api/brokcode/projects/[id]/backend</code> - read redacted
+            project backend metadata
+          </li>
+          <li>
+            <code>PUT /api/brokcode/projects/[id]/backend</code> - link, rotate,
+            or clear an encrypted InsForge backend connection
+          </li>
+          <li>
+            <code>POST /api/brokcode/projects/[id]/backend/health</code> - check
+            InsForge backend reachability
+          </li>
+          <li>
+            <code>POST /api/brokcode/projects/insforge/provision</code> - create
+            one InsForge trial backend for the selected project
+          </li>
+          <li>
             <code>GET /api/brokcode/projects/[id]/files</code> - list files for
             one saved project
           </li>

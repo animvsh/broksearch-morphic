@@ -2,6 +2,42 @@ import { type NextRequest, NextResponse } from 'next/server'
 
 import { updateSession } from '@/lib/supabase/middleware'
 
+const DOCS_HOSTS = new Set(['docs.brok.fyi'])
+const DOCS_CLEAN_PATHS = new Set([
+  '/',
+  '/api-keys',
+  '/brokcode',
+  '/chat-completions',
+  '/errors',
+  '/models',
+  '/quickstart',
+  '/rate-limits',
+  '/search-completions',
+  '/security'
+])
+
+function rewriteDocsSubdomain(request: NextRequest, host: string) {
+  const hostname = host.split(':')[0]?.toLowerCase()
+  if (!DOCS_HOSTS.has(hostname)) return null
+
+  const pathname = request.nextUrl.pathname
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/auth') ||
+    pathname.startsWith('/docs') ||
+    pathname === '/favicon.ico'
+  ) {
+    return null
+  }
+
+  if (!DOCS_CLEAN_PATHS.has(pathname)) return null
+
+  const url = request.nextUrl.clone()
+  url.pathname = pathname === '/' ? '/docs' : `/docs${pathname}`
+  return NextResponse.rewrite(url)
+}
+
 export async function proxy(request: NextRequest) {
   // Get the protocol from X-Forwarded-Proto header or request protocol
   const protocol =
@@ -10,6 +46,7 @@ export async function proxy(request: NextRequest) {
   // Get the host from X-Forwarded-Host header or request host
   const host =
     request.headers.get('x-forwarded-host') || request.headers.get('host') || ''
+  const docsRewrite = rewriteDocsSubdomain(request, host)
 
   // Construct the base URL - ensure protocol has :// format
   const baseUrl = `${protocol}${protocol.endsWith(':') ? '//' : '://'}${host}`
@@ -28,6 +65,13 @@ export async function proxy(request: NextRequest) {
     response = NextResponse.next({
       request
     })
+  }
+
+  if (docsRewrite) {
+    response.cookies.getAll().forEach(cookie => {
+      docsRewrite.cookies.set(cookie)
+    })
+    response = docsRewrite
   }
 
   // Add request information to response headers

@@ -17,7 +17,6 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
-  Command,
   FileText,
   Flame,
   Inbox,
@@ -138,6 +137,9 @@ const quickPrompts = [
   'Create receipt rule'
 ]
 
+const PI_RESPONSE_STYLE =
+  'Keep answers short and practical. Use bullets when listing actions.'
+
 const sortOptions: Array<{ id: MailSortMode; label: string }> = [
   { id: 'priority', label: 'Priority' },
   { id: 'newest', label: 'Newest' },
@@ -219,10 +221,11 @@ function scoreMailSearchMatch(thread: MailThread, terms: string[]) {
   return terms.reduce((score, term) => {
     if (!haystack.includes(term)) return score
     const subjectBoost = thread.subject.toLowerCase().includes(term) ? 4 : 0
-    const senderBoost =
-      `${thread.sender} ${thread.senderEmail}`.toLowerCase().includes(term)
-        ? 3
-        : 0
+    const senderBoost = `${thread.sender} ${thread.senderEmail}`
+      .toLowerCase()
+      .includes(term)
+      ? 3
+      : 0
     return score + 1 + subjectBoost + senderBoost
   }, 0)
 }
@@ -559,6 +562,7 @@ export function BrokMailApp() {
   const [agentOpen, setAgentOpen] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
   const [composer, setComposer] = useState('')
+  const composerTextareaRef = useRef<HTMLTextAreaElement>(null)
   const [messages, setMessages] = useState<AgentMessage[]>([
     {
       id: 'welcome',
@@ -702,28 +706,24 @@ export function BrokMailApp() {
       }
 
       if (isTyping) return
-
-      if (event.key.toLowerCase() === 'c') {
-        event.preventDefault()
-        setComposer('Hi,\n\n\n\nBest,\nAnimesh')
-        return
-      }
-
-      if (event.key.toLowerCase() === 'j') {
-        event.preventDefault()
-        selectAdjacentThread(1)
-        return
-      }
-
-      if (event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        selectAdjacentThread(-1)
-      }
     }
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  })
+  }, [])
+
+  useEffect(() => {
+    if (composerTextareaRef.current && composer.trim() === '') {
+      composerTextareaRef.current.focus()
+    }
+  }, [composer, selectedThread?.id])
+
+  function focusComposer() {
+    setComposer('')
+    requestAnimationFrame(() => {
+      composerTextareaRef.current?.focus()
+    })
+  }
 
   async function loadComposioGmailThreads() {
     setIsSyncingMail(true)
@@ -832,23 +832,11 @@ export function BrokMailApp() {
     }
   }
 
-  function selectAdjacentThread(direction: 1 | -1) {
-    if (filteredThreads.length === 0) return
-    const currentIndex = Math.max(
-      0,
-      filteredThreads.findIndex(thread => thread.id === selectedThread?.id)
-    )
-    const nextIndex =
-      (currentIndex + direction + filteredThreads.length) %
-      filteredThreads.length
-    setSelectedThreadId(filteredThreads[nextIndex]?.id)
-  }
-
   function toggleThreadStar(threadId: string) {
     setThreads(current =>
       current.map(thread =>
         thread.id === threadId
-          ? { ...thread, starred: !thread.starred, important: !thread.starred }
+          ? { ...thread, starred: !thread.starred }
           : thread
       )
     )
@@ -1085,12 +1073,20 @@ export function BrokMailApp() {
     )
   }
 
-  async function askPiBrokMailAgent(command: string) {
+  async function askPiBrokMailAgent(
+    command: string,
+    options?: {
+      concise?: boolean
+    }
+  ) {
+    const concise = options?.concise ?? true
+
     const response = await fetch('/api/brokmail/pi-agent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prompt: command,
+        concise,
         threads,
         calendarEvents,
         selectedThreadId: selectedThread?.id ?? null,
@@ -1126,342 +1122,315 @@ export function BrokMailApp() {
       { id: createId('user'), role: 'user', content: command }
     ])
 
-    const wait = (ms: number) =>
-      new Promise(resolve => window.setTimeout(resolve, ms))
-
-    updateActivity('Understanding the inbox command...')
-    await wait(140)
-
     const lower = command.toLowerCase()
     const hasMail = threads.length > 0
     let response = ''
     let draft: DraftState | undefined
     let approval: ApprovalState | undefined
+    let branchHandled = false
 
-    if (
-      /calendar|meeting|event|schedule/.test(lower) &&
-      (lower.includes('show') ||
-        lower.includes('list') ||
-        lower.includes('upcoming') ||
-        lower.includes('next'))
-    ) {
-      setView('calendar')
-      updateActivity('Checking Composio Calendar connection...')
-      await wait(170)
-      let liveEvents = calendarEvents
-      if (calendarConnectionMode === 'composio') {
-        updateActivity('Loading upcoming events from Google Calendar...')
-        liveEvents = await loadComposioCalendarEvents()
-      }
-
-      response =
-        calendarConnectionMode === 'composio'
-          ? liveEvents.length
-            ? `Google Calendar is live. I loaded ${liveEvents.length} upcoming events from Composio. Select an event to inspect or ask me to add/remove one with approval.`
-            : 'Google Calendar is connected through Composio, but no upcoming events were returned.'
-          : 'Connect Google Calendar through Composio before using live calendar actions.'
-    } else if (
-      /calendar|meeting|event|schedule/.test(lower) &&
-      (lower.includes('add') ||
-        lower.includes('create') ||
-        lower.includes('schedule'))
-    ) {
-      setView('calendar')
-      updateActivity('Parsing calendar command...')
-      await wait(130)
-
-      if (calendarConnectionMode !== 'composio') {
-        response =
-          'Connect Google Calendar through Composio before creating live events.'
-      } else {
-        const summary = parseEventTitle(command)
-        const startAt = parseCalendarStartDate(command)
-        if (startAt.getTime() < Date.now() - 15 * 60_000) {
-          startAt.setDate(startAt.getDate() + 1)
+    try {
+      if (
+        /calendar|meeting|event|schedule/.test(lower) &&
+        (lower.includes('show') ||
+          lower.includes('list') ||
+          lower.includes('upcoming') ||
+          lower.includes('next'))
+      ) {
+        branchHandled = true
+        setView('calendar')
+        updateActivity('Opening calendar')
+        let liveEvents = calendarEvents
+        if (calendarConnectionMode === 'composio') {
+          updateActivity('Loading live events')
+          liveEvents = await loadComposioCalendarEvents()
         }
-        const durationMinutes = parseDurationMinutes(command)
-        const endAt = new Date(startAt.getTime() + durationMinutes * 60_000)
 
-        updateActivity('Preparing a calendar approval card...')
-        await wait(170)
-        response = [
-          'Calendar event ready for approval:',
-          `Title: ${summary}`,
-          `When: ${formatCalendarTimestamp(startAt.toISOString(), false)}`,
-          'Confirm before I add it to Google Calendar.'
-        ].join('\n')
-        approval = {
-          id: createId('approval'),
-          title: 'Create Calendar Event?',
-          description: `${summary} at ${formatCalendarTimestamp(startAt.toISOString(), false)}.`,
-          action: 'calendar_create',
-          calendarEvent: {
-            summary,
-            startAt: startAt.toISOString(),
-            endAt: endAt.toISOString()
-          }
-        }
-      }
-    } else if (
-      /calendar|meeting|event|schedule/.test(lower) &&
-      (lower.includes('remove') ||
-        lower.includes('delete') ||
-        lower.includes('cancel'))
-    ) {
-      setView('calendar')
-      updateActivity('Locating calendar event to remove...')
-      await wait(140)
-
-      if (calendarConnectionMode !== 'composio') {
         response =
-          'Connect Google Calendar through Composio before removing live events.'
-      } else {
-        let candidate = findCalendarEventToDelete(command, calendarEvents)
-
-        if (!candidate) {
+          calendarConnectionMode === 'composio'
+            ? liveEvents.length
+              ? `Google Calendar is live. Loaded ${liveEvents.length} upcoming events from Composio. Select one to review and approve changes.`
+              : 'Google Calendar is connected through Composio, but no upcoming events were returned.'
+            : 'Connect Google Calendar through Composio before using live calendar actions.'
+      } else if (
+        /calendar|meeting|event|schedule/.test(lower) &&
+        (lower.includes('add') ||
+          lower.includes('create') ||
+          lower.includes('schedule'))
+      ) {
+        branchHandled = true
+        setView('calendar')
+        updateActivity('Preparing calendar action')
+        if (calendarConnectionMode !== 'composio') {
           response =
-            'I could not find that calendar event in the live upcoming-event list. Refresh Calendar, select the event, or quote the event title.'
+            'Connect Google Calendar through Composio before creating live events.'
         } else {
-          updateActivity(
-            `Preparing removal approval for "${candidate.summary}"...`
-          )
-          await wait(170)
+          const summary = parseEventTitle(command)
+          const startAt = parseCalendarStartDate(command)
+          if (startAt.getTime() < Date.now() - 15 * 60_000) {
+            startAt.setDate(startAt.getDate() + 1)
+          }
+          const durationMinutes = parseDurationMinutes(command)
+          const endAt = new Date(startAt.getTime() + durationMinutes * 60_000)
+
           response = [
-            'Calendar removal ready for approval:',
-            `Title: ${candidate.summary}`,
-            `When: ${formatCalendarTimestamp(candidate.startAt, candidate.isAllDay)}`,
-            'Confirm before I remove it from Google Calendar.'
+            'Calendar event ready for approval:',
+            `Title: ${summary}`,
+            `When: ${formatCalendarTimestamp(startAt.toISOString(), false)}`,
+            'Confirm before I add it to Google Calendar.'
           ].join('\n')
           approval = {
             id: createId('approval'),
-            title: 'Remove Calendar Event?',
-            description: `${candidate.summary} at ${formatCalendarTimestamp(candidate.startAt, candidate.isAllDay)}.`,
-            action: 'calendar_delete',
+            title: 'Create Calendar Event?',
+            description: `${summary} at ${formatCalendarTimestamp(startAt.toISOString(), false)}.`,
+            action: 'calendar_create',
             calendarEvent: {
-              id: candidate.id,
-              summary: candidate.summary,
-              startAt: candidate.startAt,
-              endAt: candidate.endAt
+              summary,
+              startAt: startAt.toISOString(),
+              endAt: endAt.toISOString()
             }
           }
         }
-      }
-    } else if (lower.includes('attention') || lower.includes('triage')) {
-      updateActivity('Scanning unread, important, and recent threads...')
-      await wait(160)
-      updateActivity(
-        'Asking Pi to classify needs reply, waiting-on, and low-priority mail...'
-      )
-      await wait(160)
-      if (!hasMail) {
-        response =
-          'Connect Gmail first so I can triage your live inbox. I will not use demo mail data.'
-      } else {
-        try {
-          response = await askPiBrokMailAgent(command)
-        } catch (error) {
+      } else if (
+        /calendar|meeting|event|schedule/.test(lower) &&
+        (lower.includes('remove') ||
+          lower.includes('delete') ||
+          lower.includes('cancel'))
+      ) {
+        branchHandled = true
+        setView('calendar')
+        updateActivity('Preparing removal approval')
+        if (calendarConnectionMode !== 'composio') {
           response =
-            error instanceof Error
-              ? error.message
-              : 'Pi-powered triage failed. No placeholder triage was generated.'
+            'Connect Google Calendar through Composio before removing live events.'
+        } else {
+          const candidate = findCalendarEventToDelete(command, calendarEvents)
+          if (!candidate) {
+            response =
+              'I could not find that event in the live list. Refresh Calendar, select one, or quote the exact event title.'
+          } else {
+            response = [
+              'Calendar removal ready for approval:',
+              `Title: ${candidate.summary}`,
+              `When: ${formatCalendarTimestamp(candidate.startAt, candidate.isAllDay)}`,
+              'Confirm before I remove it from Google Calendar.'
+            ].join('\n')
+            approval = {
+              id: createId('approval'),
+              title: 'Remove Calendar Event?',
+              description: `${candidate.summary} at ${formatCalendarTimestamp(candidate.startAt, candidate.isAllDay)}.`,
+              action: 'calendar_delete',
+              calendarEvent: {
+                id: candidate.id,
+                summary: candidate.summary,
+                startAt: candidate.startAt,
+                endAt: candidate.endAt
+              }
+            }
+          }
         }
-      }
-    } else if (lower.includes('follow')) {
-      updateActivity('Checking sent conversations without a recent reply...')
-      await wait(170)
-      const followUps = threads.filter(thread => thread.waitingOnReply)
-      if (followUps[0]) setSelectedThreadId(followUps[0].id)
-      if (!hasMail) {
-        response =
-          'Connect Gmail first so I can scan your real sent mail for follow-ups.'
-      } else {
-        try {
-          response = await askPiBrokMailAgent(command)
-        } catch (error) {
+      } else if (lower.includes('attention') || lower.includes('triage')) {
+        branchHandled = true
+        updateActivity('Running inbox triage')
+        if (!hasMail) {
           response =
-            error instanceof Error
-              ? error.message
-              : 'Pi-powered follow-up scan failed. No placeholder follow-up list was generated.'
+            'Connect Gmail first so I can triage your live inbox. I will not use demo data.'
+        } else {
+          response = await askPiBrokMailAgent(
+            `${command}\n\nFocus on top-priority needs first.`
+          )
         }
-      }
-    } else if (lower.includes('archive') || lower.includes('newsletter')) {
-      updateActivity('Searching newsletter-like emails older than 30 days...')
-      await wait(150)
-      updateActivity('Excluding starred and important emails...')
-      await wait(150)
-      const archiveTargets = threads.filter(
-        thread =>
-          thread.category === 'newsletter' &&
-          !thread.starred &&
-          !thread.important
-      )
-      const archiveCount = archiveTargets.length
-      response = hasMail
-        ? `I found ${archiveCount} newsletter-like email ready to archive. Starred and important messages are excluded.`
-        : 'Connect Gmail first so I can search and archive real newsletter threads.'
-      if (hasMail && archiveTargets.length > 0) {
+      } else if (lower.includes('follow')) {
+        branchHandled = true
+        updateActivity('Checking follow-ups')
+        const followUps = threads.filter(thread => thread.waitingOnReply)
+        if (followUps[0]) setSelectedThreadId(followUps[0].id)
+        if (!hasMail) {
+          response =
+            'Connect Gmail first so I can scan your real sent mail for follow-ups.'
+        } else if (followUps[0]) {
+          response = await askPiBrokMailAgent(
+            `${command}\n\nPrioritize the most urgent follow-up and next action.`
+          )
+        } else {
+          response = 'No follow-ups are currently waiting for a response.'
+        }
+      } else if (lower.includes('archive') || lower.includes('newsletter')) {
+        branchHandled = true
+        updateActivity('Preparing archive action')
+        const archiveTargets = threads.filter(
+          thread =>
+            thread.category === 'newsletter' &&
+            !thread.starred &&
+            !thread.important
+        )
+        const archiveCount = archiveTargets.length
+        response = hasMail
+          ? `I found ${archiveCount} newsletter-like email${archiveCount === 1 ? '' : 's'} ready to archive.`
+          : 'Connect Gmail first so I can search and archive real threads.'
+        if (hasMail && archiveTargets.length > 0) {
+          approval = {
+            id: createId('approval'),
+            title: 'Confirm Archive',
+            description:
+              'Archive newsletter-like emails older than 30 days, excluding starred and important messages.',
+            action: 'archive',
+            count: archiveCount,
+            targetThreadIds: archiveTargets.map(thread => thread.id)
+          }
+        }
+      } else if (lower.includes('receipt') || lower.includes('automation')) {
+        branchHandled = true
+        updateActivity('Preparing automation preview')
+        response =
+          'Receipt automation preview: label incoming receipt/invoice mail with Expenses. Requires approval before it is saved.'
         approval = {
           id: createId('approval'),
-          title: 'Confirm Archive',
+          title: 'Create Automation',
           description:
-            'Archive newsletter-like emails older than 30 days, excluding starred and important messages.',
-          action: 'archive',
-          count: archiveCount,
-          targetThreadIds: archiveTargets.map(thread => thread.id)
+            'When a new email appears to be a receipt or invoice, apply the Expenses label.',
+          action: 'automation'
         }
-      }
-    } else if (lower.includes('receipt') || lower.includes('automation')) {
-      updateActivity('Building an automation preview...')
-      await wait(160)
-      response =
-        'Automation preview: when a new email looks like a receipt or invoice, label it Expenses. This rule is low risk and can run without send/delete access.'
-      approval = {
-        id: createId('approval'),
-        title: 'Create Automation',
-        description:
-          'When a new email appears to be a receipt or invoice, apply the Expenses label.',
-        action: 'automation'
-      }
-    } else if (
-      (lower.includes('find') ||
+      } else if (
+        (lower.includes('find') ||
+          lower.includes('search') ||
+          lower.includes('contract')) &&
+        (lower.includes('draft') || lower.includes('reply'))
+      ) {
+        branchHandled = true
+        updateActivity('Drafting from matched thread')
+        const match = findBestMailThreadMatch(command, threads, selectedThread)
+        if (!match) {
+          response =
+            'Connect Gmail first so I can search real threads and draft from actual context.'
+        } else {
+          setSelectedThreadId(match.id)
+          try {
+            const draftBody = await askPiBrokMailAgent(
+              `${command}\n\nDraft a reply for this thread. Return only the draft body. ${PI_RESPONSE_STYLE}`,
+              { concise: false }
+            )
+            draft = {
+              subject: `Re: ${match.subject}`,
+              body: draftBody,
+              threadId: match.id
+            }
+            setComposer(draft.body)
+            response = `${match.sender} - ${match.subject}\nI found the matching thread and drafted for review.`
+            approval = {
+              id: createId('approval'),
+              title: 'Create Gmail Draft?',
+              description:
+                'This creates a Gmail draft in the selected live thread. It does not send email.',
+              action: 'create_draft',
+              targetThreadIds: [match.id]
+            }
+          } catch (error) {
+            response =
+              error instanceof Error
+                ? error.message
+                : 'Pi-powered drafting failed. No placeholder draft was generated.'
+          }
+        }
+      } else if (
+        lower.includes('find') ||
         lower.includes('search') ||
-        lower.includes('contract')) &&
-      (lower.includes('draft') || lower.includes('reply'))
-    ) {
-      updateActivity(
-        'Searching Gmail-style metadata for the contract thread...'
-      )
-      await wait(140)
-      const match = findBestMailThreadMatch(command, threads, selectedThread)
-      if (!match) {
-        response =
-          'Connect Gmail first so I can search real threads and draft from actual email context.'
+        lower.includes('contract')
+      ) {
+        branchHandled = true
+        updateActivity('Searching thread context')
+        const match = findBestMailThreadMatch(command, threads, selectedThread)
+        if (!match) {
+          response = 'Connect Gmail first so I can search your real mailbox.'
+        } else {
+          setSelectedThreadId(match.id)
+          try {
+            const piSummary = await askPiBrokMailAgent(
+              `${command}\n\nPick the matching thread and summarize next action in one paragraph.`
+            )
+            response = `${match.sender} - ${match.subject}\n${match.hasAttachments ? 'Attachment context included.' : 'Matching thread found.'}\n${piSummary}`
+          } catch (error) {
+            response =
+              error instanceof Error
+                ? error.message
+                : 'Pi-powered search summary failed. No placeholder summary was generated.'
+          }
+        }
+      } else if (lower.includes('draft') || lower.includes('reply')) {
+        branchHandled = true
+        updateActivity('Drafting a live reply')
+        if (!selectedThread) {
+          response =
+            'Connect Gmail and select a live thread before drafting. I always read the real thread first.'
+        } else {
+          try {
+            const draftBody = await askPiBrokMailAgent(
+              `${command}\n\nDraft a reply for the selected thread in a concise tone. Return only the draft body.`,
+              { concise: false }
+            )
+            draft = {
+              subject: `Re: ${selectedThread.subject}`,
+              body: draftBody,
+              threadId: selectedThread.id
+            }
+            setComposer(draft.body)
+            response =
+              'Draft generated. Review below before saving or sending from Gmail.'
+            approval = {
+              id: createId('approval'),
+              title: 'Create Gmail Draft?',
+              description:
+                'This creates a Gmail draft in the selected live thread. It does not send email.',
+              action: 'create_draft',
+              targetThreadIds: [selectedThread.id]
+            }
+          } catch (error) {
+            response =
+              error instanceof Error
+                ? error.message
+                : 'Pi-powered drafting failed. No placeholder draft was generated.'
+          }
+        }
       } else {
-        setSelectedThreadId(match.id)
-        updateActivity('Reading the best matching thread...')
-        await wait(140)
-        updateActivity(
-          'Asking Pi to summarize context and draft a safe reply...'
-        )
-        await wait(180)
-        try {
-          const draftBody = await askPiBrokMailAgent(
-            `${command}\n\nDraft a reply for this matched thread. Return only the draft body.`
+        branchHandled = true
+        updateActivity('Summarizing the selected thread')
+        if (!selectedThread) {
+          response =
+            'Connect Gmail first or select a live thread so I can summarize real email context.'
+        } else {
+          response = await askPiBrokMailAgent(
+            `${command}\n\nKeep it concise with next action first.`
           )
-          draft = {
-            subject: `Re: ${match.subject}`,
-            body: draftBody,
-            threadId: match.id
-          }
-          setComposer(draft.body)
-          response = `${match.sender} - ${match.subject}\nFound from your search terms and ${match.hasAttachments ? 'attachment context' : 'matching thread context'}.\n\nPi drafted the reply for review.`
-          approval = {
-            id: createId('approval'),
-            title: 'Create Gmail Draft?',
-            description:
-              'This creates a Gmail draft in the current live thread. It does not send email.',
-            action: 'create_draft',
-            targetThreadIds: [match.id]
-          }
-        } catch (error) {
-          response =
-            error instanceof Error
-              ? error.message
-              : 'Pi-powered drafting failed. No placeholder draft was generated.'
         }
       }
-    } else if (
-      lower.includes('find') ||
-      lower.includes('search') ||
-      lower.includes('contract')
-    ) {
-      updateActivity('Searching mail metadata and thread snippets...')
-      await wait(140)
-      const match = findBestMailThreadMatch(command, threads, selectedThread)
-      if (!match) {
-        response = 'Connect Gmail first so I can search your real mailbox.'
-      } else {
-        setSelectedThreadId(match.id)
-        updateActivity('Opening the most relevant thread...')
-        await wait(120)
-        try {
-          const piSummary = await askPiBrokMailAgent(
-            `${command}\n\nExplain why this matched thread is relevant and summarize the next action.`
-          )
-          response = `${match.sender} - ${match.subject}\nFound from your search terms and ${match.hasAttachments ? 'attachment context' : 'matching thread context'}.\n\n${piSummary}`
-        } catch (error) {
-          response =
-            error instanceof Error
-              ? error.message
-              : 'Pi-powered search summary failed. No placeholder summary was generated.'
-        }
-      }
-    } else if (lower.includes('draft') || lower.includes('reply')) {
-      updateActivity('Reading the selected thread before drafting...')
-      await wait(150)
-      updateActivity('Asking Pi to write a concise reply in your saved tone...')
-      await wait(180)
-      if (!selectedThread) {
-        response =
-          'Connect Gmail and select a live thread before drafting. I always read the real thread before writing.'
-      } else {
-        try {
-          const draftBody = await askPiBrokMailAgent(
-            `${command}\n\nDraft a reply for the selected thread. Return only the draft body.`
-          )
-          draft = {
-            subject: `Re: ${selectedThread.subject}`,
-            body: draftBody,
-            threadId: selectedThread.id
-          }
-          setComposer(draft.body)
-          response =
-            'Pi drafted a reply from the selected thread. Review it below before sending or saving.'
-          approval = {
-            id: createId('approval'),
-            title: 'Create Gmail Draft?',
-            description:
-              'This creates a Gmail draft in the selected live thread. It does not send email.',
-            action: 'create_draft',
-            targetThreadIds: [selectedThread.id]
-          }
-        } catch (error) {
-          response =
-            error instanceof Error
-              ? error.message
-              : 'Pi-powered drafting failed. No placeholder draft was generated.'
-        }
-      }
-    } else {
-      updateActivity('Reading the selected thread with Pi...')
-      await wait(150)
-      if (!selectedThread) {
-        response =
-          'Connect Gmail first or select a live thread so I can summarize real email context.'
-      } else {
-        try {
-          response = await askPiBrokMailAgent(command)
-        } catch (error) {
-          response =
-            error instanceof Error
-              ? error.message
-              : 'Pi-powered thread summary failed. No placeholder summary was generated.'
-        }
-      }
-    }
 
-    finishActivity()
-    setMessages(current => [
-      ...current,
-      {
-        id: createId('assistant'),
-        role: 'assistant',
-        content: response,
-        draft,
-        approval
+      finishActivity()
+      if (!branchHandled) {
+        response = response || 'I am ready. Ask me for a thread action.'
       }
-    ])
-    setIsRunning(false)
+    } catch (error) {
+      response =
+        error instanceof Error
+          ? error.message
+          : 'BrokMail assistant failed. Please try again.'
+      toast.error(response)
+      finishActivity()
+    } finally {
+      if (!response) {
+        response = 'I am ready. Ask me about your thread and priorities.'
+      }
+      setMessages(current => [
+        ...current,
+        {
+          id: createId('assistant'),
+          role: 'assistant',
+          content: response,
+          draft,
+          approval
+        }
+      ])
+      setIsRunning(false)
+    }
   }
 
   async function approveAction(approval: ApprovalState, draft?: DraftState) {
@@ -1850,10 +1819,7 @@ export function BrokMailApp() {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
           <aside className="hidden w-52 shrink-0 border-r border-zinc-200/80 bg-[#fbfbf8] lg:flex lg:flex-col">
             <div className="border-b border-zinc-100 p-3">
-              <Button
-                className="h-9 w-full gap-2"
-                onClick={() => setComposer('Hi,\n\n\n\nBest,\nAnimesh')}
-              >
+              <Button className="h-9 w-full gap-2" onClick={focusComposer}>
                 <PenLine className="size-4" />
                 Compose
               </Button>
@@ -1924,10 +1890,7 @@ export function BrokMailApp() {
           <div className="border-b border-zinc-200/80 bg-[#fbfbf8] px-3 py-3 lg:hidden">
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <Button
-                  className="h-9 flex-1 gap-2"
-                  onClick={() => setComposer('Hi,\n\n\n\nBest,\nAnimesh')}
-                >
+                <Button className="h-9 flex-1 gap-2" onClick={focusComposer}>
                   <PenLine className="size-4" />
                   Compose
                 </Button>
@@ -1935,7 +1898,9 @@ export function BrokMailApp() {
                   variant="outline"
                   className="h-9 flex-1 gap-2"
                   onClick={() => {
-                    void (connected ? loadComposioGmailThreads() : connectGmail())
+                    void (connected
+                      ? loadComposioGmailThreads()
+                      : connectGmail())
                   }}
                   disabled={isConnecting || isSyncingMail}
                 >
@@ -2039,6 +2004,11 @@ export function BrokMailApp() {
                   events={calendarEvents}
                   selectedEventId={selectedCalendarEvent?.id || null}
                   isSyncing={isSyncingCalendar}
+                  connected={calendarConnected}
+                  connectionStatus={calendarConnectionStatus}
+                  isConnecting={isConnectingCalendar}
+                  onConnect={connectCalendar}
+                  onRefresh={loadComposioCalendarEvents}
                   onSelect={eventId => setSelectedCalendarEventId(eventId)}
                 />
               ) : view === 'drafts' ? (
@@ -2051,8 +2021,7 @@ export function BrokMailApp() {
                       key={thread.id}
                       className={cn(
                         'border-b border-zinc-100 transition-colors hover:bg-zinc-50',
-                        selectedThread?.id === thread.id &&
-                          'bg-zinc-100/80'
+                        selectedThread?.id === thread.id && 'bg-zinc-100/80'
                       )}
                     >
                       <button
@@ -2100,19 +2069,49 @@ export function BrokMailApp() {
                   )
                 })
               ) : (
-                <div className="flex h-full min-h-40 items-center justify-center p-5 text-center">
-                  <div>
+                <div className="flex h-full min-h-44 items-center justify-center p-5 text-center">
+                  <div className="max-w-xs">
                     <Search className="mx-auto mb-3 size-5 text-muted-foreground" />
                     <p className="text-sm font-medium">
-                      {query.trim()
-                        ? 'No conversations match this search.'
-                        : 'No live inbox threads loaded yet.'}
+                      {isSyncingMail
+                        ? 'Loading live Gmail...'
+                        : query.trim()
+                          ? 'No conversations match this search.'
+                          : connected
+                            ? 'No conversations in this view.'
+                            : 'Connect Gmail to load mail.'}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {query.trim()
-                        ? 'Try a sender, subject, label, or ask BrokMail directly.'
-                        : 'Connect Gmail to pull real threads into this workspace.'}
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      {isSyncingMail
+                        ? 'BrokMail is asking Composio for your recent threads.'
+                        : query.trim()
+                          ? 'Try a sender, subject, label, or ask BrokMail directly.'
+                          : connected
+                            ? 'Switch folders, refresh Gmail, or ask BrokMail to triage your inbox.'
+                            : connectionStatus}
                     </p>
+                    {!query.trim() && (
+                      <div className="mt-3 flex justify-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => {
+                            void (connected
+                              ? loadComposioGmailThreads()
+                              : connectGmail())
+                          }}
+                          disabled={isConnecting || isSyncingMail}
+                        >
+                          <MailCheck className="size-4" />
+                          {isSyncingMail
+                            ? 'Loading...'
+                            : connected
+                              ? 'Refresh Gmail'
+                              : 'Connect Gmail'}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -2136,6 +2135,7 @@ export function BrokMailApp() {
               <ThreadView
                 thread={selectedThread}
                 composer={composer}
+                composerTextareaRef={composerTextareaRef}
                 setComposer={setComposer}
                 runAgent={runAgent}
                 rewriteComposer={rewriteComposer}
@@ -2168,6 +2168,37 @@ export function BrokMailApp() {
 function modeLabel(mode: IntegrationConnectionMode) {
   if (mode === 'composio') return 'Composio'
   return 'off'
+}
+
+function approvalActionLabel(approval: ApprovalState) {
+  if (approval.action === 'create_draft') return 'Create Gmail draft'
+  if (approval.action === 'archive') {
+    return `Archive ${approval.count ?? approval.targetThreadIds?.length ?? 0} thread${(approval.count ?? approval.targetThreadIds?.length ?? 0) === 1 ? '' : 's'}`
+  }
+  if (approval.action === 'calendar_create') return 'Add Calendar event'
+  if (approval.action === 'calendar_delete') return 'Remove Calendar event'
+  if (approval.action === 'automation') return 'Save automation'
+  if (approval.action === 'label') return 'Apply Gmail label'
+  return 'Approve action'
+}
+
+function approvalScopeLabel(approval: ApprovalState) {
+  if (approval.action === 'calendar_create') {
+    return 'BrokMail will add this event to your connected Google Calendar.'
+  }
+  if (approval.action === 'calendar_delete') {
+    return 'BrokMail will remove this event from your connected Google Calendar.'
+  }
+  if (approval.action === 'create_draft') {
+    return 'BrokMail will create a Gmail draft only. It will not send email.'
+  }
+  if (approval.action === 'archive') {
+    return 'BrokMail will archive the selected Gmail threads. Starred and important mail stays untouched.'
+  }
+  if (approval.action === 'automation') {
+    return 'BrokMail will save this local rule. It will not send, delete, or archive mail.'
+  }
+  return 'BrokMail will run this action only after you approve it.'
 }
 
 function BrokMailStatusBar({
@@ -2273,6 +2304,7 @@ function BrokMailStatusBar({
 function ThreadView({
   thread,
   composer,
+  composerTextareaRef,
   setComposer,
   runAgent,
   rewriteComposer,
@@ -2285,6 +2317,7 @@ function ThreadView({
 }: {
   thread: MailThread
   composer: string
+  composerTextareaRef: React.RefObject<HTMLTextAreaElement>
   setComposer: (value: string) => void
   runAgent: (prompt: string) => void
   rewriteComposer: (style: 'shorter' | 'warmer' | 'direct') => void
@@ -2457,6 +2490,7 @@ function ThreadView({
               </div>
             </div>
             <Textarea
+              ref={composerTextareaRef}
               value={composer}
               onChange={event => setComposer(event.target.value)}
               placeholder="Draft or insert a reply..."
@@ -2731,12 +2765,20 @@ function AgentPanel({
               )}
               {message.approval && (
                 <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950 shadow-sm">
-                  <div className="mb-2 flex items-center gap-2 font-medium">
-                    <AlertTriangle className="size-4" />
-                    {message.approval.title}
+                  <div className="mb-2 flex items-start gap-2 font-medium">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <div>
+                      <p>{message.approval.title}</p>
+                      <p className="mt-0.5 text-[11px] font-normal uppercase tracking-wide text-amber-800">
+                        Approval required before any live action
+                      </p>
+                    </div>
                   </div>
                   <p className="text-xs leading-5">
                     {message.approval.description}
+                  </p>
+                  <p className="mt-2 rounded-md border border-amber-200 bg-white/55 px-2 py-1.5 text-xs leading-5">
+                    {approvalScopeLabel(message.approval)}
                   </p>
                   {handledApprovalIds.includes(message.approval.id) ? (
                     <p className="mt-3 rounded-md bg-white/70 px-2 py-1.5 text-xs font-medium">
@@ -2751,7 +2793,7 @@ function AgentPanel({
                           approveAction(message.approval!, message.draft)
                         }
                       >
-                        Confirm
+                        {approvalActionLabel(message.approval)}
                       </Button>
                       <Button
                         variant="outline"
@@ -2823,18 +2865,61 @@ function CalendarEventList({
   events,
   selectedEventId,
   isSyncing,
+  connected,
+  connectionStatus,
+  isConnecting,
+  onConnect,
+  onRefresh,
   onSelect
 }: {
   events: BrokCalendarEvent[]
   selectedEventId: string | null
   isSyncing: boolean
+  connected: boolean
+  connectionStatus: string
+  isConnecting: boolean
+  onConnect: () => Promise<void>
+  onRefresh: () => Promise<BrokCalendarEvent[]>
   onSelect: (eventId: string) => void
 }) {
   if (events.length === 0) {
     return (
-      <div className="space-y-2 p-4 text-sm text-muted-foreground">
-        <p>No upcoming calendar events yet.</p>
-        {isSyncing && <p>Syncing events...</p>}
+      <div className="flex h-full min-h-44 items-center justify-center p-5 text-center">
+        <div className="max-w-xs">
+          <CalendarDays className="mx-auto mb-3 size-5 text-muted-foreground" />
+          <p className="text-sm font-medium">
+            {isSyncing
+              ? 'Loading Calendar...'
+              : connected
+                ? 'No upcoming events loaded.'
+                : 'Connect Google Calendar.'}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {isSyncing
+              ? 'BrokMail is asking Composio for upcoming events.'
+              : connected
+                ? 'Refresh Calendar or ask BrokMail to show your next events.'
+                : connectionStatus}
+          </p>
+          <div className="mt-3 flex justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => {
+                void (connected ? onRefresh() : onConnect())
+              }}
+              disabled={isConnecting || isSyncing}
+            >
+              <CalendarDays className="size-4" />
+              {isSyncing
+                ? 'Loading...'
+                : connected
+                  ? 'Refresh Calendar'
+                  : 'Connect Calendar'}
+            </Button>
+          </div>
+        </div>
       </div>
     )
   }
