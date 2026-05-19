@@ -9,6 +9,7 @@ import {
 
 const mocks = vi.hoisted(() => {
   const getCurrentUserMock = vi.fn().mockResolvedValue(null)
+  const isAnonymousAuthModeMock = vi.fn(() => false)
   const selectLimitMock = vi.fn()
   const returningMock = vi.fn()
   const insertValuesMock = vi.fn(() => ({ returning: returningMock }))
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     getCurrentUserMock,
+    isAnonymousAuthModeMock,
     selectLimitMock,
     returningMock,
     insertMock,
@@ -28,7 +30,8 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('@/lib/auth/get-current-user', () => ({
-  getCurrentUser: mocks.getCurrentUserMock
+  getCurrentUser: mocks.getCurrentUserMock,
+  isAnonymousAuthMode: mocks.isAnonymousAuthModeMock
 }))
 
 vi.mock('@/lib/db', () => ({
@@ -54,6 +57,7 @@ describe('enforceBrokCodeAccountOwnership', () => {
     delete process.env.BROKCODE_ALLOW_LOCAL_AUTH_FALLBACK
     vi.clearAllMocks()
     mocks.getCurrentUserMock.mockResolvedValue(null)
+    mocks.isAnonymousAuthModeMock.mockReturnValue(false)
     mocks.selectLimitMock.mockReset()
     mocks.returningMock.mockReset()
   })
@@ -82,8 +86,10 @@ describe('getBrokCodeBrowserSessionAuth', () => {
   afterEach(() => {
     delete process.env.BROK_CLOUD_DEPLOYMENT
     delete process.env.BROKCODE_ALLOW_LOCAL_BROWSER_SESSION_FALLBACK
+    vi.unstubAllEnvs()
     vi.clearAllMocks()
     mocks.getCurrentUserMock.mockResolvedValue(null)
+    mocks.isAnonymousAuthModeMock.mockReturnValue(false)
     mocks.selectLimitMock.mockReset()
     mocks.returningMock.mockReset()
   })
@@ -148,6 +154,26 @@ describe('getBrokCodeBrowserSessionAuth', () => {
       workspace: {
         id: '00000000-0000-0000-0000-000000000003',
         status: 'active'
+      }
+    })
+  })
+
+  it('uses a local browser workspace for local anonymous production smoke runs', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    mocks.isAnonymousAuthModeMock.mockReturnValue(true)
+    mocks.getCurrentUserMock.mockResolvedValue({
+      id: 'user-1',
+      email: 'anonymous@local.brok'
+    })
+    mocks.selectLimitMock.mockRejectedValue(new Error('getaddrinfo ENOTFOUND'))
+
+    const auth = await getBrokCodeBrowserSessionAuth()
+
+    expect(auth).toMatchObject({
+      success: true,
+      isBrowserSession: true,
+      workspace: {
+        id: '00000000-0000-0000-0000-000000000003'
       }
     })
   })

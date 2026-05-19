@@ -4,7 +4,10 @@ import type { User } from '@supabase/supabase-js'
 import { asc, eq } from 'drizzle-orm'
 
 import { getAppAccessForUser, hasFeatureAccess } from '@/lib/auth/app-access'
-import { getCurrentUser } from '@/lib/auth/get-current-user'
+import {
+  getCurrentUser,
+  isAnonymousAuthMode
+} from '@/lib/auth/get-current-user'
 import { type AuthResult, verifyRequestAuth } from '@/lib/brok/auth'
 import {
   decryptRuntimeKey,
@@ -36,6 +39,7 @@ function canUseLocalBrowserSessionFallback() {
   if (process.env.BROKCODE_ALLOW_LOCAL_BROWSER_SESSION_FALLBACK === 'true') {
     return true
   }
+  if (isAnonymousAuthMode()) return true
   return process.env.NODE_ENV !== 'production'
 }
 
