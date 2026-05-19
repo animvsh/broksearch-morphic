@@ -11,6 +11,7 @@ import {
   maskApiKey
 } from '@/lib/api-key'
 import { getCurrentAppAccess, hasFeatureAccess } from '@/lib/auth/app-access'
+import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
 import { db } from '@/lib/db'
 import { apiKeys, workspaces } from '@/lib/db/schema'
 
@@ -24,27 +25,59 @@ export interface CreateApiKeyInput {
   monthlyBudgetCents: number
 }
 
-export async function ensureWorkspaceForUser(userId: string) {
-  const [workspace] = await db
-    .select()
-    .from(workspaces)
-    .where(eq(workspaces.ownerUserId, userId))
-    .orderBy(asc(workspaces.createdAt))
-    .limit(1)
-
-  if (workspace) {
-    return workspace
+function canUseLocalApiPlatformFallback() {
+  if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') return false
+  if (process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID) {
+    return false
   }
+  return isAnonymousAuthMode()
+}
 
-  const [createdWorkspace] = await db
-    .insert(workspaces)
-    .values({
-      name: 'Personal Workspace',
-      ownerUserId: userId
-    })
-    .returning()
+function localWorkspaceForUser(userId: string) {
+  return {
+    id: '00000000-0000-0000-0000-000000000010',
+    name: 'Local API Workspace',
+    ownerUserId: userId,
+    plan: 'free',
+    status: 'active',
+    monthlyBudgetCents: 0,
+    createdAt: new Date(0)
+  } satisfies typeof workspaces.$inferSelect
+}
 
-  return createdWorkspace
+export async function ensureWorkspaceForUser(userId: string) {
+  try {
+    const [workspace] = await db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.ownerUserId, userId))
+      .orderBy(asc(workspaces.createdAt))
+      .limit(1)
+
+    if (workspace) {
+      return workspace
+    }
+
+    const [createdWorkspace] = await db
+      .insert(workspaces)
+      .values({
+        name: 'Personal Workspace',
+        ownerUserId: userId
+      })
+      .returning()
+
+    return createdWorkspace
+  } catch (error) {
+    if (canUseLocalApiPlatformFallback()) {
+      console.error(
+        'API platform workspace lookup failed; using local workspace:',
+        error
+      )
+      return localWorkspaceForUser(userId)
+    }
+
+    throw error
+  }
 }
 
 async function requireApiPlatformUser() {
@@ -121,20 +154,31 @@ export async function createApiKey(
 export async function listApiKeys(workspaceId: string) {
   const user = await requireApiPlatformUser()
 
-  const [workspace] = await db
-    .select()
-    .from(workspaces)
-    .where(eq(workspaces.id, workspaceId))
-    .limit(1)
+  let keys: Array<typeof apiKeys.$inferSelect>
 
-  if (!workspace || workspace.ownerUserId !== user.id) {
-    throw new Error('This workspace does not belong to your Brok account.')
+  try {
+    const [workspace] = await db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .limit(1)
+
+    if (!workspace || workspace.ownerUserId !== user.id) {
+      throw new Error('This workspace does not belong to your Brok account.')
+    }
+
+    keys = await db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.workspaceId, workspaceId))
+  } catch (error) {
+    if (canUseLocalApiPlatformFallback()) {
+      console.error('API key lookup failed; using empty local list:', error)
+      keys = []
+    } else {
+      throw error
+    }
   }
-
-  const keys = await db
-    .select()
-    .from(apiKeys)
-    .where(eq(apiKeys.workspaceId, workspaceId))
 
   return keys.map(key => ({
     id: key.id,

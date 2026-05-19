@@ -216,6 +216,25 @@ function inferSpace(title: string) {
   )
 }
 
+function emptyUsageDashboardData(workspace: WorkspaceRow): UsageDashboardData {
+  return {
+    workspace,
+    apiKeys: [],
+    recentEvents: [],
+    daily: [],
+    endpointSplit: [],
+    keyUsage: [],
+    totals: {
+      requests30d: 0,
+      tokens30d: 0,
+      billedUsd30d: 0,
+      errors30d: 0,
+      activeKeys: 0,
+      budgetUsedPercent: null
+    }
+  }
+}
+
 async function getThreadRows(userId: string) {
   return withRLS(userId, async tx => {
     const rows = await tx.execute(sql`
@@ -451,17 +470,38 @@ export async function getUsageDashboardData(
   const workspace = await ensureWorkspaceForUser(userId)
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const sinceIso = since.toISOString()
-  const usageColumns = await getUsageEventColumns()
-  const surfaceColumn = usageColumns.has('surface')
-    ? sql`ue.surface`
-    : sql`'api'::text`
-  const runtimeColumn = usageColumns.has('runtime')
-    ? sql`ue.runtime`
-    : sql`null::text`
+  let keys: ApiKeyRow[]
+  let recentEvents: UsageRow[]
+  let dailyRows: Array<{
+    day: string
+    requests: number
+    tokens: number
+    billedUsd: string
+    errors: number
+  }>
+  let endpointRows: Array<{ label: string; requests: number; tokens: number }>
+  let keyRows: Array<{
+    id: string
+    name: string
+    prefix: string
+    requests: number
+    tokens: number
+    billedUsd: string
+    lastUsedAt: Date | null
+  }>
 
-  const [keys, recentEvents, dailyRows, endpointRows, keyRows] =
-    await Promise.all([
-      db.execute(sql`
+  try {
+    const usageColumns = await getUsageEventColumns()
+    const surfaceColumn = usageColumns.has('surface')
+      ? sql`ue.surface`
+      : sql`'api'::text`
+    const runtimeColumn = usageColumns.has('runtime')
+      ? sql`ue.runtime`
+      : sql`null::text`
+
+    ;[keys, recentEvents, dailyRows, endpointRows, keyRows] = await Promise.all(
+      [
+        db.execute(sql`
         select
           id,
           name,
@@ -479,7 +519,7 @@ export async function getUsageDashboardData(
         where workspace_id = ${workspace.id}
         order by created_at desc
       `) as Promise<ApiKeyRow[]>,
-      db.execute(sql`
+        db.execute(sql`
         select
           ue.id,
           ue.request_id as "requestId",
@@ -504,7 +544,7 @@ export async function getUsageDashboardData(
         order by ue.created_at desc
         limit 80
       `) as Promise<UsageRow[]>,
-      db.execute(sql`
+        db.execute(sql`
         select
           to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day,
           count(*)::int as requests,
@@ -517,15 +557,15 @@ export async function getUsageDashboardData(
         group by date_trunc('day', created_at)
         order by day asc
       `) as Promise<
-        Array<{
-          day: string
-          requests: number
-          tokens: number
-          billedUsd: string
-          errors: number
-        }>
-      >,
-      db.execute(sql`
+          Array<{
+            day: string
+            requests: number
+            tokens: number
+            billedUsd: string
+            errors: number
+          }>
+        >,
+        db.execute(sql`
         select
           endpoint as label,
           count(*)::int as requests,
@@ -536,7 +576,7 @@ export async function getUsageDashboardData(
         group by endpoint
         order by requests desc
       `) as Promise<Array<{ label: string; requests: number; tokens: number }>>,
-      db.execute(sql`
+        db.execute(sql`
         select
           coalesce(ak.id::text, 'unkeyed') as id,
           coalesce(ak.name, 'Browser or saved runtime key') as name,
@@ -553,17 +593,22 @@ export async function getUsageDashboardData(
         order by requests desc
         limit 12
       `) as Promise<
-        Array<{
-          id: string
-          name: string
-          prefix: string
-          requests: number
-          tokens: number
-          billedUsd: string
-          lastUsedAt: Date | null
-        }>
-      >
-    ])
+          Array<{
+            id: string
+            name: string
+            prefix: string
+            requests: number
+            tokens: number
+            billedUsd: string
+            lastUsedAt: Date | null
+          }>
+        >
+      ]
+    )
+  } catch (error) {
+    console.error('Usage dashboard lookup failed; using empty data:', error)
+    return emptyUsageDashboardData(workspace as WorkspaceRow)
+  }
 
   const daily = dailyRows.map(row => ({
     ...row,

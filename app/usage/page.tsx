@@ -1,7 +1,16 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
-import { Activity, AlertTriangle, BarChart3, KeyRound } from 'lucide-react'
+import {
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  BarChart3,
+  Gauge,
+  KeyRound,
+  ReceiptText,
+  Zap
+} from 'lucide-react'
 
 import { getUsageDashboardData } from '@/lib/actions/platform-dashboard'
 import { requireFeatureAccess } from '@/lib/auth/app-access'
@@ -53,56 +62,73 @@ export default async function UsagePage() {
   return (
     <div className="dashboard-shell min-h-svh px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className="flex flex-col gap-3 rounded-lg border bg-background/90 p-5 shadow-sm lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <Badge variant="outline" className="mb-3">
-              Usage
-            </Badge>
-            <h1 className="text-3xl font-semibold tracking-normal">
-              Usage Dashboard
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Requests, tokens, cost, errors, endpoint mix, and per-key activity
-              for {data.workspace.name}.
-            </p>
+        <header className="overflow-hidden rounded-xl border bg-background shadow-sm">
+          <div className="flex flex-col gap-4 p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <Badge variant="outline" className="mb-3 gap-2">
+                <Gauge className="size-3.5" />
+                Usage
+              </Badge>
+              <h1 className="text-3xl font-semibold tracking-normal sm:text-4xl">
+                Usage dashboard
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                Requests, tokens, spend, failures, endpoint mix, and per-key
+                activity for {data.workspace.name}.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/api-keys"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border bg-background px-4 text-sm font-medium hover:bg-muted"
+              >
+                <KeyRound className="size-4" />
+                API keys
+              </Link>
+              <Link
+                href="/billing"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Billing
+                <ArrowRight className="size-4" />
+              </Link>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/api-keys"
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border px-4 text-sm font-medium hover:bg-muted"
-            >
-              <KeyRound className="size-4" />
-              API keys
-            </Link>
-            <Link
-              href="/billing"
-              className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              Billing
-            </Link>
+          <div className="grid border-t bg-muted/25 sm:grid-cols-2 lg:grid-cols-5">
+            <Metric
+              icon={Zap}
+              label="30d Requests"
+              value={compact(data.totals.requests30d)}
+            />
+            <Metric
+              icon={BarChart3}
+              label="30d Tokens"
+              value={compact(data.totals.tokens30d)}
+            />
+            <Metric
+              icon={ReceiptText}
+              label="Billed"
+              value={currency(data.totals.billedUsd30d)}
+            />
+            <Metric
+              icon={AlertTriangle}
+              label="Errors"
+              value={data.totals.errors30d.toString()}
+            />
+            <Metric
+              icon={KeyRound}
+              label="Active Keys"
+              value={data.totals.activeKeys.toString()}
+            />
           </div>
         </header>
 
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          <Metric
-            label="30d Requests"
-            value={compact(data.totals.requests30d)}
-          />
-          <Metric label="30d Tokens" value={compact(data.totals.tokens30d)} />
-          <Metric label="Billed" value={currency(data.totals.billedUsd30d)} />
-          <Metric label="Errors" value={data.totals.errors30d.toString()} />
-          <Metric
-            label="Active Keys"
-            value={data.totals.activeKeys.toString()}
-          />
-        </section>
-
         <section className="grid gap-5 xl:grid-cols-[1.35fr_0.9fr]">
-          <Card className="rounded-lg">
+          <Card className="overflow-hidden rounded-xl shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <BarChart3 className="size-4" />
-                Daily Usage
+                Daily usage
               </CardTitle>
               <CardDescription>
                 Last 30 days of API, BrokCode, browser, and saved-runtime usage.
@@ -114,7 +140,7 @@ export default async function UsagePage() {
               ) : (
                 <div className="space-y-3">
                   {data.daily.map(day => (
-                    <div key={day.day}>
+                    <div key={day.day} className="rounded-lg border p-3">
                       <div className="mb-1 flex justify-between text-xs text-muted-foreground">
                         <span>{day.day}</span>
                         <span>
@@ -124,7 +150,7 @@ export default async function UsagePage() {
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-muted">
                         <div
-                          className="h-full rounded-full bg-primary"
+                          className="h-full rounded-full bg-primary transition-all"
                           style={{
                             width: `${Math.max(
                               4,
@@ -145,7 +171,7 @@ export default async function UsagePage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-lg">
+          <Card className="overflow-hidden rounded-xl shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Activity className="size-4" />
@@ -161,7 +187,7 @@ export default async function UsagePage() {
               ) : (
                 <div className="space-y-3">
                   {data.endpointSplit.map(row => (
-                    <div key={row.label} className="rounded-md border p-3">
+                    <div key={row.label} className="rounded-lg border p-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="font-medium capitalize">{row.label}</p>
                         <Badge variant="outline">{row.requests} req</Badge>
@@ -178,7 +204,7 @@ export default async function UsagePage() {
         </section>
 
         <section className="grid gap-5 xl:grid-cols-2">
-          <Card className="rounded-lg">
+          <Card className="overflow-hidden rounded-xl shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Key Breakdown</CardTitle>
               <CardDescription>
@@ -189,7 +215,7 @@ export default async function UsagePage() {
               {data.keyUsage.length === 0 ? (
                 <EmptyState text="No per-key usage yet." />
               ) : (
-                <div className="divide-y rounded-md border">
+                <div className="divide-y overflow-hidden rounded-xl border">
                   {data.keyUsage.map(key => (
                     <div
                       key={key.id}
@@ -214,7 +240,7 @@ export default async function UsagePage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-lg">
+          <Card className="overflow-hidden rounded-xl shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Recent Events</CardTitle>
               <CardDescription>
@@ -225,7 +251,7 @@ export default async function UsagePage() {
               {data.recentEvents.length === 0 ? (
                 <EmptyState text="No request ledger entries yet." />
               ) : (
-                <div className="max-h-[520px] overflow-auto rounded-md border">
+                <div className="max-h-[520px] overflow-auto rounded-xl border">
                   <table className="w-full min-w-[720px] text-sm">
                     <thead className="sticky top-0 bg-background">
                       <tr className="border-b text-left text-xs text-muted-foreground">
@@ -285,13 +311,26 @@ export default async function UsagePage() {
   )
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: typeof KeyRound
+  label: string
+  value: string
+}) {
   return (
-    <div className="rounded-lg border bg-background/90 p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
+    <div className="flex items-center gap-3 border-b p-4 last:border-b-0 sm:[&:nth-child(2n)]:border-r-0 sm:border-r lg:border-b-0 lg:[&:nth-child(2n)]:border-r lg:last:border-r-0">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-background shadow-sm ring-1 ring-border">
+        <Icon className="size-4 text-muted-foreground" />
+      </div>
+      <div>
+        <p className="text-2xl font-semibold leading-none">{value}</p>
+        <p className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+      </div>
     </div>
   )
 }
