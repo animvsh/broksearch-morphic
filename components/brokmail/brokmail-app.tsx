@@ -640,18 +640,29 @@ export function BrokMailApp() {
   }, [deferredQuery, sortMode, threads, view])
 
   const counts = useMemo(
-    () => ({
-      inbox: threads.filter(thread => hasLabel(thread, 'INBOX')).length,
-      'needs-reply': threads.filter(thread => thread.needsReply).length,
-      'follow-ups': threads.filter(thread => thread.waitingOnReply).length,
-      drafts: messages.filter(message => message.draft).length,
-      sent: threads.filter(thread => hasLabel(thread, 'SENT')).length,
-      newsletters: threads.filter(thread => thread.category === 'newsletter')
-        .length,
-      receipts: threads.filter(thread => thread.category === 'receipt').length,
-      calendar: calendarEvents.length,
-      automations: automationRules.length
-    }),
+    () =>
+      threads.reduce(
+        (acc, thread) => {
+          if (hasLabel(thread, 'INBOX')) acc.inbox += 1
+          if (thread.needsReply) acc['needs-reply'] += 1
+          if (thread.waitingOnReply) acc['follow-ups'] += 1
+          if (hasLabel(thread, 'SENT')) acc.sent += 1
+          if (thread.category === 'newsletter') acc.newsletters += 1
+          if (thread.category === 'receipt') acc.receipts += 1
+          return acc
+        },
+        {
+          inbox: 0,
+          'needs-reply': 0,
+          'follow-ups': 0,
+          drafts: messages.filter(message => message.draft).length,
+          sent: 0,
+          newsletters: 0,
+          receipts: 0,
+          calendar: calendarEvents.length,
+          automations: automationRules.length
+        } satisfies Record<MailboxView, number>
+      ),
     [automationRules.length, calendarEvents.length, messages, threads]
   )
   const listCount =
@@ -890,10 +901,12 @@ export function BrokMailApp() {
       const gmailStatus = await gmailResponse.json()
       const gcalStatus = await gcalResponse.json()
 
+      const liveLoads: Array<Promise<unknown>> = []
+
       if (gmailStatus.connected) {
         setConnected(true)
         setConnectionMode('composio')
-        await loadComposioGmailThreads()
+        liveLoads.push(loadComposioGmailThreads())
       } else {
         setConnectionStatus(
           gmailStatus.message ||
@@ -904,13 +917,15 @@ export function BrokMailApp() {
       if (gcalStatus.connected) {
         setCalendarConnected(true)
         setCalendarConnectionMode('composio')
-        await loadComposioCalendarEvents()
+        liveLoads.push(loadComposioCalendarEvents())
       } else {
         setCalendarConnectionStatus(
           gcalStatus.message ||
             'Connect Google Calendar through Composio to use live calendar actions.'
         )
       }
+
+      await Promise.allSettled(liveLoads)
     } catch {
       setConnectionStatus('Connect Gmail to load live mail.')
       setCalendarConnectionStatus(

@@ -813,7 +813,6 @@ export function BrokCodeApp({
   const [selectedId, setSelectedId] = useState('')
   const [input, setInput] = useState('')
   const [isRunning, setIsRunning] = useState(false)
-  const [livePulse, setLivePulse] = useState(0)
   const [runHintIndex, setRunHintIndex] = useState(0)
   const [activeRuntime, setActiveRuntime] =
     useState<BrokCodeRuntime>('not_connected')
@@ -875,14 +874,6 @@ export function BrokCodeApp({
         'I am Brok Code. You are signed in, so browser runs are ready. Connect GitHub for repo work, or add a Brok API key only when you want CLI/TUI sync and external agent access.'
     }
   ])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setLivePulse(value => (value + 1) % 4)
-    }, 1000)
-
-    return () => window.clearInterval(timer)
-  }, [])
 
   useEffect(() => {
     if (!isRunning) {
@@ -1361,8 +1352,9 @@ export function BrokCodeApp({
     if (!hasLiveRuntime || (apiKey && !isValidBrokApiKey(apiKey))) return
 
     const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
       void refreshSyncedSessions(apiKey)
-    }, 5000)
+    }, 15000)
 
     return () => window.clearInterval(timer)
   }, [apiKey, hasLiveRuntime, refreshSyncedSessions])
@@ -3193,7 +3185,6 @@ export function BrokCodeApp({
                   <div className="mt-3">
                     <SubagentDetail
                       agent={selectedAgent}
-                      livePulse={livePulse}
                       onFocus={focusAgent}
                     />
                   </div>
@@ -4002,17 +3993,14 @@ function BrowserPreviewPanel({
 
 function SubagentCard({
   agent,
-  livePulse,
   selected,
   onSelect
 }: {
   agent: BrokCodeSubagent
-  livePulse: number
   selected: boolean
   onSelect: () => void
 }) {
   const StatusIcon = statusMeta[agent.status].icon
-  const isActive = agent.status === 'running' && livePulse % 2 === 0
 
   return (
     <button
@@ -4039,7 +4027,7 @@ function SubagentCard({
                 className={cn(
                   'size-2 rounded-full',
                   statusTone(agent.status),
-                  isActive && 'animate-pulse'
+                  agent.status === 'running' && 'animate-pulse'
                 )}
               />
             </div>
@@ -4067,15 +4055,12 @@ function SubagentCard({
 
 function SubagentDetail({
   agent,
-  livePulse,
   onFocus
 }: {
   agent: BrokCodeSubagent
-  livePulse: number
   onFocus: (agent: BrokCodeSubagent) => void
 }) {
   const StatusIcon = statusMeta[agent.status].icon
-  const liveDots = '.'.repeat(livePulse)
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-0 lg:p-4">
@@ -4124,7 +4109,13 @@ function SubagentDetail({
             </div>
             <p className="rounded-md border bg-muted/30 p-3 text-sm leading-6">
               {agent.currentTask}
-              {agent.status === 'running' ? liveDots : ''}
+              {agent.status === 'running' ? (
+                <span className="typing-dots ml-1 align-middle" aria-hidden>
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              ) : null}
             </p>
           </section>
 
