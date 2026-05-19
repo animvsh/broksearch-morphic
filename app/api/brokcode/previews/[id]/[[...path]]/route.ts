@@ -7,7 +7,9 @@ import {
 import { getManagedPreviewAsset } from '@/lib/brokcode/preview'
 import {
   getBrokCodeProject,
-  listBrokCodeProjectFiles
+  getBrokCodeProjectById,
+  listBrokCodeProjectFiles,
+  listBrokCodeProjectFilesByProjectId
 } from '@/lib/brokcode/project-store'
 
 export const runtime = 'nodejs'
@@ -50,11 +52,49 @@ async function authorizeProject(request: Request, id: string) {
   return { ok: true as const, authResult, project }
 }
 
+async function getPublicPreviewProject(id: string) {
+  const project = await getBrokCodeProjectById({ id })
+  if (!project) return null
+
+  const isPreviewReady =
+    project.status === 'preview_ready' ||
+    project.status === 'deployed' ||
+    Boolean(project.previewUrl) ||
+    Boolean(project.deploymentUrl)
+  if (!isPreviewReady) return null
+
+  return project
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string; path?: string[] }> }
 ) {
   const { id, path } = await params
+  const publicProject = await getPublicPreviewProject(id)
+
+  if (publicProject) {
+    const files = await listBrokCodeProjectFilesByProjectId({
+      projectId: publicProject.id
+    })
+    const asset = getManagedPreviewAsset({
+      files,
+      pathParts: path,
+      project: publicProject
+    })
+
+    if (asset) {
+      return new NextResponse(asset.content, {
+        status: asset.status,
+        headers: {
+          'Cache-Control': 'no-store',
+          'Content-Type': asset.contentType,
+          'X-BrokCode-Preview-Path': asset.path
+        }
+      })
+    }
+  }
+
   const access = await authorizeProject(request, id)
   if (!access.ok) return access.response
 

@@ -9,6 +9,8 @@ export const maxDuration = 300
 
 const MAX_THREADS = 20
 const MAX_EVENTS = 20
+const MAX_MESSAGES_PER_THREAD = 6
+const MAX_MESSAGE_BODY_CHARS = 4000
 
 function compactThread(thread: any) {
   return {
@@ -31,6 +33,18 @@ function compactThread(thread: any) {
       : [],
     openQuestions: Array.isArray(thread?.openQuestions)
       ? thread.openQuestions.slice(0, 6)
+      : [],
+    messages: Array.isArray(thread?.messages)
+      ? thread.messages.slice(-MAX_MESSAGES_PER_THREAD).map((message: any) => ({
+          id: message?.id,
+          from: message?.from,
+          to: Array.isArray(message?.to) ? message.to.slice(0, 8) : [],
+          sentAt: message?.sentAt,
+          body:
+            typeof message?.body === 'string'
+              ? message.body.slice(0, MAX_MESSAGE_BODY_CHARS)
+              : ''
+        }))
       : [],
     receivedAt: thread?.receivedAt
   }

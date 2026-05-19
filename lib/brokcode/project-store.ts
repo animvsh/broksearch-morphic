@@ -377,6 +377,28 @@ export async function getBrokCodeProject({
   return getFallbackProject({ id, workspaceId, userId })
 }
 
+export async function getBrokCodeProjectById({ id }: { id: string }) {
+  if (canUseDatabaseStore()) {
+    try {
+      const [project] = await db
+        .select()
+        .from(brokCodeProjects)
+        .where(eq(brokCodeProjects.id, id))
+        .limit(1)
+
+      return project ?? null
+    } catch (error) {
+      console.error(
+        'BrokCode project DB public get failed; using file store:',
+        error
+      )
+    }
+  }
+
+  const store = await readProjectStore()
+  return store.projects.find(project => project.id === id) ?? null
+}
+
 export async function updateBrokCodeProjectBackend({
   projectId,
   workspaceId,
@@ -618,6 +640,32 @@ export async function listBrokCodeProjectFiles({
     .filter(
       file => file.projectId === projectId && file.workspaceId === workspaceId
     )
+    .sort((a, b) => a.path.localeCompare(b.path))
+}
+
+export async function listBrokCodeProjectFilesByProjectId({
+  projectId
+}: {
+  projectId: string
+}) {
+  if (canUseDatabaseStore()) {
+    try {
+      return await db
+        .select()
+        .from(brokCodeProjectFiles)
+        .where(eq(brokCodeProjectFiles.projectId, projectId))
+        .orderBy(asc(brokCodeProjectFiles.path))
+    } catch (error) {
+      console.error(
+        'BrokCode project file DB public list failed; using file store:',
+        error
+      )
+    }
+  }
+
+  const store = await readProjectStore()
+  return store.files
+    .filter(file => file.projectId === projectId)
     .sort((a, b) => a.path.localeCompare(b.path))
 }
 

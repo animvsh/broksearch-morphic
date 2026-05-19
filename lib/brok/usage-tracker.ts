@@ -206,6 +206,15 @@ export async function checkUsageLimits({
   apiKey: typeof apiKeys.$inferSelect
   workspace: typeof workspaces.$inferSelect
 }): Promise<UsageLimitResult> {
+  if (
+    process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK === 'true' &&
+    process.env.BROK_CLOUD_DEPLOYMENT !== 'true' &&
+    apiKey.id === '00000000-0000-0000-0000-000000000001' &&
+    workspace.id === '00000000-0000-0000-0000-000000000000'
+  ) {
+    return { allowed: true }
+  }
+
   try {
     const dailyLimit = apiKey.dailyRequestLimit ?? 0
     if (dailyLimit > 0) {

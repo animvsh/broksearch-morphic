@@ -16,6 +16,7 @@
     "test:watch": "vitest --watch",
     "brokcode": "node scripts/brokcode-tui.mjs",
     "chat": "bun run scripts/chat-cli.ts",
+    "smoke:brokcode": "npx --yes tsx --env-file=.env.local scripts/smoke-brokcode.ts",
     "smoke:platform": "npx --yes tsx --env-file=.env.local scripts/smoke-platform.ts",
     "stress:platform": "npx --yes tsx --env-file=.env.local scripts/stress-platform.ts"
   },

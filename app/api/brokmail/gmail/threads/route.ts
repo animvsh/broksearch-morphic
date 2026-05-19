@@ -291,6 +291,62 @@ function toMailThread(message: Record<string, unknown>): MailThread {
   }
 }
 
+function groupMailThreads(messages: Record<string, unknown>[]): MailThread[] {
+  const threads = new Map<string, MailThread>()
+
+  for (const message of messages) {
+    const thread = toMailThread(message)
+    const existing = threads.get(thread.id)
+    if (!existing) {
+      threads.set(thread.id, thread)
+      continue
+    }
+
+    const messageIds = new Set([
+      ...(existing.providerMessageIds ?? []),
+      ...(thread.providerMessageIds ?? [])
+    ])
+    const labels = new Set([...existing.labels, ...thread.labels])
+    const existingMessageIds = new Set(
+      existing.messages.map(existingMessage => existingMessage.id)
+    )
+    const nextMessages = [
+      ...existing.messages,
+      ...thread.messages.filter(message => !existingMessageIds.has(message.id))
+    ]
+
+    threads.set(thread.id, {
+      ...existing,
+      sender: thread.sender || existing.sender,
+      senderEmail: thread.senderEmail || existing.senderEmail,
+      subject: thread.subject || existing.subject,
+      snippet: thread.snippet || existing.snippet,
+      aiSummary:
+        nextMessages.length > 1
+          ? `Live Composio Gmail conversation with ${nextMessages.length} messages.`
+          : existing.aiSummary,
+      receivedAt: thread.receivedAt || existing.receivedAt,
+      labels: Array.from(labels),
+      unread: existing.unread || thread.unread,
+      starred: existing.starred || thread.starred,
+      important: existing.important || thread.important,
+      hasAttachments: existing.hasAttachments || thread.hasAttachments,
+      needsReply: existing.needsReply || thread.needsReply,
+      waitingOnReply: existing.waitingOnReply || thread.waitingOnReply,
+      providerMessageIds: Array.from(messageIds),
+      messages: nextMessages,
+      actionItems: Array.from(
+        new Set([...existing.actionItems, ...thread.actionItems])
+      ),
+      openQuestions: Array.from(
+        new Set([...existing.openQuestions, ...thread.openQuestions])
+      )
+    })
+  }
+
+  return Array.from(threads.values())
+}
+
 export async function GET() {
   if (!isComposioConfigured()) {
     return NextResponse.json(
@@ -360,7 +416,7 @@ export async function GET() {
         provider: 'composio',
         connectedAccountId: account.id,
         toolSlug,
-        threads: messages.map(toMailThread)
+        threads: groupMailThreads(messages)
       })
     } catch (error) {
       errors.push(

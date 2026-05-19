@@ -163,6 +163,8 @@ function printHelp() {
   /project new <name>          Create a saved project
   /project select <id|slug>    Select a project for file commands
   /project show                Show the selected project
+  /preview [id|slug]           Refresh and print the managed preview URL
+  /deploy [id|slug]            Publish selected project to its managed URL
   /backend status              Show selected project backend
   /backend insforge <url>      Link existing InsForge backend
   /backend provision           Create an InsForge trial backend
@@ -203,6 +205,17 @@ function getProjectFilesEndpoint(projectId) {
   )
 }
 
+function getProjectPreviewEndpoint(projectId) {
+  return new URL(
+    `/api/brokcode/projects/${encodeURIComponent(projectId)}/preview`,
+    syncBaseUrl
+  )
+}
+
+function getDeployEndpoint() {
+  return new URL('/api/brokcode/deploy', syncBaseUrl)
+}
+
 function getProjectBackendEndpoint(projectId) {
   return new URL(
     `/api/brokcode/projects/${encodeURIComponent(projectId)}/backend`,
@@ -238,7 +251,9 @@ async function requestJson(url, options = {}) {
     const message =
       typeof body?.error === 'string'
         ? body.error
-        : `Request failed: ${response.status}`
+        : typeof body?.error?.message === 'string'
+          ? body.error.message
+          : `Request failed: ${response.status}`
     output.write(`${colors.red}${message}${colors.reset}\n`)
     return null
   }
@@ -531,6 +546,47 @@ async function showProjectFiles(value) {
     output.write(
       `${file.path} ${colors.dim}${file.language || 'text'} ${file.updatedAt || ''}${colors.reset}\n`
     )
+  }
+}
+
+async function refreshProjectPreview(value) {
+  const projectId = await resolveProjectId(value)
+  if (!projectId) return
+
+  const body = await requestJson(getProjectPreviewEndpoint(projectId), {
+    method: 'POST'
+  })
+  if (!body?.previewUrl) return
+
+  output.write(
+    `${colors.green}Preview ready:${colors.reset} ${body.previewUrl}\n`
+  )
+  if (body.fileCount !== undefined) {
+    output.write(`${colors.dim}Files: ${body.fileCount}${colors.reset}\n`)
+  }
+}
+
+async function deployProject(value) {
+  const projectId = await resolveProjectId(value)
+  if (!projectId) return
+
+  const body = await requestJson(getDeployEndpoint(), {
+    method: 'POST',
+    body: JSON.stringify({
+      project_id: projectId,
+      source: 'tui'
+    })
+  })
+  if (!body) return
+
+  const url = body.deploymentPreviewUrl || body.previewUrl
+  output.write(
+    `${colors.green}Deploy ${body.status || 'ready'}:${colors.reset} ${
+      url || body.message || 'no URL returned'
+    }\n`
+  )
+  if (body.strategy) {
+    output.write(`${colors.dim}Strategy: ${body.strategy}${colors.reset}\n`)
   }
 }
 
@@ -831,6 +887,8 @@ async function handleCommand(raw) {
     )
     return
   }
+  if (name === '/preview') return refreshProjectPreview(args[0])
+  if (name === '/deploy') return deployProject(args[0])
   if (name === '/files') return showProjectFiles(args[0])
   if (name === '/file') {
     if (args[0] === 'put') return putProjectFile(args)
@@ -935,6 +993,8 @@ async function sendChat(content) {
   let buffer = ''
   let assistant = ''
   let resultContent = ''
+  let previewUrl = ''
+  let generatedFiles = []
   let currentEvent = 'message'
   let streamFailed = false
 
@@ -981,8 +1041,26 @@ async function sendChat(content) {
           continue
         }
 
+        if (currentEvent === 'files' && Array.isArray(payload.files)) {
+          generatedFiles = payload.files.map(file => file?.path).filter(Boolean)
+          output.write(
+            `\n${colors.green}Saved files:${colors.reset} ${generatedFiles.join(', ')}\n`
+          )
+          continue
+        }
+
+        if (currentEvent === 'preview' && payload.preview_url) {
+          previewUrl = payload.preview_url
+          output.write(`${colors.green}Preview:${colors.reset} ${previewUrl}\n`)
+          continue
+        }
+
         if (payload.runtime && typeof payload.content === 'string') {
           resultContent = payload.content
+          if (payload.preview_url) previewUrl = payload.preview_url
+          if (Array.isArray(payload.generated_files)) {
+            generatedFiles = payload.generated_files
+          }
           continue
         }
 
@@ -1001,6 +1079,14 @@ async function sendChat(content) {
   }
 
   output.write('\n\n')
+  if (generatedFiles.length > 0) {
+    output.write(
+      `${colors.green}Generated:${colors.reset} ${generatedFiles.join(', ')}\n`
+    )
+  }
+  if (previewUrl) {
+    output.write(`${colors.green}Preview URL:${colors.reset} ${previewUrl}\n`)
+  }
   if (streamFailed) return
 
   messages.push({ role: 'assistant', content: assistant })

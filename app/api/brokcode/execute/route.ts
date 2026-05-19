@@ -270,13 +270,15 @@ async function persistGeneratedProjectOutput({
   projectId,
   origin,
   content,
-  taskId
+  taskId,
+  send
 }: {
   auth: SuccessfulAuth
   projectId?: string | null
   origin: string
   content: string
   taskId?: string
+  send?: (event: string, payload: unknown) => void
 }) {
   if (!projectId) return null
 
@@ -312,6 +314,15 @@ async function persistGeneratedProjectOutput({
     })
   }
 
+  send?.('files', {
+    project_id: project.id,
+    count: files.length,
+    files: files.map(file => ({
+      path: file.path,
+      language: file.language
+    }))
+  })
+
   const previewUrl = makeManagedPreviewUrl({
     origin,
     projectId: project.id
@@ -340,6 +351,12 @@ async function persistGeneratedProjectOutput({
       console.error('Failed to append BrokCode preview event:', error)
     })
   }
+
+  send?.('preview', {
+    project_id: project.id,
+    preview_url: previewUrl,
+    file_count: files.length
+  })
 
   return {
     files,
@@ -741,7 +758,8 @@ function createExecutionStream({
                 projectId: usageContext.projectId,
                 origin: requestOrigin,
                 content: result.content,
-                taskId
+                taskId,
+                send
               }).catch(error => {
                 console.error('Failed to persist Pi BrokCode output:', error)
                 return null
@@ -884,7 +902,8 @@ function createExecutionStream({
                 projectId: usageContext.projectId,
                 origin: requestOrigin,
                 content,
-                taskId
+                taskId,
+                send
               }).catch(error => {
                 console.error(
                   'Failed to persist OpenCode BrokCode output:',
@@ -1064,7 +1083,8 @@ function createExecutionStream({
             projectId: usageContext.projectId,
             origin: requestOrigin,
             content,
-            taskId
+            taskId,
+            send
           }).catch(error => {
             console.error('Failed to persist BrokCode output:', error)
             return null
