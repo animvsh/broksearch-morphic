@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { execFile } from 'node:child_process'
-import { access } from 'node:fs/promises'
-import path from 'node:path'
 import { promisify } from 'node:util'
 
 import { unauthorizedResponse } from '@/lib/brok/auth'
@@ -74,18 +72,11 @@ async function resolveGitWorkingDirectory() {
   const configured = process.env.BROKCODE_GIT_DIR?.trim()
   if (configured) return configured
 
-  let current = process.cwd()
-  while (true) {
-    try {
-      await access(path.join(current, '.git'))
-      return current
-    } catch {}
-
-    const parent = path.dirname(current)
-    if (parent === current) {
-      return process.cwd()
-    }
-    current = parent
+  try {
+    const root = await gitOutput(['rev-parse', '--show-toplevel'], process.cwd())
+    return root || process.cwd()
+  } catch {
+    return process.cwd()
   }
 }
 

@@ -194,14 +194,22 @@ export async function GET() {
         toolSlug,
         userId: user.id,
         connectedAccountId: account.id,
-        arguments: {
-          calendarId: 'primary',
-          maxResults: 25,
-          singleEvents: true,
-          orderBy: 'startTime',
-          timeMin,
-          timeMax
-        }
+        arguments: toolSlug.includes('ALL_CALENDARS')
+          ? {
+              time_min: timeMin,
+              time_max: timeMax,
+              single_events: true,
+              max_results_per_calendar: 25,
+              response_detail: 'full'
+            }
+          : {
+              calendarId: 'primary',
+              maxResults: 25,
+              singleEvents: true,
+              orderBy: 'startTime',
+              timeMin,
+              timeMax
+            }
       })
       const events = extractEvents(payload)
         .map(toBrokCalendarEvent)
@@ -222,7 +230,12 @@ export async function GET() {
     {
       error:
         errors.length > 0
-          ? `Could not list Google Calendar events through Composio. ${Array.from(new Set(errors.map(error => error.replace(/^[^:]+:\s*/, '')))).join(' ')}`
+          ? `Could not list Google Calendar events. ${
+              Array.from(
+                new Set(errors.map(error => error.replace(/^[^:]+:\s*/, '')))
+              )[0] ||
+              'Calendar is connected, but Brok could not read events through Composio.'
+            }`
           : 'Composio Google Calendar list tools did not return events for this account.',
       attemptedTools: resolveEventToolSlugs()
     },

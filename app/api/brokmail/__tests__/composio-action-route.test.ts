@@ -50,6 +50,7 @@ function actionRequest(body: unknown) {
 
 describe('BrokMail Composio action route', () => {
   beforeEach(() => {
+    delete process.env.COMPOSIO_GCAL_TOOLKIT_SLUGS
     vi.clearAllMocks()
     vi.mocked(isComposioConfigured).mockReturnValue(true)
     vi.mocked(getCurrentUser).mockResolvedValue({ id: 'user_123' } as any)
@@ -166,7 +167,66 @@ describe('BrokMail Composio action route', () => {
       expect.objectContaining({
         toolSlug: 'GMAIL_CREATE_EMAIL_DRAFT',
         userId: 'user_123',
-        connectedAccountId: 'acct_gmail'
+        connectedAccountId: 'acct_gmail',
+        arguments: expect.objectContaining({
+          body: 'Thanks, I will follow up.',
+          thread_id: 'provider_thread_1',
+          to: 'sender@example.com'
+        })
+      })
+    )
+  })
+
+  it('uses configured calendar toolkit candidates for calendar writes', async () => {
+    process.env.COMPOSIO_GCAL_TOOLKIT_SLUGS = 'googlecalendar'
+    vi.mocked(listConnectedAccounts).mockImplementation(
+      async (_userId, toolkitSlug) =>
+        toolkitSlug === 'googlecalendar'
+          ? ([
+              {
+                id: 'acct_calendar',
+                status: 'active',
+                toolkit_slug: 'googlecalendar'
+              }
+            ] as any)
+          : []
+    )
+    const payload = {
+      action: 'create_calendar_event' as const,
+      threads: [],
+      draftBody: undefined,
+      calendarEvent: {
+        summary: 'Prep call',
+        startAt: '2026-06-01T15:00:00.000Z',
+        endAt: '2026-06-01T15:30:00.000Z'
+      }
+    }
+    const approval = signBrokMailApproval({
+      userId: 'user_123',
+      payload
+    })
+
+    const response = await runBrokMailAction(
+      actionRequest({
+        ...payload,
+        approval
+      }) as any
+    )
+
+    expect(response.status).toBe(200)
+    expect(listConnectedAccounts).toHaveBeenCalledWith(
+      'user_123',
+      'googlecalendar',
+      10
+    )
+    expect(executeComposioTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connectedAccountId: 'acct_calendar',
+        arguments: expect.objectContaining({
+          calendar_id: 'primary',
+          summary: 'Prep call',
+          start_datetime: '2026-06-01T15:00:00.000Z'
+        })
       })
     )
   })

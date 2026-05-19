@@ -2,7 +2,13 @@ import { type NextRequest, NextResponse } from 'next/server'
 
 import { createServerClient } from '@supabase/ssr'
 
+import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
+
 export async function updateSession(request: NextRequest) {
+  if (isAnonymousAuthMode()) {
+    return NextResponse.next({ request })
+  }
+
   let supabaseResponse = NextResponse.next({
     request
   })

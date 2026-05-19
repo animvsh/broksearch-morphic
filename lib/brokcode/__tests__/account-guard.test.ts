@@ -80,6 +80,8 @@ describe('enforceBrokCodeAccountOwnership', () => {
 
 describe('getBrokCodeBrowserSessionAuth', () => {
   afterEach(() => {
+    delete process.env.BROK_CLOUD_DEPLOYMENT
+    delete process.env.BROKCODE_ALLOW_LOCAL_BROWSER_SESSION_FALLBACK
     vi.clearAllMocks()
     mocks.getCurrentUserMock.mockResolvedValue(null)
     mocks.selectLimitMock.mockReset()
@@ -125,5 +127,39 @@ describe('getBrokCodeBrowserSessionAuth', () => {
       }
     })
     expect(mocks.insertMock).toHaveBeenCalled()
+  })
+
+  it('uses a local browser workspace when dev database storage is unavailable', async () => {
+    mocks.getCurrentUserMock.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com'
+    })
+    mocks.selectLimitMock.mockRejectedValue(new Error('getaddrinfo ENOTFOUND'))
+
+    const auth = await getBrokCodeBrowserSessionAuth()
+
+    expect(auth).toMatchObject({
+      success: true,
+      isBrowserSession: true,
+      apiKey: {
+        userId: 'user-1',
+        workspaceId: '00000000-0000-0000-0000-000000000003'
+      },
+      workspace: {
+        id: '00000000-0000-0000-0000-000000000003',
+        status: 'active'
+      }
+    })
+  })
+
+  it('does not synthesize a browser workspace in cloud deployments', async () => {
+    process.env.BROK_CLOUD_DEPLOYMENT = 'true'
+    mocks.getCurrentUserMock.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com'
+    })
+    mocks.selectLimitMock.mockRejectedValue(new Error('getaddrinfo ENOTFOUND'))
+
+    await expect(getBrokCodeBrowserSessionAuth()).resolves.toBeNull()
   })
 })

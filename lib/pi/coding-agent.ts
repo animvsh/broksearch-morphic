@@ -21,6 +21,7 @@ export type PiAgentRunInput = {
   model?: string
   tools?: string[]
   noTools?: 'all' | 'builtin'
+  timeoutMs?: number
 }
 
 export type PiAgentRunResult = {
@@ -175,6 +176,84 @@ function selectModel({
   return modelRegistry.getAvailable()[0]
 }
 
+function parsePositiveInteger(value: string | undefined) {
+  if (!value?.trim()) return null
+
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+
+  return Math.round(parsed)
+}
+
+function resolvePiAgentTimeoutMs(mode: PiAgentMode, timeoutMs?: number) {
+  if (Number.isFinite(timeoutMs) && timeoutMs && timeoutMs > 0) {
+    return Math.round(timeoutMs)
+  }
+
+  return (
+    parsePositiveInteger(process.env.PI_AGENT_TIMEOUT_MS) ??
+    parsePositiveInteger(
+      mode === 'brokcode'
+        ? process.env.BROKCODE_PI_TIMEOUT_MS
+        : process.env.BROKMAIL_PI_TIMEOUT_MS
+    ) ??
+    (mode === 'brokcode' ? 120_000 : 45_000)
+  )
+}
+
+function formatPiAgentPromptError({
+  error,
+  provider,
+  model,
+  mode
+}: {
+  error: unknown
+  provider: string
+  model: string
+  mode: PiAgentMode
+}) {
+  const message =
+    error instanceof Error ? error.message : 'Pi coding-agent runtime failed.'
+
+  if (/^fetch failed$/i.test(message.trim())) {
+    return new Error(
+      `Pi coding-agent could not reach the configured model runtime for ${mode} (${provider}/${model}). Check PI_AGENT_* base URL, model, and API key configuration, then try again.`
+    )
+  }
+
+  return error instanceof Error ? error : new Error(message)
+}
+
+async function withPiAgentTimeout<T>({
+  promise,
+  timeoutMs,
+  mode
+}: {
+  promise: Promise<T>
+  timeoutMs: number
+  mode: PiAgentMode
+}) {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(
+        new Error(
+          `Pi coding-agent timed out after ${Math.round(
+            timeoutMs / 1000
+          )}s while running ${mode}. Check PI_AGENT_* model settings or the Pi runtime service, then try again.`
+        )
+      )
+    }, timeoutMs)
+  })
+
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
 export function isPiAgentConfigured() {
   const authStorage = configureAuthStorage()
   const custom = createOpenAiCompatibleModelsFile()
@@ -203,7 +282,8 @@ export async function runPiAgentPrompt({
   provider,
   model,
   tools,
-  noTools
+  noTools,
+  timeoutMs
 }: PiAgentRunInput): Promise<PiAgentRunResult> {
   const authStorage = configureAuthStorage()
   const custom = createOpenAiCompatibleModelsFile()
@@ -248,6 +328,7 @@ export async function runPiAgentPrompt({
 
   let content = ''
   let eventCount = 0
+  const agentTimeoutMs = resolvePiAgentTimeoutMs(mode, timeoutMs)
 
   const unsubscribe = session.subscribe((event: any) => {
     eventCount += 1
@@ -262,7 +343,21 @@ export async function runPiAgentPrompt({
   })
 
   try {
-    await session.prompt(prompt)
+    try {
+      await withPiAgentTimeout({
+        promise: session.prompt(prompt),
+        timeoutMs: agentTimeoutMs,
+        mode
+      })
+    } catch (error) {
+      throw formatPiAgentPromptError({
+        error,
+        provider: selectedModel.provider,
+        model: selectedModel.id,
+        mode
+      })
+    }
+
     const finalContent = stripThinkingBlocks(content).trim()
     if (!finalContent) {
       throw new Error('Pi coding-agent completed without assistant output.')

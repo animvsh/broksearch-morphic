@@ -1,8 +1,38 @@
+import type { User } from '@supabase/supabase-js'
+
 import { createClient } from '@/lib/supabase/server'
 import { perfLog } from '@/lib/utils/perf-logging'
 import { incrementAuthCallCount } from '@/lib/utils/perf-tracking'
 
+export function isAnonymousAuthMode() {
+  return (
+    process.env.ENABLE_AUTH === 'false' &&
+    process.env.BROK_CLOUD_DEPLOYMENT !== 'true'
+  )
+}
+
+function getAnonymousUser(): User {
+  const id =
+    process.env.ANONYMOUS_USER_ID || '00000000-0000-0000-0000-000000000000'
+  const now = new Date(0).toISOString()
+
+  return {
+    id,
+    app_metadata: { provider: 'anonymous', providers: ['anonymous'] },
+    aud: 'authenticated',
+    created_at: now,
+    email: process.env.ANONYMOUS_USER_EMAIL || 'anonymous@local.brok',
+    role: 'authenticated',
+    updated_at: now,
+    user_metadata: { name: 'Local Brok User' }
+  } as User
+}
+
 export async function getCurrentUser() {
+  if (isAnonymousAuthMode()) {
+    return getAnonymousUser()
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -27,7 +57,7 @@ export async function getCurrentUserId() {
     process.env.ANONYMOUS_USER_ID || '00000000-0000-0000-0000-000000000000'
 
   // Skip authentication mode (for personal Docker deployments)
-  if (process.env.ENABLE_AUTH === 'false') {
+  if (isAnonymousAuthMode()) {
     // Guard: Prevent disabling auth in Brok Cloud deployments
     if (cloudDeployment) {
       throw new Error(

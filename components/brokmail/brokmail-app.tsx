@@ -77,7 +77,7 @@ type ApprovalState = {
   title: string
   description: string
   action:
-    | 'send'
+    | 'create_draft'
     | 'archive'
     | 'label'
     | 'automation'
@@ -164,6 +164,86 @@ function cleanIntegrationError(
 function hasLabel(thread: MailThread, label: string) {
   const normalized = label.toLowerCase()
   return thread.labels.some(item => item.toLowerCase() === normalized)
+}
+
+const SEARCH_STOP_WORDS = new Set([
+  'a',
+  'about',
+  'an',
+  'and',
+  'ask',
+  'can',
+  'could',
+  'draft',
+  'email',
+  'emails',
+  'find',
+  'for',
+  'from',
+  'in',
+  'mail',
+  'me',
+  'my',
+  'please',
+  'reply',
+  'search',
+  'show',
+  'the',
+  'thread',
+  'to',
+  'with'
+])
+
+function extractMailSearchTerms(command: string) {
+  return command
+    .toLowerCase()
+    .replace(/[^a-z0-9@._+-]+/g, ' ')
+    .split(/\s+/)
+    .map(term => term.trim())
+    .filter(term => term.length > 1 && !SEARCH_STOP_WORDS.has(term))
+}
+
+function scoreMailSearchMatch(thread: MailThread, terms: string[]) {
+  const haystack = [
+    thread.sender,
+    thread.senderEmail,
+    thread.subject,
+    thread.snippet,
+    thread.aiSummary,
+    thread.labels.join(' '),
+    ...thread.messages.flatMap(message => [message.from, message.body])
+  ]
+    .join(' ')
+    .toLowerCase()
+
+  return terms.reduce((score, term) => {
+    if (!haystack.includes(term)) return score
+    const subjectBoost = thread.subject.toLowerCase().includes(term) ? 4 : 0
+    const senderBoost =
+      `${thread.sender} ${thread.senderEmail}`.toLowerCase().includes(term)
+        ? 3
+        : 0
+    return score + 1 + subjectBoost + senderBoost
+  }, 0)
+}
+
+function findBestMailThreadMatch(
+  command: string,
+  threads: MailThread[],
+  fallback?: MailThread | null
+) {
+  const terms = extractMailSearchTerms(command)
+  if (terms.length === 0) return fallback ?? null
+
+  const ranked = threads
+    .map(thread => ({
+      thread,
+      score: scoreMailSearchMatch(thread, terms)
+    }))
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+
+  return ranked[0]?.thread ?? null
 }
 
 function preferredViewForThreads(threads: MailThread[]): MailboxView {
@@ -1209,16 +1289,17 @@ export function BrokMailApp() {
       await wait(150)
       updateActivity('Excluding starred and important emails...')
       await wait(150)
-      const archiveCount = threads.filter(
+      const archiveTargets = threads.filter(
         thread =>
           thread.category === 'newsletter' &&
           !thread.starred &&
           !thread.important
-      ).length
+      )
+      const archiveCount = archiveTargets.length
       response = hasMail
         ? `I found ${archiveCount} newsletter-like email ready to archive. Starred and important messages are excluded.`
         : 'Connect Gmail first so I can search and archive real newsletter threads.'
-      if (hasMail) {
+      if (hasMail && archiveTargets.length > 0) {
         approval = {
           id: createId('approval'),
           title: 'Confirm Archive',
@@ -1226,14 +1307,7 @@ export function BrokMailApp() {
             'Archive newsletter-like emails older than 30 days, excluding starred and important messages.',
           action: 'archive',
           count: archiveCount,
-          targetThreadIds: threads
-            .filter(
-              thread =>
-                thread.category === 'newsletter' &&
-                !thread.starred &&
-                !thread.important
-            )
-            .map(thread => thread.id)
+          targetThreadIds: archiveTargets.map(thread => thread.id)
         }
       }
     } else if (lower.includes('receipt') || lower.includes('automation')) {
@@ -1258,12 +1332,7 @@ export function BrokMailApp() {
         'Searching Gmail-style metadata for the contract thread...'
       )
       await wait(140)
-      const match =
-        threads.find(thread =>
-          `${thread.sender} ${thread.subject} ${thread.snippet}`
-            .toLowerCase()
-            .includes('contract')
-        ) ?? selectedThread
+      const match = findBestMailThreadMatch(command, threads, selectedThread)
       if (!match) {
         response =
           'Connect Gmail first so I can search real threads and draft from actual email context.'
@@ -1285,13 +1354,13 @@ export function BrokMailApp() {
             threadId: match.id
           }
           setComposer(draft.body)
-          response = `${match.sender} - ${match.subject}\nFound because it mentions the contract and has ${match.hasAttachments ? 'an attachment' : 'matching context'}.\n\nPi drafted the reply for review.`
+          response = `${match.sender} - ${match.subject}\nFound from your search terms and ${match.hasAttachments ? 'attachment context' : 'matching thread context'}.\n\nPi drafted the reply for review.`
           approval = {
             id: createId('approval'),
             title: 'Create Gmail Draft?',
             description:
               'This creates a Gmail draft in the current live thread. It does not send email.',
-            action: 'send',
+            action: 'create_draft',
             targetThreadIds: [match.id]
           }
         } catch (error) {
@@ -1308,12 +1377,7 @@ export function BrokMailApp() {
     ) {
       updateActivity('Searching mail metadata and thread snippets...')
       await wait(140)
-      const match =
-        threads.find(thread =>
-          `${thread.sender} ${thread.subject} ${thread.snippet}`
-            .toLowerCase()
-            .includes('contract')
-        ) ?? selectedThread
+      const match = findBestMailThreadMatch(command, threads, selectedThread)
       if (!match) {
         response = 'Connect Gmail first so I can search your real mailbox.'
       } else {
@@ -1324,7 +1388,7 @@ export function BrokMailApp() {
           const piSummary = await askPiBrokMailAgent(
             `${command}\n\nExplain why this matched thread is relevant and summarize the next action.`
           )
-          response = `${match.sender} - ${match.subject}\nFound because it mentions the contract and has ${match.hasAttachments ? 'an attachment' : 'matching context'}.\n\n${piSummary}`
+          response = `${match.sender} - ${match.subject}\nFound from your search terms and ${match.hasAttachments ? 'attachment context' : 'matching thread context'}.\n\n${piSummary}`
         } catch (error) {
           response =
             error instanceof Error
@@ -1358,7 +1422,7 @@ export function BrokMailApp() {
             title: 'Create Gmail Draft?',
             description:
               'This creates a Gmail draft in the selected live thread. It does not send email.',
-            action: 'send',
+            action: 'create_draft',
             targetThreadIds: [selectedThread.id]
           }
         } catch (error) {
@@ -1412,9 +1476,7 @@ export function BrokMailApp() {
           ? threads.filter(thread =>
               approval.targetThreadIds?.includes(thread.id)
             )
-          : selectedThread
-            ? [selectedThread]
-            : []
+          : []
       ) as MailThread[]
 
       if (targetThreads.length === 0) {
@@ -1444,7 +1506,9 @@ export function BrokMailApp() {
           targetThreads.some(target => target.id === thread.id)
             ? {
                 ...thread,
-                labels: thread.labels.filter(label => label !== 'Inbox')
+                labels: thread.labels.filter(
+                  label => label.toLowerCase() !== 'inbox'
+                )
               }
             : thread
         )
@@ -1452,7 +1516,7 @@ export function BrokMailApp() {
       toast.success('Archived through Composio')
     }
 
-    if (approval.action === 'send') {
+    if (approval.action === 'create_draft') {
       const targetThread =
         (approval.targetThreadIds?.[0]
           ? threads.find(thread => thread.id === approval.targetThreadIds?.[0])
@@ -1620,7 +1684,7 @@ export function BrokMailApp() {
           title: 'Create Gmail Draft?',
           description:
             'This creates a Gmail draft in the selected live thread. It does not send email.',
-          action: 'send',
+          action: 'create_draft',
           targetThreadIds: [selectedThread.id]
         }
       }
@@ -1719,7 +1783,7 @@ export function BrokMailApp() {
   }
 
   return (
-    <div className="dashboard-shell brokmail-shell flex h-full w-full overflow-hidden bg-background text-foreground">
+    <div className="brokmail-shell flex h-full w-full overflow-hidden bg-[#f6f6f3] text-foreground">
       {agentOpen ? (
         <div
           className="fixed inset-0 z-50 bg-zinc-950/20 backdrop-blur-[1px]"
@@ -1784,7 +1848,7 @@ export function BrokMailApp() {
         />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
-          <aside className="dashboard-rail hidden w-56 shrink-0 border-r border-zinc-200/80 bg-white/78 lg:flex lg:flex-col">
+          <aside className="hidden w-52 shrink-0 border-r border-zinc-200/80 bg-[#fbfbf8] lg:flex lg:flex-col">
             <div className="border-b border-zinc-100 p-3">
               <Button
                 className="h-9 w-full gap-2"
@@ -1826,30 +1890,38 @@ export function BrokMailApp() {
                   size="sm"
                   className="h-8 gap-1.5 px-2 text-xs"
                   onClick={connected ? loadComposioGmailThreads : connectGmail}
-                  disabled={isConnecting}
+                  disabled={isConnecting || isSyncingMail}
                 >
                   <MailCheck className="size-3.5" />
-                  {isConnecting ? '...' : connected ? 'Refresh' : 'Gmail'}
+                  {isConnecting || isSyncingMail
+                    ? '...'
+                    : connected
+                      ? 'Refresh'
+                      : 'Gmail'}
                 </Button>
                 <Button
                   variant={calendarConnected ? 'secondary' : 'outline'}
                   size="sm"
                   className="h-8 gap-1.5 px-2 text-xs"
-                  onClick={connectCalendar}
-                  disabled={isConnectingCalendar}
+                  onClick={
+                    calendarConnected
+                      ? loadComposioCalendarEvents
+                      : connectCalendar
+                  }
+                  disabled={isConnectingCalendar || isSyncingCalendar}
                 >
                   <CalendarDays className="size-3.5" />
-                  {isConnectingCalendar
+                  {isConnectingCalendar || isSyncingCalendar
                     ? '...'
                     : calendarConnected
-                      ? 'Calendar'
+                      ? 'Refresh'
                       : 'Connect'}
                 </Button>
               </div>
             </div>
           </aside>
 
-          <div className="dashboard-rail border-b border-zinc-200/80 px-3 py-3 lg:hidden">
+          <div className="border-b border-zinc-200/80 bg-[#fbfbf8] px-3 py-3 lg:hidden">
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Button
@@ -1863,30 +1935,36 @@ export function BrokMailApp() {
                   variant="outline"
                   className="h-9 flex-1 gap-2"
                   onClick={() => {
-                    void connectGmail()
+                    void (connected ? loadComposioGmailThreads() : connectGmail())
                   }}
-                  disabled={isConnecting}
+                  disabled={isConnecting || isSyncingMail}
                 >
                   <UserRoundCheck className="size-4" />
                   {isConnecting
                     ? 'Connecting...'
                     : connected
-                      ? 'Gmail Ready'
+                      ? isSyncingMail
+                        ? 'Refreshing...'
+                        : 'Refresh Gmail'
                       : 'Connect Gmail'}
                 </Button>
                 <Button
                   variant="outline"
                   className="h-9 flex-1 gap-2"
                   onClick={() => {
-                    void connectCalendar()
+                    void (calendarConnected
+                      ? loadComposioCalendarEvents()
+                      : connectCalendar())
                   }}
-                  disabled={isConnectingCalendar}
+                  disabled={isConnectingCalendar || isSyncingCalendar}
                 >
                   <CalendarDays className="size-4" />
                   {isConnectingCalendar
                     ? 'Connecting...'
                     : calendarConnected
-                      ? 'Calendar Ready'
+                      ? isSyncingCalendar
+                        ? 'Refreshing...'
+                        : 'Refresh Calendar'
                       : 'Connect Calendar'}
                 </Button>
               </div>
@@ -1916,8 +1994,8 @@ export function BrokMailApp() {
             </div>
           </div>
 
-          <div className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white/72 lg:max-h-none lg:w-[380px] lg:border-b-0 lg:border-r xl:w-[420px]">
-            <div className="border-b border-zinc-100 bg-white/60 p-3 backdrop-blur">
+          <div className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white lg:max-h-none lg:w-[360px] lg:border-b-0 lg:border-r xl:w-[390px]">
+            <div className="border-b border-zinc-100 bg-white p-3">
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />
                 <Input
@@ -1972,9 +2050,9 @@ export function BrokMailApp() {
                     <article
                       key={thread.id}
                       className={cn(
-                        'border-b border-border/65 transition-colors hover:bg-muted/60',
+                        'border-b border-zinc-100 transition-colors hover:bg-zinc-50',
                         selectedThread?.id === thread.id &&
-                          'dashboard-list-row-active'
+                          'bg-zinc-100/80'
                       )}
                     >
                       <button
@@ -2041,7 +2119,7 @@ export function BrokMailApp() {
             </div>
           </div>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-[#fbfbf8]">
             {view === 'calendar' ? (
               <CalendarWorkspace
                 events={calendarEvents}
@@ -2123,19 +2201,19 @@ function BrokMailStatusBar({
   runPriorityBrief: () => void
 }) {
   return (
-    <div className="dashboard-rail border-b border-zinc-200/80 bg-white/95 px-3 py-2 backdrop-blur-md sm:px-4">
+    <div className="border-b border-zinc-200/80 bg-[#fbfbf8]/95 px-3 py-2 backdrop-blur-md sm:px-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">BrokMail</p>
             <p className="hidden truncate text-xs text-muted-foreground sm:block">
-              Inbox, drafts, and calendar actions
+              Live inbox, drafts, and approval-gated actions
             </p>
           </div>
           <span className="hidden h-5 w-px bg-zinc-200 sm:block" />
           <Badge
             variant="outline"
-            className="h-7 gap-1.5 rounded-full border-border/70 bg-background/80 px-2.5"
+            className="h-7 gap-1.5 rounded-full border-zinc-200 bg-white px-2.5"
           >
             <span
               className={cn(
@@ -2148,7 +2226,7 @@ function BrokMailStatusBar({
           </Badge>
           <Badge
             variant="outline"
-            className="hidden h-7 gap-1.5 rounded-full border-border/70 bg-background/80 px-2.5 md:inline-flex"
+            className="hidden h-7 gap-1.5 rounded-full border-zinc-200 bg-white px-2.5 md:inline-flex"
           >
             <span
               className={cn(
@@ -2168,9 +2246,9 @@ function BrokMailStatusBar({
 
         <div className="flex shrink-0 gap-1.5">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
-            className="h-8 gap-2 rounded-md px-3 text-xs"
+            className="h-8 gap-2 rounded-md px-3 text-xs hover:bg-zinc-100"
             onClick={runPriorityBrief}
             disabled={isRunning}
           >
@@ -2180,7 +2258,7 @@ function BrokMailStatusBar({
           <Button
             variant="default"
             size="sm"
-            className="h-8 shrink-0 gap-2 rounded-md px-3 text-xs"
+            className="h-8 shrink-0 gap-2 rounded-md bg-zinc-950 px-3 text-xs text-white hover:bg-zinc-800"
             onClick={onOpenAgent}
           >
             <Bot className="size-3.5" />
@@ -2229,7 +2307,7 @@ function ThreadView({
 
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="border-b bg-white/80 px-3 py-3 sm:px-4">
+      <div className="border-b border-zinc-200 bg-white px-3 py-3 sm:px-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -2290,7 +2368,7 @@ function ThreadView({
           </div>
         </div>
 
-        <div className="mt-3 rounded-lg border border-border/60 bg-background/70 p-3">
+        <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -2298,7 +2376,7 @@ function ThreadView({
                   Assistant summary · {priorityLabel(priorityScore)}
                 </span>
               </div>
-              <p className="text-sm leading-6 text-muted-foreground">
+              <p className="text-sm leading-6 text-zinc-600">
                 {thread.aiSummary}
               </p>
             </div>
@@ -2307,7 +2385,7 @@ function ThreadView({
                 <CheckCircle2 className="size-3.5" />
                 Next actions
               </div>
-              <div className="space-y-1 text-sm text-muted-foreground">
+              <div className="space-y-1 text-sm text-zinc-600">
                 {thread.actionItems.length ? (
                   thread.actionItems
                     .slice(0, 3)
@@ -2326,7 +2404,7 @@ function ThreadView({
           {thread.messages.map(message => (
             <article
               key={message.id}
-              className="rounded-lg border border-border/60 bg-white/72 p-4 shadow-sm"
+              className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm"
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
@@ -2345,7 +2423,7 @@ function ThreadView({
             </article>
           ))}
 
-          <section className="sticky bottom-0 rounded-lg border border-border/70 bg-card/95 p-3 shadow-[0_-12px_32px_-30px_rgba(24,24,27,0.45)] backdrop-blur sm:p-4">
+          <section className="sticky bottom-0 rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-[0_-18px_46px_-38px_rgba(24,24,27,0.42)] backdrop-blur sm:p-4">
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <PenLine className="size-4" />
@@ -2382,7 +2460,7 @@ function ThreadView({
               value={composer}
               onChange={event => setComposer(event.target.value)}
               placeholder="Draft or insert a reply..."
-              className="min-h-32 resize-none rounded-lg border-border/70 bg-background/80 leading-6 shadow-inner"
+              className="min-h-32 resize-none rounded-xl border-zinc-200 bg-zinc-50/80 leading-6 shadow-inner"
             />
             <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
               <div className="rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5">
@@ -2430,7 +2508,7 @@ function ThreadView({
                   disabled={!composer.trim()}
                 >
                   <ShieldCheck className="size-4" />
-                  Send With Approval
+                  Create Gmail Draft
                 </Button>
               </div>
             </div>

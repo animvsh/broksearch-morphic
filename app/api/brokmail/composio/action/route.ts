@@ -44,6 +44,18 @@ function resolveGmailToolkits() {
   return candidates.length > 0 ? candidates : DEFAULT_GMAIL_TOOLKITS
 }
 
+function resolveCalendarToolkits() {
+  const configured = process.env.COMPOSIO_GCAL_TOOLKIT_SLUGS?.trim()
+  if (!configured) return CALENDAR_TOOLKITS
+
+  const candidates = configured
+    .split(',')
+    .map(value => value.trim().toLowerCase())
+    .filter(Boolean)
+
+  return candidates.length > 0 ? candidates : CALENDAR_TOOLKITS
+}
+
 const DEFAULT_TOOL_SLUGS: Record<BrokMailComposioAction, string[]> = {
   create_draft: ['GMAIL_CREATE_EMAIL_DRAFT', 'GMAIL_CREATE_DRAFT'],
   archive_threads: ['GMAIL_MODIFY_EMAIL_LABELS', 'GMAIL_MODIFY_THREAD_LABELS'],
@@ -97,7 +109,7 @@ async function findConnectedAccountId(
 ) {
   const toolkits =
     action === 'create_calendar_event' || action === 'delete_calendar_event'
-      ? CALENDAR_TOOLKITS
+      ? resolveCalendarToolkits()
       : resolveGmailToolkits()
 
   const settled = await Promise.allSettled(
@@ -112,6 +124,73 @@ async function findConnectedAccountId(
     const status = account.status?.toLowerCase()
     return !status || ['active', 'connected', 'enabled'].includes(status)
   })?.id
+}
+
+function buildActionArguments({
+  action,
+  threads,
+  draftBody,
+  calendarEvent
+}: {
+  action: BrokMailComposioAction
+  threads: BrokMailApprovalThread[]
+  draftBody?: string
+  calendarEvent?: BrokMailApprovalCalendarEvent | null
+}): Record<string, unknown> | undefined {
+  if (action === 'create_draft') {
+    const thread = threads[0]
+    if (!thread || !draftBody?.trim()) return undefined
+
+    return {
+      recipient_email: thread.senderEmail,
+      to: thread.senderEmail,
+      subject: thread.subject?.match(/^re:/i)
+        ? thread.subject
+        : `Re: ${thread.subject || 'selected thread'}`,
+      body: draftBody.trim(),
+      message_body: draftBody.trim(),
+      thread_id: thread.providerThreadId || thread.id
+    }
+  }
+
+  if (action === 'archive_threads') {
+    const threadIds = threads
+      .map(thread => thread.providerThreadId || thread.id)
+      .filter(Boolean)
+    const messageIds = threads.flatMap(thread => thread.providerMessageIds ?? [])
+
+    return {
+      thread_ids: threadIds,
+      message_ids: messageIds,
+      ids: threadIds.length > 0 ? threadIds : messageIds,
+      remove_label_ids: ['INBOX'],
+      labels_to_remove: ['INBOX'],
+      add_label_ids: []
+    }
+  }
+
+  if (action === 'create_calendar_event') {
+    if (!calendarEvent?.summary || !calendarEvent.startAt || !calendarEvent.endAt)
+      return undefined
+
+    return {
+      calendar_id: 'primary',
+      summary: calendarEvent.summary,
+      title: calendarEvent.summary,
+      start: calendarEvent.startAt,
+      end: calendarEvent.endAt,
+      start_datetime: calendarEvent.startAt,
+      end_datetime: calendarEvent.endAt
+    }
+  }
+
+  if (!calendarEvent?.id) return undefined
+
+  return {
+    calendar_id: 'primary',
+    event_id: calendarEvent.id,
+    id: calendarEvent.id
+  }
 }
 
 function buildActionText({
@@ -285,6 +364,12 @@ export async function POST(request: NextRequest) {
     draftBody: payload.draftBody,
     calendarEvent: payload.calendarEvent
   })
+  const toolArguments = buildActionArguments({
+    action: payload.action,
+    threads: payload.threads,
+    draftBody: payload.draftBody,
+    calendarEvent: payload.calendarEvent
+  })
   const connectedAccountId = await findConnectedAccountId(
     user.id,
     payload.action
@@ -308,7 +393,8 @@ export async function POST(request: NextRequest) {
         toolSlug,
         userId: user.id,
         connectedAccountId,
-        text
+        text,
+        ...(toolArguments ? { arguments: toolArguments } : {})
       })
 
       return NextResponse.json({

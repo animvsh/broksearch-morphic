@@ -575,6 +575,7 @@ async function readBrokCodeExecutionStream(
   let buffer = ''
   let accumulated = ''
   let result: Partial<BrokCodeStreamResult> = {}
+  let receivedResult = false
 
   const processBlock = (block: string) => {
     const lines = block.split(/\r?\n/)
@@ -617,6 +618,7 @@ async function readBrokCodeExecutionStream(
     }
 
     if (eventType === 'result') {
+      receivedResult = true
       result = payload as Partial<BrokCodeStreamResult>
       if (typeof result.content === 'string' && !accumulated) {
         accumulated = result.content
@@ -647,6 +649,14 @@ async function readBrokCodeExecutionStream(
 
   if (buffer.trim()) {
     processBlock(buffer)
+  }
+
+  if (!receivedResult) {
+    throw new Error(
+      accumulated.trim()
+        ? 'BrokCode runtime ended before sending a final result event.'
+        : 'BrokCode runtime ended without a final result event.'
+    )
   }
 
   return {
@@ -2396,18 +2406,18 @@ export function BrokCodeApp({
   }, [connectGithub, githubStatus, hasLiveRuntime, isRunning])
 
   return (
-    <div className="dashboard-shell brokcode-shell flex h-full w-full flex-col text-foreground">
-      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/95 px-3 py-2 backdrop-blur-md sm:px-4">
+    <div className="brokcode-lovable flex h-full w-full flex-col overflow-hidden bg-[#191918] text-zinc-100">
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-[#1f1f1d]/95 px-3 py-2 backdrop-blur-md sm:px-4">
         <div className="flex h-11 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-zinc-50 shadow-[0_10px_30px_-20px_rgba(0,0,0,0.9)]">
               <Code2 className="size-4" />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold sm:text-base">
+              <h1 className="truncate text-sm font-semibold text-white sm:text-base">
                 Brok Code
               </h1>
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="truncate text-xs text-zinc-400">
                 {isRunning
                   ? runStreamingHints[runHintIndex]
                   : getRuntimeLabel(activeRuntime)}
@@ -2415,12 +2425,12 @@ export function BrokCodeApp({
             </div>
           </div>
 
-          <div className="hidden min-w-0 items-center gap-2 text-xs text-muted-foreground md:flex">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/80 px-2.5 py-1">
+          <div className="hidden min-w-0 items-center gap-2 text-xs text-zinc-400 md:flex">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1">
               <span
                 className={cn(
                   'size-1.5 rounded-full',
-                  hasLiveRuntime ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+                  hasLiveRuntime ? 'bg-emerald-400' : 'bg-zinc-600'
                 )}
               />
               {hasLiveKey
@@ -2428,15 +2438,15 @@ export function BrokCodeApp({
                 : hasAccountRuntime
                   ? 'Browser ready'
                   : 'Sign in required'}
-              <span className="text-zinc-300">/</span>
+              <span className="text-zinc-600">/</span>
               <span
                 className={cn(
                   'size-1.5 rounded-full',
                   githubStatus === 'connected'
-                    ? 'bg-emerald-500'
+                    ? 'bg-emerald-400'
                     : githubStatus === 'checking'
                       ? 'animate-pulse bg-cyan-500'
-                      : 'bg-muted-foreground/40'
+                      : 'bg-zinc-600'
                 )}
               />
               GitHub{' '}
@@ -2447,7 +2457,7 @@ export function BrokCodeApp({
                   : 'off'}
             </span>
             {isConnectingIntegration && (
-              <span className="truncate rounded-full border border-zinc-200/80 bg-white/70 px-2 py-1">
+              <span className="truncate rounded-full border border-white/10 bg-white/[0.06] px-2 py-1">
                 Connecting {formatToolkitName(isConnectingIntegration)}
               </span>
             )}
@@ -2458,7 +2468,7 @@ export function BrokCodeApp({
               asChild
               variant="ghost"
               size="icon"
-              className="size-9"
+              className="size-9 text-zinc-300 hover:bg-white/10 hover:text-white"
               title="Open TUI"
             >
               <Link href="/brokcode/tui">
@@ -2469,7 +2479,7 @@ export function BrokCodeApp({
             <Button
               variant="ghost"
               size="icon"
-              className="size-9"
+              className="size-9 text-zinc-300 hover:bg-white/10 hover:text-white"
               disabled={isSharing}
               title="Share chat"
               onClick={() => {
@@ -2492,7 +2502,7 @@ export function BrokCodeApp({
                 <Button
                   variant="outline"
                   size="icon"
-                  className="size-9"
+                  className="size-9 border-white/10 bg-white/[0.06] text-zinc-200 hover:bg-white/[0.12] hover:text-white"
                   title="Brok Code actions"
                 >
                   <MoreHorizontal className="size-4" />
@@ -2569,19 +2579,19 @@ export function BrokCodeApp({
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] xl:grid-cols-[minmax(390px,470px)_minmax(0,1fr)]">
-        <section className="dashboard-rail flex min-h-[620px] flex-col overflow-hidden border-r border-zinc-200/80 lg:min-h-0">
-          <div className="border-b border-zinc-100 bg-white/80 px-3 py-2 sm:px-4">
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 bg-[#191918] lg:grid-cols-[minmax(350px,430px)_minmax(0,1fr)] xl:grid-cols-[minmax(380px,450px)_minmax(0,1fr)]">
+        <section className="flex min-h-[620px] flex-col overflow-hidden border-r border-white/10 bg-[#1c1c1a] lg:min-h-0">
+          <div className="border-b border-white/10 bg-[#1f1f1d] px-3 py-3 sm:px-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold">Chat</p>
-                <p className="hidden truncate text-xs text-muted-foreground sm:block">
-                  Tell Brok Code what to build, fix, test, or ship.
+                <p className="text-sm font-semibold text-white">Builder chat</p>
+                <p className="hidden truncate text-xs text-zinc-400 sm:block">
+                  Describe the app. Brok builds, checks, and keeps preview live.
                 </p>
               </div>
               <Badge
                 variant={isRunning ? 'default' : 'secondary'}
-                className="shrink-0 rounded-md"
+                className="shrink-0 rounded-full border-white/10 bg-white/[0.08] text-zinc-200"
               >
                 {isRunning ? 'Working' : 'Ready'}
               </Badge>
@@ -2590,14 +2600,14 @@ export function BrokCodeApp({
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-5">
             <div className="flex flex-col gap-4">
               {executionRuns.length > 0 && (
-                <div className="rounded-md border bg-background p-3 lg:hidden">
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3 lg:hidden">
                   <Tabs defaultValue="visualizer">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <p className="text-sm font-semibold">
+                        <p className="text-sm font-semibold text-white">
                           Pi coding-agent Runtime Workspace
                         </p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-zinc-400">
                           Watch execution lanes and live browser preview.
                         </p>
                       </div>
@@ -2742,7 +2752,7 @@ export function BrokCodeApp({
               ))}
 
               {isRunning && (
-                <div className="mr-auto max-w-[min(100%,42rem)] overflow-hidden rounded-md border bg-muted/30 p-4 shadow-[0_18px_50px_-34px_rgba(15,23,42,0.28)]">
+                <div className="mr-auto max-w-[min(100%,42rem)] overflow-hidden rounded-xl border border-white/10 bg-white/[0.06] p-4 text-zinc-100 shadow-[0_22px_58px_-42px_rgba(0,0,0,0.9)]">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Wand2 className="size-4" />
                     <span>Brok Code is working</span>
@@ -2752,13 +2762,13 @@ export function BrokCodeApp({
                       <span />
                     </span>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
+                  <p className="mt-2 text-xs text-zinc-400">
                     <span className="thinking-text">
                       {runStreamingHints[runHintIndex]}
                     </span>
                   </p>
-                  <div className="mt-3 h-1 overflow-hidden rounded-full bg-background/70">
-                    <div className="h-full w-2/5 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-zinc-950/80 dark:bg-white/80" />
+                  <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
+                    <div className="h-full w-2/5 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-white/80" />
                   </div>
                   <div className="mt-3">
                     <ExecutionVisualizer runs={executionRuns.slice(0, 1)} />
@@ -2768,16 +2778,16 @@ export function BrokCodeApp({
             </div>
           </div>
 
-          <div className="border-t border-zinc-100 bg-white/82 p-3 backdrop-blur sm:p-4">
+          <div className="border-t border-white/10 bg-[#20201e]/95 p-3 backdrop-blur sm:p-4">
             <div className="w-full">
               <form
-                className="smooth-composer morphic-surface relative flex items-end gap-2 overflow-hidden rounded-2xl p-2"
+                className="relative flex items-end gap-2 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.07] p-2 shadow-[0_18px_48px_-34px_rgba(0,0,0,0.95)]"
                 onSubmit={event => {
                   event.preventDefault()
                   runCommand(input)
                 }}
               >
-                <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent" />
+                <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.45] to-transparent" />
                 <Textarea
                   value={input}
                   onChange={event => setInput(event.target.value)}
@@ -2788,7 +2798,7 @@ export function BrokCodeApp({
                     }
                   }}
                   placeholder="Ask Brok Code to build, fix, audit, or ship..."
-                  className="max-h-36 min-h-12 resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="max-h-36 min-h-12 resize-none border-0 bg-transparent text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -2796,7 +2806,7 @@ export function BrokCodeApp({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="mb-1 size-9 shrink-0"
+                      className="mb-1 size-9 shrink-0 text-zinc-300 hover:bg-white/10 hover:text-white"
                       disabled={isRunning}
                       title="Example commands"
                     >
@@ -2820,7 +2830,7 @@ export function BrokCodeApp({
                 <Button
                   type="submit"
                   size="icon"
-                  className="mb-1 size-9 shrink-0"
+                  className="mb-1 size-9 shrink-0 bg-white text-zinc-950 hover:bg-zinc-200"
                   disabled={isRunning || !input.trim()}
                 >
                   <Send className="size-4" />
@@ -2831,28 +2841,33 @@ export function BrokCodeApp({
           </div>
         </section>
 
-        <aside className="hidden min-h-0 flex-col overflow-hidden bg-zinc-50/45 lg:flex">
-          <div className="border-b border-zinc-100 bg-white/80 px-3 py-2 backdrop-blur">
+        <aside className="hidden min-h-0 flex-col overflow-hidden bg-[#242421] lg:flex">
+          <div className="border-b border-white/10 bg-[#20201e]/90 px-3 py-2 backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold">Preview</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  Keep the generated app visible while you iterate.
+                <p className="text-sm font-semibold text-white">Preview</p>
+                <p className="truncate text-xs text-zinc-400">
+                  Live app canvas. Load localhost, Railway, or generated URLs.
                 </p>
               </div>
-              <Badge variant="outline" className="shrink-0 rounded-md">
+              <Badge
+                variant="outline"
+                className="shrink-0 rounded-full border-white/10 bg-white/[0.06] text-zinc-200"
+              >
                 {previewHealth.status === 'online'
                   ? 'Live'
                   : previewHealth.status === 'checking'
                     ? 'Checking'
-                    : previewHealth.status === 'offline'
+                    : previewHealth.status === 'offline' && previewUrl.trim()
+                      ? 'Loaded'
+                      : previewHealth.status === 'offline'
                       ? 'Offline'
                       : 'Ready'}
               </Badge>
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          <div className="min-h-0 flex-1 p-2">
             <BrowserPreviewPanel
               previewInput={previewInput}
               previewUrl={previewUrl}
@@ -2867,9 +2882,10 @@ export function BrokCodeApp({
             />
           </div>
 
-          <div className="border-t border-zinc-100 bg-white/95 p-2 backdrop-blur">
+          {(isRunning || executionRuns.length > 0) && (
+          <div className="max-h-[260px] overflow-hidden border-t border-white/10 bg-[#20201e]/95 p-2 backdrop-blur">
             <Tabs defaultValue="run">
-              <TabsList className="h-9 w-full justify-start rounded-lg bg-zinc-100/80">
+              <TabsList className="h-9 w-full justify-start rounded-lg bg-white/[0.06] p-1">
                 <TabsTrigger value="run" className="gap-1.5 rounded-sm">
                   <Activity className="size-4" />
                   Run
@@ -2890,7 +2906,7 @@ export function BrokCodeApp({
 
               <TabsContent
                 value="run"
-                className="mt-3 max-h-[300px] overflow-y-auto"
+                className="mt-3 max-h-[205px] overflow-y-auto"
               >
                 <ExecutionVisualizer runs={executionRuns} />
                 <div className="mt-3">
@@ -2907,7 +2923,7 @@ export function BrokCodeApp({
 
               <TabsContent
                 value="agents"
-                className="mt-3 max-h-[300px] overflow-y-auto"
+                className="mt-3 max-h-[205px] overflow-y-auto"
               >
                 <div className="grid gap-2">
                   {runtimeAgents.map(agent => (
@@ -2938,7 +2954,7 @@ export function BrokCodeApp({
 
               <TabsContent
                 value="history"
-                className="mt-3 max-h-[300px] overflow-y-auto"
+                className="mt-3 max-h-[205px] overflow-y-auto"
               >
                 <VersionHistoryPanel
                   versions={versions}
@@ -2953,7 +2969,7 @@ export function BrokCodeApp({
 
               <TabsContent
                 value="setup"
-                className="mt-3 max-h-[340px] overflow-y-auto p-1"
+                className="mt-3 max-h-[205px] overflow-y-auto p-1"
               >
                 <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px] xl:items-end">
                   <div>
@@ -3238,6 +3254,7 @@ export function BrokCodeApp({
               </TabsContent>
             </Tabs>
           </div>
+          )}
         </aside>
       </main>
     </div>
@@ -3430,22 +3447,22 @@ function ChatBubble({
       )}
     >
       {!isUser && !isSystem && (
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-zinc-300">
           <Bot className="size-4" />
         </div>
       )}
       <div
         className={cn(
-          'max-w-[min(100%,42rem)] rounded-md border p-3 text-sm leading-6 shadow-[0_16px_44px_-34px_rgba(15,23,42,0.45)] sm:p-4',
-          isUser && 'bg-primary text-primary-foreground',
+          'max-w-[min(100%,42rem)] rounded-2xl border p-3 text-sm leading-6 shadow-[0_18px_46px_-34px_rgba(0,0,0,0.95)] sm:p-4',
+          isUser && 'border-white/90 bg-white text-zinc-950',
           isSystem &&
-            'border-dashed bg-muted/30 py-2 text-xs text-muted-foreground',
-          !isUser && !isSystem && 'bg-background'
+            'border-dashed border-white/10 bg-white/[0.04] py-2 text-xs text-zinc-400',
+          !isUser && !isSystem && 'border-white/10 bg-white/[0.06] text-zinc-100'
         )}
       >
         {!isUser && !isSystem && (
-          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/25 px-2 py-1 text-[11px] font-medium text-muted-foreground">
-            <span className="size-1.5 animate-pulse rounded-full bg-zinc-900 dark:bg-zinc-100" />
+          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-2 py-1 text-[11px] font-medium text-zinc-400">
+            <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
             Brok Code
           </div>
         )}
@@ -3457,8 +3474,8 @@ function ChatBubble({
               <button
                 key={agent.id}
                 className={cn(
-                  'rounded-md border bg-muted/30 p-2 text-left transition-colors hover:bg-accent',
-                  selectedId === agent.id && 'border-foreground'
+                  'rounded-md border border-white/10 bg-white/[0.05] p-2 text-left transition-colors hover:bg-white/10',
+                  selectedId === agent.id && 'border-white/50'
                 )}
                 onClick={() => onAgentClick(agent.id)}
               >
@@ -3471,7 +3488,7 @@ function ChatBubble({
                     )}
                   />
                 </div>
-                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                <p className="mt-1 line-clamp-2 text-xs text-zinc-400">
                   {agent.currentTask}
                 </p>
               </button>
@@ -3485,7 +3502,7 @@ function ChatBubble({
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full gap-2 sm:w-auto"
+                className="w-full gap-2 border-white/[0.15] bg-white/[0.05] text-zinc-100 hover:bg-white/10 sm:w-auto"
                 onClick={() => onAction('run-checks')}
               >
                 <CheckCircle2 className="size-4" />
@@ -3496,7 +3513,7 @@ function ChatBubble({
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full gap-2 sm:w-auto"
+                className="w-full gap-2 border-white/[0.15] bg-white/[0.05] text-zinc-100 hover:bg-white/10 sm:w-auto"
                 onClick={() => onAction('open-pr')}
               >
                 <Rocket className="size-4" />
@@ -3507,7 +3524,7 @@ function ChatBubble({
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full gap-2 sm:w-auto"
+                className="w-full gap-2 border-white/[0.15] bg-white/[0.05] text-zinc-100 hover:bg-white/10 sm:w-auto"
                 onClick={() => onAction('connect-github')}
               >
                 <Github className="size-4" />
@@ -3519,7 +3536,7 @@ function ChatBubble({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full gap-2 sm:w-auto"
+                  className="w-full gap-2 border-white/[0.15] bg-white/[0.05] text-zinc-100 hover:bg-white/10 sm:w-auto"
                   onClick={() =>
                     onAction('connect-integration', message.integrationToolkit)
                   }
@@ -3532,7 +3549,7 @@ function ChatBubble({
         )}
       </div>
       {isUser && (
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-primary text-primary-foreground">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/80 bg-white text-zinc-950">
           <User className="size-4" />
         </div>
       )}
@@ -3543,7 +3560,7 @@ function ChatBubble({
 function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
   if (runs.length === 0) {
     return (
-      <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
+      <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3 text-xs text-zinc-400">
         No runs yet. Send a command to watch the execution graph.
       </div>
     )
@@ -3554,12 +3571,12 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
       {runs.slice(0, 4).map(run => (
         <div
           key={run.id}
-          className="rounded-md border bg-muted/10 p-3 shadow-[0_14px_36px_-30px_rgba(15,23,42,0.45)]"
+          className="rounded-xl border border-white/10 bg-white/[0.05] p-3 text-zinc-100 shadow-[0_14px_36px_-30px_rgba(0,0,0,0.95)]"
         >
           <div className="mb-2 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{run.command}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-zinc-400">
                 {new Date(run.startedAt).toLocaleTimeString()} -{' '}
                 {run.status === 'running'
                   ? 'Running'
@@ -3582,7 +3599,7 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
             </Badge>
           </div>
 
-          <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-muted">
+          <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-white/10">
             <div
               className={cn(
                 'h-full rounded-full transition-all duration-500',
@@ -3628,7 +3645,7 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
                     />
                     <span className="font-medium">{step.label}</span>
                   </div>
-                  <span className="text-muted-foreground">
+                  <span className="text-zinc-400">
                     {step.status === 'done'
                       ? 'done'
                       : step.status === 'running'
@@ -3638,13 +3655,13 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
                           : 'queued'}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground">{step.detail}</p>
+                <p className="text-xs text-zinc-400">{step.detail}</p>
               </div>
             ))}
           </div>
 
           {run.note && (
-            <p className="mt-2 rounded-md border bg-background px-2 py-1 text-xs text-muted-foreground">
+            <p className="mt-2 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-xs text-zinc-400">
               {run.note}
             </p>
           )}
@@ -3684,36 +3701,51 @@ function BrowserPreviewPanel({
   ]
   const hasPreviewUrl = Boolean(previewUrl.trim())
   const isBlockedPreview = isBrokCodeWorkspaceUrl(previewUrl)
+  const previewStatus =
+    previewHealth.status === 'offline' && hasPreviewUrl
+      ? 'loaded'
+      : previewHealth.status
   const healthTone =
-    previewHealth.status === 'online'
+    previewStatus === 'online'
       ? 'default'
-      : previewHealth.status === 'checking'
+      : previewStatus === 'checking' || previewStatus === 'loaded'
         ? 'secondary'
         : 'outline'
+  const previewMessage =
+    previewStatus === 'loaded'
+      ? 'Preview loaded. Health check may be blocked by the preview origin.'
+      : previewHealth.message
 
   return (
-    <div className="flex min-h-0 flex-col gap-2">
-      <div className="flex flex-col gap-2 rounded-lg border border-zinc-200/80 bg-white/88 p-2 sm:flex-row sm:items-center">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-white shadow-[0_30px_80px_-50px_rgba(0,0,0,0.95)]">
+      <div className="flex flex-col gap-2 border-b border-zinc-200/80 bg-[#f5f4f1] p-2 sm:flex-row sm:items-center">
+        <div className="hidden items-center gap-1.5 px-1 sm:flex">
+          <span className="size-3 rounded-full bg-[#ff5f57]" />
+          <span className="size-3 rounded-full bg-[#febc2e]" />
+          <span className="size-3 rounded-full bg-[#28c840]" />
+        </div>
         <Input
           value={previewInput}
           onChange={event => onPreviewInputChange(event.target.value)}
           placeholder="Paste your app preview URL"
-          className="h-9 min-w-0 flex-1"
+          className="h-9 min-w-0 flex-1 rounded-full border-zinc-200 bg-white px-4 text-sm shadow-inner"
         />
         <div className="flex items-center gap-1.5">
-          <Badge variant={healthTone} className="shrink-0 rounded-md">
-            {previewHealth.status === 'online'
+          <Badge variant={healthTone} className="shrink-0 rounded-full">
+            {previewStatus === 'online'
               ? 'Live'
-              : previewHealth.status === 'checking'
+              : previewStatus === 'checking'
                 ? 'Checking'
-                : previewHealth.status === 'offline'
+                : previewStatus === 'loaded'
+                  ? 'Loaded'
+                : previewStatus === 'offline'
                   ? 'Offline'
                   : 'Ready'}
           </Badge>
           <Button
             variant="default"
             size="icon"
-            className="size-9 shrink-0"
+            className="size-9 shrink-0 rounded-full bg-zinc-950 text-white hover:bg-zinc-800"
             onClick={onApply}
             title="Load preview URL"
           >
@@ -3725,7 +3757,7 @@ function BrowserPreviewPanel({
               <Button
                 variant="outline"
                 size="icon"
-                className="size-9 shrink-0"
+                className="size-9 shrink-0 rounded-full"
                 title="Preview shortcuts"
               >
                 <Globe className="size-4" />
@@ -3748,7 +3780,7 @@ function BrowserPreviewPanel({
           <Button
             variant="outline"
             size="icon"
-            className="size-9 shrink-0"
+            className="size-9 shrink-0 rounded-full"
             onClick={onReload}
             title="Reload preview"
           >
@@ -3760,7 +3792,7 @@ function BrowserPreviewPanel({
               asChild
               variant="outline"
               size="icon"
-              className="size-9 shrink-0"
+              className="size-9 shrink-0 rounded-full"
               title="Open preview in new tab"
             >
               <a href={previewUrl} target="_blank" rel="noreferrer">
@@ -3772,7 +3804,7 @@ function BrowserPreviewPanel({
             <Button
               variant="outline"
               size="icon"
-              className="size-9 shrink-0"
+              className="size-9 shrink-0 rounded-full"
               title="Open preview in new tab"
               disabled
             >
@@ -3783,23 +3815,33 @@ function BrowserPreviewPanel({
         </div>
       </div>
 
-      <p className="truncate px-1 text-xs text-muted-foreground">
-        {previewHealth.message}
-        {previewHealth.httpStatus ? ` (${previewHealth.httpStatus})` : ''}
-      </p>
+      <div className="flex min-h-9 items-center justify-between gap-3 border-b border-zinc-200/70 bg-white px-4 text-xs text-zinc-500">
+        <p className="truncate">
+          {previewMessage}
+          {previewHealth.httpStatus ? ` (${previewHealth.httpStatus})` : ''}
+        </p>
+        {latestRun?.previewUrl && (
+          <button
+            className="hidden max-w-[45%] truncate rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-zinc-700 hover:bg-zinc-100 xl:inline-flex"
+            onClick={() => onDirectLoad(latestRun.previewUrl ?? previewInput)}
+          >
+            Use last run: {latestRun.previewUrl}
+          </button>
+        )}
+      </div>
 
       {runtimeError && (
-        <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-50">
+        <p className="m-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
           {runtimeError}
         </p>
       )}
 
       {latestRun?.previewUrl && (
-        <div className="flex items-center gap-2 rounded-md border border-zinc-200/80 bg-white/70 px-2 py-1.5 text-xs text-muted-foreground">
+        <div className="mx-2 mt-2 flex items-center gap-2 rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 xl:hidden">
           <Globe className="size-3.5" />
           Suggested from last run:
           <button
-            className="truncate text-foreground underline"
+            className="truncate text-zinc-950 underline"
             onClick={() => onDirectLoad(latestRun.previewUrl ?? previewInput)}
           >
             {latestRun.previewUrl}
@@ -3807,22 +3849,24 @@ function BrowserPreviewPanel({
         </div>
       )}
 
-      <div className="min-h-0 overflow-hidden rounded-lg border border-zinc-200/80 bg-background shadow-none">
+      <div className="min-h-0 flex-1 overflow-hidden bg-white">
         {!hasPreviewUrl ? (
-          <div className="flex h-[360px] min-h-[360px] w-full items-center justify-center bg-muted/10 px-6 text-center lg:h-[calc(100vh-14rem)] lg:min-h-[520px]">
+          <div className="flex h-full min-h-[520px] w-full items-center justify-center bg-[#fbfaf8] px-6 text-center">
             <div className="max-w-sm">
-              <div className="mx-auto flex size-10 items-center justify-center rounded-md border bg-background">
-                <Monitor className="size-5 text-muted-foreground" />
+              <div className="mx-auto flex size-11 items-center justify-center rounded-xl border border-zinc-200 bg-white shadow-sm">
+                <Monitor className="size-5 text-zinc-500" />
               </div>
-              <p className="mt-3 text-sm font-medium">Preview is ready</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              <p className="mt-3 text-sm font-medium text-zinc-950">
+                Preview is ready
+              </p>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">
                 Paste a localhost or deployed app URL, or run Brok Code and open
                 the preview it returns.
               </p>
             </div>
           </div>
         ) : isBlockedPreview ? (
-          <div className="flex h-[360px] min-h-[360px] w-full items-center justify-center bg-muted/20 px-6 text-center text-sm text-muted-foreground lg:h-[calc(100vh-14rem)] lg:min-h-[520px]">
+          <div className="flex h-full min-h-[520px] w-full items-center justify-center bg-zinc-50 px-6 text-center text-sm text-zinc-500">
             BrokCode preview cannot render the BrokCode app itself. Load your
             generated app URL instead.
           </div>
@@ -3831,7 +3875,7 @@ function BrowserPreviewPanel({
             key={previewFrameKey}
             src={previewUrl}
             title="Brok Code browser preview"
-            className="h-[360px] min-h-[360px] w-full bg-white lg:h-[calc(100vh-14rem)] lg:min-h-[520px]"
+            className="h-full min-h-[520px] w-full bg-white"
             referrerPolicy="no-referrer"
           />
         )}

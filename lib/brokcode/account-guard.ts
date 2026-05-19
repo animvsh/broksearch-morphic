@@ -16,6 +16,8 @@ import { apiKeys, workspaces } from '@/lib/db/schema'
 const LOCAL_FALLBACK_API_KEY_ID = '00000000-0000-0000-0000-000000000001'
 const LOCAL_FALLBACK_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000'
 const BROWSER_SESSION_API_KEY_ID = '00000000-0000-0000-0000-000000000002'
+const LOCAL_BROWSER_SESSION_WORKSPACE_ID =
+  '00000000-0000-0000-0000-000000000003'
 
 export type BrokCodeAuthResult = Extract<AuthResult, { success: true }> & {
   isBrowserSession?: boolean
@@ -23,6 +25,65 @@ export type BrokCodeAuthResult = Extract<AuthResult, { success: true }> & {
 
 export async function getRequiredBrokAccountUser(): Promise<User | null> {
   return getCurrentUser()
+}
+
+function canUseLocalBrowserSessionFallback() {
+  if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') return false
+  if (process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID) {
+    return false
+  }
+  if (process.env.VERCEL || process.env.NEXT_PUBLIC_VERCEL_ENV) return false
+  if (process.env.BROKCODE_ALLOW_LOCAL_BROWSER_SESSION_FALLBACK === 'true') {
+    return true
+  }
+  return process.env.NODE_ENV !== 'production'
+}
+
+function createBrowserSessionAuth({
+  user,
+  workspace
+}: {
+  user: User
+  workspace: typeof workspaces.$inferSelect
+}): BrokCodeAuthResult {
+  return {
+    success: true,
+    isBrowserSession: true,
+    apiKey: {
+      id: BROWSER_SESSION_API_KEY_ID,
+      workspaceId: workspace.id,
+      userId: user.id,
+      name: 'BrokCode Browser Session',
+      keyPrefix: 'browser_session',
+      keyHash: 'browser_session',
+      environment: 'live',
+      status: 'active',
+      scopes: ['code:write', 'agents:write', 'usage:read'],
+      allowedModels: [],
+      rpmLimit: 60,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: 0,
+      lastUsedAt: null,
+      createdAt: new Date(),
+      revokedAt: null
+    } satisfies typeof apiKeys.$inferSelect,
+    workspace
+  }
+}
+
+function createLocalBrowserSessionAuth(user: User): BrokCodeAuthResult {
+  return createBrowserSessionAuth({
+    user,
+    workspace: {
+      id: LOCAL_BROWSER_SESSION_WORKSPACE_ID,
+      name: 'Local Browser Workspace',
+      ownerUserId: user.id,
+      plan: 'free',
+      status: 'active',
+      monthlyBudgetCents: 0,
+      createdAt: new Date()
+    } satisfies typeof workspaces.$inferSelect
+  })
 }
 
 export async function verifyBrokCodeRequestAuth(request: Request): Promise<{
@@ -44,7 +105,12 @@ export async function verifyBrokCodeRequestAuth(request: Request): Promise<{
   if (!hasExplicitCredential) {
     const user = await getCurrentUser()
     if (user) {
-      const savedKey = await getLatestSavedBrokCodeRuntimeKeyForUser(user.id)
+      const savedKey = await getLatestSavedBrokCodeRuntimeKeyForUser(
+        user.id
+      ).catch(error => {
+        console.error('BrokCode saved runtime key lookup failed:', error)
+        return null
+      })
       if (savedKey) {
         apiKey = decryptRuntimeKey(savedKey)
         authorization = `Bearer ${apiKey}`
@@ -120,51 +186,38 @@ export async function getBrokCodeBrowserSessionAuth(): Promise<BrokCodeAuthResul
   const access = await getAppAccessForUser(user)
   if (!access.allowed) return null
 
-  const [existingWorkspace] = await db
-    .select()
-    .from(workspaces)
-    .where(eq(workspaces.ownerUserId, user.id))
-    .orderBy(asc(workspaces.createdAt))
-    .limit(1)
+  try {
+    const [existingWorkspace] = await db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.ownerUserId, user.id))
+      .orderBy(asc(workspaces.createdAt))
+      .limit(1)
 
-  const workspace =
-    existingWorkspace ??
-    (
-      await db
-        .insert(workspaces)
-        .values({
-          name: 'Personal Workspace',
-          ownerUserId: user.id
-        })
-        .returning()
-    )[0]
+    const workspace =
+      existingWorkspace ??
+      (
+        await db
+          .insert(workspaces)
+          .values({
+            name: 'Personal Workspace',
+            ownerUserId: user.id
+          })
+          .returning()
+      )[0]
 
-  if (!workspace || workspace.status !== 'active') {
+    if (!workspace || workspace.status !== 'active') {
+      return null
+    }
+
+    return createBrowserSessionAuth({ user, workspace })
+  } catch (error) {
+    console.error('BrokCode browser workspace lookup failed:', error)
+    if (canUseLocalBrowserSessionFallback()) {
+      return createLocalBrowserSessionAuth(user)
+    }
+
     return null
-  }
-
-  return {
-    success: true,
-    isBrowserSession: true,
-    apiKey: {
-      id: BROWSER_SESSION_API_KEY_ID,
-      workspaceId: workspace.id,
-      userId: user.id,
-      name: 'BrokCode Browser Session',
-      keyPrefix: 'browser_session',
-      keyHash: 'browser_session',
-      environment: 'live',
-      status: 'active',
-      scopes: ['code:write', 'agents:write', 'usage:read'],
-      allowedModels: [],
-      rpmLimit: 60,
-      dailyRequestLimit: 5000,
-      monthlyBudgetCents: 0,
-      lastUsedAt: null,
-      createdAt: new Date(),
-      revokedAt: null
-    } satisfies typeof apiKeys.$inferSelect,
-    workspace
   }
 }
 

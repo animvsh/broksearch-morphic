@@ -32,7 +32,7 @@ export function summarizeBrokMailIntegrationError(
     lower.includes('google_calendar') ||
     lower.includes('calendar')
   ) {
-    return 'Calendar is connected, but Composio event sync is missing the right Calendar tool.'
+    return 'Calendar is connected, but Brok could not read events through the enabled Composio Calendar tools.'
   }
 
   if (lower.includes('tool') && lower.includes('not found')) {

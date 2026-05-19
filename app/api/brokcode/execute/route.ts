@@ -176,7 +176,8 @@ function classifyCommandType(command: string) {
   if (isDeepSecSecurityScanCommand(command)) return 'security_scan'
   if (/\b(pr|pull request|github)\b/.test(lower)) return 'github'
   if (/\b(deploy|publish|ship)\b/.test(lower)) return 'deploy'
-  if (/\b(test|check|lint|typecheck|build)\b/.test(lower)) return 'verify'
+  if (/\b(build|create|scaffold|generate|make)\b/.test(lower)) return 'build'
+  if (/\b(test|check|lint|typecheck)\b/.test(lower)) return 'verify'
   if (/\b(fix|bug|error|broken)\b/.test(lower)) return 'fix'
   return 'build'
 }
@@ -191,8 +192,24 @@ function canUseGenericBrokFallback({
   allowBrokFallback?: boolean
 }) {
   if (allowBrokFallback) return true
-  if (source !== 'browser') return true
-  return commandType === 'verify' || commandType === 'security_scan'
+  if (source?.toLowerCase() !== 'browser') return true
+
+  const normalizedCommandType = commandType?.toLowerCase()
+  return (
+    normalizedCommandType === 'verify' ||
+    normalizedCommandType === 'security_scan'
+  )
+}
+
+function formatBrokCodeRuntimeError(error: unknown) {
+  const message =
+    error instanceof Error ? error.message : 'BrokCode Cloud execution failed.'
+
+  if (/^fetch failed$/i.test(message.trim())) {
+    return 'BrokCode runtime could not reach its configured model provider. Check the BrokCode Pi/OpenCode provider base URL and API key configuration, then try again.'
+  }
+
+  return message
 }
 
 function usageNumber(usage: unknown, keys: string[]) {
@@ -848,6 +865,7 @@ function createExecutionStream({
           }
           close()
         } catch (error) {
+          const errorMessage = formatBrokCodeRuntimeError(error)
           await recordCodeExecutionUsage({
             ...usageContext,
             auth,
@@ -857,29 +875,20 @@ function createExecutionStream({
             provider: 'Brok',
             messages,
             status: 'error',
-            errorCode:
-              error instanceof Error
-                ? error.message
-                : 'brokcode_execution_failed'
+            errorCode: errorMessage
           })
           if (taskId) {
             await updateBackgroundTask({
               id: taskId,
               userId: auth.apiKey.userId,
               status: 'failed',
-              error:
-                error instanceof Error
-                  ? error.message
-                  : 'BrokCode Cloud execution failed.'
+              error: errorMessage
             }).catch(updateError => {
               console.error('Failed to mark BrokCode task failed:', updateError)
             })
           }
           send('error', {
-            message:
-              error instanceof Error
-                ? error.message
-                : 'BrokCode Cloud execution failed.'
+            message: errorMessage
           })
           close()
         }
@@ -940,7 +949,12 @@ export async function POST(request: NextRequest) {
   if (!hasExplicitCredential && !browserSessionAuth) {
     const user = await getCurrentUser()
     if (user) {
-      const savedKey = await getLatestSavedBrokCodeRuntimeKeyForUser(user.id)
+      const savedKey = await getLatestSavedBrokCodeRuntimeKeyForUser(
+        user.id
+      ).catch(error => {
+        console.error('BrokCode saved runtime key lookup failed:', error)
+        return null
+      })
       if (savedKey) {
         inboundApiKey = decryptRuntimeKey(savedKey)
         authorization = `Bearer ${inboundApiKey}`

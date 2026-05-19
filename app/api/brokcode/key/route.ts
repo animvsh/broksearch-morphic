@@ -27,6 +27,24 @@ function getRawBearerKey(request: NextRequest) {
   return request.headers.get('x-api-key')?.trim() ?? ''
 }
 
+function isLocalRuntimeKeyStoreFallbackAllowed() {
+  if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') return false
+  if (process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID) {
+    return false
+  }
+  if (process.env.VERCEL || process.env.NEXT_PUBLIC_VERCEL_ENV) return false
+  return (
+    process.env.BROKCODE_ALLOW_LOCAL_BROWSER_SESSION_FALLBACK === 'true' ||
+    process.env.NODE_ENV !== 'production'
+  )
+}
+
+function emptyLocalKeyStoreResponse(error: unknown) {
+  console.error('BrokCode runtime key store unavailable:', error)
+  if (!isLocalRuntimeKeyStoreFallbackAllowed()) return null
+  return jsonNoStore({ key: null })
+}
+
 async function requireSignedInUser() {
   const user = await getCurrentUser()
   if (!user) {
@@ -57,7 +75,13 @@ export async function GET(request: NextRequest) {
       return unauthorizedResponse(authResult)
     }
 
-    const row = await getLatestSavedBrokCodeRuntimeKeyForUser(signedIn.user.id)
+    const row = await getLatestSavedBrokCodeRuntimeKeyForUser(
+      signedIn.user.id
+    ).catch(error => {
+      const response = emptyLocalKeyStoreResponse(error)
+      if (response) return null
+      throw error
+    })
     return jsonNoStore({
       key: row ? serializeRuntimeKey(row) : null
     })
@@ -69,6 +93,10 @@ export async function GET(request: NextRequest) {
   const row = await getSavedBrokCodeRuntimeKey({
     workspaceId: authResult.workspace.id,
     userId: signedIn.user.id
+  }).catch(error => {
+    const response = emptyLocalKeyStoreResponse(error)
+    if (response) return null
+    throw error
   })
 
   return jsonNoStore({
@@ -87,7 +115,13 @@ export async function PUT(request: NextRequest) {
       return unauthorizedResponse(authResult)
     }
 
-    const row = await getLatestSavedBrokCodeRuntimeKeyForUser(signedIn.user.id)
+    const row = await getLatestSavedBrokCodeRuntimeKeyForUser(
+      signedIn.user.id
+    ).catch(error => {
+      const response = emptyLocalKeyStoreResponse(error)
+      if (response) return null
+      throw error
+    })
     if (row) {
       await deleteBrokCodeRuntimeKeyById({
         id: row.id,
@@ -130,7 +164,13 @@ export async function DELETE(request: NextRequest) {
       return unauthorizedResponse(authResult)
     }
 
-    const row = await getLatestSavedBrokCodeRuntimeKeyForUser(signedIn.user.id)
+    const row = await getLatestSavedBrokCodeRuntimeKeyForUser(
+      signedIn.user.id
+    ).catch(error => {
+      const response = emptyLocalKeyStoreResponse(error)
+      if (response) return null
+      throw error
+    })
     if (row) {
       await deleteBrokCodeRuntimeKeyById({
         id: row.id,
