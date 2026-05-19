@@ -75,6 +75,56 @@ export function makeManagedPreviewUrl({
   return `${origin.replace(/\/+$/, '')}/api/brokcode/previews/${encodeURIComponent(projectId)}/index.html`
 }
 
+function normalizeOrigin(value: unknown) {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim().replace(/\/+$/, '')
+  if (!trimmed) return null
+
+  try {
+    const withProtocol = /^https?:\/\//i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`
+    const url = new URL(withProtocol)
+    if (!['http:', 'https:'].includes(url.protocol)) return null
+    if (url.hostname === '0.0.0.0') return null
+    return url.origin
+  } catch {
+    return null
+  }
+}
+
+export function resolvePublicPreviewOrigin(request: {
+  headers: Headers
+  url: string
+}) {
+  const configured =
+    normalizeOrigin(process.env.NEXT_PUBLIC_APP_URL) ??
+    normalizeOrigin(process.env.NEXT_PUBLIC_BASE_URL) ??
+    normalizeOrigin(process.env.BASE_URL) ??
+    normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL)
+  if (configured) return configured
+
+  const forwardedHost =
+    request.headers.get('x-forwarded-host') ??
+    request.headers.get('x-host') ??
+    request.headers.get('host')
+  const forwardedProto =
+    request.headers.get('x-forwarded-proto') ??
+    request.headers.get('x-protocol') ??
+    'https'
+  const forwardedOrigin =
+    forwardedHost && normalizeOrigin(`${forwardedProto}://${forwardedHost}`)
+  if (forwardedOrigin) return forwardedOrigin
+
+  const directOrigin = normalizeOrigin(new URL(request.url).origin)
+  if (directOrigin) return directOrigin
+
+  const railwayDomain = normalizeOrigin(process.env.RAILWAY_PUBLIC_DOMAIN)
+  if (railwayDomain) return railwayDomain
+
+  return 'http://localhost:3000'
+}
+
 function buildGeneratedIndexHtml({
   project,
   files

@@ -5,7 +5,10 @@ import {
   resolveBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 import { publicBrokCodeBackendMetadata } from '@/lib/brokcode/backend-provider'
-import { makeManagedPreviewUrl } from '@/lib/brokcode/preview'
+import {
+  makeManagedPreviewUrl,
+  resolvePublicPreviewOrigin
+} from '@/lib/brokcode/preview'
 import {
   getBrokCodeProject,
   listBrokCodeProjectFiles,
@@ -77,7 +80,7 @@ export async function POST(
     workspaceId: access.authResult.workspace.id
   })
   const previewUrl = makeManagedPreviewUrl({
-    origin: new URL(request.url).origin,
+    origin: resolvePublicPreviewOrigin(request),
     projectId: access.project.id
   })
   const project = await updateBrokCodeProjectPreview({

@@ -116,6 +116,8 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     project_id?: unknown
     projectName?: unknown
+    projectUrl?: unknown
+    adminKey?: unknown
   } | null
   const projectName =
     typeof body?.projectName === 'string' && body.projectName.trim()
@@ -124,6 +126,14 @@ export async function POST(request: Request) {
   const projectId =
     typeof body?.project_id === 'string' && body.project_id.trim()
       ? body.project_id.trim()
+      : null
+  const selfHostedProjectUrl =
+    typeof body?.projectUrl === 'string' && body.projectUrl.trim()
+      ? body.projectUrl.trim()
+      : null
+  const selfHostedAdminKey =
+    typeof body?.adminKey === 'string' && body.adminKey.trim()
+      ? body.adminKey.trim()
       : null
 
   let project = projectId
@@ -147,16 +157,63 @@ export async function POST(request: Request) {
     })
   }
 
+  if (selfHostedProjectUrl || selfHostedAdminKey) {
+    if (!selfHostedProjectUrl || !selfHostedAdminKey) {
+      return NextResponse.json(
+        {
+          project: publicProject(project),
+          backend: publicBrokCodeBackendMetadata(project.metadata?.backend),
+          error:
+            'Both projectUrl and adminKey are required to connect a self-hosted InsForge backend.'
+        },
+        { status: 400 }
+      )
+    }
+  }
+
   try {
     await updateBrokCodeProjectBackend({
       projectId: project.id,
       workspaceId: authResult.workspace.id,
       userId: authResult.apiKey.userId,
       backend: createInsForgeBackendMetadata({
-        mode: 'trial',
+        mode: selfHostedProjectUrl ? 'self_hosted' : 'trial',
         status: 'provisioning'
       })
     })
+
+    if (selfHostedProjectUrl && selfHostedAdminKey) {
+      const health = await checkInsForgeProjectHealth({
+        projectUrl: selfHostedProjectUrl,
+        adminKey: selfHostedAdminKey
+      })
+      const backend = createInsForgeBackendMetadata({
+        mode: 'self_hosted',
+        status: health.health === 'online' ? 'ready' : 'error',
+        projectUrl: selfHostedProjectUrl,
+        adminKey: selfHostedAdminKey,
+        health: health.health,
+        lastHealthStatus: health.statusCode,
+        lastHealthCheckedAt: new Date().toISOString(),
+        error: health.error
+      })
+      const updatedProject = await updateBrokCodeProjectBackend({
+        projectId: project.id,
+        workspaceId: authResult.workspace.id,
+        userId: authResult.apiKey.userId,
+        backend
+      })
+
+      return NextResponse.json({
+        project: publicProject(updatedProject),
+        backend: publicBrokCodeBackendMetadata(backend),
+        mode: 'self_hosted',
+        message:
+          health.health === 'online'
+            ? 'Self-hosted InsForge backend is connected.'
+            : 'Self-hosted InsForge backend was saved but health check failed.'
+      })
+    }
 
     const sharedRailway = getSharedInsForgeRailwayConfig()
     if (sharedRailway) {

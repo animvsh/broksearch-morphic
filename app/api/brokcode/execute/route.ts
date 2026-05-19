@@ -33,7 +33,10 @@ import {
   decryptRuntimeKey,
   getLatestSavedBrokCodeRuntimeKeyForUser
 } from '@/lib/brokcode/key-vault'
-import { makeManagedPreviewUrl } from '@/lib/brokcode/preview'
+import {
+  makeManagedPreviewUrl,
+  resolvePublicPreviewOrigin
+} from '@/lib/brokcode/preview'
 import {
   getBrokCodeProject,
   getBrokCodeProjectBackend,
@@ -1137,6 +1140,7 @@ function createExecutionStream({
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
   const requestId = generateRequestId()
+  const publicOrigin = resolvePublicPreviewOrigin(request)
   const body = await request.json().catch(() => null)
   const command =
     typeof body?.command === 'string' ? body.command.trim() : undefined
@@ -1430,7 +1434,7 @@ export async function POST(request: NextRequest) {
       preferPi,
       requirePi,
       taskId: task?.id,
-      requestOrigin: request.nextUrl.origin,
+      requestOrigin: publicOrigin,
       usageContext: codeUsageContext
     })
   }
@@ -1445,7 +1449,7 @@ export async function POST(request: NextRequest) {
       const persisted = await persistGeneratedProjectOutput({
         auth: authResult,
         projectId: codeUsageContext.projectId,
-        origin: request.nextUrl.origin,
+        origin: publicOrigin,
         content: result.content
       }).catch(error => {
         console.error('Failed to persist Pi BrokCode output:', error)
@@ -1536,7 +1540,7 @@ export async function POST(request: NextRequest) {
         const persisted = await persistGeneratedProjectOutput({
           auth: authResult,
           projectId: codeUsageContext.projectId,
-          origin: request.nextUrl.origin,
+          origin: publicOrigin,
           content
         }).catch(error => {
           console.error('Failed to persist OpenCode BrokCode output:', error)
@@ -1673,7 +1677,7 @@ export async function POST(request: NextRequest) {
   const persisted = await persistGeneratedProjectOutput({
     auth: authResult,
     projectId: codeUsageContext.projectId,
-    origin: request.nextUrl.origin,
+    origin: publicOrigin,
     content
   }).catch(error => {
     console.error('Failed to persist BrokCode output:', error)

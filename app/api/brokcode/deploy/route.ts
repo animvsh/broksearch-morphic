@@ -12,7 +12,10 @@ import {
   getBrokCodeBrowserSessionAuth,
   verifyBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
-import { makeManagedPreviewUrl } from '@/lib/brokcode/preview'
+import {
+  makeManagedPreviewUrl,
+  resolvePublicPreviewOrigin
+} from '@/lib/brokcode/preview'
 import {
   getBrokCodeProject,
   listBrokCodeProjectFiles,
@@ -162,7 +165,7 @@ async function triggerManagedPreviewDeployment({
     workspaceId: auth.workspace.id
   })
   const previewUrl = makeManagedPreviewUrl({
-    origin: request.nextUrl.origin,
+    origin: resolvePublicPreviewOrigin(request),
     projectId: project.id
   })
   const generatedAt = new Date().toISOString()

@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   getManagedPreviewAsset,
   makeManagedPreviewUrl,
-  normalizeManagedPreviewPath
+  normalizeManagedPreviewPath,
+  resolvePublicPreviewOrigin
 } from '../preview'
 
 const project = {
@@ -57,5 +58,17 @@ describe('BrokCode managed preview', () => {
         projectId: 'project_123'
       })
     ).toBe('https://www.brok.fyi/api/brokcode/previews/project_123/index.html')
+  })
+
+  it('uses forwarded public host instead of Railway bind address', () => {
+    expect(
+      resolvePublicPreviewOrigin({
+        url: 'https://0.0.0.0:8080/api/brokcode/execute',
+        headers: new Headers({
+          'x-forwarded-host': 'www.brok.fyi',
+          'x-forwarded-proto': 'https'
+        })
+      })
+    ).toBe('https://www.brok.fyi')
   })
 })

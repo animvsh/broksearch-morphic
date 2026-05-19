@@ -5,6 +5,7 @@ import {
   enforceBrokCodeAccountOwnership,
   resolveBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
+import { resolvePublicPreviewOrigin } from '@/lib/brokcode/preview'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -97,6 +98,7 @@ function jsonNoStore(body: unknown, init?: ResponseInit) {
 }
 
 export async function GET(request: NextRequest) {
+  const publicOrigin = resolvePublicPreviewOrigin(request)
   const { authResult } = await resolveBrokCodeRequestAuth(request, {
     allowBrowserSession: true
   })
@@ -131,7 +133,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (
-    url.origin === request.nextUrl.origin &&
+    url.origin === publicOrigin &&
     url.pathname.startsWith('/api/brokcode/previews/')
   ) {
     return jsonNoStore({
@@ -143,7 +145,7 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  if (!isAllowedPreviewUrl(url, request.nextUrl.origin)) {
+  if (!isAllowedPreviewUrl(url, publicOrigin)) {
     return jsonNoStore(
       {
         ok: false,
