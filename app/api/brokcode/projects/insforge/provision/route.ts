@@ -9,7 +9,11 @@ import {
   emptyBrokCodeBackendMetadata,
   publicBrokCodeBackendMetadata
 } from '@/lib/brokcode/backend-provider'
-import { createInsForgeTrialProject } from '@/lib/brokcode/insforge'
+import {
+  checkInsForgeProjectHealth,
+  createInsForgeTrialProject,
+  getSharedInsForgeRailwayConfig
+} from '@/lib/brokcode/insforge'
 import {
   createBrokCodeProject,
   getBrokCodeProject,
@@ -153,6 +157,44 @@ export async function POST(request: Request) {
         status: 'provisioning'
       })
     })
+
+    const sharedRailway = getSharedInsForgeRailwayConfig()
+    if (sharedRailway) {
+      const health = await checkInsForgeProjectHealth({
+        projectUrl: sharedRailway.projectUrl,
+        adminKey: sharedRailway.accessApiKey
+      })
+      const backend = createInsForgeBackendMetadata({
+        mode: 'shared_railway',
+        status: health.health === 'online' ? 'ready' : 'error',
+        projectUrl: sharedRailway.projectUrl,
+        dashboardUrl: sharedRailway.dashboardUrl,
+        projectId: sharedRailway.projectId,
+        appkey: sharedRailway.appkey,
+        region: sharedRailway.region,
+        adminKey: sharedRailway.accessApiKey,
+        health: health.health,
+        lastHealthStatus: health.statusCode,
+        lastHealthCheckedAt: new Date().toISOString(),
+        error: health.error
+      })
+      const updatedProject = await updateBrokCodeProjectBackend({
+        projectId: project.id,
+        workspaceId: authResult.workspace.id,
+        userId: authResult.apiKey.userId,
+        backend
+      })
+
+      return NextResponse.json({
+        project: publicProject(updatedProject),
+        backend: publicBrokCodeBackendMetadata(backend),
+        mode: 'shared_railway',
+        message:
+          health.health === 'online'
+            ? 'Shared Railway InsForge backend is connected.'
+            : 'Shared Railway InsForge backend is configured but needs attention.'
+      })
+    }
 
     const trial = await createInsForgeTrialProject(projectName)
     const health = await pollInsForgeHealth(trial.projectUrl)

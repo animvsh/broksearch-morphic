@@ -48,6 +48,10 @@ import {
   BrokCodeSubagent,
   SubagentStatus
 } from '@/lib/brokcode/data'
+import {
+  extractGeneratedBrokCodeFiles,
+  GeneratedBrokCodeFile
+} from '@/lib/brokcode/generated-files'
 import { openComposioPopup } from '@/lib/composio-popup'
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
@@ -119,7 +123,7 @@ type BrokCodeBackendHealthStatus =
 
 type BrokCodeBackendMetadata = {
   provider: BrokCodeBackendProvider
-  mode?: 'trial' | 'existing' | 'self_hosted'
+  mode?: 'trial' | 'existing' | 'self_hosted' | 'shared_railway'
   status: 'not_configured' | 'provisioning' | 'ready' | 'error' | 'expired'
   projectUrl?: string | null
   dashboardUrl?: string | null
@@ -612,11 +616,7 @@ function extractPreviewUrlFromText(text: string) {
   return match?.[0] ?? null
 }
 
-type GeneratedPreviewFile = {
-  path: string
-  content: string
-  language: string | null
-}
+type GeneratedPreviewFile = GeneratedBrokCodeFile
 
 function makeProjectNameFromPrompt(prompt: string) {
   const cleaned = prompt
@@ -631,63 +631,8 @@ function makeProjectNameFromPrompt(prompt: string) {
   return words.length > 48 ? `${words.slice(0, 45)}...` : words
 }
 
-function filePathFromFenceInfo(info: string, language: string | null) {
-  const filenameMatch = info.match(
-    /(?:^|\s)(?:file|filename|path)=["']?([^"'\s]+)["']?/i
-  )
-  if (filenameMatch?.[1]) return filenameMatch[1]
-
-  const tokenPath = info
-    .split(/\s+/)
-    .map(token => token.trim())
-    .find(token => /[./\\][\w.-]+$/.test(token) || /\.[a-z0-9]+$/i.test(token))
-  if (tokenPath) return tokenPath
-
-  if (language === 'html') return 'index.html'
-  if (language === 'css') return 'styles.css'
-  if (language === 'javascript' || language === 'js') return 'app.js'
-  if (language === 'json') return 'data.json'
-  if (language === 'svg') return 'asset.svg'
-  return null
-}
-
-function normalizeGeneratedFilePath(path: string) {
-  return path.trim().replace(/\\/g, '/').replace(/^\/+/, '')
-}
-
 function extractGeneratedPreviewFiles(text: string): GeneratedPreviewFile[] {
-  const files = new Map<string, GeneratedPreviewFile>()
-  const fencePattern = /```([^\n`]*)\n([\s\S]*?)```/g
-  let match: RegExpExecArray | null
-
-  while ((match = fencePattern.exec(text)) !== null) {
-    const info = match[1]?.trim() ?? ''
-    const content = match[2]?.trim() ?? ''
-    if (!content) continue
-
-    const language = info.split(/\s+/)[0]?.toLowerCase() || null
-    const rawPath = filePathFromFenceInfo(info, language)
-    if (!rawPath) continue
-
-    const path = normalizeGeneratedFilePath(rawPath)
-    if (!path || path.includes('..') || path.includes('\0')) continue
-
-    files.set(path, { path, content, language })
-  }
-
-  if (
-    files.size === 0 &&
-    /<!doctype html|<html[\s>]/i.test(text) &&
-    /<\/html>/i.test(text)
-  ) {
-    files.set('index.html', {
-      path: 'index.html',
-      content: text.trim(),
-      language: 'html'
-    })
-  }
-
-  return [...files.values()]
+  return extractGeneratedBrokCodeFiles(text)
 }
 
 function cleanAssistantContentForBuilder(content: string) {
@@ -2579,11 +2524,6 @@ export function BrokCodeApp({
       ...current,
       { id: createId('user'), role: 'user', content: trimmed },
       {
-        id: createId('system'),
-        role: 'system',
-        content: 'Building in BrokCode Cloud...'
-      },
-      {
         id: assistantMessageId,
         role: 'assistant',
         content: 'I am setting up the project and preview...'
@@ -2943,18 +2883,18 @@ export function BrokCodeApp({
   }, [connectGithub, githubStatus, hasLiveRuntime, isRunning])
 
   return (
-    <div className="brokcode-lovable flex h-full w-full flex-col overflow-hidden bg-[#191918] text-zinc-100">
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-[#1f1f1d]/95 px-3 py-2 backdrop-blur-md sm:px-4">
+    <div className="brokcode-lovable flex h-full w-full flex-col overflow-hidden bg-[#f6f6f3] text-zinc-950">
+      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 px-3 py-2 backdrop-blur-md sm:px-4">
         <div className="flex h-11 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-zinc-50 shadow-[0_10px_30px_-20px_rgba(0,0,0,0.9)]">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-900 shadow-sm">
               <Code2 className="size-4" />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold text-white sm:text-base">
+              <h1 className="truncate text-sm font-semibold text-zinc-950 sm:text-base">
                 Brok Code
               </h1>
-              <p className="truncate text-xs text-zinc-400">
+              <p className="truncate text-xs text-zinc-500">
                 {isRunning
                   ? runStreamingHints[runHintIndex]
                   : getRuntimeLabel(activeRuntime)}
@@ -2962,12 +2902,12 @@ export function BrokCodeApp({
             </div>
           </div>
 
-          <div className="hidden min-w-0 items-center gap-2 text-xs text-zinc-400 md:flex">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1">
+          <div className="hidden min-w-0 items-center gap-2 text-xs text-zinc-500 md:flex">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1">
               <span
                 className={cn(
                   'size-1.5 rounded-full',
-                  hasLiveRuntime ? 'bg-emerald-400' : 'bg-zinc-600'
+                  hasLiveRuntime ? 'bg-emerald-500' : 'bg-zinc-300'
                 )}
               />
               {hasLiveKey
@@ -2975,7 +2915,7 @@ export function BrokCodeApp({
                 : hasAccountRuntime
                   ? 'Browser ready'
                   : 'Sign in required'}
-              <span className="text-zinc-600">/</span>
+              <span className="text-zinc-300">/</span>
               <span
                 className={cn(
                   'size-1.5 rounded-full',
@@ -2983,7 +2923,7 @@ export function BrokCodeApp({
                     ? 'bg-emerald-400'
                     : githubStatus === 'checking'
                       ? 'animate-pulse bg-cyan-500'
-                      : 'bg-zinc-600'
+                      : 'bg-zinc-300'
                 )}
               />
               GitHub{' '}
@@ -2992,7 +2932,7 @@ export function BrokCodeApp({
                 : githubStatus === 'checking'
                   ? 'checking'
                   : 'off'}
-              <span className="text-zinc-600">/</span>
+              <span className="text-zinc-300">/</span>
               <span
                 className={cn(
                   'size-1.5 rounded-full',
@@ -3001,7 +2941,7 @@ export function BrokCodeApp({
                     ? 'bg-emerald-400'
                     : activeBackend.provider === 'insforge'
                       ? 'bg-cyan-500'
-                      : 'bg-zinc-600'
+                      : 'bg-zinc-300'
                 )}
               />
               {activeBackend.provider === 'insforge'
@@ -3009,7 +2949,7 @@ export function BrokCodeApp({
                 : 'Backend off'}
             </span>
             {isConnectingIntegration && (
-              <span className="truncate rounded-full border border-white/10 bg-white/[0.06] px-2 py-1">
+              <span className="truncate rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1">
                 Connecting {formatToolkitName(isConnectingIntegration)}
               </span>
             )}
@@ -3020,7 +2960,7 @@ export function BrokCodeApp({
               asChild
               variant="ghost"
               size="icon"
-              className="size-9 text-zinc-300 hover:bg-white/10 hover:text-white"
+              className="size-9 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
               title="Open TUI"
             >
               <Link href="/brokcode/tui">
@@ -3031,7 +2971,7 @@ export function BrokCodeApp({
             <Button
               variant="ghost"
               size="icon"
-              className="size-9 text-zinc-300 hover:bg-white/10 hover:text-white"
+              className="size-9 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
               disabled={isSharing}
               title="Share chat"
               onClick={() => {
@@ -3054,7 +2994,7 @@ export function BrokCodeApp({
                 <Button
                   variant="outline"
                   size="icon"
-                  className="size-9 border-white/10 bg-white/[0.06] text-zinc-200 hover:bg-white/[0.12] hover:text-white"
+                  className="size-9 border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
                   title="Brok Code actions"
                 >
                   <MoreHorizontal className="size-4" />
@@ -3131,19 +3071,21 @@ export function BrokCodeApp({
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 bg-[#191918] lg:grid-cols-[minmax(350px,430px)_minmax(0,1fr)] xl:grid-cols-[minmax(380px,450px)_minmax(0,1fr)]">
-        <section className="flex min-h-[620px] flex-col overflow-hidden border-r border-white/10 bg-[#1c1c1a] lg:min-h-0">
-          <div className="border-b border-white/10 bg-[#1f1f1d] px-3 py-3 sm:px-4">
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 bg-[#f6f6f3] lg:grid-cols-[minmax(350px,430px)_minmax(0,1fr)] xl:grid-cols-[minmax(380px,450px)_minmax(0,1fr)]">
+        <section className="flex min-h-[620px] flex-col overflow-hidden border-r border-zinc-200/80 bg-white lg:min-h-0">
+          <div className="border-b border-zinc-200/80 bg-white px-3 py-3 sm:px-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">Builder chat</p>
-                <p className="hidden truncate text-xs text-zinc-400 sm:block">
+                <p className="text-sm font-semibold text-zinc-950">
+                  Builder chat
+                </p>
+                <p className="hidden truncate text-xs text-zinc-500 sm:block">
                   Describe the app. Brok builds, checks, and keeps preview live.
                 </p>
               </div>
               <Badge
                 variant={isRunning ? 'default' : 'secondary'}
-                className="shrink-0 rounded-full border-white/10 bg-white/[0.08] text-zinc-200"
+                className="shrink-0 rounded-full border-zinc-200 bg-zinc-50 text-zinc-700"
               >
                 {isRunning ? 'Working' : 'Ready'}
               </Badge>
@@ -3151,65 +3093,6 @@ export function BrokCodeApp({
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-5">
             <div className="flex flex-col gap-4">
-              {executionRuns.length > 0 && (
-                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3 lg:hidden">
-                  <Tabs defaultValue="visualizer">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-white">
-                          Pi coding-agent Runtime Workspace
-                        </p>
-                        <p className="text-xs text-zinc-400">
-                          Watch execution lanes and live browser preview.
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="w-fit rounded-md">
-                        Runtime:{' '}
-                        {activeRuntime === 'not_connected'
-                          ? 'Not connected'
-                          : getRuntimeLabel(activeRuntime)}
-                      </Badge>
-                    </div>
-
-                    <TabsList className="mt-3 h-9 w-full justify-start rounded-md">
-                      <TabsTrigger
-                        value="visualizer"
-                        className="gap-1.5 rounded-sm"
-                      >
-                        <Activity className="size-4" />
-                        Visualizer
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="browser"
-                        className="gap-1.5 rounded-sm"
-                      >
-                        <Monitor className="size-4" />
-                        Browser Preview
-                      </TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="visualizer" className="mt-3">
-                      <ExecutionVisualizer runs={executionRuns} />
-                    </TabsContent>
-
-                    <TabsContent value="browser" className="mt-3">
-                      <BrowserPreviewPanel
-                        previewInput={previewInput}
-                        previewUrl={previewUrl}
-                        previewFrameKey={previewFrameKey}
-                        previewHealth={previewHealth}
-                        onPreviewInputChange={setPreviewInput}
-                        onApply={applyPreviewInput}
-                        onDirectLoad={loadPreviewTarget}
-                        onReload={reloadPreview}
-                        runtimeError={runtimeError}
-                        latestRun={executionRuns[0]}
-                      />
-                    </TabsContent>
-                  </Tabs>
-                </div>
-              )}
-
               <div className="hidden">
                 <SyncedSessionPanel
                   session={activeSyncSession}
@@ -3304,7 +3187,7 @@ export function BrokCodeApp({
               ))}
 
               {isRunning && (
-                <div className="mr-auto max-w-[min(100%,42rem)] overflow-hidden rounded-xl border border-white/10 bg-white/[0.06] p-4 text-zinc-100 shadow-[0_22px_58px_-42px_rgba(0,0,0,0.9)]">
+                <div className="mr-auto max-w-[min(100%,42rem)] overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-zinc-950 shadow-sm">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Wand2 className="size-4" />
                     <span>Brok Code is working</span>
@@ -3314,32 +3197,29 @@ export function BrokCodeApp({
                       <span />
                     </span>
                   </div>
-                  <p className="mt-2 text-xs text-zinc-400">
+                  <p className="mt-2 text-xs text-zinc-500">
                     <span className="thinking-text">
                       {runStreamingHints[runHintIndex]}
                     </span>
                   </p>
-                  <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
-                    <div className="h-full w-2/5 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-white/80" />
-                  </div>
-                  <div className="mt-3">
-                    <ExecutionVisualizer runs={executionRuns.slice(0, 1)} />
+                  <div className="mt-3 h-1 overflow-hidden rounded-full bg-zinc-200">
+                    <div className="h-full w-2/5 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-zinc-900" />
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="border-t border-white/10 bg-[#20201e]/95 p-3 backdrop-blur sm:p-4">
+          <div className="border-t border-zinc-200/80 bg-white/95 p-3 backdrop-blur sm:p-4">
             <div className="w-full">
               <form
-                className="relative flex items-end gap-2 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.07] p-2 shadow-[0_18px_48px_-34px_rgba(0,0,0,0.95)]"
+                className="relative flex items-end gap-2 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 p-2 shadow-sm"
                 onSubmit={event => {
                   event.preventDefault()
                   runCommand(input)
                 }}
               >
-                <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.45] to-transparent" />
+                <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
                 <Textarea
                   value={input}
                   onChange={event => setInput(event.target.value)}
@@ -3350,7 +3230,7 @@ export function BrokCodeApp({
                     }
                   }}
                   placeholder="Ask Brok Code to build, fix, audit, or ship..."
-                  className="max-h-36 min-h-12 resize-none border-0 bg-transparent text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="max-h-36 min-h-12 resize-none border-0 bg-transparent text-zinc-950 placeholder:text-zinc-400 focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -3358,7 +3238,7 @@ export function BrokCodeApp({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="mb-1 size-9 shrink-0 text-zinc-300 hover:bg-white/10 hover:text-white"
+                      className="mb-1 size-9 shrink-0 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-950"
                       disabled={isRunning}
                       title="Example commands"
                     >
@@ -3382,7 +3262,7 @@ export function BrokCodeApp({
                 <Button
                   type="submit"
                   size="icon"
-                  className="mb-1 size-9 shrink-0 bg-white text-zinc-950 hover:bg-zinc-200"
+                  className="mb-1 size-9 shrink-0 bg-zinc-950 text-white hover:bg-zinc-800"
                   disabled={isRunning || !input.trim()}
                 >
                   <Send className="size-4" />
@@ -3393,18 +3273,18 @@ export function BrokCodeApp({
           </div>
         </section>
 
-        <aside className="hidden min-h-0 flex-col overflow-hidden bg-[#242421] lg:flex">
-          <div className="border-b border-white/10 bg-[#20201e]/90 px-3 py-2 backdrop-blur">
+        <aside className="hidden min-h-0 flex-col overflow-hidden bg-[#f3f2ee] lg:flex">
+          <div className="border-b border-zinc-200/80 bg-white/90 px-3 py-2 backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">Preview</p>
-                <p className="truncate text-xs text-zinc-400">
+                <p className="text-sm font-semibold text-zinc-950">Preview</p>
+                <p className="truncate text-xs text-zinc-500">
                   Live app canvas. Load localhost, Railway, or generated URLs.
                 </p>
               </div>
               <Badge
                 variant="outline"
-                className="shrink-0 rounded-full border-white/10 bg-white/[0.06] text-zinc-200"
+                className="shrink-0 rounded-full border-zinc-200 bg-zinc-50 text-zinc-700"
               >
                 {previewHealth.status === 'online'
                   ? 'Live'
@@ -3420,14 +3300,14 @@ export function BrokCodeApp({
           </div>
 
           <div className="min-h-0 flex-1 p-2">
-            <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-xs text-zinc-300">
+            <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 shadow-sm">
               <div className="min-w-0">
-                <p className="font-medium text-white">
+                <p className="font-medium text-zinc-950">
                   {activeBackend.provider === 'insforge'
                     ? 'InsForge backend'
                     : 'Backend not configured'}
                 </p>
-                <p className="truncate text-zinc-400">
+                <p className="truncate text-zinc-500">
                   {activeBackend.provider === 'insforge'
                     ? activeBackend.projectUrl || 'Project URL not set'
                     : 'Configure database, auth, storage, and functions in Setup.'}
@@ -3435,7 +3315,7 @@ export function BrokCodeApp({
               </div>
               <Badge
                 variant="outline"
-                className="shrink-0 rounded-full border-white/10 bg-white/[0.06] text-zinc-200"
+                className="shrink-0 rounded-full border-zinc-200 bg-zinc-50 text-zinc-700"
               >
                 {activeBackend.provider === 'insforge'
                   ? activeBackend.health === 'online'
@@ -3459,584 +3339,8 @@ export function BrokCodeApp({
           </div>
 
           {(isRunning || executionRuns.length > 0) && (
-            <div className="max-h-[260px] overflow-hidden border-t border-white/10 bg-[#20201e]/95 p-2 backdrop-blur">
-              <Tabs defaultValue="run">
-                <TabsList className="h-9 w-full justify-start rounded-lg bg-white/[0.06] p-1">
-                  <TabsTrigger value="run" className="gap-1.5 rounded-sm">
-                    <Activity className="size-4" />
-                    Run
-                  </TabsTrigger>
-                  <TabsTrigger value="agents" className="gap-1.5 rounded-sm">
-                    <Bot className="size-4" />
-                    Agents
-                  </TabsTrigger>
-                  <TabsTrigger value="history" className="gap-1.5 rounded-sm">
-                    <Clock3 className="size-4" />
-                    History
-                  </TabsTrigger>
-                  <TabsTrigger value="setup" className="gap-1.5 rounded-sm">
-                    <KeyRound className="size-4" />
-                    Setup
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent
-                  value="run"
-                  className="mt-3 max-h-[205px] overflow-y-auto"
-                >
-                  <ExecutionVisualizer runs={executionRuns} />
-                  <div className="mt-3">
-                    <SyncedSessionPanel
-                      session={activeSyncSession}
-                      sessionId={syncSessionId}
-                      loading={syncLoading}
-                      onRefresh={() => {
-                        void refreshSyncedSessions()
-                      }}
-                    />
-                  </div>
-                </TabsContent>
-
-                <TabsContent
-                  value="agents"
-                  className="mt-3 max-h-[205px] overflow-y-auto"
-                >
-                  <div className="grid gap-2">
-                    {runtimeAgents.map(agent => (
-                      <SubagentCard
-                        key={agent.id}
-                        agent={agent}
-                        livePulse={livePulse}
-                        selected={agent.id === selectedAgent?.id}
-                        onSelect={() => setSelectedId(agent.id)}
-                      />
-                    ))}
-                  </div>
-                  {runtimeAgents.length === 0 && (
-                    <p className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
-                      No real subagent events reported yet.
-                    </p>
-                  )}
-                  {selectedAgent && (
-                    <div className="mt-3">
-                      <SubagentDetail
-                        agent={selectedAgent}
-                        livePulse={livePulse}
-                        onFocus={focusAgent}
-                      />
-                    </div>
-                  )}
-                </TabsContent>
-
-                <TabsContent
-                  value="history"
-                  className="mt-3 max-h-[205px] overflow-y-auto"
-                >
-                  <VersionHistoryPanel
-                    versions={versions}
-                    loading={versionsLoading}
-                    onRefresh={() => {
-                      if (apiKey) {
-                        void refreshVersions(apiKey)
-                      }
-                    }}
-                  />
-                </TabsContent>
-
-                <TabsContent
-                  value="setup"
-                  className="mt-3 max-h-[205px] overflow-y-auto p-1"
-                >
-                  <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px] xl:items-end">
-                    <div>
-                      <Label htmlFor="brok-code-key" className="text-xs">
-                        Optional CLI/TUI API key
-                        <span className="ml-1 font-normal text-muted-foreground">
-                          encrypted key vault
-                        </span>
-                      </Label>
-                      <div className="mt-1 flex items-center gap-2">
-                        <KeyRound className="size-4 text-muted-foreground" />
-                        <Input
-                          id="brok-code-key"
-                          value={apiKeyInput}
-                          onChange={event => {
-                            setApiKeyInput(event.target.value)
-                            if (apiKeyError) setApiKeyError(null)
-                          }}
-                          placeholder="brok_sk_live_..."
-                          className="h-9"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-xs">Model</Label>
-                      <Select
-                        value={selectedModel}
-                        onValueChange={setSelectedModel}
-                      >
-                        <SelectTrigger className="mt-1 h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {codeModels.map(model => (
-                            <SelectItem key={model.id} value={model.id}>
-                              {model.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Button size="sm" className="h-9" onClick={saveApiKey}>
-                      Save Key
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-9"
-                      onClick={clearApiKey}
-                      disabled={!apiKeyInput && !savedRuntimeKey && !apiKey}
-                    >
-                      Clear
-                    </Button>
-                  </div>
-                  <div className="mt-3 rounded-md border bg-background px-3 py-2 text-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-medium">Runtime</p>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-6"
-                        disabled={!hasLiveKey || !apiKey || usageLoading}
-                        onClick={() => {
-                          if (apiKey) void refreshUsage(apiKey)
-                        }}
-                      >
-                        <RefreshCcw className="size-3.5" />
-                        <span className="sr-only">Refresh usage</span>
-                      </Button>
-                    </div>
-                    <p className="mt-1 text-muted-foreground">
-                      {maskedKey
-                        ? savedRuntimeKey
-                          ? `Using saved ${savedRuntimeKey.name} (${savedRuntimeKey.prefix})`
-                          : `Using ${maskedKey}`
-                        : `Browser runs use signed-in account (${accountEmail})`}
-                    </p>
-                    {savedRuntimeKey && (
-                      <p className="mt-1 text-muted-foreground">
-                        Stored for session {savedRuntimeKey.defaultSessionId} ·{' '}
-                        {savedRuntimeKey.environment} ·{' '}
-                        {savedRuntimeKey.scopes.join(', ') || 'no scopes'}
-                      </p>
-                    )}
-                    {usageLoading ? (
-                      <p className="mt-1 text-muted-foreground">
-                        Refreshing usage...
-                      </p>
-                    ) : usage ? (
-                      <p className="mt-1 text-muted-foreground">
-                        {usage.requests} req,{' '}
-                        {usage.input_tokens + usage.output_tokens} tokens, $
-                        {usage.billed_usd.toFixed(4)}
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-muted-foreground">
-                        Usage unavailable
-                      </p>
-                    )}
-                  </div>
-                  <div className="mt-3 rounded-md border bg-background p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-medium">InsForge Backend</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Saved per BrokCode project for database, auth,
-                          storage, and functions.
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="shrink-0 rounded-md">
-                        {activeBackend.provider === 'insforge'
-                          ? activeBackend.health === 'online'
-                            ? 'Online'
-                            : activeBackend.status
-                          : 'Not configured'}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(0,1fr)_160px]">
-                      <div>
-                        <Label htmlFor="brokcode-project" className="text-xs">
-                          Project
-                        </Label>
-                        {projects.length > 0 ? (
-                          <Select
-                            value={activeProject?.id ?? ''}
-                            onValueChange={setActiveProjectId}
-                          >
-                            <SelectTrigger
-                              id="brokcode-project"
-                              className="mt-1 h-9"
-                            >
-                              <SelectValue placeholder="Select project" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {projects.map(project => (
-                                <SelectItem key={project.id} value={project.id}>
-                                  {project.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <Input
-                            id="brokcode-project"
-                            value={backendProjectName}
-                            onChange={event =>
-                              setBackendProjectName(event.target.value)
-                            }
-                            placeholder="BrokCode app"
-                            className="mt-1 h-9"
-                          />
-                        )}
-                      </div>
-                      <div>
-                        <Label className="text-xs">Provider</Label>
-                        <div className="mt-1 flex h-9 items-center gap-2 rounded-md border px-3 text-xs">
-                          <PlugZap className="size-4 text-muted-foreground" />
-                          InsForge
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-2 grid gap-2 xl:grid-cols-2">
-                      <div>
-                        <Label htmlFor="insforge-url" className="text-xs">
-                          Project URL
-                        </Label>
-                        <Input
-                          id="insforge-url"
-                          value={insForgeProjectUrl}
-                          onChange={event =>
-                            setInsForgeProjectUrl(event.target.value)
-                          }
-                          placeholder="https://your-project.insforge.app"
-                          className="mt-1 h-9"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="insforge-dashboard" className="text-xs">
-                          Dashboard URL
-                        </Label>
-                        <Input
-                          id="insforge-dashboard"
-                          value={insForgeDashboardUrl}
-                          onChange={event =>
-                            setInsForgeDashboardUrl(event.target.value)
-                          }
-                          placeholder="https://dashboard.insforge.dev/..."
-                          className="mt-1 h-9"
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-2">
-                      <Label htmlFor="insforge-admin-key" className="text-xs">
-                        Admin key
-                        <span className="ml-1 font-normal text-muted-foreground">
-                          encrypted server-side, never sent back
-                        </span>
-                      </Label>
-                      <Input
-                        id="insforge-admin-key"
-                        value={insForgeAdminKey}
-                        onChange={event =>
-                          setInsForgeAdminKey(event.target.value)
-                        }
-                        placeholder={
-                          activeBackend.adminKeyConfigured
-                            ? 'Configured. Enter a new key to rotate.'
-                            : 'ik_...'
-                        }
-                        className="mt-1 h-9"
-                      />
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        className="h-9 gap-2"
-                        onClick={provisionInsForgeBackend}
-                        disabled={backendProvisioning}
-                      >
-                        {backendProvisioning ? (
-                          <RefreshCcw className="size-4 animate-spin" />
-                        ) : (
-                          <Rocket className="size-4" />
-                        )}
-                        {backendProvisioning
-                          ? 'Provisioning...'
-                          : 'Create trial'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 gap-2"
-                        onClick={saveInsForgeBackend}
-                        disabled={backendSaving}
-                      >
-                        {backendSaving ? (
-                          <RefreshCcw className="size-4 animate-spin" />
-                        ) : (
-                          <PlugZap className="size-4" />
-                        )}
-                        {backendSaving ? 'Saving...' : 'Save backend'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 gap-2"
-                        onClick={checkBackendHealth}
-                        disabled={
-                          backendChecking ||
-                          !activeProject ||
-                          activeBackend.provider !== 'insforge'
-                        }
-                      >
-                        <RefreshCcw
-                          className={cn(
-                            'size-4',
-                            backendChecking && 'animate-spin'
-                          )}
-                        />
-                        Check
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-9"
-                        onClick={clearBackend}
-                        disabled={
-                          backendSaving ||
-                          !activeProject ||
-                          activeBackend.provider === 'none'
-                        }
-                      >
-                        Clear
-                      </Button>
-                      {activeBackend.provider === 'insforge' &&
-                        activeBackend.projectUrl && (
-                          <Button
-                            asChild
-                            variant="outline"
-                            size="sm"
-                            className="h-9 gap-2"
-                          >
-                            <a
-                              href={activeBackend.projectUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <Globe className="size-4" />
-                              Open
-                            </a>
-                          </Button>
-                        )}
-                    </div>
-                    {activeBackend.provider === 'insforge' && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {activeBackend.adminKeyConfigured
-                          ? 'Admin key is configured.'
-                          : 'Admin key is not configured.'}
-                        {activeBackend.lastHealthCheckedAt
-                          ? ` Last checked ${new Date(
-                              activeBackend.lastHealthCheckedAt
-                            ).toLocaleString()}.`
-                          : ''}
-                      </p>
-                    )}
-                  </div>
-                  <div className="mt-3 rounded-md border bg-background p-3">
-                    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-                      <div>
-                        <Label htmlFor="brok-code-session" className="text-xs">
-                          Shared Cloud/TUI Session
-                        </Label>
-                        <Input
-                          id="brok-code-session"
-                          value={syncSessionId}
-                          onChange={event =>
-                            setSyncSessionId(event.target.value)
-                          }
-                          onBlur={saveSyncSessionId}
-                          placeholder="default"
-                          className="mt-1 h-9"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-9 gap-2"
-                          onClick={saveSyncSessionId}
-                        >
-                          <Globe className="size-4" />
-                          Save
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-9 gap-2"
-                          disabled={!hasLiveRuntime || syncLoading}
-                          onClick={() => {
-                            void refreshSyncedSessions()
-                          }}
-                        >
-                          <RefreshCcw
-                            className={cn(
-                              'size-4',
-                              syncLoading && 'animate-spin'
-                            )}
-                          />
-                          Sync
-                        </Button>
-                      </div>
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Use the same value in terminal with{' '}
-                      <code>BROKCODE_SESSION_ID={syncSessionId}</code>.
-                    </p>
-                    {syncError && (
-                      <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                        {syncError}
-                      </p>
-                    )}
-                    {githubMessage && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {githubMessage}
-                      </p>
-                    )}
-                  </div>
-                  <div className="mt-3 rounded-md border bg-background p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-medium">
-                          GitHub PR Repository
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Used by Open PR so Brok Code can publish directly.
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 gap-1 px-2 text-xs"
-                        disabled={!hasLiveRuntime}
-                        onClick={() => {
-                          void refreshRepoContext(apiKey)
-                        }}
-                      >
-                        <RefreshCcw className="size-3.5" />
-                        Detect
-                      </Button>
-                    </div>
-                    <div className="mt-3 grid gap-2 xl:grid-cols-3">
-                      <div className="xl:col-span-2">
-                        <Label htmlFor="brok-github-repo" className="text-xs">
-                          Repository
-                        </Label>
-                        <Input
-                          id="brok-github-repo"
-                          value={githubRepository}
-                          onChange={event =>
-                            setGithubRepository(event.target.value)
-                          }
-                          placeholder="owner/repo"
-                          className="mt-1 h-9"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="brok-github-base" className="text-xs">
-                          Base
-                        </Label>
-                        <Input
-                          id="brok-github-base"
-                          value={githubBaseBranch}
-                          onChange={event =>
-                            setGithubBaseBranch(event.target.value)
-                          }
-                          placeholder="main"
-                          className="mt-1 h-9"
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-2">
-                      <Label htmlFor="brok-github-head" className="text-xs">
-                        Head Branch
-                      </Label>
-                      <Input
-                        id="brok-github-head"
-                        value={githubHeadBranch}
-                        onChange={event =>
-                          setGithubHeadBranch(event.target.value)
-                        }
-                        placeholder="feature/my-branch"
-                        className="mt-1 h-9"
-                      />
-                    </div>
-                    {repoContext?.remoteUrl && (
-                      <p className="mt-2 truncate text-xs text-muted-foreground">
-                        Remote: {repoContext.remoteUrl}
-                      </p>
-                    )}
-                    {repoContext?.commitSha && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        HEAD: {repoContext.commitSha.slice(0, 10)}
-                      </p>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 gap-2"
-                        onClick={() => {
-                          void submitPullRequest()
-                        }}
-                        disabled={
-                          !hasLiveRuntime ||
-                          isSubmittingPr ||
-                          githubStatus !== 'connected'
-                        }
-                      >
-                        {isSubmittingPr ? (
-                          <RefreshCcw className="size-4 animate-spin" />
-                        ) : (
-                          <Rocket className="size-4" />
-                        )}
-                        {isSubmittingPr ? 'Opening PR...' : 'Open PR'}
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="h-9 gap-2"
-                        onClick={() => {
-                          void deployBrokCodeCloud()
-                        }}
-                        disabled={!hasLiveRuntime || isDeploying}
-                      >
-                        {isDeploying ? (
-                          <RefreshCcw className="size-4 animate-spin" />
-                        ) : (
-                          <Rocket className="size-4" />
-                        )}
-                        {isDeploying ? 'Deploying...' : '1-Click Deploy'}
-                      </Button>
-                    </div>
-                  </div>
-                  {(apiKeyError || runtimeError) && (
-                    <p className="mt-3 text-xs text-rose-600 dark:text-rose-400">
-                      {apiKeyError ?? runtimeError}
-                    </p>
-                  )}
-                </TabsContent>
-              </Tabs>
+            <div className="max-h-[220px] overflow-y-auto border-t border-zinc-200/80 bg-white/95 p-2 backdrop-blur">
+              <ExecutionVisualizer runs={executionRuns} />
             </div>
           )}
         </aside>
@@ -4346,18 +3650,18 @@ function ChatBubble({
 function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
   if (runs.length === 0) {
     return (
-      <div className="rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-500">
+      <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-500">
         No agent activity yet. Send a command to see the reasoning trace.
       </div>
     )
   }
 
   return (
-    <div className="space-y-3">
-      {runs.slice(0, 4).map(run => (
+    <div className="space-y-2">
+      {runs.slice(0, 2).map(run => (
         <div
           key={run.id}
-          className="rounded-xl border border-zinc-200 bg-white p-3 text-zinc-950 shadow-[0_16px_48px_-40px_rgba(24,24,27,0.55)]"
+          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-zinc-950"
         >
           <div className="mb-2 flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -4385,7 +3689,7 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
             </Badge>
           </div>
 
-          <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+          <div className="mb-2 h-1 overflow-hidden rounded-full bg-zinc-100">
             <div
               className={cn(
                 'h-full rounded-full transition-all duration-500',
@@ -4412,12 +3716,10 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
             />
           </div>
 
-          <div className="rounded-lg border border-zinc-200/80 bg-[#fbfaf8] p-3">
-            <p className="mb-2 text-xs font-medium text-zinc-950">
-              Agent reasoning trace
-            </p>
-            <div className="space-y-3">
-              {run.steps.map(step => (
+          <div className="space-y-2">
+            {run.steps
+              .filter(step => step.status !== 'queued')
+              .map(step => (
                 <div key={`${run.id}-${step.id}`} className="grid gap-1">
                   <div className="flex items-start gap-2 text-xs">
                     <span
@@ -4439,14 +3741,10 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
                   </div>
                 </div>
               ))}
-            </div>
+            {run.steps.every(step => step.status === 'queued') && (
+              <p className="text-xs text-zinc-500">Waiting for the agent.</p>
+            )}
           </div>
-
-          {run.note && (
-            <p className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs text-zinc-500">
-              {run.note}
-            </p>
-          )}
         </div>
       ))}
     </div>

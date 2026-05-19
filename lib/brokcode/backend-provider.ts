@@ -4,7 +4,11 @@ import {
 } from '@/lib/brokcode/key-vault'
 
 export type BrokCodeBackendProvider = 'none' | 'insforge'
-export type InsForgeBackendMode = 'trial' | 'existing' | 'self_hosted'
+export type InsForgeBackendMode =
+  | 'trial'
+  | 'existing'
+  | 'self_hosted'
+  | 'shared_railway'
 export type BrokCodeBackendStatus =
   | 'not_configured'
   | 'provisioning'
@@ -108,7 +112,8 @@ const EMPTY_CAPABILITIES: BrokCodeBackendCapabilities = {
 const INSFORGE_MODES = new Set<InsForgeBackendMode>([
   'trial',
   'existing',
-  'self_hosted'
+  'self_hosted',
+  'shared_railway'
 ])
 
 const BACKEND_STATUSES = new Set<BrokCodeBackendStatus>([

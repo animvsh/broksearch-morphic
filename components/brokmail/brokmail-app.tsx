@@ -1755,7 +1755,7 @@ export function BrokMailApp() {
     <div className="brokmail-shell flex h-full w-full overflow-hidden bg-[#f6f6f3] text-foreground">
       {agentOpen ? (
         <div
-          className="fixed inset-0 z-50 bg-zinc-950/20 backdrop-blur-[1px]"
+          className="fixed inset-0 z-50 bg-zinc-950/20 backdrop-blur-[1px] xl:hidden"
           onClick={() => setAgentOpen(false)}
         >
           <aside
@@ -2159,6 +2159,31 @@ export function BrokMailApp() {
               />
             )}
           </div>
+
+          <aside className="hidden w-[390px] shrink-0 border-l border-zinc-200/80 bg-white xl:flex xl:flex-col">
+            <AgentPanel
+              activity={activity}
+              agentInput={agentInput}
+              calendarConnected={calendarConnected}
+              connected={connected}
+              connectionMode={connectionMode}
+              isSharing={isSharing}
+              isRunning={isRunning}
+              messages={messages}
+              threadCount={threads.length}
+              runAgent={runAgent}
+              setAgentInput={setAgentInput}
+              insertDraft={insertDraft}
+              approveAction={approveAction}
+              cancelAction={cancelAction}
+              handledApprovalIds={handledApprovalIds}
+              onShare={() => {
+                startShareTransition(() => {
+                  void shareBrokMailChat()
+                })
+              }}
+            />
+          </aside>
         </div>
       </section>
     </div>
@@ -2289,7 +2314,7 @@ function BrokMailStatusBar({
           <Button
             variant="default"
             size="sm"
-            className="h-8 shrink-0 gap-2 rounded-md bg-zinc-950 px-3 text-xs text-white hover:bg-zinc-800"
+            className="h-8 shrink-0 gap-2 rounded-md bg-zinc-950 px-3 text-xs text-white hover:bg-zinc-800 xl:hidden"
             onClick={onOpenAgent}
           >
             <Bot className="size-3.5" />

@@ -3,7 +3,8 @@ export default function DocsPage() {
     <div className="container py-8">
       <h1 className="text-4xl font-bold mb-4">Brok Documentation</h1>
       <p className="text-xl text-muted-foreground mb-8">
-        Build with Brok API in minutes
+        Build, search, code, email, connect tools, and operate Brok in
+        production.
       </p>
 
       <div className="grid md:grid-cols-3 gap-6">
@@ -26,6 +27,36 @@ export default function DocsPage() {
           title="Brok Code"
           description="Use Brok Code in cloud, terminal, and coding-agent tools"
           href="/docs/brokcode"
+        />
+        <DocCard
+          title="BrokCode API"
+          description="Use Brok Code through API-compatible agent endpoints"
+          href="/docs/brokcode-api"
+        />
+        <DocCard
+          title="BrokMail"
+          description="Connect Gmail and Calendar with approval-gated actions"
+          href="/docs/brokmail"
+        />
+        <DocCard
+          title="Integrations"
+          description="Connect Composio toolkits and inspect status"
+          href="/docs/integrations"
+        />
+        <DocCard
+          title="Admin, Usage, Billing"
+          description="Control access, feature gates, budgets, and analytics"
+          href="/docs/admin"
+        />
+        <DocCard
+          title="Tools"
+          description="Use Humanizer and the platform feature request queue"
+          href="/docs/tools"
+        />
+        <DocCard
+          title="InsForge"
+          description="Configure the shared Brok-managed backend provider"
+          href="/docs/insforge"
         />
         <DocCard
           title="Search Completions"

@@ -9,6 +9,15 @@ export type InsForgeTrialProject = {
   trialExpiresAt: string | null
 }
 
+export type SharedInsForgeRailwayConfig = {
+  accessApiKey: string
+  projectUrl: string
+  dashboardUrl: string | null
+  projectId: string | null
+  appkey: string | null
+  region: string | null
+}
+
 export type InsForgeProjectHealthStatus =
   | 'online'
   | 'offline'
@@ -61,6 +70,34 @@ function requiredString(value: unknown, name: string) {
     throw new Error(`InsForge did not return ${name}.`)
   }
   return text
+}
+
+export function getSharedInsForgeRailwayConfig(): SharedInsForgeRailwayConfig | null {
+  const projectUrl =
+    stringOrNull(process.env.BROKCODE_INSFORGE_SHARED_URL) ??
+    stringOrNull(process.env.INSFORGE_PROJECT_URL)
+  const accessApiKey =
+    stringOrNull(process.env.BROKCODE_INSFORGE_SHARED_ADMIN_KEY) ??
+    stringOrNull(process.env.INSFORGE_ACCESS_API_KEY)
+
+  if (!projectUrl || !accessApiKey) return null
+
+  return {
+    projectUrl,
+    accessApiKey,
+    dashboardUrl:
+      stringOrNull(process.env.BROKCODE_INSFORGE_SHARED_DASHBOARD_URL) ??
+      stringOrNull(process.env.INSFORGE_DASHBOARD_URL),
+    projectId:
+      stringOrNull(process.env.BROKCODE_INSFORGE_SHARED_PROJECT_ID) ??
+      stringOrNull(process.env.INSFORGE_PROJECT_ID),
+    appkey:
+      stringOrNull(process.env.BROKCODE_INSFORGE_SHARED_APP_KEY) ??
+      stringOrNull(process.env.INSFORGE_APP_KEY),
+    region:
+      stringOrNull(process.env.BROKCODE_INSFORGE_SHARED_REGION) ??
+      stringOrNull(process.env.INSFORGE_REGION)
+  }
 }
 
 export async function createInsForgeTrialProject(projectName: string) {

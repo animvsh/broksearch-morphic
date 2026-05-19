@@ -914,6 +914,7 @@ async function sendChat(content) {
       model,
       source: 'tui',
       session_id: sessionId,
+      project_id: activeProjectId || undefined,
       stream: true,
       [requireCloudRuntimeField]: requireCloudRuntime,
       prefer_pi: !requireCloudRuntime,

@@ -5,15 +5,21 @@ import { updateSession } from '@/lib/supabase/middleware'
 const DOCS_HOSTS = new Set(['docs.brok.fyi'])
 const DOCS_CLEAN_PATHS = new Set([
   '/',
+  '/admin',
   '/api-keys',
   '/brokcode',
+  '/brokcode-api',
+  '/brokmail',
   '/chat-completions',
   '/errors',
+  '/insforge',
+  '/integrations',
   '/models',
   '/quickstart',
   '/rate-limits',
   '/search-completions',
-  '/security'
+  '/security',
+  '/tools'
 ])
 
 function rewriteDocsSubdomain(request: NextRequest, host: string) {

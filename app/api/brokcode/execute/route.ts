@@ -24,6 +24,7 @@ import {
   decryptInsForgeAdminKey,
   publicBrokCodeBackendMetadata
 } from '@/lib/brokcode/backend-provider'
+import { extractGeneratedBrokCodeFiles } from '@/lib/brokcode/generated-files'
 import {
   fetchInsForgeBackendContext,
   formatInsForgeBackendContextForPrompt
@@ -32,9 +33,12 @@ import {
   decryptRuntimeKey,
   getLatestSavedBrokCodeRuntimeKeyForUser
 } from '@/lib/brokcode/key-vault'
+import { makeManagedPreviewUrl } from '@/lib/brokcode/preview'
 import {
   getBrokCodeProject,
-  getBrokCodeProjectBackend
+  getBrokCodeProjectBackend,
+  updateBrokCodeProjectPreview,
+  upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
 import {
   isDeepSecSecurityScanCommand,
@@ -42,6 +46,7 @@ import {
 } from '@/lib/brokcode/security-scan'
 import { runPiAgentPrompt } from '@/lib/pi/coding-agent'
 import {
+  appendBackgroundTaskEvent,
   createBackgroundTask,
   updateBackgroundTask
 } from '@/lib/tasks/background-tasks'
@@ -236,6 +241,88 @@ function usageNumber(usage: unknown, keys: string[]) {
   }
 
   return 0
+}
+
+async function persistGeneratedProjectOutput({
+  auth,
+  projectId,
+  origin,
+  content,
+  taskId
+}: {
+  auth: SuccessfulAuth
+  projectId?: string | null
+  origin: string
+  content: string
+  taskId?: string
+}) {
+  if (!projectId) return null
+
+  const project = await getBrokCodeProject({
+    id: projectId,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId
+  })
+  if (!project) return null
+
+  const files = extractGeneratedBrokCodeFiles(content)
+  if (files.length === 0) return null
+
+  if (taskId) {
+    await appendBackgroundTaskEvent({
+      id: taskId,
+      userId: auth.apiKey.userId,
+      message: `Saving ${files.length} generated file${files.length === 1 ? '' : 's'}.`,
+      progress: 72,
+      metadata: { generatedFileCount: files.length }
+    }).catch(error => {
+      console.error('Failed to append BrokCode file-save event:', error)
+    })
+  }
+
+  for (const file of files) {
+    await upsertBrokCodeProjectFile({
+      projectId: project.id,
+      workspaceId: auth.workspace.id,
+      path: file.path,
+      content: file.content,
+      language: file.language
+    })
+  }
+
+  const previewUrl = makeManagedPreviewUrl({
+    origin,
+    projectId: project.id
+  })
+  await updateBrokCodeProjectPreview({
+    projectId: project.id,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId,
+    previewUrl,
+    metadata: {
+      mode: 'managed_static',
+      fileCount: files.length,
+      generatedAt: new Date().toISOString(),
+      source: 'runtime_output'
+    }
+  })
+
+  if (taskId) {
+    await appendBackgroundTaskEvent({
+      id: taskId,
+      userId: auth.apiKey.userId,
+      message: 'Cloud preview is ready.',
+      progress: 88,
+      metadata: { previewUrl }
+    }).catch(error => {
+      console.error('Failed to append BrokCode preview event:', error)
+    })
+  }
+
+  return {
+    files,
+    previewUrl
+  }
 }
 
 async function recordCodeExecutionUsage({
@@ -483,6 +570,15 @@ async function buildBrokCodeProjectContext({
   return [
     ...projectLines,
     `Backend public metadata: ${JSON.stringify(publicBrokCodeBackendMetadata(backend))}`,
+    [
+      'Generated app InsForge environment contract:',
+      `VITE_INSFORGE_URL=${backend.projectUrl}`,
+      `NEXT_PUBLIC_INSFORGE_URL=${backend.projectUrl}`,
+      backend.appkey
+        ? `VITE_INSFORGE_APP_KEY=${backend.appkey}\nNEXT_PUBLIC_INSFORGE_APP_KEY=${backend.appkey}`
+        : 'Public app key is not configured yet; use the public auth config endpoint before requiring login.',
+      'Never write the InsForge admin access key into generated source, browser env, logs, or previews.'
+    ].join('\n'),
     formatInsForgeBackendContextForPrompt(liveContext)
   ]
     .filter(Boolean)
@@ -526,7 +622,8 @@ function createExecutionStream({
   preferPi,
   requirePi,
   taskId,
-  usageContext
+  usageContext,
+  requestOrigin
 }: {
   auth: SuccessfulAuth
   requestId: string
@@ -542,10 +639,12 @@ function createExecutionStream({
   preferPi: boolean
   requirePi: boolean
   taskId?: string
+  requestOrigin: string
   usageContext: {
     source?: string
     sessionId?: string
     commandType?: string
+    projectId?: string | null
   }
 }) {
   const encoder = new TextEncoder()
@@ -594,6 +693,14 @@ function createExecutionStream({
             }).catch(error => {
               console.error('Failed to mark BrokCode task running:', error)
             })
+            await appendBackgroundTaskEvent({
+              id: taskId,
+              userId: auth.apiKey.userId,
+              message: 'Loaded project context and started the coding runtime.',
+              progress: 18
+            }).catch(error => {
+              console.error('Failed to append BrokCode start event:', error)
+            })
           }
 
           if (preferPi || requirePi) {
@@ -606,13 +713,27 @@ function createExecutionStream({
                 prompt: buildPiPrompt(messages),
                 tools: getPiTools()
               })
+              const persisted = await persistGeneratedProjectOutput({
+                auth,
+                projectId: usageContext.projectId,
+                origin: requestOrigin,
+                content: result.content,
+                taskId
+              }).catch(error => {
+                console.error('Failed to persist Pi BrokCode output:', error)
+                return null
+              })
+              const previewUrl =
+                persisted?.previewUrl ??
+                extractPreviewUrl(`${command}\n${result.content}`)
               send('delta', { content: result.content })
               send('result', {
                 runtime: 'pi',
                 model: result.model,
                 content: result.content,
                 usage: null,
-                preview_url: extractPreviewUrl(`${command}\n${result.content}`),
+                preview_url: previewUrl,
+                generated_files: persisted?.files.map(file => file.path) ?? [],
                 note: 'Built with BrokCode Cloud.'
               })
               await recordCodeExecutionUsage({
@@ -635,9 +756,9 @@ function createExecutionStream({
                   result: {
                     runtime: 'pi',
                     model: result.model,
-                    previewUrl: extractPreviewUrl(
-                      `${command}\n${result.content}`
-                    )
+                    previewUrl,
+                    generatedFiles:
+                      persisted?.files.map(file => file.path) ?? []
                   }
                 }).catch(error => {
                   console.error(
@@ -735,6 +856,22 @@ function createExecutionStream({
                   send('delta', { content })
                 }
               }
+              const persisted = await persistGeneratedProjectOutput({
+                auth,
+                projectId: usageContext.projectId,
+                origin: requestOrigin,
+                content,
+                taskId
+              }).catch(error => {
+                console.error(
+                  'Failed to persist OpenCode BrokCode output:',
+                  error
+                )
+                return null
+              })
+              const previewUrl =
+                persisted?.previewUrl ??
+                extractPreviewUrl(`${command}\n${content}`)
 
               send('result', {
                 runtime: 'opencode',
@@ -744,7 +881,8 @@ function createExecutionStream({
                     ? content
                     : 'OpenCode completed the run but returned no text output.',
                 usage,
-                preview_url: extractPreviewUrl(`${command}\n${content}`),
+                preview_url: previewUrl,
+                generated_files: persisted?.files.map(file => file.path) ?? [],
                 note: 'Executed through OpenCode runtime.'
               })
               await recordCodeExecutionUsage({
@@ -767,7 +905,9 @@ function createExecutionStream({
                   result: {
                     runtime: 'opencode',
                     model,
-                    previewUrl: extractPreviewUrl(`${command}\n${content}`)
+                    previewUrl,
+                    generatedFiles:
+                      persisted?.files.map(file => file.path) ?? []
                   }
                 }).catch(error => {
                   console.error(
@@ -895,6 +1035,18 @@ function createExecutionStream({
           })
           content = direct.content
           usage = direct.usage
+          const persisted = await persistGeneratedProjectOutput({
+            auth,
+            projectId: usageContext.projectId,
+            origin: requestOrigin,
+            content,
+            taskId
+          }).catch(error => {
+            console.error('Failed to persist BrokCode output:', error)
+            return null
+          })
+          const previewUrl =
+            persisted?.previewUrl ?? extractPreviewUrl(`${command}\n${content}`)
 
           send('result', {
             runtime: 'brok',
@@ -904,7 +1056,8 @@ function createExecutionStream({
                 ? content
                 : 'Brok runtime completed the run but returned no text output.',
             usage,
-            preview_url: extractPreviewUrl(`${command}\n${content}`),
+            preview_url: previewUrl,
+            generated_files: persisted?.files.map(file => file.path) ?? [],
             note:
               piFailure || opencodeFailure
                 ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} Routed through Brok runtime.`
@@ -930,7 +1083,8 @@ function createExecutionStream({
               result: {
                 runtime: 'brok',
                 model,
-                previewUrl: extractPreviewUrl(`${command}\n${content}`)
+                previewUrl,
+                generatedFiles: persisted?.files.map(file => file.path) ?? []
               }
             }).catch(error => {
               console.error('Failed to mark BrokCode task succeeded:', error)
@@ -1276,6 +1430,7 @@ export async function POST(request: NextRequest) {
       preferPi,
       requirePi,
       taskId: task?.id,
+      requestOrigin: request.nextUrl.origin,
       usageContext: codeUsageContext
     })
   }
@@ -1287,6 +1442,18 @@ export async function POST(request: NextRequest) {
         prompt: buildPiPrompt(messages),
         tools: getPiTools()
       })
+      const persisted = await persistGeneratedProjectOutput({
+        auth: authResult,
+        projectId: codeUsageContext.projectId,
+        origin: request.nextUrl.origin,
+        content: result.content
+      }).catch(error => {
+        console.error('Failed to persist Pi BrokCode output:', error)
+        return null
+      })
+      const previewUrl =
+        persisted?.previewUrl ??
+        extractPreviewUrl(`${command}\n${result.content}`)
 
       await recordCodeExecutionUsage({
         ...codeUsageContext,
@@ -1306,7 +1473,8 @@ export async function POST(request: NextRequest) {
         model: result.model,
         content: result.content,
         usage: null,
-        preview_url: extractPreviewUrl(`${command}\n${result.content}`),
+        preview_url: previewUrl,
+        generated_files: persisted?.files.map(file => file.path) ?? [],
         note: 'Built with BrokCode Cloud.'
       })
     } catch (error) {
@@ -1365,6 +1533,17 @@ export async function POST(request: NextRequest) {
       if (opencodeResponse.ok) {
         const payload = await opencodeResponse.json()
         const content = extractAssistantText(payload)
+        const persisted = await persistGeneratedProjectOutput({
+          auth: authResult,
+          projectId: codeUsageContext.projectId,
+          origin: request.nextUrl.origin,
+          content
+        }).catch(error => {
+          console.error('Failed to persist OpenCode BrokCode output:', error)
+          return null
+        })
+        const previewUrl =
+          persisted?.previewUrl ?? extractPreviewUrl(`${command}\n${content}`)
         await recordCodeExecutionUsage({
           ...codeUsageContext,
           auth: authResult,
@@ -1386,7 +1565,8 @@ export async function POST(request: NextRequest) {
               ? content
               : 'OpenCode completed the run but returned no text output.',
           usage: payload?.usage ?? null,
-          preview_url: extractPreviewUrl(`${command}\n${content}`),
+          preview_url: previewUrl,
+          generated_files: persisted?.files.map(file => file.path) ?? [],
           note: 'Executed through OpenCode runtime.'
         })
       }
@@ -1490,6 +1670,17 @@ export async function POST(request: NextRequest) {
   })
   content = direct.content
   usage = direct.usage
+  const persisted = await persistGeneratedProjectOutput({
+    auth: authResult,
+    projectId: codeUsageContext.projectId,
+    origin: request.nextUrl.origin,
+    content
+  }).catch(error => {
+    console.error('Failed to persist BrokCode output:', error)
+    return null
+  })
+  const previewUrl =
+    persisted?.previewUrl ?? extractPreviewUrl(`${command}\n${content}`)
   await recordCodeExecutionUsage({
     ...codeUsageContext,
     auth: authResult,
@@ -1511,7 +1702,8 @@ export async function POST(request: NextRequest) {
         ? content
         : 'Brok runtime completed the run but returned no text output.',
     usage,
-    preview_url: extractPreviewUrl(`${command}\n${content}`),
+    preview_url: previewUrl,
+    generated_files: persisted?.files.map(file => file.path) ?? [],
     note:
       piFailure || opencodeFailure
         ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} Routed through Brok runtime.`

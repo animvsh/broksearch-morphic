@@ -258,6 +258,20 @@ export async function enforceBrokCodeAccountOwnership(
     return null
   }
 
+  const access = await getAppAccessForUser(user)
+  if (!hasFeatureAccess(access, 'brokcode')) {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'permission_error',
+          code: 'feature_access_denied',
+          message: 'BrokCode access is not enabled for this account.'
+        }
+      },
+      { status: 403 }
+    )
+  }
+
   if (authResult.apiKey.userId === user.id) {
     return null
   }

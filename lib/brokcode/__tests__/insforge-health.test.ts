@@ -3,12 +3,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   checkInsForgeProjectHealth,
   fetchInsForgeBackendContext,
-  formatInsForgeBackendContextForPrompt
+  formatInsForgeBackendContextForPrompt,
+  getSharedInsForgeRailwayConfig
 } from '../insforge'
 
 describe('InsForge project health checks', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    delete process.env.BROKCODE_INSFORGE_SHARED_URL
+    delete process.env.BROKCODE_INSFORGE_SHARED_ADMIN_KEY
+    delete process.env.BROKCODE_INSFORGE_SHARED_APP_KEY
+    delete process.env.BROKCODE_INSFORGE_SHARED_DASHBOARD_URL
+    delete process.env.BROKCODE_INSFORGE_SHARED_PROJECT_ID
+    delete process.env.BROKCODE_INSFORGE_SHARED_REGION
   })
 
   it('checks the project api health endpoint and marks 2xx as online', async () => {
@@ -91,6 +98,25 @@ describe('InsForge project health checks', () => {
       error: 'InsForge project URL is invalid.'
     })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('reads shared Railway provider config from server env', () => {
+    process.env.BROKCODE_INSFORGE_SHARED_URL = 'https://insforge.brok.test'
+    process.env.BROKCODE_INSFORGE_SHARED_ADMIN_KEY = 'admin-secret'
+    process.env.BROKCODE_INSFORGE_SHARED_APP_KEY = 'public-app-key'
+    process.env.BROKCODE_INSFORGE_SHARED_DASHBOARD_URL =
+      'https://dashboard.brok.test'
+    process.env.BROKCODE_INSFORGE_SHARED_PROJECT_ID = 'proj_shared'
+    process.env.BROKCODE_INSFORGE_SHARED_REGION = 'us'
+
+    expect(getSharedInsForgeRailwayConfig()).toEqual({
+      projectUrl: 'https://insforge.brok.test',
+      accessApiKey: 'admin-secret',
+      appkey: 'public-app-key',
+      dashboardUrl: 'https://dashboard.brok.test',
+      projectId: 'proj_shared',
+      region: 'us'
+    })
   })
 
   it('fetches safe backend context for BrokCode prompts', async () => {
