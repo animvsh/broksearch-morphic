@@ -871,7 +871,7 @@ export function BrokCodeApp({
       id: 'welcome',
       role: 'assistant',
       content:
-        'I am Brok Code. You are signed in, so browser runs are ready. Connect GitHub for repo work, or add a Brok API key only when you want CLI/TUI sync and external agent access.'
+        'I am Brok Code. You are signed in, so browser runs are ready. Connect GitHub for repo work, then build and preview directly in the cloud.'
     }
   ])
 
@@ -2529,7 +2529,7 @@ export function BrokCodeApp({
           id: createId('system'),
           role: 'system',
           content:
-            'Real BrokCode execution requires a signed-in Brok account. API keys are only needed for CLI/TUI sync and external agent access.'
+            'Real BrokCode execution requires a signed-in Brok account. The browser builder uses your account session automatically.'
         }
       ])
       return
