@@ -1,0 +1,28 @@
+import { describe, expect, it } from 'vitest'
+
+import { normalizeMiniMaxMessages } from '../provider-router'
+
+describe('normalizeMiniMaxMessages', () => {
+  it('folds system instructions into the first user message', () => {
+    const messages = normalizeMiniMaxMessages([
+      { role: 'system', content: 'Be concise.' },
+      { role: 'user', content: 'Build a todo app.' },
+      { role: 'assistant', content: 'Sure.' }
+    ])
+
+    expect(messages).toEqual([
+      {
+        role: 'user',
+        content:
+          'System instructions:\nBe concise.\n\nUser request:\nBuild a todo app.'
+      },
+      { role: 'assistant', content: 'Sure.' }
+    ])
+  })
+
+  it('creates a user message when only system instructions are present', () => {
+    expect(
+      normalizeMiniMaxMessages([{ role: 'system', content: 'No markdown.' }])
+    ).toEqual([{ role: 'user', content: 'System instructions:\nNo markdown.' }])
+  })
+})

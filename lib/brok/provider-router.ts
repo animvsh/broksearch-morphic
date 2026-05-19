@@ -203,7 +203,63 @@ export async function routeToProviderResponse(
   return response
 }
 
-function transformToProviderRequest(
+function normalizeMessageContent(content: unknown) {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content
+      .map(part => {
+        if (typeof part === 'string') return part
+        if (typeof part?.text === 'string') return part.text
+        return ''
+      })
+      .filter(Boolean)
+      .join('\n')
+  }
+  return ''
+}
+
+export function normalizeMiniMaxMessages(
+  messages: Array<Record<string, unknown>>
+) {
+  const systemMessages = messages
+    .filter(message => message.role === 'system')
+    .map(message => normalizeMessageContent(message.content).trim())
+    .filter(Boolean)
+
+  const nonSystemMessages = messages.filter(
+    message => message.role !== 'system'
+  )
+  if (systemMessages.length === 0) return nonSystemMessages
+
+  const systemBlock = `System instructions:\n${systemMessages.join('\n\n')}`
+  const firstUserIndex = nonSystemMessages.findIndex(
+    message => message.role === 'user'
+  )
+
+  if (firstUserIndex === -1) {
+    return [
+      {
+        role: 'user',
+        content: systemBlock
+      },
+      ...nonSystemMessages
+    ]
+  }
+
+  return nonSystemMessages.map((message, index) => {
+    if (index !== firstUserIndex) return message
+
+    const userContent = normalizeMessageContent(message.content).trim()
+    return {
+      ...message,
+      content: userContent
+        ? `${systemBlock}\n\nUser request:\n${userContent}`
+        : systemBlock
+    }
+  })
+}
+
+export function transformToProviderRequest(
   model: BrokModelId,
   request: ProviderRequest,
   providerModel: string
@@ -215,15 +271,17 @@ function transformToProviderRequest(
 
   const providerRequest: Record<string, unknown> = {
     model: providerModel,
-    messages: hasSystemMessage
-      ? request.messages
-      : [
-          {
-            role: 'system',
-            content: DEFAULT_BROK_SYSTEM_MESSAGE
-          },
-          ...request.messages
-        ],
+    messages: normalizeMiniMaxMessages(
+      hasSystemMessage
+        ? request.messages
+        : [
+            {
+              role: 'system',
+              content: DEFAULT_BROK_SYSTEM_MESSAGE
+            },
+            ...request.messages
+          ]
+    ),
     stream: request.stream,
     temperature: request.temperature,
     top_p: request.topP,

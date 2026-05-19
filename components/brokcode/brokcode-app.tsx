@@ -806,6 +806,7 @@ export function BrokCodeApp({
   accountEmail = 'Brok account'
 }: BrokCodeAppProps = {}) {
   const cloudBootstrapRef = useRef(false)
+  const hydratedProjectPreviewRef = useRef<string | null>(null)
   const pendingCloudStartPromptRef = useRef<string | null>(null)
   const runCommandRef = useRef<((command: string) => Promise<void>) | null>(
     null
@@ -1688,6 +1689,38 @@ export function BrokCodeApp({
     loadPreviewTarget(normalized)
     return normalized
   }
+
+  useEffect(() => {
+    if (!activeProject) return
+
+    const candidate = activeProject.previewUrl ?? activeProject.deploymentUrl
+    const normalized =
+      typeof candidate === 'string' ? normalizePreviewUrl(candidate) : null
+    if (!normalized || isBrokCodeWorkspaceUrl(normalized)) return
+
+    const hydrationKey = `${activeProject.id}:${normalized}`
+    if (hydratedProjectPreviewRef.current === hydrationKey) return
+
+    const currentPreviewIsManaged =
+      previewUrl.includes('/api/brokcode/previews/') ||
+      previewUrl.trim().length === 0
+    const nextPreviewIsProjectManaged = normalized.includes(
+      `/api/brokcode/previews/${encodeURIComponent(activeProject.id)}/`
+    )
+
+    if (!currentPreviewIsManaged && !nextPreviewIsProjectManaged) return
+
+    hydratedProjectPreviewRef.current = hydrationKey
+    setPreviewUrl(normalized)
+    setPreviewInput(normalized)
+    setPreviewFrameKey(value => value + 1)
+  }, [
+    activeProject,
+    activeProject?.deploymentUrl,
+    activeProject?.id,
+    activeProject?.previewUrl,
+    previewUrl
+  ])
 
   function applyPreviewInput() {
     loadPreviewTarget(previewInput)
@@ -2608,6 +2641,7 @@ export function BrokCodeApp({
           session_id: syncSessionId,
           stream: true,
           prefer_pi: true,
+          allow_brok_fallback: true,
           project_id: runProject.id,
           backend_provider: activeBackend.provider,
           backend_status: activeBackend.status,
@@ -3320,29 +3354,121 @@ export function BrokCodeApp({
           </div>
 
           <div className="min-h-0 flex-1 p-2">
-            <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 shadow-sm">
-              <div className="min-w-0">
-                <p className="font-medium text-zinc-950">
-                  {activeBackend.provider === 'insforge'
-                    ? 'InsForge backend'
-                    : 'Backend not configured'}
-                </p>
-                <p className="truncate text-zinc-500">
-                  {activeBackend.provider === 'insforge'
-                    ? activeBackend.projectUrl || 'Project URL not set'
-                    : 'Configure database, auth, storage, and functions in Setup.'}
-                </p>
+            <div className="mb-2 rounded-lg border border-zinc-200 bg-white p-2 text-xs text-zinc-600 shadow-sm">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-medium text-zinc-950">
+                    {activeProject?.name ?? 'No project yet'}
+                  </p>
+                  <p className="truncate text-zinc-500">
+                    {activeBackend.provider === 'insforge'
+                      ? activeBackend.projectUrl ||
+                        'InsForge project URL not set'
+                      : 'Cloud project, preview, and backend stay attached here.'}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {projects.length > 0 && (
+                    <Select
+                      value={activeProject?.id ?? ''}
+                      onValueChange={value => {
+                        setActiveProjectId(value)
+                        hydratedProjectPreviewRef.current = null
+                      }}
+                    >
+                      <SelectTrigger className="h-8 w-[150px] rounded-full border-zinc-200 bg-zinc-50 text-xs">
+                        <SelectValue placeholder="Project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projects.map(project => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 rounded-full border-zinc-200 bg-zinc-50 text-zinc-700"
+                  >
+                    {activeBackend.provider === 'insforge'
+                      ? activeBackend.health === 'online'
+                        ? 'Backend live'
+                        : activeBackend.status
+                      : 'No backend'}
+                  </Badge>
+                </div>
               </div>
-              <Badge
-                variant="outline"
-                className="shrink-0 rounded-full border-zinc-200 bg-zinc-50 text-zinc-700"
-              >
-                {activeBackend.provider === 'insforge'
-                  ? activeBackend.health === 'online'
-                    ? 'Online'
-                    : activeBackend.status
-                  : 'Off'}
-              </Badge>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {activeBackend.provider === 'insforge' ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-full px-3 text-xs"
+                      disabled={backendChecking}
+                      onClick={() => {
+                        void checkBackendHealth()
+                      }}
+                    >
+                      {backendChecking ? (
+                        <RefreshCcw className="size-3.5 animate-spin" />
+                      ) : (
+                        <Radar className="size-3.5" />
+                      )}
+                      Check backend
+                    </Button>
+                    {activeBackend.dashboardUrl && (
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-full px-3 text-xs"
+                      >
+                        <a
+                          href={activeBackend.dashboardUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <ExternalLink className="size-3.5" />
+                          Dashboard
+                        </a>
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full px-3 text-xs"
+                    disabled={backendProvisioning || !hasLiveRuntime}
+                    onClick={() => {
+                      void provisionInsForgeBackend()
+                    }}
+                  >
+                    {backendProvisioning ? (
+                      <RefreshCcw className="size-3.5 animate-spin" />
+                    ) : (
+                      <PlugZap className="size-3.5" />
+                    )}
+                    Add cloud backend
+                  </Button>
+                )}
+                {activeProject?.previewUrl && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 rounded-full px-3 text-xs text-zinc-600"
+                    onClick={() =>
+                      loadPreviewUrlIfAllowed(activeProject.previewUrl)
+                    }
+                  >
+                    <Eye className="size-3.5" />
+                    Open saved preview
+                  </Button>
+                )}
+              </div>
             </div>
             <BrowserPreviewPanel
               previewInput={previewInput}

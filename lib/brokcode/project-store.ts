@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -149,7 +149,7 @@ export async function listBrokCodeProjects({
             eq(brokCodeProjects.userId, userId)
           )
         )
-        .orderBy(asc(brokCodeProjects.createdAt))
+        .orderBy(desc(brokCodeProjects.updatedAt))
     } catch (error) {
       console.error('BrokCode project DB list failed; using file store:', error)
     }
@@ -163,7 +163,7 @@ export async function listBrokCodeProjects({
     )
     .sort(
       (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     )
 }
 

@@ -513,8 +513,7 @@ async function runDirectBrokRuntime({
     model,
     messages,
     stream,
-    temperature: 0.2,
-    maxTokens: 1200
+    maxTokens: 4096
   })
 
   if (stream) {
@@ -643,6 +642,7 @@ function createExecutionStream({
   requireOpenCode,
   preferPi,
   requirePi,
+  allowBrokFallback,
   taskId,
   usageContext,
   requestOrigin
@@ -660,6 +660,7 @@ function createExecutionStream({
   requireOpenCode: boolean
   preferPi: boolean
   requirePi: boolean
+  allowBrokFallback: boolean
   taskId?: string
   requestOrigin: string
   usageContext: {
@@ -1006,7 +1007,8 @@ function createExecutionStream({
           if (
             !canUseGenericBrokFallback({
               source: usageContext.source,
-              commandType: usageContext.commandType
+              commandType: usageContext.commandType,
+              allowBrokFallback
             })
           ) {
             const message =
@@ -1452,6 +1454,7 @@ export async function POST(request: NextRequest) {
       requireOpenCode,
       preferPi,
       requirePi,
+      allowBrokFallback: body?.allow_brok_fallback === true,
       taskId: task?.id,
       requestOrigin: publicOrigin,
       usageContext: codeUsageContext
