@@ -443,6 +443,12 @@ const runStreamingHints = [
   'Preparing the answer'
 ]
 
+const builderQuickPrompts = [
+  'Build a polished landing page',
+  'Make this app cleaner on mobile',
+  'Fix the preview and explain what changed'
+]
+
 const integrationConnectMatchers: Array<{ toolkit: string; pattern: RegExp }> =
   [
     { toolkit: 'github', pattern: /\b(github|git hub|repo|repository)\b/i },
@@ -669,6 +675,57 @@ function cleanAssistantContentForBuilder(content: string) {
     .replace(/^Live \([^)]+\)\s*/i, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+function formatBuilderContentForChat({
+  content,
+  files,
+  previewUrl
+}: {
+  content: string
+  files?: GeneratedPreviewFile[]
+  previewUrl?: string | null
+}) {
+  const generatedFiles = files ?? extractGeneratedPreviewFiles(content)
+  const withoutCode = content
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/```[\s\S]*$/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  const firstUsefulLine =
+    withoutCode
+      .split('\n')
+      .map(line => line.trim())
+      .find(line => line && !/^done\.?$/i.test(line)) ?? ''
+
+  if (generatedFiles.length > 0) {
+    const fileList = generatedFiles
+      .slice(0, 4)
+      .map(file => file.path)
+      .join(', ')
+    const extraCount = generatedFiles.length > 4 ? generatedFiles.length - 4 : 0
+    return [
+      previewUrl
+        ? 'Done. I updated the project files and opened the preview on the right.'
+        : 'I am writing the project files now.',
+      fileList
+        ? `Files: ${fileList}${extraCount > 0 ? `, +${extraCount} more` : ''}.`
+        : null,
+      firstUsefulLine && firstUsefulLine.length < 180 ? firstUsefulLine : null
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join('\n\n')
+  }
+
+  if (content.includes('```')) {
+    return [
+      firstUsefulLine || 'I am writing the project files now.',
+      'I will keep the raw code out of the chat and open the preview when it is ready.'
+    ].join('\n\n')
+  }
+
+  return content.length > 1400 ? `${content.slice(0, 1397)}...` : content
 }
 
 async function readBrokCodeExecutionStream(
@@ -1722,10 +1779,6 @@ export function BrokCodeApp({
     previewUrl
   ])
 
-  function applyPreviewInput() {
-    loadPreviewTarget(previewInput)
-  }
-
   const checkPreviewHealth = useCallback(
     async (target = previewUrl) => {
       const normalized = normalizePreviewUrl(target)
@@ -2688,9 +2741,11 @@ export function BrokCodeApp({
                 message.id === assistantMessageId
                   ? {
                       ...message,
-                      content: cleanAssistantContentForBuilder(
-                        event.accumulated
-                      )
+                      content: formatBuilderContentForChat({
+                        content: cleanAssistantContentForBuilder(
+                          event.accumulated
+                        )
+                      })
                     }
                   : message
               )
@@ -2760,9 +2815,11 @@ export function BrokCodeApp({
           message.id === assistantMessageId
             ? {
                 ...message,
-                content: discoveredPreviewUrl
-                  ? `Done. I opened the preview on the right.\n\n${assistantContent}`
-                  : `Done.\n\n${assistantContent}`,
+                content: formatBuilderContentForChat({
+                  content: assistantContent,
+                  files: generatedFiles,
+                  previewUrl: discoveredPreviewUrl
+                }),
                 actions
               }
             : message
@@ -3126,28 +3183,26 @@ export function BrokCodeApp({
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto bg-[#f6f6f3] lg:grid-cols-[minmax(350px,430px)_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[minmax(380px,450px)_minmax(0,1fr)]">
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto bg-[#f6f6f3] lg:grid-cols-[minmax(390px,480px)_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[minmax(420px,520px)_minmax(0,1fr)]">
         <section className="flex min-h-[52dvh] flex-col overflow-hidden border-b border-zinc-200/80 bg-white lg:min-h-0 lg:border-b-0 lg:border-r">
-          <div className="border-b border-zinc-200/80 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
+          <div className="border-b border-zinc-200/80 bg-white px-3 py-2 sm:px-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-zinc-950">
-                  Builder chat
-                </p>
+                <p className="text-sm font-semibold text-zinc-950">Chat</p>
                 <p className="hidden truncate text-xs text-zinc-500 sm:block">
-                  Describe the app. Brok builds, checks, and keeps preview live.
+                  Tell Brok what to build. The preview updates on the right.
                 </p>
               </div>
               <Badge
                 variant={isRunning ? 'default' : 'secondary'}
-                className="shrink-0 rounded-full border-zinc-200 bg-zinc-50 text-zinc-700"
+                className="shrink-0 rounded-full border-zinc-200 bg-zinc-50 px-2.5 text-zinc-700"
               >
                 {isRunning ? 'Working' : 'Ready'}
               </Badge>
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-5">
-            <div className="flex flex-col gap-3 sm:gap-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+            <div className="flex flex-col gap-3 sm:gap-5">
               <div className="hidden">
                 <SyncedSessionPanel
                   session={activeSyncSession}
@@ -3240,34 +3295,31 @@ export function BrokCodeApp({
                 />
               ))}
 
-              {isRunning && (
-                <div className="mr-auto max-w-[min(100%,42rem)] overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-zinc-950 shadow-sm">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Wand2 className="size-4" />
-                    <span>Brok Code is working</span>
-                    <span className="typing-dots" aria-hidden>
-                      <span />
-                      <span />
-                      <span />
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-zinc-500">
-                    <span className="thinking-text">
-                      {runStreamingHints[runHintIndex]}
-                    </span>
-                  </p>
-                  <div className="mt-3 h-1 overflow-hidden rounded-full bg-zinc-200">
-                    <div className="h-full w-2/5 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-zinc-900" />
-                  </div>
-                </div>
+              {(isRunning || executionRuns.length > 0) && (
+                <AgentReasoningBar
+                  run={executionRuns[0]}
+                  fallbackHint={runStreamingHints[runHintIndex]}
+                />
               )}
             </div>
           </div>
 
           <div className="border-t border-zinc-200/80 bg-white/95 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur sm:p-4">
+            <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
+              {builderQuickPrompts.map(prompt => (
+                <button
+                  key={prompt}
+                  type="button"
+                  className="shrink-0 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-950"
+                  onClick={() => setInput(prompt)}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
             <div className="w-full">
               <form
-                className="relative flex items-end gap-2 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 p-2 shadow-sm"
+                className="relative flex items-end gap-2 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-2 shadow-[0_18px_48px_-34px_rgba(24,24,27,0.5)]"
                 onSubmit={event => {
                   event.preventDefault()
                   runCommand(input)
@@ -3284,7 +3336,7 @@ export function BrokCodeApp({
                     }
                   }}
                   placeholder="Ask Brok Code to build, fix, audit, or ship..."
-                  className="max-h-32 min-h-11 resize-none border-0 bg-transparent text-sm text-zinc-950 placeholder:text-zinc-400 focus-visible:ring-0 focus-visible:ring-offset-0 sm:max-h-36 sm:min-h-12"
+                  className="max-h-32 min-h-11 resize-none border-0 bg-transparent text-sm leading-6 text-zinc-950 placeholder:text-zinc-400 focus-visible:ring-0 focus-visible:ring-offset-0 sm:max-h-36 sm:min-h-12"
                 />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -3316,7 +3368,7 @@ export function BrokCodeApp({
                 <Button
                   type="submit"
                   size="icon"
-                  className="mb-1 size-9 shrink-0 bg-zinc-950 text-white hover:bg-zinc-800"
+                  className="mb-1 size-9 shrink-0 rounded-xl bg-zinc-950 text-white hover:bg-zinc-800"
                   disabled={isRunning || !input.trim()}
                 >
                   <Send className="size-4" />
@@ -3475,20 +3527,12 @@ export function BrokCodeApp({
               previewUrl={previewUrl}
               previewFrameKey={previewFrameKey}
               previewHealth={previewHealth}
-              onPreviewInputChange={setPreviewInput}
-              onApply={applyPreviewInput}
               onDirectLoad={loadPreviewTarget}
               onReload={reloadPreview}
               runtimeError={runtimeError}
               latestRun={executionRuns[0]}
             />
           </div>
-
-          {(isRunning || executionRuns.length > 0) && (
-            <div className="max-h-[180px] overflow-y-auto border-t border-zinc-200/80 bg-white/95 p-2 backdrop-blur sm:max-h-[220px]">
-              <ExecutionVisualizer runs={executionRuns} />
-            </div>
-          )}
         </aside>
       </main>
     </div>
@@ -3681,24 +3725,22 @@ function ChatBubble({
       )}
     >
       {!isUser && !isSystem && (
-        <div className="hidden size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-zinc-300 sm:flex">
+        <div className="hidden size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-950 text-white sm:flex">
           <Bot className="size-4" />
         </div>
       )}
       <div
         className={cn(
-          'max-w-[min(100%,42rem)] rounded-2xl border p-3 text-sm leading-6 shadow-[0_18px_46px_-34px_rgba(0,0,0,0.95)] sm:p-4',
-          isUser && 'border-white/90 bg-white text-zinc-950',
+          'max-w-[min(100%,42rem)] rounded-2xl border p-3 text-sm leading-6 shadow-[0_18px_46px_-38px_rgba(24,24,27,0.55)] sm:p-4',
+          isUser && 'border-zinc-950 bg-zinc-950 text-white',
           isSystem &&
-            'border-dashed border-white/10 bg-white/[0.04] py-2 text-xs text-zinc-400',
-          !isUser &&
-            !isSystem &&
-            'border-white/10 bg-white/[0.06] text-zinc-100'
+            'border-dashed border-zinc-200 bg-zinc-50 py-2 text-xs text-zinc-500 shadow-none',
+          !isUser && !isSystem && 'border-zinc-200 bg-white text-zinc-950'
         )}
       >
         {!isUser && !isSystem && (
-          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-2 py-1 text-[11px] font-medium text-zinc-400">
-            <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
+          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] font-medium text-zinc-500">
+            <span className="size-1.5 rounded-full bg-emerald-500" />
             Brok Code
           </div>
         )}
@@ -3710,8 +3752,8 @@ function ChatBubble({
               <button
                 key={agent.id}
                 className={cn(
-                  'rounded-md border border-white/10 bg-white/[0.05] p-2 text-left transition-colors hover:bg-white/10',
-                  selectedId === agent.id && 'border-white/50'
+                  'rounded-md border border-zinc-200 bg-zinc-50 p-2 text-left transition-colors hover:bg-zinc-100',
+                  selectedId === agent.id && 'border-zinc-950'
                 )}
                 onClick={() => onAgentClick(agent.id)}
               >
@@ -3724,7 +3766,7 @@ function ChatBubble({
                     )}
                   />
                 </div>
-                <p className="mt-1 line-clamp-2 text-xs text-zinc-400">
+                <p className="mt-1 line-clamp-2 text-xs text-zinc-500">
                   {agent.currentTask}
                 </p>
               </button>
@@ -3738,7 +3780,7 @@ function ChatBubble({
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full gap-2 border-white/[0.15] bg-white/[0.05] text-zinc-100 hover:bg-white/10 sm:w-auto"
+                className="w-full gap-2 border-zinc-200 bg-zinc-50 text-zinc-800 hover:bg-zinc-100 sm:w-auto"
                 onClick={() => onAction('run-checks')}
               >
                 <CheckCircle2 className="size-4" />
@@ -3749,7 +3791,7 @@ function ChatBubble({
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full gap-2 border-white/[0.15] bg-white/[0.05] text-zinc-100 hover:bg-white/10 sm:w-auto"
+                className="w-full gap-2 border-zinc-200 bg-zinc-50 text-zinc-800 hover:bg-zinc-100 sm:w-auto"
                 onClick={() => onAction('open-pr')}
               >
                 <Rocket className="size-4" />
@@ -3760,7 +3802,7 @@ function ChatBubble({
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full gap-2 border-white/[0.15] bg-white/[0.05] text-zinc-100 hover:bg-white/10 sm:w-auto"
+                className="w-full gap-2 border-zinc-200 bg-zinc-50 text-zinc-800 hover:bg-zinc-100 sm:w-auto"
                 onClick={() => onAction('connect-github')}
               >
                 <Github className="size-4" />
@@ -3772,7 +3814,7 @@ function ChatBubble({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full gap-2 border-white/[0.15] bg-white/[0.05] text-zinc-100 hover:bg-white/10 sm:w-auto"
+                  className="w-full gap-2 border-zinc-200 bg-zinc-50 text-zinc-800 hover:bg-zinc-100 sm:w-auto"
                   onClick={() =>
                     onAction('connect-integration', message.integrationToolkit)
                   }
@@ -3785,11 +3827,98 @@ function ChatBubble({
         )}
       </div>
       {isUser && (
-        <div className="hidden size-8 shrink-0 items-center justify-center rounded-lg border border-white/80 bg-white text-zinc-950 sm:flex">
+        <div className="hidden size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-600 sm:flex">
           <User className="size-4" />
         </div>
       )}
     </article>
+  )
+}
+
+function AgentReasoningBar({
+  run,
+  fallbackHint
+}: {
+  run?: ExecutionRun
+  fallbackHint: string
+}) {
+  const activeStep =
+    run?.steps.find(step => step.status === 'running') ??
+    [...(run?.steps ?? [])].reverse().find(step => step.status === 'done')
+  const status = run?.status ?? 'running'
+  const label =
+    status === 'error'
+      ? 'Needs attention'
+      : status === 'done'
+        ? 'Finished'
+        : 'Working'
+  const detail = activeStep?.detail ?? fallbackHint
+  const completed =
+    run?.steps.filter(step => step.status === 'done').length ?? 0
+  const total = Math.max(run?.steps.length ?? 5, 1)
+  const progress =
+    status === 'done'
+      ? 100
+      : status === 'error'
+        ? Math.max(14, Math.round((completed / total) * 100))
+        : Math.max(
+            18,
+            Math.round(
+              ((completed + (activeStep?.status === 'running' ? 0.55 : 0)) /
+                total) *
+                100
+            )
+          )
+
+  return (
+    <div className="mr-auto w-full max-w-[min(100%,42rem)] rounded-2xl border border-zinc-200 bg-zinc-50 p-3 text-zinc-950 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <div
+            className={cn(
+              'flex size-7 shrink-0 items-center justify-center rounded-lg text-white',
+              status === 'error'
+                ? 'bg-rose-500'
+                : status === 'done'
+                  ? 'bg-emerald-500'
+                  : 'bg-zinc-950'
+            )}
+          >
+            {status === 'done' ? (
+              <CheckCircle2 className="size-4" />
+            ) : status === 'error' ? (
+              <Clock3 className="size-4" />
+            ) : (
+              <Wand2 className="size-4" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium">{label}</p>
+            <p className="truncate text-xs text-zinc-500">{detail}</p>
+          </div>
+        </div>
+        {status === 'running' && (
+          <span className="typing-dots shrink-0" aria-hidden>
+            <span />
+            <span />
+            <span />
+          </span>
+        )}
+      </div>
+      <div className="mt-3 h-1 overflow-hidden rounded-full bg-zinc-200">
+        <div
+          className={cn(
+            'h-full rounded-full transition-all duration-500',
+            status === 'error'
+              ? 'bg-rose-500'
+              : status === 'done'
+                ? 'bg-emerald-500'
+                : 'bg-zinc-950'
+          )}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
   )
 }
 
@@ -3903,8 +4032,6 @@ function BrowserPreviewPanel({
   previewFrameKey,
   previewHealth,
   latestRun,
-  onPreviewInputChange,
-  onApply,
   onDirectLoad,
   onReload,
   runtimeError
@@ -3914,8 +4041,6 @@ function BrowserPreviewPanel({
   previewFrameKey: number
   previewHealth: PreviewHealth
   latestRun?: ExecutionRun
-  onPreviewInputChange: (value: string) => void
-  onApply: () => void
   onDirectLoad: (value: string) => void
   onReload: () => void
   runtimeError: string | null
@@ -3938,28 +4063,19 @@ function BrowserPreviewPanel({
       : previewHealth.message
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-white shadow-[0_30px_80px_-50px_rgba(0,0,0,0.95)] sm:rounded-2xl">
-      <div className="flex flex-col gap-2 border-b border-zinc-200/80 bg-[#f5f4f1] p-2 sm:flex-row sm:items-center">
-        <div className="hidden items-center gap-1.5 px-1 sm:flex">
-          <span className="size-3 rounded-full bg-[#ff5f57]" />
-          <span className="size-3 rounded-full bg-[#febc2e]" />
-          <span className="size-3 rounded-full bg-[#28c840]" />
-        </div>
-        <div className="min-w-0 px-1 sm:w-36">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_30px_80px_-58px_rgba(24,24,27,0.6)] sm:rounded-2xl">
+      <div className="flex flex-col gap-2 border-b border-zinc-200/80 bg-white p-2.5 sm:flex-row sm:items-center">
+        <div className="min-w-0 flex-1 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-2">
           <p className="truncate text-xs font-semibold text-zinc-950">
-            Cloud Preview
+            {hasPreviewUrl ? 'Cloud preview' : 'Preview is waiting'}
           </p>
           <p className="truncate text-[11px] text-zinc-500">
-            {hasPreviewUrl ? 'Auto-opened' : 'Waiting for build'}
+            {hasPreviewUrl
+              ? previewInput || previewUrl
+              : 'Brok opens the generated app here after the first build.'}
           </p>
         </div>
-        <Input
-          value={previewInput}
-          onChange={event => onPreviewInputChange(event.target.value)}
-          placeholder="Preview opens automatically after Brok builds"
-          className="h-9 min-w-0 flex-1 rounded-full border-zinc-200 bg-white px-4 text-sm shadow-inner"
-        />
-        <div className="mobile-chip-row flex items-center gap-1.5 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0">
+        <div className="mobile-chip-row flex items-center justify-end gap-1.5 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0">
           <Badge variant={healthTone} className="shrink-0 rounded-full">
             {previewStatus === 'online'
               ? 'Live'
@@ -3971,26 +4087,16 @@ function BrowserPreviewPanel({
                     ? 'Offline'
                     : 'Ready'}
           </Badge>
-          <Button
-            variant="default"
-            size="icon"
-            className="size-9 shrink-0 rounded-full bg-zinc-950 text-white hover:bg-zinc-800"
-            onClick={onApply}
-            title="Load preview URL"
-          >
-            <Eye className="size-4" />
-            <span className="sr-only">Load preview URL</span>
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
                 size="icon"
                 className="size-9 shrink-0 rounded-full"
-                title="Preview options"
+                title="Load preview"
               >
                 <Globe className="size-4" />
-                <span className="sr-only">Preview options</span>
+                <span className="sr-only">Load preview</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -4056,7 +4162,7 @@ function BrowserPreviewPanel({
         {latestRun?.previewUrl && (
           <button
             className="hidden max-w-[45%] truncate rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-zinc-700 hover:bg-zinc-100 xl:inline-flex"
-            onClick={() => onDirectLoad(latestRun.previewUrl ?? previewInput)}
+            onClick={() => onDirectLoad(latestRun.previewUrl ?? previewUrl)}
           >
             Use last run: {latestRun.previewUrl}
           </button>
@@ -4075,7 +4181,7 @@ function BrowserPreviewPanel({
           Suggested from last run:
           <button
             className="truncate text-zinc-950 underline"
-            onClick={() => onDirectLoad(latestRun.previewUrl ?? previewInput)}
+            onClick={() => onDirectLoad(latestRun.previewUrl ?? previewUrl)}
           >
             {latestRun.previewUrl}
           </button>
