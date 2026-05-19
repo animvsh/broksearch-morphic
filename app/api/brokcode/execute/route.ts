@@ -141,13 +141,32 @@ function extractAssistantText(payload: any): string {
 }
 
 function extractPreviewUrl(text: string): string | null {
-  const match = text.match(/https?:\/\/[^\s"'<>]+/i)
-  if (!match?.[0]) {
-    return null
+  const matches = text.matchAll(/https?:\/\/[^\s"'<>`)]+/gi)
+
+  for (const match of matches) {
+    const rawUrl = match[0].replace(/[),.;:!?`]+$/, '')
+
+    try {
+      const parsed = new URL(rawUrl)
+      const hostname = parsed.hostname.toLowerCase()
+      const pathname = parsed.pathname.toLowerCase()
+
+      if (hostname === 'api.brok.io' || pathname.startsWith('/v1/')) {
+        continue
+      }
+
+      if (
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname.endsWith('.railway.app') ||
+        pathname.startsWith('/api/brokcode/previews/')
+      ) {
+        return parsed.toString()
+      }
+    } catch {}
   }
 
-  // Drop trailing punctuation from plain-language sentences.
-  return match[0].replace(/[),.;:!?]+$/, '')
+  return null
 }
 
 function formatSseEvent(event: string, payload: unknown) {

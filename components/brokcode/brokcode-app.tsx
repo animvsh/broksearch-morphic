@@ -613,8 +613,36 @@ function isBrokCodeWorkspaceUrl(value: string) {
 }
 
 function extractPreviewUrlFromText(text: string) {
-  const match = text.match(/https?:\/\/(?:127\.0\.0\.1|localhost|[^\s"'<>]+)/i)
-  return match?.[0] ?? null
+  const matches = text.matchAll(
+    /https?:\/\/(?:127\.0\.0\.1|localhost|[^\s"'<>`)]+)/gi
+  )
+
+  for (const match of matches) {
+    const normalized = normalizePreviewUrl(match[0].replace(/[),.;:!?`]+$/, ''))
+    if (!normalized) continue
+
+    try {
+      const parsed = new URL(normalized)
+      const hostname = parsed.hostname.toLowerCase()
+      const pathname = parsed.pathname.toLowerCase()
+
+      if (hostname === 'api.brok.io' || pathname.startsWith('/v1/')) {
+        continue
+      }
+
+      if (
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname.endsWith('.railway.app') ||
+        (typeof window !== 'undefined' &&
+          parsed.origin === window.location.origin)
+      ) {
+        return normalized
+      }
+    } catch {}
+  }
+
+  return null
 }
 
 type GeneratedPreviewFile = GeneratedBrokCodeFile
@@ -2674,7 +2702,7 @@ export function BrokCodeApp({
         managedPreviewUrl = await openCloudProjectPreview(runProject.id)
       }
 
-      const discoveredPreviewUrl = externalPreviewUrl ?? managedPreviewUrl
+      const discoveredPreviewUrl = managedPreviewUrl ?? externalPreviewUrl
 
       setActiveRuntime(runtime)
       updateExecutionStep(run.id, 'execute', 'done', 'Build finished.')
