@@ -2904,7 +2904,7 @@ export function BrokCodeApp({
   }, [connectGithub, githubStatus, hasLiveRuntime, isRunning])
 
   return (
-    <div className="brokcode-lovable flex h-full w-full flex-col overflow-hidden bg-[#f6f6f3] text-zinc-950">
+    <div className="brokcode-lovable flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#f6f6f3] text-zinc-950">
       <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 px-3 py-2 backdrop-blur-md sm:px-4">
         <div className="flex h-11 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -3093,8 +3093,8 @@ export function BrokCodeApp({
       </header>
 
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto bg-[#f6f6f3] lg:grid-cols-[minmax(350px,430px)_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[minmax(380px,450px)_minmax(0,1fr)]">
-        <section className="flex min-h-[54dvh] flex-col overflow-hidden border-b border-zinc-200/80 bg-white lg:min-h-0 lg:border-b-0 lg:border-r">
-          <div className="border-b border-zinc-200/80 bg-white px-3 py-3 sm:px-4">
+        <section className="flex min-h-[52dvh] flex-col overflow-hidden border-b border-zinc-200/80 bg-white lg:min-h-0 lg:border-b-0 lg:border-r">
+          <div className="border-b border-zinc-200/80 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-zinc-950">
@@ -3112,8 +3112,8 @@ export function BrokCodeApp({
               </Badge>
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-5">
-            <div className="flex flex-col gap-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-5">
+            <div className="flex flex-col gap-3 sm:gap-4">
               <div className="hidden">
                 <SyncedSessionPanel
                   session={activeSyncSession}
@@ -3230,7 +3230,7 @@ export function BrokCodeApp({
             </div>
           </div>
 
-          <div className="border-t border-zinc-200/80 bg-white/95 p-3 backdrop-blur sm:p-4">
+          <div className="border-t border-zinc-200/80 bg-white/95 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur sm:p-4">
             <div className="w-full">
               <form
                 className="relative flex items-end gap-2 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 p-2 shadow-sm"
@@ -3250,7 +3250,7 @@ export function BrokCodeApp({
                     }
                   }}
                   placeholder="Ask Brok Code to build, fix, audit, or ship..."
-                  className="max-h-36 min-h-12 resize-none border-0 bg-transparent text-zinc-950 placeholder:text-zinc-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="max-h-32 min-h-11 resize-none border-0 bg-transparent text-sm text-zinc-950 placeholder:text-zinc-400 focus-visible:ring-0 focus-visible:ring-offset-0 sm:max-h-36 sm:min-h-12"
                 />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -3293,7 +3293,7 @@ export function BrokCodeApp({
           </div>
         </section>
 
-        <aside className="flex min-h-[46dvh] flex-col overflow-hidden bg-[#f3f2ee] lg:min-h-0">
+        <aside className="flex min-h-[48dvh] flex-col overflow-hidden bg-[#f3f2ee] lg:min-h-0">
           <div className="border-b border-zinc-200/80 bg-white/90 px-3 py-2 backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -3359,7 +3359,7 @@ export function BrokCodeApp({
           </div>
 
           {(isRunning || executionRuns.length > 0) && (
-            <div className="max-h-[220px] overflow-y-auto border-t border-zinc-200/80 bg-white/95 p-2 backdrop-blur">
+            <div className="max-h-[180px] overflow-y-auto border-t border-zinc-200/80 bg-white/95 p-2 backdrop-blur sm:max-h-[220px]">
               <ExecutionVisualizer runs={executionRuns} />
             </div>
           )}
@@ -3555,7 +3555,7 @@ function ChatBubble({
       )}
     >
       {!isUser && !isSystem && (
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-zinc-300">
+        <div className="hidden size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-zinc-300 sm:flex">
           <Bot className="size-4" />
         </div>
       )}
@@ -3659,7 +3659,7 @@ function ChatBubble({
         )}
       </div>
       {isUser && (
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/80 bg-white text-zinc-950">
+        <div className="hidden size-8 shrink-0 items-center justify-center rounded-lg border border-white/80 bg-white text-zinc-950 sm:flex">
           <User className="size-4" />
         </div>
       )}
@@ -3812,7 +3812,7 @@ function BrowserPreviewPanel({
       : previewHealth.message
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-white shadow-[0_30px_80px_-50px_rgba(0,0,0,0.95)]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-white shadow-[0_30px_80px_-50px_rgba(0,0,0,0.95)] sm:rounded-2xl">
       <div className="flex flex-col gap-2 border-b border-zinc-200/80 bg-[#f5f4f1] p-2 sm:flex-row sm:items-center">
         <div className="hidden items-center gap-1.5 px-1 sm:flex">
           <span className="size-3 rounded-full bg-[#ff5f57]" />
@@ -3833,7 +3833,7 @@ function BrowserPreviewPanel({
           placeholder="Preview opens automatically after Brok builds"
           className="h-9 min-w-0 flex-1 rounded-full border-zinc-200 bg-white px-4 text-sm shadow-inner"
         />
-        <div className="flex items-center gap-1.5">
+        <div className="mobile-chip-row flex items-center gap-1.5 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0">
           <Badge variant={healthTone} className="shrink-0 rounded-full">
             {previewStatus === 'online'
               ? 'Live'
@@ -3958,7 +3958,7 @@ function BrowserPreviewPanel({
 
       <div className="min-h-0 flex-1 overflow-hidden bg-white">
         {!hasPreviewUrl ? (
-          <div className="flex h-full min-h-[520px] w-full items-center justify-center bg-[#fbfaf8] px-6 text-center">
+          <div className="flex h-full min-h-[330px] w-full items-center justify-center bg-[#fbfaf8] px-6 text-center sm:min-h-[520px]">
             <div className="max-w-sm">
               <div className="mx-auto flex size-11 items-center justify-center rounded-xl border border-zinc-200 bg-white shadow-sm">
                 <Monitor className="size-5 text-zinc-500" />
@@ -3973,7 +3973,7 @@ function BrowserPreviewPanel({
             </div>
           </div>
         ) : isBlockedPreview ? (
-          <div className="flex h-full min-h-[520px] w-full items-center justify-center bg-zinc-50 px-6 text-center text-sm text-zinc-500">
+          <div className="flex h-full min-h-[330px] w-full items-center justify-center bg-zinc-50 px-6 text-center text-sm text-zinc-500 sm:min-h-[520px]">
             BrokCode preview cannot render the BrokCode app itself. Load your
             generated app URL instead.
           </div>
@@ -3982,7 +3982,7 @@ function BrowserPreviewPanel({
             key={previewFrameKey}
             src={previewUrl}
             title="Brok Code browser preview"
-            className="h-full min-h-[520px] w-full bg-white"
+            className="h-full min-h-[330px] w-full bg-white sm:min-h-[520px]"
             referrerPolicy="no-referrer"
           />
         )}

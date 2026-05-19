@@ -823,6 +823,15 @@
     scroll-behavior: smooth;
   }
 
+  .mobile-chip-row {
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+
+  .mobile-chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
   #scroll-container {
     overflow-anchor: auto;
   }
@@ -1371,6 +1380,24 @@
 
 .brokmail-shell textarea {
   scroll-padding-bottom: 1rem;
+}
+
+@media (max-width: 767px) {
+  .brokmail-shell,
+  .brokcode-lovable {
+    max-height: calc(100dvh - 3.25rem);
+  }
+
+  .brokmail-shell button,
+  .brokcode-lovable button,
+  .mobile-chip-row > * {
+    touch-action: manipulation;
+  }
+
+  .brokmail-shell .dashboard-card,
+  .brokcode-lovable .rounded-2xl {
+    border-radius: 0.875rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

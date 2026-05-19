@@ -21,8 +21,10 @@ export function FeatureRequestWidget() {
   return (
     <aside
       className={cn(
-        'group fixed bottom-4 right-4 z-[90] transition-all duration-300 ease-out',
-        open ? 'w-[min(calc(100vw-2rem),330px)]' : 'w-10 hover:w-32'
+        'group fixed right-3 z-[90] transition-all duration-300 ease-out sm:right-4',
+        open
+          ? 'bottom-3 w-[min(calc(100vw-1.5rem),330px)] sm:bottom-4'
+          : 'bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] w-10 hover:w-32 sm:bottom-4'
       )}
       aria-label="Feature request"
     >

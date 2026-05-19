@@ -1767,14 +1767,14 @@ export function BrokMailApp() {
   }
 
   return (
-    <div className="brokmail-shell flex h-full w-full overflow-hidden bg-[#f6f6f3] text-foreground">
+    <div className="brokmail-shell flex h-full min-h-0 w-full overflow-hidden bg-[#f6f6f3] text-foreground">
       {agentOpen ? (
         <div
           className="fixed inset-0 z-50 bg-zinc-950/20 backdrop-blur-[1px] xl:hidden"
           onClick={() => setAgentOpen(false)}
         >
           <aside
-            className="absolute bottom-3 left-3 top-3 flex w-[min(440px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+            className="absolute inset-x-2 bottom-2 flex max-h-[min(86dvh,720px)] flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl md:bottom-3 md:left-3 md:top-3 md:w-[min(440px,calc(100vw-1.5rem))] md:rounded-xl"
             onClick={event => event.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b px-3 py-2">
@@ -1902,16 +1902,19 @@ export function BrokMailApp() {
             </div>
           </aside>
 
-          <div className="border-b border-zinc-200/80 bg-[#fbfbf8] px-3 py-3 2xl:hidden">
+          <div className="border-b border-zinc-200/80 bg-[#fbfbf8] px-3 py-2.5 2xl:hidden">
             <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <Button className="h-9 flex-1 gap-2" onClick={focusComposer}>
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  className="h-9 flex-1 gap-1.5 px-2 text-xs sm:gap-2 sm:text-sm"
+                  onClick={focusComposer}
+                >
                   <PenLine className="size-4" />
                   Compose
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-9 flex-1 gap-2"
+                  className="h-9 flex-1 gap-1.5 px-2 text-xs sm:gap-2 sm:text-sm"
                   onClick={() => {
                     void (connected
                       ? loadComposioGmailThreads()
@@ -1940,7 +1943,7 @@ export function BrokMailApp() {
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-9 flex-1 gap-2"
+                  className="h-9 flex-1 gap-1.5 px-2 text-xs sm:gap-2 sm:text-sm"
                   onClick={() => {
                     void (calendarConnected
                       ? loadComposioCalendarEvents()
@@ -1973,8 +1976,8 @@ export function BrokMailApp() {
             </div>
           </div>
 
-          <div className="flex max-h-[42dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white lg:max-h-none lg:w-[320px] lg:border-b-0 lg:border-r xl:w-[350px]">
-            <div className="border-b border-zinc-100 bg-white p-3">
+          <div className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white sm:max-h-[42dvh] lg:max-h-none lg:w-[320px] lg:border-b-0 lg:border-r xl:w-[350px]">
+            <div className="border-b border-zinc-100 bg-white p-2.5 sm:p-3">
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />
                 <Input
@@ -1986,12 +1989,12 @@ export function BrokMailApp() {
                   className="h-9 min-w-0"
                 />
               </div>
-              <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground sm:mt-3 sm:gap-3">
                 <span>
                   {listCount} {listLabel}
                 </span>
-                <div className="flex items-center gap-1 rounded-md border border-border/60 bg-white/70 p-0.5">
-                  <ArrowDownUp className="ml-1 size-3.5 shrink-0 text-muted-foreground" />
+                <div className="flex min-w-0 items-center gap-1 rounded-md border border-border/60 bg-white/70 p-0.5">
+                  <ArrowDownUp className="ml-1 hidden size-3.5 shrink-0 text-muted-foreground sm:block" />
                   {sortOptions.map(option => (
                     <button
                       key={option.id}
@@ -2008,7 +2011,7 @@ export function BrokMailApp() {
                   ))}
                 </div>
               </div>
-              <div className="-mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1 2xl:hidden">
+              <div className="mobile-chip-row -mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:mt-3 2xl:hidden">
                 {viewLabels.map(item => {
                   const Icon = item.icon
                   return (
@@ -2358,7 +2361,7 @@ function BrokMailStatusBar({
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 gap-2 rounded-md px-3 text-xs hover:bg-zinc-100"
+            className="h-8 gap-1.5 rounded-md px-2.5 text-xs hover:bg-zinc-100 sm:gap-2 sm:px-3"
             onClick={runPriorityBrief}
             disabled={isRunning}
           >
@@ -2368,11 +2371,12 @@ function BrokMailStatusBar({
           <Button
             variant="default"
             size="sm"
-            className="h-8 shrink-0 gap-2 rounded-md bg-zinc-950 px-3 text-xs text-white hover:bg-zinc-800 xl:hidden"
+            className="h-8 shrink-0 gap-1.5 rounded-md bg-zinc-950 px-2.5 text-xs text-white hover:bg-zinc-800 sm:gap-2 sm:px-3 xl:hidden"
             onClick={onOpenAgent}
           >
             <Bot className="size-3.5" />
-            Ask BrokMail
+            <span className="sm:hidden">Ask</span>
+            <span className="hidden sm:inline">Ask BrokMail</span>
           </Button>
         </div>
       </div>
@@ -2419,7 +2423,7 @@ function ThreadView({
 
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="border-b border-zinc-200 bg-white px-3 py-3 sm:px-4">
+      <div className="border-b border-zinc-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -2432,15 +2436,15 @@ function ThreadView({
               )}
               {isSyncingMail && <span>Syncing...</span>}
             </div>
-            <h1 className="mt-1 line-clamp-2 max-w-4xl text-lg font-semibold leading-snug sm:text-xl">
+            <h1 className="mt-1 line-clamp-2 max-w-4xl text-base font-semibold leading-snug sm:text-xl">
               {thread.subject}
             </h1>
           </div>
-          <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:items-center">
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 gap-2 sm:flex-none"
+              className="gap-1.5 px-2 text-xs sm:flex-none sm:gap-2 sm:text-sm"
               onClick={onToggleStar}
             >
               <Star
@@ -2454,15 +2458,16 @@ function ThreadView({
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 gap-2 sm:flex-none"
+              className="gap-1.5 px-2 text-xs sm:flex-none sm:gap-2 sm:text-sm"
               onClick={() => runAgent('Summarize this thread.')}
             >
               <Sparkles className="size-4" />
-              Summarize
+              <span className="sm:hidden">Brief</span>
+              <span className="hidden sm:inline">Summarize</span>
             </Button>
             <Button
               size="sm"
-              className="flex-1 gap-2 sm:flex-none"
+              className="gap-1.5 px-2 text-xs sm:flex-none sm:gap-2 sm:text-sm"
               onClick={() => runAgent('Draft a reply to this thread.')}
             >
               <Reply className="size-4" />
@@ -2480,7 +2485,7 @@ function ThreadView({
           </div>
         </div>
 
-        <div className="mt-3 border-t border-zinc-200/80 pt-3">
+        <div className="mt-2 border-t border-zinc-200/80 pt-2 sm:mt-3 sm:pt-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -2488,11 +2493,11 @@ function ThreadView({
                   Assistant summary · {priorityLabel(priorityScore)}
                 </span>
               </div>
-              <p className="text-sm leading-6 text-zinc-600">
+              <p className="line-clamp-2 text-sm leading-6 text-zinc-600 sm:line-clamp-none">
                 {thread.aiSummary}
               </p>
             </div>
-            <div className="min-w-0 xl:w-80">
+            <div className="hidden min-w-0 sm:block xl:w-80">
               <div className="mb-1 flex items-center gap-2 text-xs font-medium">
                 <CheckCircle2 className="size-3.5" />
                 Next actions
@@ -2511,12 +2516,12 @@ function ThreadView({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:px-4">
         <div className="mx-auto max-w-4xl space-y-3">
           {thread.messages.map(message => (
             <article
               key={message.id}
-              className="rounded-lg border border-zinc-100 bg-white p-4"
+              className="rounded-lg border border-zinc-100 bg-white p-3 sm:p-4"
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
@@ -2573,7 +2578,7 @@ function ThreadView({
               value={composer}
               onChange={event => setComposer(event.target.value)}
               placeholder="Draft or insert a reply..."
-              className="min-h-32 resize-none rounded-xl border-zinc-200 bg-zinc-50/80 leading-6 shadow-inner"
+              className="min-h-24 resize-none rounded-xl border-zinc-200 bg-zinc-50/80 leading-6 shadow-inner sm:min-h-32"
             />
             <div className="mt-3 hidden flex-wrap gap-2 text-xs text-muted-foreground sm:flex">
               <div className="rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5">
@@ -2608,7 +2613,7 @@ function ThreadView({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-2"
+                  className="gap-1.5 px-2 text-xs sm:gap-2 sm:text-sm"
                   onClick={saveComposerDraft}
                 >
                   <FileText className="size-4" />
@@ -2616,7 +2621,7 @@ function ThreadView({
                 </Button>
                 <Button
                   size="sm"
-                  className="gap-2"
+                  className="gap-1.5 px-2 text-xs sm:gap-2 sm:text-sm"
                   onClick={requestComposerSendApproval}
                   disabled={!composer.trim()}
                 >
@@ -2680,7 +2685,7 @@ function AgentPanel({
   }, [activity.length, messages.length])
 
   return (
-    <div className="flex h-full flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="border-b bg-white p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -2707,12 +2712,12 @@ function AgentPanel({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-2"
+              className="h-8 gap-1.5 px-2.5 text-xs sm:gap-2 sm:px-3 sm:text-sm"
               onClick={onShare}
               disabled={isSharing}
             >
               <Share2 className="size-4" />
-              {isSharing ? 'Sharing...' : 'Share'}
+              {isSharing ? 'Sharing' : 'Share'}
             </Button>
           </div>
         </div>
@@ -2742,7 +2747,7 @@ function AgentPanel({
             </p>
           </div>
         </div>
-        <div className="-mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
+        <div className="mobile-chip-row -mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
           {quickPrompts.map(prompt => (
             <button
               key={prompt}
@@ -2905,7 +2910,7 @@ function AgentPanel({
         <div ref={messageEndRef} />
       </div>
 
-      <div className="border-t bg-card/95 p-3 shadow-[0_-16px_40px_-36px_rgba(24,24,27,0.45)] backdrop-blur sm:p-4">
+      <div className="border-t bg-card/95 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-16px_40px_-36px_rgba(24,24,27,0.45)] backdrop-blur sm:p-4">
         <form
           className="rounded-2xl border border-border bg-background/95 p-2 shadow-sm transition-all focus-within:border-foreground/25 focus-within:shadow-md"
           onSubmit={event => {
