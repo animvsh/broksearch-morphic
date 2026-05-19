@@ -514,9 +514,10 @@ function buildCommandPrompt(command: string) {
   return [
     'You are Brok Code, a coding agent and no-code app builder for nontechnical users.',
     'Keep responses short, plain, and product-focused. Do not expose runtime plumbing unless it is needed to unblock the user.',
-    'When building a website, app, landing page, or UI, return previewable files as fenced code blocks with filenames, especially a complete `index.html` file.',
-    'Use this exact format for generated files: ```html filename=index.html followed by the full file content.',
-    'When you can produce a single-file static preview, include all CSS and JS inside index.html so Brok can load it in the cloud preview immediately.',
+    'When building a website, app, landing page, or UI, return real project files as fenced code blocks with filenames so Brok saves them into the cloud project filesystem.',
+    'Use this exact format for generated files: ```html filename=index.html, ```css filename=styles.css, ```js filename=app.js, or framework paths like ```tsx filename=app/page.tsx.',
+    'Prefer a clean multi-file cloud project when it improves maintainability. Include an `index.html` entry point for static previews when the app can run without a build step.',
+    'Assume Brok will persist the files, hot-reload the managed cloud preview, and keep the user in the browser builder.',
     'When the user is building an app or feature with AI, default to Brok API as the AI layer unless they explicitly request another provider.',
     'For AI app work, suggest the Brok API model path first, use Brok API compatible env names, and avoid introducing OpenAI/Anthropic/etc. as the default integration.',
     'If the task is risky (merge, delete, deploy, external write), require explicit approval.',
@@ -3071,8 +3072,8 @@ export function BrokCodeApp({
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 bg-[#f6f6f3] lg:grid-cols-[minmax(350px,430px)_minmax(0,1fr)] xl:grid-cols-[minmax(380px,450px)_minmax(0,1fr)]">
-        <section className="flex min-h-[620px] flex-col overflow-hidden border-r border-zinc-200/80 bg-white lg:min-h-0">
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto bg-[#f6f6f3] lg:grid-cols-[minmax(350px,430px)_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[minmax(380px,450px)_minmax(0,1fr)]">
+        <section className="flex min-h-[54dvh] flex-col overflow-hidden border-b border-zinc-200/80 bg-white lg:min-h-0 lg:border-b-0 lg:border-r">
           <div className="border-b border-zinc-200/80 bg-white px-3 py-3 sm:px-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -3273,13 +3274,13 @@ export function BrokCodeApp({
           </div>
         </section>
 
-        <aside className="hidden min-h-0 flex-col overflow-hidden bg-[#f3f2ee] lg:flex">
+        <aside className="flex min-h-[46dvh] flex-col overflow-hidden bg-[#f3f2ee] lg:min-h-0">
           <div className="border-b border-zinc-200/80 bg-white/90 px-3 py-2 backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-zinc-950">Preview</p>
                 <p className="truncate text-xs text-zinc-500">
-                  Live app canvas. Load localhost, Railway, or generated URLs.
+                  Live cloud canvas. Generated files hot-reload here.
                 </p>
               </div>
               <Badge

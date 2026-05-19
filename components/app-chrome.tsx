@@ -30,8 +30,7 @@ export function AppChrome({
     pathname === '/playground' ||
     pathname?.startsWith('/tools') ||
     pathname?.startsWith('/admin') ||
-    pathname?.startsWith('/brokcode') ||
-    pathname?.startsWith('/brokmail')
+    pathname?.startsWith('/brokcode')
 
   if (isAuthRoute || isPublicLanding) {
     return (

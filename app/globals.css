@@ -1357,6 +1357,22 @@
   color: #71717a !important;
 }
 
+.brokmail-shell .dashboard-card,
+.brokmail-shell .dashboard-pill-active,
+.brokmail-shell .dashboard-list-row-active {
+  box-shadow: none;
+}
+
+.brokmail-shell .dashboard-pill-active,
+.brokmail-shell .dashboard-list-row-active {
+  border-color: rgb(228 228 231 / 0.9);
+  background: rgb(244 244 245 / 0.72);
+}
+
+.brokmail-shell textarea {
+  scroll-padding-bottom: 1rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-shell-gradient::before,
   .brand-gradient-text,

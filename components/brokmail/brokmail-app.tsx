@@ -1817,7 +1817,7 @@ export function BrokMailApp() {
         />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
-          <aside className="hidden w-52 shrink-0 border-r border-zinc-200/80 bg-[#fbfbf8] lg:flex lg:flex-col">
+          <aside className="hidden w-48 shrink-0 border-r border-zinc-200/80 bg-[#fbfbf8] 2xl:flex 2xl:flex-col">
             <div className="border-b border-zinc-100 p-3">
               <Button className="h-9 w-full gap-2" onClick={focusComposer}>
                 <PenLine className="size-4" />
@@ -1887,7 +1887,7 @@ export function BrokMailApp() {
             </div>
           </aside>
 
-          <div className="border-b border-zinc-200/80 bg-[#fbfbf8] px-3 py-3 lg:hidden">
+          <div className="border-b border-zinc-200/80 bg-[#fbfbf8] px-3 py-3 2xl:hidden">
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Button className="h-9 flex-1 gap-2" onClick={focusComposer}>
@@ -1905,13 +1905,23 @@ export function BrokMailApp() {
                   disabled={isConnecting || isSyncingMail}
                 >
                   <UserRoundCheck className="size-4" />
-                  {isConnecting
-                    ? 'Connecting...'
-                    : connected
-                      ? isSyncingMail
-                        ? 'Refreshing...'
-                        : 'Refresh Gmail'
-                      : 'Connect Gmail'}
+                  {isConnecting ? (
+                    'Connecting...'
+                  ) : connected ? (
+                    isSyncingMail ? (
+                      'Refreshing...'
+                    ) : (
+                      <>
+                        <span className="sm:hidden">Gmail</span>
+                        <span className="hidden sm:inline">Refresh Gmail</span>
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <span className="sm:hidden">Gmail</span>
+                      <span className="hidden sm:inline">Connect Gmail</span>
+                    </>
+                  )}
                 </Button>
                 <Button
                   variant="outline"
@@ -1924,42 +1934,31 @@ export function BrokMailApp() {
                   disabled={isConnectingCalendar || isSyncingCalendar}
                 >
                   <CalendarDays className="size-4" />
-                  {isConnectingCalendar
-                    ? 'Connecting...'
-                    : calendarConnected
-                      ? isSyncingCalendar
-                        ? 'Refreshing...'
-                        : 'Refresh Calendar'
-                      : 'Connect Calendar'}
+                  {isConnectingCalendar ? (
+                    'Connecting...'
+                  ) : calendarConnected ? (
+                    isSyncingCalendar ? (
+                      'Refreshing...'
+                    ) : (
+                      <>
+                        <span className="sm:hidden">Calendar</span>
+                        <span className="hidden sm:inline">
+                          Refresh Calendar
+                        </span>
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <span className="sm:hidden">Calendar</span>
+                      <span className="hidden sm:inline">Connect Calendar</span>
+                    </>
+                  )}
                 </Button>
-              </div>
-              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-                {viewLabels.map(item => {
-                  const Icon = item.icon
-                  return (
-                    <button
-                      key={item.id}
-                      className={cn(
-                        'flex h-9 shrink-0 items-center gap-2 rounded-md border border-border/70 bg-card/88 px-3 text-sm transition-colors hover:bg-muted/70',
-                        view === item.id
-                          ? 'dashboard-pill-active font-medium'
-                          : 'text-muted-foreground'
-                      )}
-                      onClick={() => setView(item.id)}
-                    >
-                      <Icon className="size-4" />
-                      <span>{item.label}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {counts[item.id]}
-                      </span>
-                    </button>
-                  )
-                })}
               </div>
             </div>
           </div>
 
-          <div className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white lg:max-h-none lg:w-[360px] lg:border-b-0 lg:border-r xl:w-[390px]">
+          <div className="flex max-h-[42dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white lg:max-h-none lg:w-[320px] lg:border-b-0 lg:border-r xl:w-[350px]">
             <div className="border-b border-zinc-100 bg-white p-3">
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />
@@ -1993,6 +1992,33 @@ export function BrokMailApp() {
                     </button>
                   ))}
                 </div>
+              </div>
+              <div className="-mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1 2xl:hidden">
+                {viewLabels.map(item => {
+                  const Icon = item.icon
+                  return (
+                    <button
+                      key={item.id}
+                      className={cn(
+                        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-100',
+                        view === item.id &&
+                          'border-zinc-950 bg-zinc-950 text-white hover:bg-zinc-900'
+                      )}
+                      onClick={() => setView(item.id)}
+                    >
+                      <Icon className="size-3.5" />
+                      <span>{item.label}</span>
+                      <span
+                        className={cn(
+                          'hidden rounded-full bg-white/70 px-1.5 text-[10px] text-zinc-500 sm:inline-flex',
+                          view === item.id && 'bg-white/15 text-white/80'
+                        )}
+                      >
+                        {counts[item.id]}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
@@ -2160,7 +2186,7 @@ export function BrokMailApp() {
             )}
           </div>
 
-          <aside className="hidden w-[390px] shrink-0 border-l border-zinc-200/80 bg-white xl:flex xl:flex-col">
+          <aside className="hidden w-[340px] shrink-0 border-l border-zinc-200/80 bg-white xl:flex xl:flex-col 2xl:w-[370px]">
             <AgentPanel
               activity={activity}
               agentInput={agentInput}
@@ -2269,7 +2295,7 @@ function BrokMailStatusBar({
           <span className="hidden h-5 w-px bg-zinc-200 sm:block" />
           <Badge
             variant="outline"
-            className="h-7 gap-1.5 rounded-full border-zinc-200 bg-white px-2.5"
+            className="hidden h-7 gap-1.5 rounded-full border-zinc-200 bg-white px-2.5 sm:inline-flex"
           >
             <span
               className={cn(
@@ -2280,6 +2306,19 @@ function BrokMailStatusBar({
             <MailCheck className="size-3.5" />
             Gmail {connected ? 'ready' : modeLabel(connectionMode)}
           </Badge>
+          <span
+            className={cn(
+              'inline-flex size-2.5 rounded-full sm:hidden',
+              connected || calendarConnected
+                ? 'bg-emerald-500'
+                : 'bg-muted-foreground/40'
+            )}
+            aria-label={
+              connected || calendarConnected
+                ? 'Connected services ready'
+                : 'No services connected'
+            }
+          />
           <Badge
             variant="outline"
             className="hidden h-7 gap-1.5 rounded-full border-zinc-200 bg-white px-2.5 md:inline-flex"
@@ -2426,7 +2465,7 @@ function ThreadView({
           </div>
         </div>
 
-        <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3">
+        <div className="mt-3 border-t border-zinc-200/80 pt-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -2462,7 +2501,7 @@ function ThreadView({
           {thread.messages.map(message => (
             <article
               key={message.id}
-              className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm"
+              className="rounded-lg border border-zinc-100 bg-white p-4"
             >
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
@@ -2521,7 +2560,7 @@ function ThreadView({
               placeholder="Draft or insert a reply..."
               className="min-h-32 resize-none rounded-xl border-zinc-200 bg-zinc-50/80 leading-6 shadow-inner"
             />
-            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <div className="mt-3 hidden flex-wrap gap-2 text-xs text-muted-foreground sm:flex">
               <div className="rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5">
                 {composerStats.words} words · {composerStats.characters} chars
               </div>
@@ -2547,7 +2586,7 @@ function ThreadView({
               </div>
             </div>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-muted-foreground">
+              <p className="hidden text-xs text-muted-foreground sm:block">
                 Tone: {brokMailTonePreference}
               </p>
               <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
@@ -2626,8 +2665,8 @@ function AgentPanel({
   }, [activity.length, messages.length])
 
   return (
-    <div className="flex h-full flex-col bg-gradient-to-b from-card/90 to-background">
-      <div className="border-b bg-card/95 p-3 shadow-sm sm:p-4">
+    <div className="flex h-full flex-col bg-white">
+      <div className="border-b bg-white p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="relative inline-flex size-9 items-center justify-center rounded-xl border border-border bg-background shadow-sm">
@@ -2662,7 +2701,7 @@ function AgentPanel({
             </Button>
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-1.5 rounded-xl border border-border/70 bg-background/55 p-1.5">
+        <div className="mt-3 hidden grid-cols-3 gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50/70 p-1.5 sm:grid">
           <div className="rounded-lg px-2.5 py-2">
             <p className="text-[10px] font-medium uppercase text-muted-foreground">
               Mail
@@ -2692,7 +2731,7 @@ function AgentPanel({
           {quickPrompts.map(prompt => (
             <button
               key={prompt}
-              className="shrink-0 rounded-full border border-border/75 bg-background/80 px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
+              className="shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-zinc-50 hover:text-foreground disabled:opacity-60"
               onClick={() => runAgent(prompt)}
               disabled={isRunning}
             >
@@ -2704,7 +2743,7 @@ function AgentPanel({
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 scroll-smooth sm:p-4">
         {activity.length > 0 && (
-          <div className="rounded-xl border border-border/70 bg-card/90 p-3 shadow-sm">
+          <div className="rounded-lg border border-zinc-200 bg-white p-3">
             <div className="mb-3 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
                 <Wand2 className="size-4" />
@@ -2748,7 +2787,7 @@ function AgentPanel({
           >
             <div
               className={cn(
-                'max-w-[94%] rounded-2xl px-3.5 py-3 text-sm shadow-sm ring-1 ring-transparent transition-colors sm:max-w-[88%]',
+                'max-w-[94%] rounded-2xl px-3.5 py-3 text-sm ring-1 ring-transparent transition-colors sm:max-w-[88%]',
                 message.role === 'user'
                   ? 'rounded-br-md bg-foreground text-background'
                   : 'rounded-bl-md border border-border/70 bg-card text-foreground'
@@ -2837,7 +2876,7 @@ function AgentPanel({
         ))}
         {isRunning && (
           <article className="flex justify-start">
-            <div className="max-w-[88%] rounded-2xl rounded-bl-md border border-border/70 bg-card p-3 text-sm shadow-sm">
+            <div className="max-w-[88%] rounded-2xl rounded-bl-md border border-border/70 bg-card p-3 text-sm">
               <div className="flex items-center gap-2">
                 <span className="size-2 animate-pulse rounded-full bg-foreground" />
                 <span className="font-medium">BrokMail is working</span>
