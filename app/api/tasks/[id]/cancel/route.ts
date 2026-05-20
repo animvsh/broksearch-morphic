@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 
-import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
+import {
+  hasFeatureAccess,
+  requireAnyFeatureAccessForApi
+} from '@/lib/auth/app-access'
 import {
   appendBackgroundTaskEvent,
   getBackgroundTask,
@@ -16,13 +19,23 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const access = await requireFeatureAccessForApi('search')
+  const access = await requireAnyFeatureAccessForApi(['search', 'brokcode'])
   if (!access.ok) return access.response
 
   const { id } = await params
   const existing = await getBackgroundTask({ userId: access.user.id, id })
   if (!existing) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  if (
+    !hasFeatureAccess(access.access, 'search') &&
+    existing.kind !== 'brokcode'
+  ) {
+    return NextResponse.json(
+      { error: 'Feature access denied', feature: 'search' },
+      { status: 403 }
+    )
   }
 
   if (TERMINAL_STATUSES.has(existing.status)) {

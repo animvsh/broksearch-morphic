@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server'
 
-import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
+import {
+  hasFeatureAccess,
+  requireAnyFeatureAccessForApi
+} from '@/lib/auth/app-access'
 import { listBackgroundTasks } from '@/lib/tasks/background-tasks'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const access = await requireFeatureAccessForApi('search')
+  const access = await requireAnyFeatureAccessForApi(['search', 'brokcode'])
   if (!access.ok) return access.response
 
   const url = new URL(request.url)
@@ -22,5 +25,9 @@ export async function GET(request: Request) {
     limit,
     chatId
   })
-  return NextResponse.json({ tasks })
+  const visibleTasks = hasFeatureAccess(access.access, 'search')
+    ? tasks
+    : tasks.filter(task => task.kind === 'brokcode')
+
+  return NextResponse.json({ tasks: visibleTasks })
 }

@@ -249,3 +249,33 @@ export async function requireFeatureAccessForApi(feature: AppFeature) {
 
   return { ok: true as const, user: access.user }
 }
+
+export async function requireAnyFeatureAccessForApi(features: AppFeature[]) {
+  const access = await getCurrentAppAccess()
+
+  if (!access.user) {
+    return {
+      ok: false as const,
+      response: Response.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+  }
+
+  const hasAnyFeature = features.some(feature =>
+    hasFeatureAccess(access, feature)
+  )
+
+  if (!hasAnyFeature) {
+    return {
+      ok: false as const,
+      response: Response.json(
+        { error: 'Feature access denied', features },
+        { status: 403 }
+      )
+    }
+  }
+
+  return { ok: true as const, user: access.user, access }
+}

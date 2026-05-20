@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 
-import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
+import {
+  hasFeatureAccess,
+  requireAnyFeatureAccessForApi
+} from '@/lib/auth/app-access'
 import { getBackgroundTask } from '@/lib/tasks/background-tasks'
 
 export const runtime = 'nodejs'
@@ -16,7 +19,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const access = await requireFeatureAccessForApi('search')
+  const access = await requireAnyFeatureAccessForApi(['search', 'brokcode'])
   if (!access.ok) return access.response
 
   const { id } = await params
@@ -24,6 +27,14 @@ export async function GET(
   const initialTask = await getBackgroundTask({ userId, id })
   if (!initialTask) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  const canReadSearchTasks = hasFeatureAccess(access.access, 'search')
+  if (!canReadSearchTasks && initialTask.kind !== 'brokcode') {
+    return NextResponse.json(
+      { error: 'Feature access denied', feature: 'search' },
+      { status: 403 }
+    )
   }
 
   const encoder = new TextEncoder()
@@ -40,6 +51,20 @@ export async function GET(
             controller.enqueue(
               encoder.encode(
                 sse('task.error', { id, error: 'Task is no longer available' })
+              )
+            )
+            controller.close()
+            closed = true
+            return
+          }
+
+          if (!canReadSearchTasks && task.kind !== 'brokcode') {
+            controller.enqueue(
+              encoder.encode(
+                sse('task.error', {
+                  id,
+                  error: 'Feature access denied'
+                })
               )
             )
             controller.close()
