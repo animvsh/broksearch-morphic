@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 
 import type { User } from '@supabase/supabase-js'
@@ -25,12 +26,32 @@ export function AppChrome({
   const isAuthRoute = pathname?.startsWith('/auth')
   const isDocsRoute = pathname?.startsWith('/docs')
   const isPublicLanding = pathname === '/' && !user
+  const isFocusWorkspace =
+    pathname?.startsWith('/brokcode') || pathname?.startsWith('/brokmail')
   const usesPageScroll =
     isDocsRoute ||
     pathname === '/playground' ||
     pathname?.startsWith('/tools') ||
     pathname?.startsWith('/admin') ||
     pathname?.startsWith('/brokcode')
+  const [sidebarState, setSidebarState] = useState({
+    isFocusWorkspace,
+    open: !isFocusWorkspace
+  })
+
+  if (sidebarState.isFocusWorkspace !== isFocusWorkspace) {
+    setSidebarState({
+      isFocusWorkspace,
+      open: !isFocusWorkspace
+    })
+  }
+
+  const setSidebarOpen = (open: boolean) => {
+    setSidebarState({
+      isFocusWorkspace,
+      open
+    })
+  }
 
   if (isAuthRoute || isPublicLanding) {
     return (
@@ -41,7 +62,11 @@ export function AppChrome({
   }
 
   return (
-    <SidebarProvider defaultOpen={true}>
+    <SidebarProvider
+      defaultOpen={!isFocusWorkspace}
+      open={sidebarState.open}
+      onOpenChange={setSidebarOpen}
+    >
       <AppSidebar />
       <KeyboardShortcutHandler />
       <div className="flex min-w-0 flex-1 flex-col">

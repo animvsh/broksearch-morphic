@@ -444,6 +444,8 @@ const runStreamingHints = [
   'Preparing the answer'
 ]
 
+const BROKCODE_BROWSER_RUN_TIMEOUT_MS = 90_000
+
 const builderQuickPrompts = [
   'Build a polished landing page',
   'Make this app cleaner on mobile',
@@ -2669,8 +2671,14 @@ export function BrokCodeApp({
         'Building the requested changes.'
       )
 
+      const controller = new AbortController()
+      const timeout = window.setTimeout(() => {
+        controller.abort()
+      }, BROKCODE_BROWSER_RUN_TIMEOUT_MS)
+
       const response = await fetch('/api/brokcode/execute', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           ...(apiKey && isValidBrokApiKey(apiKey)
             ? { Authorization: `Bearer ${apiKey}` }
@@ -2700,6 +2708,8 @@ export function BrokCodeApp({
             { role: 'user', content: trimmed }
           ]
         })
+      }).finally(() => {
+        window.clearTimeout(timeout)
       })
 
       if (!response.ok) {
@@ -2843,7 +2853,11 @@ export function BrokCodeApp({
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Live Brok request failed.'
+        error instanceof DOMException && error.name === 'AbortError'
+          ? 'The build is taking longer than expected. Try a smaller change, or rerun after the current runtime catches up.'
+          : error instanceof Error
+            ? error.message
+            : 'Live Brok request failed.'
       updateExecutionStep(run.id, 'execute', 'error', message)
       updateExecutionStep(
         run.id,
@@ -3007,7 +3021,7 @@ export function BrokCodeApp({
             </div>
           </div>
 
-          <div className="hidden min-w-0 items-center gap-2 text-xs text-zinc-500 md:flex">
+          <div className="hidden min-w-0 items-center gap-2 text-xs text-zinc-500 xl:flex">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1">
               <span
                 className={cn(
@@ -3521,6 +3535,7 @@ export function BrokCodeApp({
               </div>
             </div>
             <BrowserPreviewPanel
+              isRunning={isRunning}
               previewInput={previewInput}
               previewUrl={previewUrl}
               previewFrameKey={previewFrameKey}
@@ -4025,6 +4040,7 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
 }
 
 function BrowserPreviewPanel({
+  isRunning,
   previewInput,
   previewUrl,
   previewFrameKey,
@@ -4034,6 +4050,7 @@ function BrowserPreviewPanel({
   onReload,
   runtimeError
 }: {
+  isRunning: boolean
   previewInput: string
   previewUrl: string
   previewFrameKey: number
@@ -4045,20 +4062,27 @@ function BrowserPreviewPanel({
 }) {
   const hasPreviewUrl = Boolean(previewUrl.trim())
   const isBlockedPreview = isBrokCodeWorkspaceUrl(previewUrl)
-  const previewStatus =
-    previewHealth.status === 'offline' && hasPreviewUrl
+  const previewStatus = isRunning
+    ? 'updating'
+    : previewHealth.status === 'offline' && hasPreviewUrl
       ? 'loaded'
       : previewHealth.status
   const healthTone =
     previewStatus === 'online'
       ? 'default'
-      : previewStatus === 'checking' || previewStatus === 'loaded'
+      : previewStatus === 'checking' ||
+          previewStatus === 'loaded' ||
+          previewStatus === 'updating'
         ? 'secondary'
         : 'outline'
   const previewMessage =
-    previewStatus === 'loaded'
-      ? 'Preview loaded. Health check may be blocked by the preview origin.'
-      : previewHealth.message
+    previewStatus === 'updating'
+      ? hasPreviewUrl
+        ? 'Building your changes. The preview below is the last saved version until the new run finishes.'
+        : 'Building your first preview. It will open here automatically.'
+      : previewStatus === 'loaded'
+        ? 'Preview loaded. Health check may be blocked by the preview origin.'
+        : previewHealth.message
 
   return (
     <div
@@ -4082,11 +4106,13 @@ function BrowserPreviewPanel({
               ? 'Live'
               : previewStatus === 'checking'
                 ? 'Checking'
-                : previewStatus === 'loaded'
-                  ? 'Loaded'
-                  : previewStatus === 'offline'
-                    ? 'Offline'
-                    : 'Ready'}
+                : previewStatus === 'updating'
+                  ? 'Updating'
+                  : previewStatus === 'loaded'
+                    ? 'Loaded'
+                    : previewStatus === 'offline'
+                      ? 'Offline'
+                      : 'Ready'}
           </Badge>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -4170,6 +4196,14 @@ function BrowserPreviewPanel({
         )}
       </div>
 
+      {isRunning && hasPreviewUrl && (
+        <div className="mx-2 mt-2 flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950">
+          <RefreshCcw className="size-3.5 animate-spin" />
+          Updating this cloud preview. The visible app is the last saved version
+          until Brok finishes writing files.
+        </div>
+      )}
+
       {runtimeError && (
         <p className="m-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
           {runtimeError}
@@ -4211,15 +4245,25 @@ function BrowserPreviewPanel({
             generated app URL instead.
           </div>
         ) : (
-          <iframe
-            key={previewFrameKey}
-            src={previewUrl}
-            data-testid="brokcode-preview-frame"
-            title="Brok Code browser preview"
-            className="h-full min-h-[330px] w-full bg-white sm:min-h-[520px]"
-            referrerPolicy="no-referrer"
-            sandbox="allow-forms allow-modals allow-popups allow-scripts"
-          />
+          <div className="relative h-full min-h-[330px] w-full sm:min-h-[520px]">
+            <iframe
+              key={previewFrameKey}
+              src={previewUrl}
+              data-testid="brokcode-preview-frame"
+              title="Brok Code browser preview"
+              className={cn(
+                'h-full min-h-[330px] w-full bg-white transition-opacity sm:min-h-[520px]',
+                isRunning && 'opacity-70'
+              )}
+              referrerPolicy="no-referrer"
+              sandbox="allow-forms allow-modals allow-popups allow-scripts"
+            />
+            {isRunning && (
+              <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-zinc-200 bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm backdrop-blur">
+                Updating preview...
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
