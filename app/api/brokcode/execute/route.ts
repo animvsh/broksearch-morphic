@@ -24,7 +24,12 @@ import {
   decryptInsForgeAdminKey,
   publicBrokCodeBackendMetadata
 } from '@/lib/brokcode/backend-provider'
-import { extractGeneratedBrokCodeFiles } from '@/lib/brokcode/generated-files'
+import {
+  extractGeneratedBrokCodeFiles,
+  inspectGeneratedBrokCodeAppQuality,
+  prepareGeneratedBrokCodeFiles
+} from '@/lib/brokcode/generated-files'
+import { getBrokCodeGenerationSystemPrompt } from '@/lib/brokcode/generation-prompt'
 import {
   fetchInsForgeBackendContext,
   formatInsForgeBackendContextForPrompt
@@ -289,16 +294,26 @@ async function persistGeneratedProjectOutput({
   })
   if (!project) return null
 
-  const files = extractGeneratedBrokCodeFiles(content)
+  const rawFiles = extractGeneratedBrokCodeFiles(content)
+  const files = prepareGeneratedBrokCodeFiles(rawFiles, {
+    fallbackTitle: project.name
+  })
   if (files.length === 0) return null
+  const quality = inspectGeneratedBrokCodeAppQuality(files)
 
   if (taskId) {
     await appendBackgroundTaskEvent({
       id: taskId,
       userId: auth.apiKey.userId,
-      message: `Saving ${files.length} generated file${files.length === 1 ? '' : 's'}.`,
+      message:
+        quality.issues.length > 0
+          ? `Saving ${files.length} generated file${files.length === 1 ? '' : 's'}; preview hygiene applied.`
+          : `Saving ${files.length} generated file${files.length === 1 ? '' : 's'}.`,
       progress: 72,
-      metadata: { generatedFileCount: files.length }
+      metadata: {
+        generatedFileCount: files.length,
+        qualityIssues: quality.issues
+      }
     }).catch(error => {
       console.error('Failed to append BrokCode file-save event:', error)
     })
@@ -320,7 +335,8 @@ async function persistGeneratedProjectOutput({
     files: files.map(file => ({
       path: file.path,
       language: file.language
-    }))
+    })),
+    quality
   })
 
   const previewUrl = makeManagedPreviewUrl({
@@ -335,6 +351,7 @@ async function persistGeneratedProjectOutput({
     metadata: {
       mode: 'managed_static',
       fileCount: files.length,
+      quality,
       generatedAt: new Date().toISOString(),
       source: 'runtime_output'
     }
@@ -355,7 +372,8 @@ async function persistGeneratedProjectOutput({
   send?.('preview', {
     project_id: project.id,
     preview_url: previewUrl,
-    file_count: files.length
+    file_count: files.length,
+    quality
   })
 
   return {
@@ -555,8 +573,7 @@ function buildDefaultMessages(command: string): OpenAiMessage[] {
   return [
     {
       role: 'system',
-      content:
-        'You are Brok Code powered by Pi coding-agent. Be execution-focused, safe, and concise. Build real cloud project files, not demo-only snippets: return named fenced files such as ```html filename=index.html, ```css filename=styles.css, ```js filename=app.js, or framework paths like ```tsx filename=app/page.tsx so Brok can persist them and hot-reload the managed preview. When building an AI app or AI feature, default to Brok API as the AI layer unless the user explicitly requests another provider. Use Brok API compatible env names and model routing first. When the user asks you to instruct or edit through connected GitHub, keep BrokCode as the default model/runtime and use the connected repository context rather than switching to another coding assistant unless explicitly requested. For risky writes, require explicit approval.'
+      content: getBrokCodeGenerationSystemPrompt()
     },
     {
       role: 'user',

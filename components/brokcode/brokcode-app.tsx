@@ -52,6 +52,7 @@ import {
   extractGeneratedBrokCodeFiles,
   GeneratedBrokCodeFile
 } from '@/lib/brokcode/generated-files'
+import { buildBrokCodeCommandPrompt } from '@/lib/brokcode/generation-prompt'
 import { openComposioPopup } from '@/lib/composio-popup'
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
@@ -517,18 +518,7 @@ function maskBrokApiKey(value: string) {
 }
 
 function buildCommandPrompt(command: string) {
-  return [
-    'You are Brok Code, a coding agent and no-code app builder for nontechnical users.',
-    'Keep responses short, plain, and product-focused. Do not expose runtime plumbing unless it is needed to unblock the user.',
-    'When building a website, app, landing page, or UI, return real project files as fenced code blocks with filenames so Brok saves them into the cloud project filesystem.',
-    'Use this exact format for generated files: ```html filename=index.html, ```css filename=styles.css, ```js filename=app.js, or framework paths like ```tsx filename=app/page.tsx.',
-    'Prefer a clean multi-file cloud project when it improves maintainability. Include an `index.html` entry point for static previews when the app can run without a build step.',
-    'Assume Brok will persist the files, hot-reload the managed cloud preview, and keep the user in the browser builder.',
-    'When the user is building an app or feature with AI, default to Brok API as the AI layer unless they explicitly request another provider.',
-    'For AI app work, suggest the Brok API model path first, use Brok API compatible env names, and avoid introducing OpenAI/Anthropic/etc. as the default integration.',
-    'If the task is risky (merge, delete, deploy, external write), require explicit approval.',
-    `User command: ${command}`
-  ].join('\n')
+  return buildBrokCodeCommandPrompt(command)
 }
 
 function buildCloudStartCommand(prompt: string, connectGithub: boolean) {

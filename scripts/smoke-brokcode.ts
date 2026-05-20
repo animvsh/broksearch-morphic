@@ -185,6 +185,14 @@ async function verifyFiles(projectId: string) {
     }
   }
 
+  for (const expected of ['styles.css', 'app.js']) {
+    if (!filePaths.includes(expected)) {
+      throw new Error(
+        `expected smoke build to save ${expected}; got ${filePaths.join(',')}`
+      )
+    }
+  }
+
   console.log(`brokcode ok saved files ${filePaths.join(',')}`)
 }
 
@@ -214,6 +222,32 @@ async function verifyPreview(previewUrl: string) {
       document.documentElement.clientWidth
   )
   const visibleText = await page.locator('body').innerText()
+  const quality = await page.evaluate(() => {
+    const stylesheets = document.querySelectorAll(
+      'link[rel~="stylesheet"], style'
+    )
+    const interactions = document.querySelectorAll(
+      'button, form, input, select, textarea, a[href]'
+    )
+    const viewport = document.querySelector('meta[name="viewport"]')
+    const text = document.body?.innerText ?? ''
+
+    return {
+      hasViewport: Boolean(viewport),
+      stylesheetCount: stylesheets.length,
+      interactionCount: interactions.length,
+      textLength: text.trim().length,
+      hasPlaceholderCopy:
+        /\blorem ipsum\b|\bcoming soon\b|\bplaceholder\b|\bTODO\b/i.test(text)
+    }
+  })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.waitForTimeout(150)
+  const mobileOverflowX = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth
+  )
   await browser.close()
 
   if (pageErrors.length > 0) {
@@ -224,8 +258,30 @@ async function verifyPreview(previewUrl: string) {
     throw new Error(`preview has horizontal overflow ${overflowX}`)
   }
 
+  if (mobileOverflowX > 2) {
+    throw new Error(`mobile preview has horizontal overflow ${mobileOverflowX}`)
+  }
+
   if (!/bakery|baked|menu|newsletter/i.test(visibleText)) {
     throw new Error(`preview text missing expected app copy; title=${title}`)
+  }
+
+  if (!quality.hasViewport) {
+    throw new Error('preview missing responsive viewport meta tag')
+  }
+
+  if (quality.stylesheetCount < 1) {
+    throw new Error('preview missing stylesheet or inline style')
+  }
+
+  if (quality.interactionCount < 1) {
+    throw new Error('preview missing useful interaction')
+  }
+
+  if (quality.textLength < 120 || quality.hasPlaceholderCopy) {
+    throw new Error(
+      `preview looks like placeholder content: ${JSON.stringify(quality)}`
+    )
   }
 
   console.log(`brokcode ok preview ${absolutePreviewUrl}`)
