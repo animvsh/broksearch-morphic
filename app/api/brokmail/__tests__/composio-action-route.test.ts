@@ -138,6 +138,28 @@ describe('BrokMail Composio action route', () => {
     expect(executeComposioTool).not.toHaveBeenCalled()
   })
 
+  it('uses the same approval id for duplicate approval requests in the same TTL window', () => {
+    const now = new Date('2026-05-20T03:00:00.000Z')
+    const firstApproval = signBrokMailApproval({
+      userId: 'user_123',
+      payload: draftPayload,
+      now
+    })
+    const duplicateApproval = signBrokMailApproval({
+      userId: 'user_123',
+      payload: draftPayload,
+      now: new Date(now.getTime() + 1_000)
+    })
+    const laterApproval = signBrokMailApproval({
+      userId: 'user_123',
+      payload: draftPayload,
+      now: new Date(now.getTime() + 5 * 60 * 1000)
+    })
+
+    expect(duplicateApproval.id).toBe(firstApproval.id)
+    expect(laterApproval.id).not.toBe(firstApproval.id)
+  })
+
   it('runs server-approved actions and includes the approval trail in the response', async () => {
     const approval = signBrokMailApproval({
       userId: 'user_123',

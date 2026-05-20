@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto'
+import { createHash, createHmac, timingSafeEqual } from 'crypto'
 
 export type BrokMailComposioAction =
   | 'create_draft'
@@ -192,20 +192,46 @@ export function signBrokMailApproval({
   now?: Date
 }): BrokMailSignedApproval {
   assertActionPayloadIsRunnable(payload)
+  const payloadHash = hashActionPayload(payload)
 
   const approval: Omit<BrokMailSignedApproval, 'signature'> = {
-    id: `approval_${randomUUID()}`,
+    id: createApprovalId({
+      action: payload.action,
+      payloadHash,
+      userId,
+      now
+    }),
     action: payload.action,
     approved: true,
     issuedAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + APPROVAL_TTL_MS).toISOString(),
-    payloadHash: hashActionPayload(payload)
+    payloadHash
   }
 
   return {
     ...approval,
     signature: signApprovalFields(userId, approval)
   }
+}
+
+function createApprovalId({
+  action,
+  payloadHash,
+  userId,
+  now
+}: {
+  action: BrokMailComposioAction
+  payloadHash: string
+  userId: string
+  now: Date
+}) {
+  const approvalWindow = Math.floor(now.getTime() / APPROVAL_TTL_MS)
+  const digest = createHash('sha256')
+    .update(stableStringify({ action, approvalWindow, payloadHash, userId }))
+    .digest('hex')
+    .slice(0, 32)
+
+  return `approval_${digest}`
 }
 
 export function verifyBrokMailApproval({
