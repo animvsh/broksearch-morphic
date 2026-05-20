@@ -231,6 +231,34 @@ async function verifyPreview(previewUrl: string) {
   console.log(`brokcode ok preview ${absolutePreviewUrl}`)
 }
 
+async function verifyDeploy(projectId: string) {
+  const response = await fetch(`${baseUrl}/api/brokcode/deploy`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      project_id: projectId,
+      source: 'api-smoke'
+    })
+  })
+  const body = await expectJson(response, 200)
+  const deploymentUrl = body.deploymentPreviewUrl ?? body.deploymentUrl
+
+  if (
+    typeof deploymentUrl !== 'string' ||
+    !deploymentUrl.includes('/brokcode/apps/')
+  ) {
+    throw new Error(
+      `expected managed app deployment URL, got ${JSON.stringify(body)}`
+    )
+  }
+
+  await verifyPreview(deploymentUrl)
+  console.log(`brokcode ok deploy ${deploymentUrl}`)
+}
+
 async function runTuiSmoke() {
   if (skipTui) {
     console.log('brokcode skip tui smoke')
@@ -288,7 +316,7 @@ async function runTuiSmoke() {
       `TUI /preview did not print managed preview: ${previewOutput}`
     )
   }
-  if (!deployOutput.includes('/api/brokcode/previews/')) {
+  if (!deployOutput.includes('/brokcode/apps/')) {
     throw new Error(
       `TUI /deploy did not print managed deploy URL: ${deployOutput}`
     )
@@ -303,6 +331,7 @@ async function main() {
   const result = await executeBuild(project.id)
   await verifyFiles(project.id)
   await verifyPreview(result.preview_url)
+  await verifyDeploy(project.id)
   await runTuiSmoke()
   console.log('brokcode smoke ok')
 }

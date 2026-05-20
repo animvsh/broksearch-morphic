@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   getManagedPreviewAsset,
+  makeManagedDeploymentUrl,
   makeManagedPreviewUrl,
   normalizeManagedPreviewPath,
   resolvePublicPreviewOrigin
@@ -27,8 +28,9 @@ describe('BrokCode managed preview', () => {
       ]
     })
 
+    expect(asset?.content).toContain('<h1>Coffee Shop</h1>')
+    expect(asset?.content).toContain('data-brokcode-hot-reload')
     expect(asset).toMatchObject({
-      content: '<h1>Coffee Shop</h1>',
       contentType: 'text/html; charset=utf-8',
       path: 'index.html',
       status: 200
@@ -58,6 +60,41 @@ describe('BrokCode managed preview', () => {
         projectId: 'project_123'
       })
     ).toBe('https://www.brok.fyi/api/brokcode/previews/project_123/index.html')
+  })
+
+  it('generates a public managed deployment URL from the project handle', () => {
+    expect(
+      makeManagedDeploymentUrl({
+        origin: 'https://www.brok.fyi/',
+        project
+      })
+    ).toBe('https://www.brok.fyi/brokcode/apps/coffee-shop--project_123/')
+  })
+
+  it('serves the hot reload manifest for managed previews', () => {
+    const asset = getManagedPreviewAsset({
+      project,
+      pathParts: ['__brokcode_hot.json'],
+      files: [
+        {
+          path: 'index.html',
+          content: '<h1>Coffee Shop</h1>',
+          language: 'html',
+          updatedAt: '2026-05-19T00:00:00.000Z'
+        }
+      ]
+    })
+
+    expect(asset).toMatchObject({
+      contentType: 'application/json; charset=utf-8',
+      path: '__brokcode_hot.json',
+      status: 200
+    })
+    expect(JSON.parse(asset?.content ?? '{}')).toMatchObject({
+      fileCount: 1,
+      projectId: project.id,
+      slug: project.slug
+    })
   })
 
   it('uses forwarded public host instead of Railway bind address', () => {

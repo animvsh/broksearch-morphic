@@ -89,15 +89,16 @@ export async function POST(
     userId: access.authResult.apiKey.userId,
     previewUrl,
     metadata: {
-      mode: 'managed_static',
+      mode: 'managed_live_preview',
       fileCount: files.length,
-      generatedAt: new Date().toISOString()
+      generatedAt: new Date().toISOString(),
+      hotReload: true
     }
   })
 
   return NextResponse.json({
     status: 'ready',
-    strategy: 'managed_static_preview',
+    strategy: 'managed_live_preview',
     message: 'Managed BrokCode preview is ready.',
     previewUrl,
     deploymentPreviewUrl: previewUrl,

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   createBrokCodeProject,
+  getBrokCodeProjectByHandle,
   listBrokCodeProjects,
   recordBrokCodeProjectDeployment,
   updateBrokCodeProjectPreview,
@@ -131,5 +132,77 @@ describe('BrokCode project file store', () => {
       mode: 'managed_static',
       fileCount: 1
     })
+  })
+
+  it('keeps managed preview and public deployment URLs distinct', async () => {
+    const project = await createBrokCodeProject({
+      workspaceId,
+      userId,
+      name: 'Published App'
+    })
+
+    await updateBrokCodeProjectPreview({
+      projectId: project.id,
+      workspaceId,
+      userId,
+      previewUrl:
+        'https://www.brok.fyi/api/brokcode/previews/published/index.html',
+      deploymentUrl:
+        'https://www.brok.fyi/brokcode/apps/published-app--published/'
+    })
+    await recordBrokCodeProjectDeployment({
+      projectId: project.id,
+      workspaceId,
+      userId,
+      provider: 'managed_preview',
+      status: 'deployed',
+      url: 'https://www.brok.fyi/brokcode/apps/published-app--published/',
+      metadata: {
+        previewUrl:
+          'https://www.brok.fyi/api/brokcode/previews/published/index.html'
+      }
+    })
+
+    const [publishedProject] = await listBrokCodeProjects({
+      workspaceId,
+      userId
+    })
+    expect(publishedProject?.status).toBe('deployed')
+    expect(publishedProject?.deploymentUrl).toBe(
+      'https://www.brok.fyi/brokcode/apps/published-app--published/'
+    )
+    expect(publishedProject?.previewUrl).toBe(
+      'https://www.brok.fyi/api/brokcode/previews/published/index.html'
+    )
+  })
+
+  it('resolves public deployed app handles by slug or username', async () => {
+    const project = await createBrokCodeProject({
+      workspaceId,
+      userId,
+      name: 'Customer Portal',
+      username: 'Acme Studio'
+    })
+
+    await updateBrokCodeProjectPreview({
+      projectId: project.id,
+      workspaceId,
+      userId,
+      previewUrl: 'https://www.brok.fyi/api/brokcode/previews/demo/index.html',
+      deploymentUrl: 'https://www.brok.fyi/brokcode/apps/acme-studio/',
+      status: 'deployed'
+    })
+
+    await expect(
+      getBrokCodeProjectByHandle({ handle: 'customer-portal' })
+    ).resolves.toMatchObject({ id: project.id })
+    await expect(
+      getBrokCodeProjectByHandle({ handle: 'Acme Studio' })
+    ).resolves.toMatchObject({ id: project.id })
+    await expect(
+      getBrokCodeProjectByHandle({
+        handle: `acme-studio--${project.id}`
+      })
+    ).resolves.toMatchObject({ id: project.id })
   })
 })

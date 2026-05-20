@@ -52,6 +52,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/auth') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/docs') ||
+    pathname.startsWith('/brokcode/apps') ||
     pathname.startsWith('/brokcode/shared') ||
     pathname.startsWith('/search') ||
     pathname.startsWith('/share')

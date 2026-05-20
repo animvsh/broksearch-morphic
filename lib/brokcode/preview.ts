@@ -2,12 +2,15 @@ type PreviewFile = {
   path: string
   content: string
   language?: string | null
+  updatedAt?: Date | string | null
 }
 
 type PreviewProject = {
   id: string
   name: string
   slug?: string | null
+  username?: string | null
+  updatedAt?: Date | string | null
 }
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -44,6 +47,17 @@ function normalizeStoredFilePath(value: string) {
   return value.trim().replace(/\\/g, '/').replace(/^\/+/, '')
 }
 
+function normalizeDeploymentHandlePart(value: string) {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 48) || 'app'
+  )
+}
+
 export function normalizeManagedPreviewPath(pathParts?: string[] | null) {
   const raw = pathParts?.length ? pathParts.join('/') : 'index.html'
   const normalized = raw.trim().replace(/\\/g, '/').replace(/^\/+/, '')
@@ -73,6 +87,19 @@ export function makeManagedPreviewUrl({
   projectId: string
 }) {
   return `${origin.replace(/\/+$/, '')}/api/brokcode/previews/${encodeURIComponent(projectId)}/index.html`
+}
+
+export function makeManagedDeploymentUrl({
+  origin,
+  project
+}: {
+  origin: string
+  project: PreviewProject
+}) {
+  const handle = normalizeDeploymentHandlePart(
+    project.username || project.slug || project.name || 'app'
+  )
+  return `${origin.replace(/\/+$/, '')}/brokcode/apps/${encodeURIComponent(`${handle}--${project.id}`)}/`
 }
 
 function normalizeOrigin(value: unknown) {
@@ -174,6 +201,101 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#39;')
 }
 
+function valueTimestamp(value: Date | string | null | undefined) {
+  if (!value) return ''
+  if (value instanceof Date) return value.toISOString()
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString()
+}
+
+export function getManagedPreviewVersion({
+  files,
+  project
+}: {
+  files: PreviewFile[]
+  project: PreviewProject
+}) {
+  return [
+    project.id,
+    project.slug ?? '',
+    project.username ?? '',
+    valueTimestamp(project.updatedAt),
+    ...files
+      .map(file =>
+        [
+          normalizeStoredFilePath(file.path),
+          file.content.length,
+          valueTimestamp(file.updatedAt)
+        ].join(':')
+      )
+      .sort()
+  ].join('|')
+}
+
+function buildHotReloadScript({
+  project,
+  files
+}: {
+  project: PreviewProject
+  files: PreviewFile[]
+}) {
+  const endpoint = `/api/brokcode/previews/${encodeURIComponent(project.id)}/__brokcode_hot.json`
+  const version = getManagedPreviewVersion({ files, project })
+
+  return `<script data-brokcode-hot-reload>
+(() => {
+  const currentVersion = ${JSON.stringify(version)};
+  const endpoint = ${JSON.stringify(endpoint)};
+  async function checkForUpdate() {
+    try {
+      const response = await fetch(endpoint, { cache: 'no-store' });
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (payload.version && payload.version !== currentVersion) {
+        window.location.reload();
+      }
+    } catch {}
+  }
+  window.addEventListener('focus', checkForUpdate);
+  window.setInterval(checkForUpdate, 1200);
+})();
+</script>`
+}
+
+function injectHotReloadScript({
+  content,
+  project,
+  files
+}: {
+  content: string
+  project: PreviewProject
+  files: PreviewFile[]
+}) {
+  if (content.includes('data-brokcode-hot-reload')) return content
+
+  const script = buildHotReloadScript({ project, files })
+  if (/<\/body>/i.test(content)) {
+    return content.replace(/<\/body>/i, `${script}</body>`)
+  }
+  return `${content}${script}`
+}
+
+function buildHotReloadManifest({
+  files,
+  project
+}: {
+  files: PreviewFile[]
+  project: PreviewProject
+}) {
+  return JSON.stringify({
+    projectId: project.id,
+    slug: project.slug,
+    version: getManagedPreviewVersion({ files, project }),
+    fileCount: files.length,
+    updatedAt: valueTimestamp(project.updatedAt) || new Date().toISOString()
+  })
+}
+
 export function getManagedPreviewAsset({
   files,
   pathParts,
@@ -185,6 +307,15 @@ export function getManagedPreviewAsset({
 }): ManagedPreviewAsset | null {
   const requestedPath = normalizeManagedPreviewPath(pathParts)
   if (!requestedPath) return null
+
+  if (requestedPath === '__brokcode_hot.json') {
+    return {
+      content: buildHotReloadManifest({ files, project }),
+      contentType: CONTENT_TYPES['.json'],
+      path: requestedPath,
+      status: 200
+    }
+  }
 
   const normalizedFiles = new Map(
     files.map(file => [normalizeStoredFilePath(file.path), file])
@@ -201,7 +332,10 @@ export function getManagedPreviewAsset({
 
     const extension = extensionForPath(candidate)
     return {
-      content: file.content,
+      content:
+        extension === '.html'
+          ? injectHotReloadScript({ content: file.content, project, files })
+          : file.content,
       contentType: CONTENT_TYPES[extension] ?? 'text/plain; charset=utf-8',
       path: candidate,
       status: 200
@@ -211,7 +345,11 @@ export function getManagedPreviewAsset({
   const indexFile = normalizedFiles.get('index.html')
   if (indexFile && !extensionForPath(requestedPath)) {
     return {
-      content: indexFile.content,
+      content: injectHotReloadScript({
+        content: indexFile.content,
+        project,
+        files
+      }),
       contentType: CONTENT_TYPES['.html'],
       path: 'index.html',
       status: 200
@@ -220,7 +358,11 @@ export function getManagedPreviewAsset({
 
   if (requestedPath === 'index.html') {
     return {
-      content: buildGeneratedIndexHtml({ project, files }),
+      content: injectHotReloadScript({
+        content: buildGeneratedIndexHtml({ project, files }),
+        project,
+        files
+      }),
       contentType: CONTENT_TYPES['.html'],
       path: 'index.html',
       status: 200

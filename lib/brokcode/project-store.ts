@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, or } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -399,6 +399,58 @@ export async function getBrokCodeProjectById({ id }: { id: string }) {
   return store.projects.find(project => project.id === id) ?? null
 }
 
+export async function getBrokCodeProjectByHandle({
+  handle
+}: {
+  handle: string
+}) {
+  const rawHandle = decodeURIComponent(handle).trim()
+  const [, explicitProjectId] = rawHandle.match(/--([^/]+)$/) ?? []
+  if (explicitProjectId) {
+    const project = await getBrokCodeProjectById({ id: explicitProjectId })
+    if (project) return project
+  }
+
+  const normalizedHandle = makeBrokCodeSlug(rawHandle)
+
+  if (canUseDatabaseStore()) {
+    try {
+      const [project] = await db
+        .select()
+        .from(brokCodeProjects)
+        .where(
+          or(
+            eq(brokCodeProjects.slug, normalizedHandle),
+            eq(brokCodeProjects.username, normalizedHandle)
+          )
+        )
+        .orderBy(desc(brokCodeProjects.updatedAt))
+        .limit(1)
+
+      return project ?? null
+    } catch (error) {
+      console.error(
+        'BrokCode project DB public handle get failed; using file store:',
+        error
+      )
+    }
+  }
+
+  const store = await readProjectStore()
+  return (
+    store.projects
+      .filter(
+        project =>
+          project.slug === normalizedHandle ||
+          project.username === normalizedHandle
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      )[0] ?? null
+  )
+}
+
 export async function updateBrokCodeProjectBackend({
   projectId,
   workspaceId,
@@ -543,6 +595,10 @@ export async function recordBrokCodeProjectDeployment({
   metadata?: Record<string, unknown> | null
 }) {
   const now = new Date()
+  const deploymentPreviewUrl =
+    typeof metadata?.previewUrl === 'string' && metadata.previewUrl.trim()
+      ? metadata.previewUrl.trim()
+      : url
   const value = {
     projectId,
     workspaceId,
@@ -568,7 +624,7 @@ export async function recordBrokCodeProjectDeployment({
         .set({
           status: fallbackProjectStatus(status),
           deploymentUrl: url ?? null,
-          previewUrl: url ?? null,
+          previewUrl: deploymentPreviewUrl ?? null,
           updatedAt: now
         })
         .where(eq(brokCodeProjects.id, projectId))
@@ -598,7 +654,7 @@ export async function recordBrokCodeProjectDeployment({
             ...project,
             status: fallbackProjectStatus(status),
             deploymentUrl: url ?? null,
-            previewUrl: url ?? null,
+            previewUrl: deploymentPreviewUrl ?? null,
             updatedAt: now
           }
         : project

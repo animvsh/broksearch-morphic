@@ -13,6 +13,7 @@ import {
   verifyBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 import {
+  makeManagedDeploymentUrl,
   makeManagedPreviewUrl,
   resolvePublicPreviewOrigin
 } from '@/lib/brokcode/preview'
@@ -168,18 +169,23 @@ async function triggerManagedPreviewDeployment({
     origin: resolvePublicPreviewOrigin(request),
     projectId: project.id
   })
+  const deploymentUrl = makeManagedDeploymentUrl({
+    origin: resolvePublicPreviewOrigin(request),
+    project
+  })
   const generatedAt = new Date().toISOString()
   const updatedProject = await updateBrokCodeProjectPreview({
     projectId: project.id,
     workspaceId: auth.workspace.id,
     userId: auth.apiKey.userId,
     previewUrl,
-    deploymentUrl: previewUrl,
-    status: 'preview_ready',
+    deploymentUrl,
+    status: 'deployed',
     metadata: {
-      mode: 'managed_static',
+      mode: 'managed_live_preview',
       fileCount: files.length,
-      generatedAt
+      generatedAt,
+      hotReload: true
     }
   })
   const persistedDeployment = await recordBrokCodeProjectDeployment({
@@ -188,10 +194,11 @@ async function triggerManagedPreviewDeployment({
     userId: auth.apiKey.userId,
     provider: 'managed_preview',
     status: 'deployed',
-    url: previewUrl,
+    url: deploymentUrl,
     subdomain: project.username ?? project.slug,
     metadata: {
-      strategy: 'managed_static_preview',
+      strategy: 'managed_live_preview',
+      previewUrl,
       fileCount: files.length,
       generatedAt
     }
@@ -199,13 +206,14 @@ async function triggerManagedPreviewDeployment({
 
   return {
     status: 'deployed',
-    strategy: 'managed_static_preview',
-    message: 'Managed BrokCode preview is ready.',
+    strategy: 'managed_live_preview',
+    message: 'BrokCode app is live on its managed URL.',
     deploymentId: persistedDeployment?.id ?? null,
     persistedDeployment,
     project: updatedProject ?? project,
     previewUrl,
-    deploymentPreviewUrl: previewUrl,
+    deploymentPreviewUrl: deploymentUrl,
+    deploymentUrl,
     fileCount: files.length
   }
 }
