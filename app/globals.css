@@ -1409,7 +1409,12 @@
   .brokmail-shell,
   .brokcode-lovable,
   .brokcode-buildspace {
+    min-height: calc(100dvh - 3.25rem);
     max-height: calc(100dvh - 3.25rem);
+  }
+
+  .brokmail-shell {
+    overscroll-behavior: contain;
   }
 
   .brokmail-shell button,

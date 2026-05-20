@@ -16,6 +16,7 @@ import {
   Bot,
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
   Clock3,
   FileText,
   Flame,
@@ -110,6 +111,7 @@ type ActivityStep = {
 
 type IntegrationConnectionMode = 'none' | 'composio'
 type MailSortMode = 'priority' | 'newest' | 'sender'
+type MobileMailPane = 'list' | 'thread'
 
 const viewLabels: Array<{
   id: MailboxView
@@ -573,6 +575,7 @@ export function BrokMailApp() {
   const [handledApprovalIds, setHandledApprovalIds] = useState<string[]>([])
   const [agentInput, setAgentInput] = useState('')
   const [agentOpen, setAgentOpen] = useState(false)
+  const [mobilePane, setMobilePane] = useState<MobileMailPane>('list')
   const [isRunning, setIsRunning] = useState(false)
   const [composer, setComposer] = useState('')
   const composerTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -757,9 +760,25 @@ export function BrokMailApp() {
 
   function focusComposer() {
     setComposer('')
+    setMobilePane('thread')
     requestAnimationFrame(() => {
       composerTextareaRef.current?.focus()
     })
+  }
+
+  function openMailboxView(nextView: MailboxView) {
+    setView(nextView)
+    setMobilePane('list')
+  }
+
+  function openThread(threadId: string) {
+    setSelectedThreadId(threadId)
+    setMobilePane('thread')
+  }
+
+  function openCalendarEvent(eventId: string) {
+    setSelectedCalendarEventId(eventId)
+    setMobilePane('thread')
   }
 
   async function loadComposioGmailThreads() {
@@ -1802,14 +1821,14 @@ export function BrokMailApp() {
   }
 
   return (
-    <div className="brokmail-shell flex h-full min-h-0 w-full overflow-hidden bg-[#f6f6f3] text-foreground">
+    <div className="brokmail-shell flex h-full min-h-0 w-full overflow-hidden bg-[#f7f6f1] text-foreground">
       {agentOpen ? (
         <div
           className="fixed inset-0 z-50 bg-zinc-950/20 backdrop-blur-[1px] 2xl:hidden"
           onClick={() => setAgentOpen(false)}
         >
           <aside
-            className="absolute inset-x-2 bottom-2 flex max-h-[min(86dvh,720px)] flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl md:bottom-3 md:left-3 md:top-3 md:w-[min(440px,calc(100vw-1.5rem))] md:rounded-xl"
+            className="absolute inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] flex max-h-[min(82dvh,720px)] flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl md:bottom-3 md:left-3 md:top-3 md:w-[min(440px,calc(100vw-1.5rem))] md:max-h-none md:rounded-xl"
             onClick={event => event.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b px-3 py-2">
@@ -1885,7 +1904,7 @@ export function BrokMailApp() {
                       'flex h-9 w-full items-center justify-between rounded-md px-2 text-sm transition-colors hover:bg-muted/70',
                       view === item.id && 'dashboard-pill-active font-medium'
                     )}
-                    onClick={() => setView(item.id)}
+                    onClick={() => openMailboxView(item.id)}
                   >
                     <span className="flex min-w-0 items-center gap-2">
                       <Icon className="size-4 shrink-0" />
@@ -2011,7 +2030,45 @@ export function BrokMailApp() {
             </div>
           </div>
 
-          <div className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white sm:max-h-[42dvh] lg:max-h-none lg:w-[300px] lg:border-b-0 lg:border-r xl:w-[330px] 2xl:w-[360px]">
+          <div className="border-b border-zinc-200/80 bg-[#f7f6f1] px-3 py-2 lg:hidden">
+            <div className="grid grid-cols-3 rounded-xl border border-zinc-200 bg-white p-1 shadow-sm">
+              <button
+                className={cn(
+                  'h-9 rounded-lg text-xs font-medium transition-colors',
+                  mobilePane === 'list'
+                    ? 'bg-zinc-950 text-white'
+                    : 'text-zinc-600 hover:bg-zinc-100'
+                )}
+                onClick={() => setMobilePane('list')}
+              >
+                Inbox
+              </button>
+              <button
+                className={cn(
+                  'h-9 rounded-lg text-xs font-medium transition-colors',
+                  mobilePane === 'thread'
+                    ? 'bg-zinc-950 text-white'
+                    : 'text-zinc-600 hover:bg-zinc-100'
+                )}
+                onClick={() => setMobilePane('thread')}
+              >
+                Thread
+              </button>
+              <button
+                className="h-9 rounded-lg text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100"
+                onClick={() => setAgentOpen(true)}
+              >
+                Agent
+              </button>
+            </div>
+          </div>
+
+          <div
+            className={cn(
+              'min-h-0 w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white lg:flex lg:max-h-none lg:w-[300px] lg:border-b-0 lg:border-r xl:w-[330px] 2xl:w-[360px]',
+              mobilePane === 'list' ? 'flex flex-1' : 'hidden'
+            )}
+          >
             <div className="border-b border-zinc-100 bg-white p-2.5 sm:p-3">
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />
@@ -2057,7 +2114,7 @@ export function BrokMailApp() {
                         view === item.id &&
                           'border-zinc-950 bg-zinc-950 text-white hover:bg-zinc-900'
                       )}
-                      onClick={() => setView(item.id)}
+                      onClick={() => openMailboxView(item.id)}
                     >
                       <Icon className="size-3.5" />
                       <span>{item.label}</span>
@@ -2088,7 +2145,7 @@ export function BrokMailApp() {
                   isConnecting={isConnectingCalendar}
                   onConnect={connectCalendar}
                   onRefresh={loadComposioCalendarEvents}
-                  onSelect={eventId => setSelectedCalendarEventId(eventId)}
+                  onSelect={openCalendarEvent}
                 />
               ) : view === 'drafts' ? (
                 <DraftList messages={messages} onInsert={insertDraft} />
@@ -2107,7 +2164,7 @@ export function BrokMailApp() {
                         aria-label={`Open ${thread.subject} from ${thread.sender}`}
                         data-selected={selectedThread?.id === thread.id}
                         className="block w-full px-3 py-3 text-left"
-                        onClick={() => setSelectedThreadId(thread.id)}
+                        onClick={() => openThread(thread.id)}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
@@ -2197,7 +2254,12 @@ export function BrokMailApp() {
             </div>
           </div>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-[#fbfbf8]">
+          <div
+            className={cn(
+              'min-h-0 min-w-0 flex-1 overflow-hidden bg-[#fbfbf8] lg:block',
+              mobilePane === 'thread' ? 'block' : 'hidden'
+            )}
+          >
             {view === 'calendar' ? (
               <CalendarWorkspace
                 events={calendarEvents}
@@ -2222,6 +2284,7 @@ export function BrokMailApp() {
                 requestComposerSendApproval={requestComposerSendApproval}
                 gmailConnected={connected}
                 isSyncingMail={isSyncingMail}
+                onBackToList={() => setMobilePane('list')}
                 onToggleStar={() => toggleThreadStar(selectedThread.id)}
                 onMarkDone={() => markThreadDone(selectedThread.id)}
               />
@@ -2430,6 +2493,7 @@ function ThreadView({
   requestComposerSendApproval,
   gmailConnected,
   isSyncingMail,
+  onBackToList,
   onToggleStar,
   onMarkDone
 }: {
@@ -2443,6 +2507,7 @@ function ThreadView({
   requestComposerSendApproval: () => void
   gmailConnected: boolean
   isSyncingMail: boolean
+  onBackToList?: () => void
   onToggleStar: () => void
   onMarkDone: () => void
 }) {
@@ -2460,7 +2525,18 @@ function ThreadView({
     <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       <div className="border-b border-zinc-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
+            {onBackToList ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="-ml-2 mb-1 h-8 gap-1.5 px-2 text-xs lg:hidden"
+                onClick={onBackToList}
+              >
+                <ChevronLeft className="size-4" />
+                Inbox
+              </Button>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <Mail className="size-3.5" />
               <span className="break-all">{thread.senderEmail}</span>
@@ -2479,7 +2555,7 @@ function ThreadView({
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 px-2 text-xs sm:flex-none sm:gap-2 sm:text-sm"
+              className="h-9 gap-1.5 px-2 text-xs sm:flex-none sm:gap-2 sm:text-sm"
               onClick={onToggleStar}
             >
               <Star
@@ -2493,7 +2569,7 @@ function ThreadView({
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 px-2 text-xs sm:flex-none sm:gap-2 sm:text-sm"
+              className="h-9 gap-1.5 px-2 text-xs sm:flex-none sm:gap-2 sm:text-sm"
               onClick={() => runAgent('Summarize this thread.')}
             >
               <Sparkles className="size-4" />
@@ -2502,7 +2578,7 @@ function ThreadView({
             </Button>
             <Button
               size="sm"
-              className="gap-1.5 px-2 text-xs sm:flex-none sm:gap-2 sm:text-sm"
+              className="h-9 gap-1.5 px-2 text-xs sm:flex-none sm:gap-2 sm:text-sm"
               onClick={() => runAgent('Draft a reply to this thread.')}
             >
               <Reply className="size-4" />
@@ -2613,7 +2689,7 @@ function ThreadView({
               value={composer}
               onChange={event => setComposer(event.target.value)}
               placeholder="Draft or insert a reply..."
-              className="min-h-24 resize-none rounded-xl border-zinc-200 bg-zinc-50/80 leading-6 shadow-inner sm:min-h-32"
+              className="min-h-20 resize-none rounded-xl border-zinc-200 bg-zinc-50/80 leading-6 shadow-inner sm:min-h-32"
             />
             <div className="mt-3 hidden flex-wrap gap-2 text-xs text-muted-foreground sm:flex">
               <div className="rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5">
