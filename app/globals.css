@@ -1365,6 +1365,30 @@
   color: #71717a !important;
 }
 
+.brokcode-buildspace {
+  color-scheme: dark;
+}
+
+.brokcode-buildspace * {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.22) transparent;
+}
+
+.brokcode-buildspace ::selection {
+  background: rgb(255 255 255 / 0.18);
+  color: #ffffff;
+}
+
+.brokcode-buildspace [data-radix-select-trigger] {
+  border-color: rgb(255 255 255 / 0.15);
+  background: rgb(255 255 255 / 0.08);
+  color: #ffffff;
+}
+
+.brokcode-buildspace .typing-dots > span {
+  background: rgb(255 255 255 / 0.72);
+}
+
 .brokmail-shell .dashboard-card,
 .brokmail-shell .dashboard-pill-active,
 .brokmail-shell .dashboard-list-row-active {
@@ -1383,18 +1407,21 @@
 
 @media (max-width: 767px) {
   .brokmail-shell,
-  .brokcode-lovable {
+  .brokcode-lovable,
+  .brokcode-buildspace {
     max-height: calc(100dvh - 3.25rem);
   }
 
   .brokmail-shell button,
   .brokcode-lovable button,
+  .brokcode-buildspace button,
   .mobile-chip-row > * {
     touch-action: manipulation;
   }
 
   .brokmail-shell .dashboard-card,
-  .brokcode-lovable .rounded-2xl {
+  .brokcode-lovable .rounded-2xl,
+  .brokcode-buildspace .rounded-2xl {
     border-radius: 0.875rem;
   }
 }
