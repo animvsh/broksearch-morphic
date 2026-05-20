@@ -1,5 +1,6 @@
 export interface Model {
   id: string
+  alias?: string
   name: string
   provider: string
   providerId: string

@@ -7,24 +7,29 @@ const MINIMAX_CONTEXT_WINDOW = 204_800
 export const BROK_CHAT_MODELS: Model[] = [
   {
     id: 'MiniMax-M2.7-highspeed',
-    name: 'Brok 3 Fast',
+    alias: 'brok-fast',
+    name: 'Brok Fast',
     provider: BROK_PROVIDER,
     providerId: BROK_PROVIDER_ID,
-    description: 'M2.7 Highspeed: same performance, faster and more agile.',
+    description:
+      'Default fast route for everyday chat, search, and quick edits.',
     contextWindow: MINIMAX_CONTEXT_WINDOW,
     speedLabel: 'about 100 tps'
   },
   {
     id: 'MiniMax-M2.7',
-    name: 'Brok 3',
+    alias: 'brok-search',
+    name: 'Brok Search',
     provider: BROK_PROVIDER,
     providerId: BROK_PROVIDER_ID,
-    description: 'M2.7 reasoning for complex long-context work.',
+    description:
+      'Search-grounded reasoning for more careful long-context work.',
     contextWindow: MINIMAX_CONTEXT_WINDOW,
     speedLabel: 'about 60 tps'
   },
   {
     id: 'MiniMax-M2.5-highspeed',
+    alias: 'brok-2.5-fast',
     name: 'Brok 2.5 Fast',
     provider: BROK_PROVIDER,
     providerId: BROK_PROVIDER_ID,
@@ -34,6 +39,7 @@ export const BROK_CHAT_MODELS: Model[] = [
   },
   {
     id: 'MiniMax-M2.5',
+    alias: 'brok-2.5',
     name: 'Brok 2.5',
     provider: BROK_PROVIDER,
     providerId: BROK_PROVIDER_ID,
@@ -43,6 +49,7 @@ export const BROK_CHAT_MODELS: Model[] = [
   },
   {
     id: 'MiniMax-M2.1-highspeed',
+    alias: 'brok-2.1-fast',
     name: 'Brok 2.1 Fast',
     provider: BROK_PROVIDER,
     providerId: BROK_PROVIDER_ID,
@@ -52,6 +59,7 @@ export const BROK_CHAT_MODELS: Model[] = [
   },
   {
     id: 'MiniMax-M2.1',
+    alias: 'brok-2.1',
     name: 'Brok 2.1',
     provider: BROK_PROVIDER,
     providerId: BROK_PROVIDER_ID,
@@ -62,6 +70,7 @@ export const BROK_CHAT_MODELS: Model[] = [
   },
   {
     id: 'MiniMax-M2',
+    alias: 'brok-reasoning',
     name: 'Brok M2 Reasoning',
     provider: BROK_PROVIDER,
     providerId: BROK_PROVIDER_ID,

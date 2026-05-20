@@ -51,6 +51,7 @@ const MODEL_SPEED_NOTES: Record<string, string> = {
   'MiniMax-M2.1': 'About 60 tokens/sec',
   'MiniMax-M2.1-highspeed': 'About 100 tokens/sec',
   'MiniMax-M2': 'Reasoning and agentic path',
+  'brok-fast': 'Default fast Brok route',
   'brok-lite': 'Highspeed MiniMax route',
   'brok-code': 'Brok default coding-agent route',
   'brok-search': 'Search-enabled route',

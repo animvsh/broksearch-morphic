@@ -3,15 +3,17 @@
   "models": {
     "quick": {
       "id": "MiniMax-M2.7-highspeed",
-      "name": "Brok 3 Fast",
+      "alias": "brok-fast",
+      "name": "Brok Fast",
       "provider": "Brok",
       "providerId": "openai-compatible",
-      "description": "M2.7 Highspeed: same performance, faster and more agile.",
+      "description": "Default fast route for everyday chat, search, and quick edits.",
       "contextWindow": 204800,
       "speedLabel": "about 100 tps"
     },
     "search": {
       "id": "MiniMax-M2.7",
+      "alias": "brok-search",
       "name": "Brok 3 Search",
       "provider": "Brok",
       "providerId": "openai-compatible",
@@ -21,6 +23,7 @@
     },
     "deep": {
       "id": "MiniMax-M2.7",
+      "alias": "brok-deep",
       "name": "Brok 3 Deep",
       "provider": "Brok",
       "providerId": "openai-compatible",
@@ -30,6 +33,7 @@
     },
     "code": {
       "id": "MiniMax-M2.7-highspeed",
+      "alias": "brok-code",
       "name": "Brok Code",
       "provider": "Brok",
       "providerId": "openai-compatible",

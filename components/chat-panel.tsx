@@ -667,7 +667,7 @@ export function ChatPanel({
               <span className="hidden text-[11px] text-muted-foreground md:inline">
                 {selectedMode?.label || 'Quick'} mode
               </span>
-              {!isCloudDeployment && modelSelectorData && (
+              {modelSelectorData && (
                 <ModelSelectorClient data={modelSelectorData} />
               )}
               {messages.length > 0 && (

@@ -41,6 +41,7 @@ interface CreateApiKeyFormProps {
 }
 
 const AVAILABLE_MODELS = [
+  { id: 'brok-fast', name: 'Brok Fast', detail: 'Default fast model' },
   { id: 'brok-lite', name: 'Brok Lite', detail: 'Fast chat and summaries' },
   { id: 'brok-search', name: 'Brok Search', detail: 'Grounded web answers' },
   {

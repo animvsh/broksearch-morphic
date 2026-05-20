@@ -16,9 +16,23 @@ export interface BrokModelConfig {
 const MINIMAX_CONTEXT_WINDOW = 204_800
 
 export const BROK_MODELS: Record<string, BrokModelConfig> = {
+  'brok-fast': {
+    name: 'Brok Fast',
+    description: 'Default fast model for chat, search, and quick tool use',
+    provider: 'minimax',
+    providerModel: 'MiniMax-M2.7-highspeed',
+    inputCostPerMillion: 0.1,
+    outputCostPerMillion: 0.4,
+    maxTokens: MINIMAX_CONTEXT_WINDOW,
+    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    supportsStreaming: true,
+    supportsSearch: true,
+    supportsTools: true,
+    supportsCode: true
+  },
   'brok-lite': {
     name: 'Brok Lite',
-    description: 'Fast, low-cost answers with optional web search',
+    description: 'Compatibility alias for the fast Brok route',
     provider: 'minimax',
     providerModel: 'MiniMax-M2.7-highspeed',
     inputCostPerMillion: 0.1,

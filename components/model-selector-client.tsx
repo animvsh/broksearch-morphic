@@ -29,6 +29,10 @@ function modelKey(model: Model): string {
   return `${model.providerId}:${model.id}`
 }
 
+function modelAlias(model: Model): string {
+  return model.alias ?? model.id
+}
+
 const PROVIDER_LOGO_BY_ID: Record<string, string> = {
   openai: '/providers/logos/openai.svg',
   anthropic: '/providers/logos/anthropic.svg',
@@ -137,6 +141,9 @@ export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
           <span className="truncate max-w-40 text-xs font-medium">
             {selectedModel.name}
           </span>
+          <span className="hidden rounded-md bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 sm:inline">
+            {modelAlias(selectedModel)}
+          </span>
           <ChevronDown
             className={cn(
               'h-3 w-3 ml-0.5 opacity-50 transition-transform duration-200',
@@ -145,7 +152,15 @@ export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
           />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0" align="end" sideOffset={6}>
+      <PopoverContent className="w-[340px] p-0" align="end" sideOffset={6}>
+        <div className="border-b border-zinc-100 px-3 py-2.5">
+          <div className="text-xs font-semibold text-zinc-900">
+            Available models
+          </div>
+          <div className="mt-1 truncate font-mono text-[11px] text-zinc-500">
+            {selectableModels.map(modelAlias).join(' · ')}
+          </div>
+        </div>
         <Command>
           <CommandInput placeholder="Search models..." />
           <CommandList>
@@ -158,7 +173,7 @@ export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
                   return (
                     <CommandItem
                       key={value}
-                      value={`${value} ${model.name} ${model.description ?? ''} ${provider}`}
+                      value={`${value} ${modelAlias(model)} ${model.name} ${model.description ?? ''} ${provider}`}
                       onSelect={() => {
                         const nextModel = selectableByKey[value]
                         if (!nextModel) {
@@ -190,6 +205,9 @@ export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
                         <span className="flex items-center gap-2">
                           <span className="truncate font-medium">
                             {model.name}
+                          </span>
+                          <span className="shrink-0 rounded-md bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
+                            {modelAlias(model)}
                           </span>
                           {model.speedLabel ? (
                             <span className="shrink-0 rounded-md border border-border/60 bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">

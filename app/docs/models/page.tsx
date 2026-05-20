@@ -13,6 +13,7 @@ const MINIMAX_MODEL_IDS = [
 ] as const
 
 const BROK_MODEL_IDS = [
+  'brok-fast',
   'brok-code',
   'brok-search',
   'brok-search-pro',
