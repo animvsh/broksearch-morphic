@@ -888,6 +888,60 @@ async function readBrokCodeExecutionStream(
   }
 }
 
+async function readBackgroundTaskEventStream(
+  response: Response,
+  onTask: (task: BrokCodeBackgroundTask) => void
+) {
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('Task event stream did not include a response body.')
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  const processBlock = (block: string) => {
+    const lines = block.split(/\r?\n/)
+    let eventType = 'message'
+    const dataLines: string[] = []
+
+    for (const line of lines) {
+      if (line.startsWith('event:')) {
+        eventType = line.slice(6).trim() || 'message'
+      } else if (line.startsWith('data:')) {
+        dataLines.push(line.slice(5).trim())
+      }
+    }
+
+    if (eventType !== 'task.update' || dataLines.length === 0) return
+
+    try {
+      const payload = JSON.parse(dataLines.join('\n')) as {
+        task?: BrokCodeBackgroundTask
+      }
+      if (payload.task?.id) {
+        onTask(payload.task)
+      }
+    } catch {}
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const blocks = buffer.split(/\n\n/)
+    buffer = blocks.pop() ?? ''
+    for (const block of blocks) {
+      processBlock(block)
+    }
+  }
+
+  if (buffer.trim()) {
+    processBlock(buffer)
+  }
+}
+
 type BrokCodeAppProps = {
   initialPrompt?: string
   autoStart?: boolean
@@ -936,6 +990,10 @@ export function BrokCodeApp({
     message: 'Preview has not been checked yet.'
   })
   const [executionRuns, setExecutionRuns] = useState<ExecutionRun[]>([])
+  const [reconnectingTaskId, setReconnectingTaskId] = useState<string | null>(
+    null
+  )
+  const [cancellingTaskId, setCancellingTaskId] = useState<string | null>(null)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [runtimeBootstrapped, setRuntimeBootstrapped] = useState(false)
   const [isDeploying, setIsDeploying] = useState(false)
@@ -1888,6 +1946,89 @@ export function BrokCodeApp({
             : 'Recovered active run from the background task ledger.',
       previewUrl,
       steps
+    }
+  }
+
+  function mergeExecutionRunFromTask(task: BrokCodeBackgroundTask) {
+    const nextRun = createExecutionRunFromTask(task)
+
+    setExecutionRuns(current => {
+      const hasExisting = current.some(
+        run => run.taskId === task.id || run.id === nextRun.id
+      )
+      const merged = hasExisting
+        ? current.map(run =>
+            run.taskId === task.id || run.id === nextRun.id ? nextRun : run
+          )
+        : [nextRun, ...current]
+
+      return merged.sort((a, b) => b.startedAt - a.startedAt).slice(0, 8)
+    })
+
+    const previewUrl =
+      typeof task.result?.previewUrl === 'string'
+        ? task.result.previewUrl
+        : null
+    if (previewUrl) {
+      loadPreviewUrlIfAllowed(previewUrl)
+    }
+  }
+
+  async function reconnectExecutionRun(run: ExecutionRun) {
+    if (!run.eventsUrl || !run.taskId || reconnectingTaskId) return
+
+    setReconnectingTaskId(run.taskId)
+    setRuntimeError(null)
+    try {
+      const response = await fetch(run.eventsUrl, {
+        headers: getAuthHeaders()
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.error ?? 'Could not reconnect to task events.')
+      }
+
+      await readBackgroundTaskEventStream(response, task => {
+        mergeExecutionRunFromTask(task)
+      })
+      await refreshBrokCodeTasks(apiKey)
+    } catch (error) {
+      setRuntimeError(
+        error instanceof Error
+          ? error.message
+          : 'Could not reconnect to task events.'
+      )
+    } finally {
+      setReconnectingTaskId(null)
+    }
+  }
+
+  async function cancelExecutionRun(run: ExecutionRun) {
+    if (!run.taskId || cancellingTaskId) return
+
+    setCancellingTaskId(run.taskId)
+    setRuntimeError(null)
+    try {
+      const response = await fetch(`/api/tasks/${run.taskId}/cancel`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      })
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.error ?? 'Could not cancel task.')
+      }
+
+      if (body?.task) {
+        mergeExecutionRunFromTask(body.task as BrokCodeBackgroundTask)
+      } else {
+        await refreshBrokCodeTasks(apiKey)
+      }
+    } catch (error) {
+      setRuntimeError(
+        error instanceof Error ? error.message : 'Could not cancel task.'
+      )
+    } finally {
+      setCancellingTaskId(null)
     }
   }
 
@@ -3575,6 +3716,17 @@ export function BrokCodeApp({
                 <AgentReasoningBar
                   run={executionRuns[0]}
                   fallbackHint={runStreamingHints[runHintIndex]}
+                  reconnectingTaskId={reconnectingTaskId}
+                  cancellingTaskId={cancellingTaskId}
+                  onReconnect={run => {
+                    void reconnectExecutionRun(run)
+                  }}
+                  onCancel={run => {
+                    void cancelExecutionRun(run)
+                  }}
+                  onRetry={run => {
+                    void runCommand(run.command)
+                  }}
                 />
               )}
             </div>
@@ -4117,10 +4269,20 @@ function ChatBubble({
 
 function AgentReasoningBar({
   run,
-  fallbackHint
+  fallbackHint,
+  reconnectingTaskId,
+  cancellingTaskId,
+  onReconnect,
+  onCancel,
+  onRetry
 }: {
   run?: ExecutionRun
   fallbackHint: string
+  reconnectingTaskId: string | null
+  cancellingTaskId: string | null
+  onReconnect: (run: ExecutionRun) => void
+  onCancel: (run: ExecutionRun) => void
+  onRetry: (run: ExecutionRun) => void
 }) {
   const activeStep =
     run?.steps.find(step => step.status === 'running') ??
@@ -4149,6 +4311,12 @@ function AgentReasoningBar({
                 100
             )
           )
+  const isTaskBackedRun = Boolean(run?.taskId)
+  const canReconnect = Boolean(run?.eventsUrl && isTaskBackedRun)
+  const canCancel = Boolean(run?.taskId && status === 'running')
+  const isReconnecting =
+    Boolean(run?.taskId) && reconnectingTaskId === run?.taskId
+  const isCancelling = Boolean(run?.taskId) && cancellingTaskId === run?.taskId
 
   return (
     <div className="mr-auto w-full max-w-[min(100%,42rem)] rounded-none border border-white/10 bg-white/[0.06] p-3 text-white shadow-[0_28px_72px_-56px_rgba(0,0,0,0.95)]">
@@ -4198,6 +4366,61 @@ function AgentReasoningBar({
           style={{ width: `${progress}%` }}
         />
       </div>
+      {run && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {canReconnect && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-none border-white/15 bg-white px-3 text-xs text-black hover:bg-white/90"
+              disabled={isReconnecting || isCancelling}
+              onClick={() => onReconnect(run)}
+            >
+              {isReconnecting ? (
+                <RefreshCcw className="size-3.5 animate-spin" />
+              ) : (
+                <Radar className="size-3.5" />
+              )}
+              {isReconnecting ? 'Reconnecting' : 'Follow task'}
+            </Button>
+          )}
+          {canCancel && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-none border-white/15 bg-transparent px-3 text-xs text-white hover:bg-white/10"
+              disabled={isCancelling || isReconnecting}
+              onClick={() => onCancel(run)}
+            >
+              {isCancelling ? (
+                <RefreshCcw className="size-3.5 animate-spin" />
+              ) : (
+                <Clock3 className="size-3.5" />
+              )}
+              {isCancelling ? 'Cancelling' : 'Cancel'}
+            </Button>
+          )}
+          {status !== 'running' && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-none px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+              onClick={() => onRetry(run)}
+            >
+              <Play className="size-3.5" />
+              Retry
+            </Button>
+          )}
+          {run.taskId && (
+            <span className="truncate text-[11px] text-white/38">
+              task {run.taskId.slice(0, 8)}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
