@@ -22,6 +22,25 @@ function isPublicBrokCodeApp(project: {
   )
 }
 
+function injectAppBaseHref({
+  content,
+  handle
+}: {
+  content: string
+  handle: string
+}) {
+  if (/<base\s/i.test(content)) return content
+
+  const baseHref = `/brokcode/apps/${encodeURIComponent(handle)}/`
+  const baseTag = `<base href="${baseHref}">`
+
+  if (/<head[^>]*>/i.test(content)) {
+    return content.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`)
+  }
+
+  return `${baseTag}${content}`
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ handle: string; path?: string[] }> }
@@ -58,7 +77,11 @@ export async function GET(
     })
   }
 
-  return new NextResponse(asset.content, {
+  const content = asset.contentType.startsWith('text/html')
+    ? injectAppBaseHref({ content: asset.content, handle })
+    : asset.content
+
+  return new NextResponse(content, {
     status: asset.status,
     headers: {
       'Cache-Control': 'no-store',

@@ -68,7 +68,9 @@ describe('BrokCode managed preview', () => {
         origin: 'https://www.brok.fyi/',
         project
       })
-    ).toBe('https://www.brok.fyi/brokcode/apps/coffee-shop--project_123/')
+    ).toBe(
+      'https://www.brok.fyi/brokcode/apps/coffee-shop--project_123/index.html'
+    )
   })
 
   it('serves the hot reload manifest for managed previews', () => {

@@ -99,7 +99,7 @@ export function makeManagedDeploymentUrl({
   const handle = normalizeDeploymentHandlePart(
     project.username || project.slug || project.name || 'app'
   )
-  return `${origin.replace(/\/+$/, '')}/brokcode/apps/${encodeURIComponent(`${handle}--${project.id}`)}/`
+  return `${origin.replace(/\/+$/, '')}/brokcode/apps/${encodeURIComponent(`${handle}--${project.id}`)}/index.html`
 }
 
 function normalizeOrigin(value: unknown) {

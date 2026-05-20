@@ -148,7 +148,7 @@ describe('BrokCode project file store', () => {
       previewUrl:
         'https://www.brok.fyi/api/brokcode/previews/published/index.html',
       deploymentUrl:
-        'https://www.brok.fyi/brokcode/apps/published-app--published/'
+        'https://www.brok.fyi/brokcode/apps/published-app--published/index.html'
     })
     await recordBrokCodeProjectDeployment({
       projectId: project.id,
@@ -156,7 +156,7 @@ describe('BrokCode project file store', () => {
       userId,
       provider: 'managed_preview',
       status: 'deployed',
-      url: 'https://www.brok.fyi/brokcode/apps/published-app--published/',
+      url: 'https://www.brok.fyi/brokcode/apps/published-app--published/index.html',
       metadata: {
         previewUrl:
           'https://www.brok.fyi/api/brokcode/previews/published/index.html'
@@ -169,7 +169,7 @@ describe('BrokCode project file store', () => {
     })
     expect(publishedProject?.status).toBe('deployed')
     expect(publishedProject?.deploymentUrl).toBe(
-      'https://www.brok.fyi/brokcode/apps/published-app--published/'
+      'https://www.brok.fyi/brokcode/apps/published-app--published/index.html'
     )
     expect(publishedProject?.previewUrl).toBe(
       'https://www.brok.fyi/api/brokcode/previews/published/index.html'
