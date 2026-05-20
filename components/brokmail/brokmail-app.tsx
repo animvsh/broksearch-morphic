@@ -1805,7 +1805,7 @@ export function BrokMailApp() {
     <div className="brokmail-shell flex h-full min-h-0 w-full overflow-hidden bg-[#f6f6f3] text-foreground">
       {agentOpen ? (
         <div
-          className="fixed inset-0 z-50 bg-zinc-950/20 backdrop-blur-[1px] xl:hidden"
+          className="fixed inset-0 z-50 bg-zinc-950/20 backdrop-blur-[1px] 2xl:hidden"
           onClick={() => setAgentOpen(false)}
         >
           <aside
@@ -2011,7 +2011,7 @@ export function BrokMailApp() {
             </div>
           </div>
 
-          <div className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white sm:max-h-[42dvh] lg:max-h-none lg:w-[320px] lg:border-b-0 lg:border-r xl:w-[360px]">
+          <div className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white sm:max-h-[42dvh] lg:max-h-none lg:w-[300px] lg:border-b-0 lg:border-r xl:w-[330px] 2xl:w-[360px]">
             <div className="border-b border-zinc-100 bg-white p-2.5 sm:p-3">
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />
@@ -2020,7 +2020,7 @@ export function BrokMailApp() {
                   ref={searchInputRef}
                   value={query}
                   onChange={event => setQuery(event.target.value)}
-                  placeholder="Search mail/calendar or ask BrokMail..."
+                  placeholder="Search mail or ask BrokMail..."
                   className="h-9 min-w-0"
                 />
               </div>
@@ -2239,7 +2239,7 @@ export function BrokMailApp() {
             )}
           </div>
 
-          <aside className="hidden w-[340px] shrink-0 border-l border-zinc-200/80 bg-white xl:flex xl:flex-col 2xl:w-[370px]">
+          <aside className="hidden w-[360px] shrink-0 border-l border-zinc-200/80 bg-white 2xl:flex 2xl:flex-col">
             <AgentPanel
               activity={activity}
               agentInput={agentInput}
@@ -2406,7 +2406,7 @@ function BrokMailStatusBar({
           <Button
             variant="default"
             size="sm"
-            className="h-8 shrink-0 gap-1.5 rounded-md bg-zinc-950 px-2.5 text-xs text-white hover:bg-zinc-800 sm:gap-2 sm:px-3 xl:hidden"
+            className="h-8 shrink-0 gap-1.5 rounded-md bg-zinc-950 px-2.5 text-xs text-white hover:bg-zinc-800 sm:gap-2 sm:px-3 2xl:hidden"
             onClick={onOpenAgent}
           >
             <Bot className="size-3.5" />

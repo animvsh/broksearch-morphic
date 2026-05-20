@@ -222,13 +222,14 @@ function buildDefaultGeneratedAppStyles() {
   color-scheme: light;
   --bg: #f7f7f4;
   --surface: #ffffff;
-  --surface-soft: #f0eee8;
+  --surface-soft: #eef2f7;
   --text: #181817;
   --muted: #66635e;
   --line: #dedbd2;
   --accent: #2563eb;
   --accent-strong: #1746a2;
-  --warm: #d97706;
+  --warm: #0f766e;
+  --ink: #0f172a;
   --shadow: 0 18px 50px rgba(24, 24, 23, 0.1);
 }
 
@@ -335,8 +336,37 @@ main > section, .section, .hero {
   overflow: hidden;
 }
 
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 auto;
+  width: min(44vw, 520px);
+  height: min(44vw, 520px);
+  border-radius: 999px 0 0 0;
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.16), transparent 58%),
+    linear-gradient(45deg, rgba(15, 118, 110, 0.18), transparent 62%);
+  pointer-events: none;
+}
+
 .hero-content, .section-header {
+  position: relative;
+  z-index: 1;
   max-width: 760px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 760;
 }
 
 h1, h2, h3, p {
@@ -397,10 +427,18 @@ p {
 
 .card, article, .menu-card, .feature-card {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 22px;
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+
+.card:nth-child(2n), article:nth-child(2n) {
+  background: var(--surface-soft);
+}
+
+.card h3, article h3 {
+  margin-bottom: 8px;
 }
 
 form {
@@ -614,7 +652,7 @@ export function buildFallbackGeneratedAppFiles({
         <div class="container hero-content">
           <p class="eyebrow">Built from your BrokCode prompt</p>
           <h1>${title}</h1>
-          <p>${escapeGeneratedHtml(prompt)}. This first version gives the app a real responsive shell, clear actions, and editable sections so the next iteration has something concrete to improve.</p>
+          <p>${escapeGeneratedHtml(prompt)}. This version starts with a real responsive product shell, a focused first workflow, and editable sections so the next iteration can improve the actual experience instead of a blank demo.</p>
           <div class="hero-actions">
             <a class="btn" href="#start">Try the flow</a>
             <a class="btn btn-secondary" href="#features">Explore features</a>
@@ -628,9 +666,9 @@ export function buildFallbackGeneratedAppFiles({
             <p>Each section is structured so BrokCode can refine copy, data, forms, and interactions in the next edit loop.</p>
           </div>
           <div class="grid">
-            <article class="card"><h3>Focused homepage</h3><p>A clear hero, navigation, and primary action give the app direction immediately.</p></article>
-            <article class="card"><h3>Responsive layout</h3><p>The layout adapts from mobile to desktop without horizontal scrolling or clipped controls.</p></article>
-            <article class="card"><h3>Working interaction</h3><p>The form and navigation include JavaScript behavior so the preview feels alive.</p></article>
+            <article class="card"><h3>Focused entry point</h3><p>A clear headline, navigation, and primary action make the first screen immediately understandable.</p></article>
+            <article class="card"><h3>Responsive structure</h3><p>The layout adapts from mobile to desktop without horizontal scrolling, clipped controls, or fragile spacing.</p></article>
+            <article class="card"><h3>Working interaction</h3><p>The form and navigation include JavaScript behavior so the preview feels alive and testable.</p></article>
           </div>
         </div>
       </section>

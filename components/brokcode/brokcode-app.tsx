@@ -3177,12 +3177,14 @@ export function BrokCodeApp({
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto bg-[#f6f6f3] lg:grid-cols-[minmax(390px,480px)_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[minmax(420px,520px)_minmax(0,1fr)]">
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto bg-[#f6f6f3] lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[minmax(380px,460px)_minmax(0,1fr)]">
         <section className="flex min-h-[52dvh] flex-col overflow-hidden border-b border-zinc-200/80 bg-white lg:min-h-0 lg:border-b-0 lg:border-r">
           <div className="border-b border-zinc-200/80 bg-white px-3 py-2 sm:px-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-zinc-950">Chat</p>
+                <p className="text-sm font-semibold text-zinc-950">
+                  Builder chat
+                </p>
                 <p className="hidden truncate text-xs text-zinc-500 sm:block">
                   Tell Brok what to build. The preview updates on the right.
                 </p>
