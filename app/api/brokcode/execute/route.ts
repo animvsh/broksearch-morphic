@@ -751,6 +751,11 @@ function createExecutionStream({
           let opencodeFailure: string | null = null
 
           if (taskId) {
+            send('task', {
+              task_id: taskId,
+              status_url: `/api/tasks/${taskId}`,
+              events_url: `/api/tasks/${taskId}/events`
+            })
             await updateBackgroundTask({
               id: taskId,
               userId: auth.apiKey.userId,
@@ -758,7 +763,10 @@ function createExecutionStream({
               metadata: {
                 requestId,
                 model,
-                command
+                command,
+                projectId: usageContext.projectId,
+                sessionId: usageContext.sessionId,
+                progress: 12
               }
             }).catch(error => {
               console.error('Failed to mark BrokCode task running:', error)
@@ -805,6 +813,9 @@ function createExecutionStream({
                 content: result.content,
                 usage: null,
                 preview_url: previewUrl,
+                task_id: taskId ?? null,
+                status_url: taskId ? `/api/tasks/${taskId}` : null,
+                events_url: taskId ? `/api/tasks/${taskId}/events` : null,
                 generated_files: persisted?.files.map(file => file.path) ?? [],
                 note: 'Built with BrokCode Cloud.'
               })
@@ -1134,6 +1145,9 @@ function createExecutionStream({
                 : 'Brok runtime completed the run but returned no text output.',
             usage,
             preview_url: previewUrl,
+            task_id: taskId ?? null,
+            status_url: taskId ? `/api/tasks/${taskId}` : null,
+            events_url: taskId ? `/api/tasks/${taskId}/events` : null,
             generated_files: persisted?.files.map(file => file.path) ?? [],
             note:
               piFailure || opencodeFailure
@@ -1478,6 +1492,8 @@ export async function POST(request: NextRequest) {
       metadata: {
         requestId,
         model,
+        command,
+        projectId: codeUsageContext.projectId,
         runtimePreference: preferPi
           ? 'pi'
           : requireOpenCode
@@ -1486,7 +1502,15 @@ export async function POST(request: NextRequest) {
         stream: true,
         source: codeUsageContext.source,
         sessionId: codeUsageContext.sessionId,
-        commandType: codeUsageContext.commandType
+        commandType: codeUsageContext.commandType,
+        progress: 0,
+        events: [
+          {
+            at: new Date().toISOString(),
+            message: 'Queued BrokCode run',
+            progress: 0
+          }
+        ]
       }
     }).catch(error => {
       console.error('Failed to create BrokCode background task:', error)

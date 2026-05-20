@@ -171,6 +171,9 @@ type ExecutionStep = {
 
 type ExecutionRun = {
   id: string
+  taskId?: string
+  statusUrl?: string | null
+  eventsUrl?: string | null
   command: string
   runtime: BrokCodeRuntime
   status: 'running' | 'done' | 'error'
@@ -233,7 +236,24 @@ type BrokCodeStreamResult = {
   content: string
   usage?: unknown
   preview_url?: string | null
+  task_id?: string | null
+  status_url?: string | null
+  events_url?: string | null
   note?: string
+}
+
+type BrokCodeBackgroundTask = {
+  id: string
+  kind: string
+  title: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  metadata?: Record<string, any> | null
+  result?: Record<string, any> | null
+  error?: string | null
+  createdAt?: string
+  updatedAt?: string
+  startedAt?: string | null
+  completedAt?: string | null
 }
 
 type GithubRepoContext = {
@@ -724,6 +744,12 @@ async function readBrokCodeExecutionStream(
   response: Response,
   onEvent: (
     event:
+      | {
+          type: 'task'
+          taskId: string
+          statusUrl?: string | null
+          eventsUrl?: string | null
+        }
       | { type: 'status'; message: string }
       | { type: 'delta'; content: string; accumulated: string }
   ) => void
@@ -758,6 +784,22 @@ async function readBrokCodeExecutionStream(
     try {
       payload = JSON.parse(dataLines.join('\n')) as Record<string, unknown>
     } catch {
+      return
+    }
+
+    if (eventType === 'task') {
+      const taskId =
+        typeof payload.task_id === 'string' ? payload.task_id : null
+      if (taskId) {
+        onEvent({
+          type: 'task',
+          taskId,
+          statusUrl:
+            typeof payload.status_url === 'string' ? payload.status_url : null,
+          eventsUrl:
+            typeof payload.events_url === 'string' ? payload.events_url : null
+        })
+      }
       return
     }
 
@@ -837,6 +879,11 @@ async function readBrokCodeExecutionStream(
     usage: result?.usage,
     preview_url:
       typeof result?.preview_url === 'string' ? result.preview_url : null,
+    task_id: typeof result?.task_id === 'string' ? result.task_id : null,
+    status_url:
+      typeof result?.status_url === 'string' ? result.status_url : null,
+    events_url:
+      typeof result?.events_url === 'string' ? result.events_url : null,
     note: typeof result?.note === 'string' ? result.note : undefined
   }
 }
@@ -1186,6 +1233,47 @@ export function BrokCodeApp({
     [apiKey, getAuthHeaders, syncSessionId]
   )
 
+  const refreshBrokCodeTasks = useCallback(
+    async (key = apiKey) => {
+      if (key && !isValidBrokApiKey(key)) return
+
+      try {
+        const params = new URLSearchParams({
+          limit: '12',
+          chatId: syncSessionId
+        })
+        const response = await fetch(`/api/tasks?${params}`, {
+          headers: getAuthHeaders(key)
+        })
+        if (!response.ok) return
+
+        const body = await response.json().catch(() => null)
+        const taskRuns = Array.isArray(body?.tasks)
+          ? (body.tasks as BrokCodeBackgroundTask[])
+              .filter(task => task.kind === 'brokcode')
+              .map(createExecutionRunFromTask)
+          : []
+
+        if (taskRuns.length === 0) return
+
+        setExecutionRuns(current => {
+          const currentKeys = new Set(current.map(run => run.taskId ?? run.id))
+          const merged = [
+            ...current.map(run => {
+              const replacement = run.taskId
+                ? taskRuns.find(taskRun => taskRun.taskId === run.taskId)
+                : null
+              return replacement ?? run
+            }),
+            ...taskRuns.filter(run => !currentKeys.has(run.taskId ?? run.id))
+          ]
+          return merged.sort((a, b) => b.startedAt - a.startedAt).slice(0, 8)
+        })
+      } catch {}
+    },
+    [apiKey, getAuthHeaders, syncSessionId]
+  )
+
   const refreshProjects = useCallback(
     async (key = apiKey) => {
       if (key && !isValidBrokApiKey(key)) {
@@ -1381,12 +1469,14 @@ export function BrokCodeApp({
     }
     void refreshSyncedSessions(apiKey)
     void refreshVersions(apiKey)
+    void refreshBrokCodeTasks(apiKey)
     void refreshRepoContext(apiKey)
     void refreshProjects(apiKey)
   }, [
     apiKey,
     hasLiveKey,
     hasLiveRuntime,
+    refreshBrokCodeTasks,
     refreshProjects,
     refreshRepoContext,
     refreshSyncedSessions,
@@ -1396,7 +1486,14 @@ export function BrokCodeApp({
   useEffect(() => {
     if (!hasLiveRuntime || (apiKey && !isValidBrokApiKey(apiKey))) return
     void refreshVersions(apiKey)
-  }, [apiKey, hasLiveRuntime, refreshVersions, syncSessionId])
+    void refreshBrokCodeTasks(apiKey)
+  }, [
+    apiKey,
+    hasLiveRuntime,
+    refreshBrokCodeTasks,
+    refreshVersions,
+    syncSessionId
+  ])
 
   useEffect(() => {
     if (!hasLiveRuntime || (apiKey && !isValidBrokApiKey(apiKey))) return
@@ -1404,10 +1501,11 @@ export function BrokCodeApp({
     const timer = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return
       void refreshSyncedSessions(apiKey)
+      void refreshBrokCodeTasks(apiKey)
     }, 15000)
 
     return () => window.clearInterval(timer)
-  }, [apiKey, hasLiveRuntime, refreshSyncedSessions])
+  }, [apiKey, hasLiveRuntime, refreshBrokCodeTasks, refreshSyncedSessions])
 
   useEffect(() => {
     if (!activeProject) return
@@ -1661,6 +1759,138 @@ export function BrokCodeApp({
     }
   }
 
+  function createExecutionRunFromTask(
+    task: BrokCodeBackgroundTask
+  ): ExecutionRun {
+    const metadata = task.metadata ?? {}
+    const result = task.result ?? {}
+    const command =
+      typeof metadata.command === 'string' && metadata.command.trim()
+        ? metadata.command.trim()
+        : task.title
+    const progress =
+      typeof metadata.progress === 'number'
+        ? Math.max(0, Math.min(100, metadata.progress))
+        : task.status === 'succeeded'
+          ? 100
+          : task.status === 'failed' || task.status === 'cancelled'
+            ? 100
+            : 18
+    const runtime =
+      result.runtime === 'pi' ||
+      result.runtime === 'opencode' ||
+      result.runtime === 'brok'
+        ? result.runtime
+        : 'brok'
+    const previewUrl =
+      typeof result.previewUrl === 'string' ? result.previewUrl : null
+    const startedAt =
+      typeof task.startedAt === 'string'
+        ? Date.parse(task.startedAt)
+        : typeof task.createdAt === 'string'
+          ? Date.parse(task.createdAt)
+          : Date.now()
+    const finishedAt =
+      typeof task.completedAt === 'string'
+        ? Date.parse(task.completedAt)
+        : undefined
+    const running = task.status === 'queued' || task.status === 'running'
+    const failed = task.status === 'failed' || task.status === 'cancelled'
+    const steps = executionStepTemplate.map(step => {
+      if (step.id === 'parse') {
+        return { ...step, status: 'done' as ExecutionStepStatus }
+      }
+      if (step.id === 'plan') {
+        return {
+          ...step,
+          status:
+            progress >= 18
+              ? ('done' as const)
+              : running
+                ? ('running' as const)
+                : failed
+                  ? ('error' as const)
+                  : ('queued' as const),
+          detail:
+            typeof metadata.runtimePreference === 'string'
+              ? `Runtime preference: ${metadata.runtimePreference}.`
+              : step.detail
+        }
+      }
+      if (step.id === 'execute') {
+        return {
+          ...step,
+          status:
+            task.status === 'succeeded'
+              ? ('done' as const)
+              : failed
+                ? ('error' as const)
+                : progress >= 18
+                  ? ('running' as const)
+                  : ('queued' as const),
+          detail:
+            Array.isArray(metadata.events) && metadata.events.length > 0
+              ? String(
+                  metadata.events[metadata.events.length - 1]?.message ??
+                    step.detail
+                )
+              : step.detail
+        }
+      }
+      if (step.id === 'validate') {
+        return {
+          ...step,
+          status:
+            task.status === 'succeeded'
+              ? ('done' as const)
+              : failed
+                ? ('error' as const)
+                : progress >= 72
+                  ? ('running' as const)
+                  : ('queued' as const),
+          detail: previewUrl ? 'Cloud preview URL recorded.' : step.detail
+        }
+      }
+      return {
+        ...step,
+        status:
+          task.status === 'succeeded'
+            ? ('done' as const)
+            : failed
+              ? ('error' as const)
+              : ('queued' as const),
+        detail:
+          task.status === 'succeeded'
+            ? 'Recovered from the background task ledger.'
+            : failed
+              ? task.error || 'Recovered failed task from the ledger.'
+              : step.detail
+      }
+    })
+
+    return {
+      id: `task-${task.id}`,
+      taskId: task.id,
+      statusUrl: `/api/tasks/${task.id}`,
+      eventsUrl: `/api/tasks/${task.id}/events`,
+      command,
+      runtime,
+      status:
+        task.status === 'succeeded' ? 'done' : failed ? 'error' : 'running',
+      startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
+      finishedAt: Number.isFinite(finishedAt) ? finishedAt : undefined,
+      note:
+        task.status === 'succeeded'
+          ? 'Recovered completed run from the background task ledger.'
+          : failed
+            ? task.error ||
+              'Recovered failed run from the background task ledger.'
+            : 'Recovered active run from the background task ledger.',
+      previewUrl,
+      steps
+    }
+  }
+
   function updateExecutionStep(
     runId: string,
     stepId: string,
@@ -1694,6 +1924,9 @@ export function BrokCodeApp({
       status: 'done' | 'error'
       note?: string
       previewUrl?: string | null
+      taskId?: string | null
+      statusUrl?: string | null
+      eventsUrl?: string | null
     }
   ) {
     setExecutionRuns(current =>
@@ -1705,6 +1938,9 @@ export function BrokCodeApp({
               status: updates.status,
               note: updates.note ?? run.note,
               previewUrl: updates.previewUrl ?? run.previewUrl,
+              taskId: updates.taskId ?? run.taskId,
+              statusUrl: updates.statusUrl ?? run.statusUrl,
+              eventsUrl: updates.eventsUrl ?? run.eventsUrl,
               finishedAt: Date.now()
             }
           : run
@@ -2720,6 +2956,23 @@ export function BrokCodeApp({
       const responseContentType = response.headers.get('content-type') ?? ''
       const body = responseContentType.includes('text/event-stream')
         ? await readBrokCodeExecutionStream(response, event => {
+            if (event.type === 'task') {
+              setExecutionRuns(current =>
+                current.map(existing =>
+                  existing.id === run.id
+                    ? {
+                        ...existing,
+                        taskId: event.taskId,
+                        statusUrl: event.statusUrl,
+                        eventsUrl: event.eventsUrl,
+                        note: 'Run is tracked in the background task ledger.'
+                      }
+                    : existing
+                )
+              )
+              return
+            }
+
             if (event.type === 'status') {
               updateExecutionStep(run.id, 'execute', 'running', event.message)
               setMessages(current =>
@@ -2809,7 +3062,10 @@ export function BrokCodeApp({
           typeof body?.note === 'string'
             ? body.note
             : `${getRuntimeLabel(runtime)} active.`,
-        previewUrl: discoveredPreviewUrl
+        previewUrl: discoveredPreviewUrl,
+        taskId: body?.task_id ?? null,
+        statusUrl: body?.status_url ?? null,
+        eventsUrl: body?.events_url ?? null
       })
 
       if (discoveredPreviewUrl) {
