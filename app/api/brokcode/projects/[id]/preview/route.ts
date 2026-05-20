@@ -6,6 +6,7 @@ import {
 } from '@/lib/brokcode/account-guard'
 import { publicBrokCodeBackendMetadata } from '@/lib/brokcode/backend-provider'
 import {
+  hasRenderableManagedPreview,
   makeManagedPreviewUrl,
   resolvePublicPreviewOrigin
 } from '@/lib/brokcode/preview'
@@ -79,6 +80,15 @@ export async function POST(
     projectId: access.project.id,
     workspaceId: access.authResult.workspace.id
   })
+  if (!hasRenderableManagedPreview(files)) {
+    return NextResponse.json(
+      {
+        error:
+          'BrokCode preview is not ready because this project does not have a renderable index.html yet.'
+      },
+      { status: 422 }
+    )
+  }
   const previewUrl = makeManagedPreviewUrl({
     origin: resolvePublicPreviewOrigin(request),
     projectId: access.project.id

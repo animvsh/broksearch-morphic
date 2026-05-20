@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import {
   getManagedPreviewAsset,
+  getManagedPreviewAssetOrPlaceholder,
+  hasRenderableManagedPreview,
   makeManagedDeploymentUrl,
   makeManagedPreviewUrl,
+  managedPreviewSecurityHeaders,
   normalizeManagedPreviewPath,
   resolvePublicPreviewOrigin
 } from '../preview'
@@ -30,11 +33,54 @@ describe('BrokCode managed preview', () => {
 
     expect(asset?.content).toContain('<h1>Coffee Shop</h1>')
     expect(asset?.content).toContain('data-brokcode-hot-reload')
+    expect(asset?.isHtml).toBe(true)
     expect(asset).toMatchObject({
       contentType: 'text/html; charset=utf-8',
       path: 'index.html',
       status: 200
     })
+  })
+
+  it('does not treat a placeholder as a renderable managed preview asset', () => {
+    const files = [
+      {
+        path: 'app/page.tsx',
+        content: 'export default function Page() { return <main /> }',
+        language: 'tsx'
+      }
+    ]
+
+    expect(hasRenderableManagedPreview(files)).toBe(false)
+    expect(
+      getManagedPreviewAsset({
+        project,
+        pathParts: ['index.html'],
+        files
+      })
+    ).toBeNull()
+
+    const placeholder = getManagedPreviewAssetOrPlaceholder({
+      project,
+      pathParts: ['index.html'],
+      files
+    })
+    expect(placeholder?.content).toContain('BrokCode Cloud preview is ready')
+  })
+
+  it('adds restrictive security headers for generated html', () => {
+    const headers = managedPreviewSecurityHeaders({
+      contentType: 'text/html; charset=utf-8',
+      isHtml: true
+    })
+
+    expect(headers['Content-Security-Policy']).toContain("default-src 'none'")
+    expect(headers['Content-Security-Policy']).toContain(
+      "frame-ancestors 'self'"
+    )
+    expect(headers['Content-Security-Policy']).toContain(
+      "script-src 'self' 'unsafe-inline'"
+    )
+    expect(headers['X-Content-Type-Options']).toBe('nosniff')
   })
 
   it('blocks traversal paths before file lookup', () => {

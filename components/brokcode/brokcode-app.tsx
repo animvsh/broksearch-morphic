@@ -4206,6 +4206,7 @@ function BrowserPreviewPanel({
             title="Brok Code browser preview"
             className="h-full min-h-[330px] w-full bg-white sm:min-h-[520px]"
             referrerPolicy="no-referrer"
+            sandbox="allow-forms allow-modals allow-popups allow-scripts"
           />
         )}
       </div>

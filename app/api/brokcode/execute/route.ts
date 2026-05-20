@@ -25,9 +25,11 @@ import {
   publicBrokCodeBackendMetadata
 } from '@/lib/brokcode/backend-provider'
 import {
+  buildFallbackGeneratedAppFiles,
   extractGeneratedBrokCodeFiles,
   inspectGeneratedBrokCodeAppQuality,
-  prepareGeneratedBrokCodeFiles
+  prepareGeneratedBrokCodeFiles,
+  shouldCreateFallbackGeneratedApp
 } from '@/lib/brokcode/generated-files'
 import { getBrokCodeGenerationSystemPrompt } from '@/lib/brokcode/generation-prompt'
 import {
@@ -275,6 +277,7 @@ async function persistGeneratedProjectOutput({
   projectId,
   origin,
   content,
+  command,
   taskId,
   send
 }: {
@@ -282,6 +285,7 @@ async function persistGeneratedProjectOutput({
   projectId?: string | null
   origin: string
   content: string
+  command?: string
   taskId?: string
   send?: (event: string, payload: unknown) => void
 }) {
@@ -294,7 +298,16 @@ async function persistGeneratedProjectOutput({
   })
   if (!project) return null
 
-  const rawFiles = extractGeneratedBrokCodeFiles(content)
+  const extractedFiles = extractGeneratedBrokCodeFiles(content)
+  const rawFiles =
+    extractedFiles.length > 0
+      ? extractedFiles
+      : shouldCreateFallbackGeneratedApp(command)
+        ? buildFallbackGeneratedAppFiles({
+            command,
+            fallbackTitle: project.name
+          })
+        : []
   const files = prepareGeneratedBrokCodeFiles(rawFiles, {
     fallbackTitle: project.name
   })
@@ -775,6 +788,7 @@ function createExecutionStream({
                 projectId: usageContext.projectId,
                 origin: requestOrigin,
                 content: result.content,
+                command,
                 taskId,
                 send
               }).catch(error => {
@@ -919,6 +933,7 @@ function createExecutionStream({
                 projectId: usageContext.projectId,
                 origin: requestOrigin,
                 content,
+                command,
                 taskId,
                 send
               }).catch(error => {
@@ -1100,6 +1115,7 @@ function createExecutionStream({
             projectId: usageContext.projectId,
             origin: requestOrigin,
             content,
+            command,
             taskId,
             send
           }).catch(error => {
@@ -1509,7 +1525,8 @@ export async function POST(request: NextRequest) {
         auth: authResult,
         projectId: codeUsageContext.projectId,
         origin: publicOrigin,
-        content: result.content
+        content: result.content,
+        command
       }).catch(error => {
         console.error('Failed to persist Pi BrokCode output:', error)
         return null
@@ -1600,7 +1617,8 @@ export async function POST(request: NextRequest) {
           auth: authResult,
           projectId: codeUsageContext.projectId,
           origin: publicOrigin,
-          content
+          content,
+          command
         }).catch(error => {
           console.error('Failed to persist OpenCode BrokCode output:', error)
           return null
@@ -1737,7 +1755,8 @@ export async function POST(request: NextRequest) {
     auth: authResult,
     projectId: codeUsageContext.projectId,
     origin: publicOrigin,
-    content
+    content,
+    command
   }).catch(error => {
     console.error('Failed to persist BrokCode output:', error)
     return null

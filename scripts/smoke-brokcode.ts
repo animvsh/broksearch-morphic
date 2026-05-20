@@ -198,7 +198,11 @@ async function verifyFiles(projectId: string) {
 
 async function verifyPreview(previewUrl: string) {
   const absolutePreviewUrl = new URL(previewUrl, baseUrl).toString()
-  const response = await fetch(absolutePreviewUrl)
+  const response = await fetch(absolutePreviewUrl, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`
+    }
+  })
   const html = await response.text()
 
   if (!response.ok) {
@@ -211,6 +215,9 @@ async function verifyPreview(previewUrl: string) {
 
   const browser = await chromium.launch({ headless: true })
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+  await page.setExtraHTTPHeaders({
+    Authorization: `Bearer ${apiKey}`
+  })
   const pageErrors: string[] = []
   page.on('pageerror', error => pageErrors.push(error.message))
   await page.goto(absolutePreviewUrl, { waitUntil: 'networkidle' })
@@ -326,7 +333,13 @@ async function runTuiSmoke() {
   const uploadPath = path.join(tempDir, 'index.html')
   await writeFile(
     uploadPath,
-    '<!doctype html><html><body><h1>TUI smoke app</h1></body></html>\n',
+    [
+      '<!doctype html>',
+      '<html lang="en">',
+      '<head><meta name="viewport" content="width=device-width, initial-scale=1"><title>TUI Smoke App</title><style>body{font-family:system-ui;margin:0;padding:40px;background:#f7f7f4;color:#181817}main{max-width:720px;margin:auto}button,input{font:inherit;padding:12px;border-radius:12px}button{background:#181817;color:#fff;border:0}</style></head>',
+      '<body><main><h1>TUI smoke app</h1><p>This app verifies that BrokCode terminal uploads can publish a real preview with enough visible product copy, a responsive viewport, useful form controls, and safe generated-app deployment behavior.</p><form><label>Request <input name="request" placeholder="Add another screen"></label><button type="submit">Save request</button></form></main><script>document.querySelector("form").addEventListener("submit",event=>{event.preventDefault();event.currentTarget.querySelector("button").textContent="Saved";});</script></body>',
+      '</html>\n'
+    ].join(''),
     'utf8'
   )
 

@@ -33,6 +33,7 @@ const CONTENT_TYPES: Record<string, string> = {
 export type ManagedPreviewAsset = {
   content: string
   contentType: string
+  isHtml: boolean
   path: string
   status: 200
 }
@@ -312,6 +313,7 @@ export function getManagedPreviewAsset({
     return {
       content: buildHotReloadManifest({ files, project }),
       contentType: CONTENT_TYPES['.json'],
+      isHtml: false,
       path: requestedPath,
       status: 200
     }
@@ -337,6 +339,7 @@ export function getManagedPreviewAsset({
           ? injectHotReloadScript({ content: file.content, project, files })
           : file.content,
       contentType: CONTENT_TYPES[extension] ?? 'text/plain; charset=utf-8',
+      isHtml: extension === '.html',
       path: candidate,
       status: 200
     }
@@ -351,21 +354,88 @@ export function getManagedPreviewAsset({
         files
       }),
       contentType: CONTENT_TYPES['.html'],
+      isHtml: true,
       path: 'index.html',
       status: 200
     }
   }
 
+  return null
+}
+
+export function getManagedPreviewPlaceholderAsset({
+  files,
+  project
+}: {
+  files: PreviewFile[]
+  project: PreviewProject
+}): ManagedPreviewAsset {
+  return {
+    content: injectHotReloadScript({
+      content: buildGeneratedIndexHtml({ project, files }),
+      project,
+      files
+    }),
+    contentType: CONTENT_TYPES['.html'],
+    isHtml: true,
+    path: 'index.html',
+    status: 200
+  }
+}
+
+export function hasRenderableManagedPreview(files: PreviewFile[]) {
+  return files.some(file => normalizeStoredFilePath(file.path) === 'index.html')
+}
+
+export function managedPreviewSecurityHeaders(asset: {
+  contentType: string
+  isHtml?: boolean
+}) {
+  const headers: Record<string, string> = {
+    'Cache-Control': 'no-store',
+    'Content-Type': asset.contentType,
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff'
+  }
+
+  if (asset.isHtml) {
+    headers['Content-Security-Policy'] = [
+      "default-src 'none'",
+      "base-uri 'self'",
+      "connect-src 'self'",
+      "font-src 'self' data:",
+      "form-action 'none'",
+      "frame-ancestors 'self'",
+      "img-src 'self' data: blob:",
+      "object-src 'none'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'unsafe-inline' 'self'"
+    ].join('; ')
+  }
+
+  return headers
+}
+
+export function getManagedPreviewAssetOrPlaceholder({
+  files,
+  pathParts,
+  project
+}: {
+  files: PreviewFile[]
+  pathParts?: string[] | null
+  project: PreviewProject
+}): ManagedPreviewAsset | null {
+  const requestedPath = normalizeManagedPreviewPath(pathParts)
+  if (!requestedPath) return null
+
+  const asset = getManagedPreviewAsset({ files, pathParts, project })
+  if (asset) return asset
+
   if (requestedPath === 'index.html') {
     return {
-      content: injectHotReloadScript({
-        content: buildGeneratedIndexHtml({ project, files }),
-        project,
-        files
-      }),
-      contentType: CONTENT_TYPES['.html'],
-      path: 'index.html',
-      status: 200
+      ...getManagedPreviewPlaceholderAsset({ project, files }),
+      path: 'index.html'
     }
   }
 

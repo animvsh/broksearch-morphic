@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildFallbackGeneratedAppFiles,
   extractGeneratedBrokCodeFiles,
   inspectGeneratedBrokCodeAppQuality,
-  prepareGeneratedBrokCodeFiles
+  prepareGeneratedBrokCodeFiles,
+  shouldCreateFallbackGeneratedApp
 } from '../generated-files'
 
 describe('extractGeneratedBrokCodeFiles', () => {
@@ -116,6 +118,25 @@ console.log("ok")
     ])
 
     expect(files.map(file => file.path)).toEqual(['index.html'])
+  })
+
+  it('builds a fallback static app only for build-like commands', () => {
+    expect(shouldCreateFallbackGeneratedApp('explain this error')).toBe(false)
+    expect(shouldCreateFallbackGeneratedApp('build a bakery website')).toBe(
+      true
+    )
+
+    const files = buildFallbackGeneratedAppFiles({
+      command: 'build a bakery website',
+      fallbackTitle: 'Smoke Bakery'
+    })
+
+    expect(files.map(file => file.path)).toEqual([
+      'index.html',
+      'styles.css',
+      'app.js'
+    ])
+    expect(inspectGeneratedBrokCodeAppQuality(files).issues).toEqual([])
   })
 
   it('reports generated app quality issues', () => {

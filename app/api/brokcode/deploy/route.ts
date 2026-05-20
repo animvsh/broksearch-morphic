@@ -12,7 +12,9 @@ import {
   getBrokCodeBrowserSessionAuth,
   verifyBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
+import { inspectGeneratedBrokCodeAppQuality } from '@/lib/brokcode/generated-files'
 import {
+  hasRenderableManagedPreview,
   makeManagedDeploymentUrl,
   makeManagedPreviewUrl,
   resolvePublicPreviewOrigin
@@ -47,6 +49,10 @@ type GraphqlResponse<TData> = {
 type RailwayNode = {
   id: string
   name: string
+}
+
+class ManagedDeployValidationError extends Error {
+  status = 422
 }
 
 function normalizeDeployPreviewUrl(value: unknown) {
@@ -165,6 +171,19 @@ async function triggerManagedPreviewDeployment({
     projectId: project.id,
     workspaceId: auth.workspace.id
   })
+  if (!hasRenderableManagedPreview(files)) {
+    throw new ManagedDeployValidationError(
+      'BrokCode cannot publish this project yet because it does not have a renderable index.html. Ask BrokCode to build a static app first.'
+    )
+  }
+
+  const quality = inspectGeneratedBrokCodeAppQuality(files)
+  if (quality.issues.length > 0) {
+    throw new ManagedDeployValidationError(
+      `BrokCode cannot publish this project until the generated app quality gate passes: ${quality.issues.join(', ')}.`
+    )
+  }
+
   const previewUrl = makeManagedPreviewUrl({
     origin: resolvePublicPreviewOrigin(request),
     projectId: project.id
@@ -184,6 +203,7 @@ async function triggerManagedPreviewDeployment({
     metadata: {
       mode: 'managed_live_preview',
       fileCount: files.length,
+      quality,
       generatedAt,
       hotReload: true
     }
@@ -200,6 +220,7 @@ async function triggerManagedPreviewDeployment({
       strategy: 'managed_live_preview',
       previewUrl,
       fileCount: files.length,
+      quality,
       generatedAt
     }
   })
@@ -568,7 +589,10 @@ export async function POST(request: NextRequest) {
                 : 'Managed preview deployment failed.'
           }
         },
-        { status: 502 }
+        {
+          status:
+            error instanceof ManagedDeployValidationError ? error.status : 502
+        }
       )
     }
   }

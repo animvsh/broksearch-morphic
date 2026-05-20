@@ -4,7 +4,11 @@ import {
   enforceBrokCodeAccountOwnership,
   resolveBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
-import { getManagedPreviewAsset } from '@/lib/brokcode/preview'
+import {
+  getManagedPreviewAsset,
+  getManagedPreviewAssetOrPlaceholder,
+  managedPreviewSecurityHeaders
+} from '@/lib/brokcode/preview'
 import {
   getBrokCodeProject,
   getBrokCodeProjectById,
@@ -57,10 +61,7 @@ async function getPublicPreviewProject(id: string) {
   if (!project) return null
 
   const isPreviewReady =
-    project.status === 'preview_ready' ||
-    project.status === 'deployed' ||
-    Boolean(project.previewUrl) ||
-    Boolean(project.deploymentUrl)
+    project.status === 'deployed' || Boolean(project.deploymentUrl)
   if (!isPreviewReady) return null
 
   return project
@@ -87,8 +88,7 @@ export async function GET(
       return new NextResponse(asset.content, {
         status: asset.status,
         headers: {
-          'Cache-Control': 'no-store',
-          'Content-Type': asset.contentType,
+          ...managedPreviewSecurityHeaders(asset),
           'X-BrokCode-Preview-Path': asset.path
         }
       })
@@ -102,7 +102,7 @@ export async function GET(
     projectId: access.project.id,
     workspaceId: access.authResult.workspace.id
   })
-  const asset = getManagedPreviewAsset({
+  const asset = getManagedPreviewAssetOrPlaceholder({
     files,
     pathParts: path,
     project: access.project
@@ -121,8 +121,7 @@ export async function GET(
   return new NextResponse(asset.content, {
     status: asset.status,
     headers: {
-      'Cache-Control': 'no-store',
-      'Content-Type': asset.contentType,
+      ...managedPreviewSecurityHeaders(asset),
       'X-BrokCode-Preview-Path': asset.path
     }
   })

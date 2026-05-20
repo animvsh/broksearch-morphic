@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 
-import { getManagedPreviewAsset } from '@/lib/brokcode/preview'
+import {
+  getManagedPreviewAsset,
+  hasRenderableManagedPreview,
+  managedPreviewSecurityHeaders
+} from '@/lib/brokcode/preview'
 import {
   getBrokCodeProjectByHandle,
   listBrokCodeProjectFilesByProjectId
@@ -14,12 +18,7 @@ function isPublicBrokCodeApp(project: {
   previewUrl?: string | null
   deploymentUrl?: string | null
 }) {
-  return (
-    project.status === 'preview_ready' ||
-    project.status === 'deployed' ||
-    Boolean(project.previewUrl) ||
-    Boolean(project.deploymentUrl)
-  )
+  return project.status === 'deployed' || Boolean(project.deploymentUrl)
 }
 
 function injectAppBaseHref({
@@ -61,6 +60,15 @@ export async function GET(
   const files = await listBrokCodeProjectFilesByProjectId({
     projectId: project.id
   })
+  if (!hasRenderableManagedPreview(files)) {
+    return new NextResponse('BrokCode app has no renderable index.html.', {
+      status: 404,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Content-Type': 'text/plain; charset=utf-8'
+      }
+    })
+  }
   const asset = getManagedPreviewAsset({
     files,
     pathParts: path,
@@ -84,8 +92,7 @@ export async function GET(
   return new NextResponse(content, {
     status: asset.status,
     headers: {
-      'Cache-Control': 'no-store',
-      'Content-Type': asset.contentType,
+      ...managedPreviewSecurityHeaders(asset),
       'X-BrokCode-App-Path': asset.path,
       'X-BrokCode-Project': project.id
     }

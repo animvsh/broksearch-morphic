@@ -6,6 +6,10 @@ import {
 } from '@/lib/brokcode/account-guard'
 import { publicBrokCodeBackendMetadata } from '@/lib/brokcode/backend-provider'
 import {
+  type GeneratedBrokCodeFile,
+  prepareGeneratedBrokCodeFiles
+} from '@/lib/brokcode/generated-files'
+import {
   getBrokCodeProject,
   listBrokCodeProjectFiles,
   upsertBrokCodeProjectFile
@@ -104,15 +108,30 @@ export async function PUT(
     )
   }
 
-  let file
+  const preparedFiles = prepareGeneratedBrokCodeFiles(
+    [
+      {
+        path,
+        content,
+        language
+      } satisfies GeneratedBrokCodeFile
+    ],
+    { fallbackTitle: access.project.name }
+  )
+
+  const savedFiles = []
   try {
-    file = await upsertBrokCodeProjectFile({
-      projectId: access.project.id,
-      workspaceId: access.authResult.workspace.id,
-      path,
-      content,
-      language
-    })
+    for (const preparedFile of preparedFiles) {
+      savedFiles.push(
+        await upsertBrokCodeProjectFile({
+          projectId: access.project.id,
+          workspaceId: access.authResult.workspace.id,
+          path: preparedFile.path,
+          content: preparedFile.content,
+          language: preparedFile.language
+        })
+      )
+    }
   } catch (error) {
     if (error instanceof Error && error.message === 'Invalid file path') {
       return NextResponse.json({ error: 'Invalid file path' }, { status: 400 })
@@ -120,5 +139,5 @@ export async function PUT(
     throw error
   }
 
-  return NextResponse.json({ file })
+  return NextResponse.json({ file: savedFiles[0] ?? null, files: savedFiles })
 }
