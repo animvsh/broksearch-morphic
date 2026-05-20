@@ -27,6 +27,7 @@ export type MailThread = {
   snippet: string
   aiSummary: string
   receivedAt: string
+  receivedAtMs?: number
   labels: string[]
   unread: boolean
   starred: boolean

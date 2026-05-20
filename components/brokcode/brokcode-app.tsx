@@ -2985,7 +2985,10 @@ export function BrokCodeApp({
   }, [connectGithub, githubStatus, hasLiveRuntime, isRunning])
 
   return (
-    <div className="brokcode-lovable flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#f6f6f3] text-zinc-950">
+    <div
+      className="brokcode-lovable flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#f6f6f3] text-zinc-950"
+      data-testid="brokcode-app"
+    >
       <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 px-3 py-2 backdrop-blur-md sm:px-4">
         <div className="flex h-11 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -3097,6 +3100,7 @@ export function BrokCodeApp({
                   variant="outline"
                   size="icon"
                   className="size-9 border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
+                  data-testid="brokcode-actions-trigger"
                   title="Brok Code actions"
                 >
                   <MoreHorizontal className="size-4" />
@@ -3318,6 +3322,7 @@ export function BrokCodeApp({
                 <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
                 <Textarea
                   value={input}
+                  data-testid="brokcode-command-input"
                   onChange={event => setInput(event.target.value)}
                   onKeyDown={event => {
                     if (event.key === 'Enter' && !event.shiftKey) {
@@ -3359,6 +3364,7 @@ export function BrokCodeApp({
                   type="submit"
                   size="icon"
                   className="mb-1 size-9 shrink-0 rounded-xl bg-zinc-950 text-white hover:bg-zinc-800"
+                  data-testid="brokcode-command-submit"
                   disabled={isRunning || !input.trim()}
                 >
                   <Send className="size-4" />
@@ -4053,7 +4059,10 @@ function BrowserPreviewPanel({
       : previewHealth.message
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_30px_80px_-58px_rgba(24,24,27,0.6)] sm:rounded-2xl">
+    <div
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_30px_80px_-58px_rgba(24,24,27,0.6)] sm:rounded-2xl"
+      data-testid="brokcode-preview-panel"
+    >
       <div className="flex flex-col gap-2 border-b border-zinc-200/80 bg-white p-2.5 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-2">
           <p className="truncate text-xs font-semibold text-zinc-950">
@@ -4203,6 +4212,7 @@ function BrowserPreviewPanel({
           <iframe
             key={previewFrameKey}
             src={previewUrl}
+            data-testid="brokcode-preview-frame"
             title="Brok Code browser preview"
             className="h-full min-h-[330px] w-full bg-white sm:min-h-[520px]"
             referrerPolicy="no-referrer"

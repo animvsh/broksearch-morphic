@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
         redirectUrl: redirectUrl.toString(),
         message: 'Composio is not configured for GitHub connections.'
       },
-      { status: 200 }
+      { status: 503 }
     )
   }
 
@@ -71,13 +71,16 @@ export async function POST(request: NextRequest) {
     })
 
     if (!link.url) {
-      return NextResponse.json({
-        provider: 'composio',
-        connectionUrl: null,
-        redirectUrl: redirectUrl.toString(),
-        raw: link.raw,
-        message: 'Composio did not return a GitHub connection URL.'
-      })
+      return NextResponse.json(
+        {
+          provider: 'composio',
+          connectionUrl: null,
+          redirectUrl: redirectUrl.toString(),
+          raw: link.raw,
+          message: 'Composio did not return a GitHub connection URL.'
+        },
+        { status: 502 }
+      )
     }
 
     return NextResponse.json({
@@ -96,7 +99,7 @@ export async function POST(request: NextRequest) {
             ? error.message
             : 'Could not create the GitHub connection link.'
       },
-      { status: 200 }
+      { status: 502 }
     )
   }
 }

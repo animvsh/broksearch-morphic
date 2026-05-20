@@ -18,6 +18,7 @@ export const maxDuration = 300
 
 interface DeepResearchBody {
   query?: unknown
+  chatId?: unknown
   recency_days?: unknown
   domains?: unknown
 }
@@ -186,6 +187,7 @@ export async function POST(request: Request) {
     typeof body?.recency_days === 'number' && body.recency_days > 0
       ? Math.floor(body.recency_days)
       : undefined
+  const chatId = typeof body?.chatId === 'string' ? body.chatId.trim() : ''
   const domains = Array.isArray(body?.domains)
     ? body.domains
         .filter((domain): domain is string => typeof domain === 'string')
@@ -195,6 +197,7 @@ export async function POST(request: Request) {
 
   const task = await createBackgroundTask({
     userId: access.user.id,
+    chatId: chatId || null,
     kind: 'deep-research',
     title: taskTitle(query),
     metadata: {

@@ -152,7 +152,11 @@ export function ChatPanel({
     if (isGuest) return
 
     try {
-      const response = await fetch('/api/tasks?limit=5', {
+      const params = new URLSearchParams({
+        limit: '5',
+        chatId
+      })
+      const response = await fetch(`/api/tasks?${params.toString()}`, {
         cache: 'no-store'
       })
       if (!response.ok) return
@@ -164,7 +168,7 @@ export function ChatPanel({
     } catch {
       // Task visibility is a resilience aid; never interrupt chat UX for it.
     }
-  }, [isGuest])
+  }, [chatId, isGuest])
 
   const handleCompositionStart = () => setIsComposing(true)
 
@@ -275,7 +279,7 @@ export function ChatPanel({
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ query: queryText })
+        body: JSON.stringify({ query: queryText, chatId })
       })
 
       if (!response.ok) {
@@ -298,7 +302,7 @@ export function ChatPanel({
           : 'Deep research could not be started.'
       )
     }
-  }, [input, loadRecentTasks])
+  }, [chatId, input, loadRecentTasks])
 
   const cancelBackgroundTask = useCallback(
     async (taskId: string) => {

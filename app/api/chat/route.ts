@@ -132,7 +132,9 @@ export async function POST(req: Request) {
     const shouldUseQuickSearchMode =
       shouldUseQuickSearchModeForMessage(currentUserMessage)
     const isExplicitMode =
-      requestedSearchMode === 'deep' || requestedSearchMode === 'code'
+      requestedSearchMode === 'search' ||
+      requestedSearchMode === 'deep' ||
+      requestedSearchMode === 'code'
     const searchMode: SearchMode = shouldUseQuickReplyForMessage(
       currentUserMessage
     )

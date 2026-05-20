@@ -12,10 +12,25 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 function normalizeToolkit(value: string) {
-  return value
+  const normalized = value
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '')
+
+  const aliases: Record<string, string> = {
+    calendar: 'googlecalendar',
+    docs: 'googledocs',
+    gcal: 'googlecalendar',
+    'google-calendar': 'googlecalendar',
+    google_calendar: 'googlecalendar',
+    'google-docs': 'googledocs',
+    google_docs: 'googledocs',
+    'google-meet': 'googlemeet',
+    google_meet: 'googlemeet',
+    meet: 'googlemeet'
+  }
+
+  return aliases[normalized] || normalized
 }
 
 function isActiveAccountStatus(status?: string) {

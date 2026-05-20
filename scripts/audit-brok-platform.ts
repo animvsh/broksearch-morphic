@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { chromium } from 'playwright'
+import { chromium, type Page } from 'playwright'
 
 const execFileAsync = promisify(execFile)
 
@@ -15,6 +15,9 @@ const docsUrl = normalizeOrigin(
 const outputDir = process.env.BROK_AUDIT_DIR || '.brok-audits'
 const timeoutMs = Number(process.env.BROK_AUDIT_TIMEOUT_MS || 15000)
 const runRailway = process.env.BROK_AUDIT_RAILWAY !== 'false'
+const runInteractiveAudit = process.env.BROK_AUDIT_INTERACTIVE !== 'false'
+const runMutatingAudit = process.env.BROK_AUDIT_MUTATING === 'true'
+const auditUntil = process.env.BROK_AUDIT_UNTIL || '2026-05-20T09:00:00-07:00'
 
 type RouteCheck = {
   label: string
@@ -41,6 +44,7 @@ type BrowserResult = {
   mobileOverflowX: number
   pageErrors: string[]
   consoleErrors: string[]
+  interactions: string[]
   ok: boolean
   error?: string
 }
@@ -51,6 +55,11 @@ type RailwayResult = {
   deploymentId?: string
   service?: string
   error?: string
+}
+
+type UserFlowResult = {
+  ok: boolean
+  interactions: string[]
 }
 
 const routeChecks: RouteCheck[] = [
@@ -164,6 +173,7 @@ async function checkBrowserUrl(
       waitUntil: 'networkidle',
       timeout: timeoutMs
     })
+    const flow = await runRegularUserFlow(page, url)
     const desktopOverflowX = await page.evaluate(
       () =>
         document.documentElement.scrollWidth -
@@ -196,10 +206,12 @@ async function checkBrowserUrl(
       mobileOverflowX,
       pageErrors,
       consoleErrors,
+      interactions: flow.interactions,
       ok:
         (status === null || status < 500) &&
         desktopOverflowX <= 2 &&
         mobileOverflowX <= 2 &&
+        flow.ok &&
         pageErrors.length === 0 &&
         consoleErrors.length === 0
     }
@@ -216,11 +228,80 @@ async function checkBrowserUrl(
       mobileOverflowX: 0,
       pageErrors,
       consoleErrors,
+      interactions: [],
       ok: false,
       error: error instanceof Error ? error.message : String(error)
     }
   } finally {
     await page.close()
+  }
+}
+
+async function runRegularUserFlow(
+  page: Page,
+  url: string
+): Promise<UserFlowResult> {
+  if (!runInteractiveAudit) return { ok: true, interactions: ['skipped'] }
+
+  const interactions: string[] = []
+
+  try {
+    await page.locator('body').waitFor({ timeout: timeoutMs / 2 })
+
+    if (page.url().includes('/auth/login')) {
+      return { ok: true, interactions: ['auth redirect'] }
+    }
+
+    await page.mouse.wheel(0, 900)
+    await page.waitForTimeout(100)
+    await page.mouse.wheel(0, -900)
+    interactions.push('scroll')
+
+    const searchInput = page
+      .locator('input[placeholder*="Search" i], input[type="search"]')
+      .first()
+    if ((await searchInput.count()) > 0 && (await searchInput.isVisible())) {
+      await searchInput.fill('test')
+      const value = await searchInput.inputValue()
+      await searchInput.fill('')
+      if (value !== 'test') {
+        throw new Error('search input did not accept typing')
+      }
+      interactions.push('search input')
+    }
+
+    const textarea = page.locator('textarea').first()
+    if ((await textarea.count()) > 0 && (await textarea.isVisible())) {
+      const auditText =
+        url.includes('/brokcode') || url.includes('/brokmail')
+          ? 'Audit this experience like a regular user.'
+          : 'This is a very important, seamless, powerful experience.'
+      await textarea.fill(auditText)
+      const value = await textarea.inputValue()
+      if (!value.includes('regular user') && !value.includes('seamless')) {
+        throw new Error('textarea did not accept typing')
+      }
+      interactions.push('textarea input')
+    }
+
+    if (runMutatingAudit && url.includes('/tools/humanizer')) {
+      const button = page
+        .getByRole('button', { name: /humanize|rewrite|run/i })
+        .first()
+      if ((await button.count()) > 0 && (await button.isEnabled())) {
+        await button.click()
+        await page.waitForTimeout(750)
+        interactions.push('humanizer submit')
+      }
+    }
+
+    await page.keyboard.press('Tab')
+    interactions.push('keyboard focus')
+
+    return { ok: true, interactions }
+  } catch (error) {
+    interactions.push(error instanceof Error ? error.message : String(error))
+    return { ok: false, interactions }
   }
 }
 
@@ -309,6 +390,7 @@ function renderMarkdown(report: {
     String(result.status ?? 'n/a'),
     String(result.desktopOverflowX),
     String(result.mobileOverflowX),
+    result.interactions.join(', '),
     [...result.pageErrors, ...result.consoleErrors, result.error]
       .filter(Boolean)
       .join('; ')
@@ -354,7 +436,15 @@ function renderMarkdown(report: {
     `## Browser UI health`,
     ``,
     markdownTable(
-      ['OK', 'URL', 'Status', 'Desktop overflow', 'Mobile overflow', 'Errors'],
+      [
+        'OK',
+        'URL',
+        'Status',
+        'Desktop overflow',
+        'Mobile overflow',
+        'User flow',
+        'Errors'
+      ],
       browserRows
     ),
     ``,
@@ -367,6 +457,59 @@ function renderMarkdown(report: {
     `## Product bar`,
     ``,
     `Use the buildspace-style reference as a visual bar where appropriate: high-contrast, cinematic, sparse, emotionally direct, with one clear primary action and no clutter. Apply it intentionally to landing/onboarding moments, while keeping operational tools like BrokMail and BrokCode dense enough for repeated work.`
+  ].join('\n')
+}
+
+function renderSubagentQueue(report: {
+  checkedAt: string
+  railway: RailwayResult
+  routes: FetchResult[]
+  browser: BrowserResult[]
+}) {
+  const routeFailures = report.routes.filter(result => !result.ok)
+  const browserFailures = report.browser.filter(result => !result.ok)
+  const docsOrIntegrationsFailed =
+    routeFailures.some(
+      result => result.label === 'docs' || result.label === 'integrations'
+    ) ||
+    browserFailures.some(
+      result =>
+        result.url.includes('docs.brok.fyi') ||
+        result.url.includes('/integrations')
+    )
+
+  return [
+    `# Brok subagent audit queue`,
+    ``,
+    `Checked: ${report.checkedAt}`,
+    `Audit window ends: ${auditUntil}`,
+    ``,
+    `## BrokCode`,
+    browserFailures.some(result => result.url.includes('/brokcode'))
+      ? '- Re-test BrokCode builder layout, textarea input, preview console errors, and mobile overflow.'
+      : '- No hard BrokCode browser failure in this pass.',
+    ``,
+    `## BrokMail`,
+    browserFailures.some(result => result.url.includes('/brokmail'))
+      ? '- Re-test BrokMail inbox layout, assistant input, connector banners, and mobile overflow.'
+      : '- No hard BrokMail browser failure in this pass.',
+    ``,
+    `## Search + Deep Research`,
+    routeFailures.some(result => result.label.includes('models-api'))
+      ? '- Re-test API model/search surface before deeper chat-flow work.'
+      : '- No hard public model/search API failure in this pass.',
+    ``,
+    `## Docs + Integrations`,
+    docsOrIntegrationsFailed
+      ? '- Re-test docs DNS/routes and Composio integration status UI.'
+      : '- No hard docs/integrations failure in this pass.',
+    ``,
+    `## Deployment`,
+    report.railway.ok
+      ? `- Railway latest deployment is ${report.railway.status}.`
+      : `- Railway needs attention: ${
+          report.railway.status ?? report.railway.error ?? 'unknown'
+        }.`
   ].join('\n')
 }
 
@@ -392,11 +535,14 @@ async function main() {
   const jsonPath = path.join(outputDir, `${fileStamp}.json`)
   const mdPath = path.join(outputDir, `${fileStamp}.md`)
   const latestPath = path.join(outputDir, 'latest.md')
+  const queuePath = path.join(outputDir, 'latest-subagent-queue.md')
   const markdown = renderMarkdown(report)
+  const subagentQueue = renderSubagentQueue(report)
 
   await writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
   await writeFile(mdPath, `${markdown}\n`, 'utf8')
   await writeFile(latestPath, `${markdown}\n`, 'utf8')
+  await writeFile(queuePath, `${subagentQueue}\n`, 'utf8')
 
   console.log(`brok audit wrote ${mdPath}`)
 

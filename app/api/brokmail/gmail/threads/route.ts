@@ -133,19 +133,25 @@ function readLabels(message: Record<string, unknown>) {
 }
 
 function formatReceivedAt(message: Record<string, unknown>) {
-  const raw =
-    readHeader(message, 'Date') ||
-    getString(message.internalDate) ||
-    getString(message.internal_date) ||
-    getString(message.date)
-  const date = raw && /^\d+$/.test(raw) ? new Date(Number(raw)) : new Date(raw)
-  if (!raw || Number.isNaN(date.getTime())) return 'Recent'
+  const date = readMessageDate(message)
+  if (!date) return 'Recent'
 
   const today = new Date()
   const sameDay = date.toDateString() === today.toDateString()
   return sameDay
     ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     : date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
+function readMessageDate(message: Record<string, unknown>) {
+  const raw =
+    readHeader(message, 'Date') ||
+    getString(message.internalDate) ||
+    getString(message.internal_date) ||
+    getString(message.date)
+  const date = raw && /^\d+$/.test(raw) ? new Date(Number(raw)) : new Date(raw)
+  if (!raw || Number.isNaN(date.getTime())) return null
+  return date
 }
 
 function inferCategory(
@@ -232,6 +238,7 @@ function toMailThread(message: Record<string, unknown>): MailThread {
     getString(message.subject) ||
     '(no subject)'
   const body = readBody(message)
+  const receivedDate = readMessageDate(message)
   const category = inferCategory(message, labels)
   const unread = labels.includes('UNREAD') || message.unread === true
   const inInbox =
@@ -264,6 +271,7 @@ function toMailThread(message: Record<string, unknown>): MailThread {
             ? 'Live Composio Gmail newsletter. Low priority.'
             : 'Live Composio Gmail thread ready for Pi summary or draft.',
     receivedAt: formatReceivedAt(message),
+    receivedAtMs: receivedDate?.getTime(),
     labels,
     unread,
     starred: labels.includes('STARRED'),
@@ -315,6 +323,10 @@ function groupMailThreads(messages: Record<string, unknown>[]): MailThread[] {
       ...thread.messages.filter(message => !existingMessageIds.has(message.id))
     ]
 
+    const existingReceivedAtMs = existing.receivedAtMs ?? 0
+    const threadReceivedAtMs = thread.receivedAtMs ?? 0
+    const threadIsNewer = threadReceivedAtMs > existingReceivedAtMs
+
     threads.set(thread.id, {
       ...existing,
       sender: thread.sender || existing.sender,
@@ -325,7 +337,8 @@ function groupMailThreads(messages: Record<string, unknown>[]): MailThread[] {
         nextMessages.length > 1
           ? `Live Composio Gmail conversation with ${nextMessages.length} messages.`
           : existing.aiSummary,
-      receivedAt: thread.receivedAt || existing.receivedAt,
+      receivedAt: threadIsNewer ? thread.receivedAt : existing.receivedAt,
+      receivedAtMs: Math.max(existingReceivedAtMs, threadReceivedAtMs),
       labels: Array.from(labels),
       unread: existing.unread || thread.unread,
       starred: existing.starred || thread.starred,

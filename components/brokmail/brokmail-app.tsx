@@ -353,6 +353,19 @@ function scoreThreadPriority(thread: MailThread) {
   ].reduce((total, value) => total + value, 0)
 }
 
+function getThreadNewestTime(thread: MailThread) {
+  if (typeof thread.receivedAtMs === 'number') return thread.receivedAtMs
+
+  const messageTimes = thread.messages
+    .map(message => Date.parse(message.sentAt))
+    .filter(time => Number.isFinite(time))
+
+  if (messageTimes.length > 0) return Math.max(...messageTimes)
+
+  const threadTime = Date.parse(thread.receivedAt)
+  return Number.isFinite(threadTime) ? threadTime : 0
+}
+
 function priorityLabel(score: number) {
   if (score >= 58) return 'Critical'
   if (score >= 36) return 'High'
@@ -618,7 +631,12 @@ export function BrokMailApp() {
         thread.subject,
         thread.snippet,
         thread.aiSummary,
-        thread.labels.join(' ')
+        thread.labels.join(' '),
+        ...thread.messages.flatMap(message => [
+          message.from,
+          message.to.join(' '),
+          message.body
+        ])
       ]
         .join(' ')
         .toLowerCase()
@@ -630,12 +648,20 @@ export function BrokMailApp() {
         return a.sender.localeCompare(b.sender)
       }
 
+      if (sortMode === 'newest') {
+        const newestDelta = getThreadNewestTime(b) - getThreadNewestTime(a)
+        if (newestDelta !== 0) return newestDelta
+      }
+
       if (sortMode === 'priority') {
         const priorityDelta = scoreThreadPriority(b) - scoreThreadPriority(a)
         if (priorityDelta !== 0) return priorityDelta
       }
 
-      return Number(b.unread) - Number(a.unread)
+      const unreadDelta = Number(b.unread) - Number(a.unread)
+      if (unreadDelta !== 0) return unreadDelta
+
+      return getThreadNewestTime(b) - getThreadNewestTime(a)
     })
   }, [deferredQuery, sortMode, threads, view])
 
@@ -1730,6 +1756,15 @@ export function BrokMailApp() {
       return
     }
 
+    const confirmed = window.confirm(
+      'This share link can include private email summaries, draft text, and approval details. Create it only if you are comfortable sharing this BrokMail transcript.'
+    )
+
+    if (!confirmed) {
+      toast.info('Share cancelled. No BrokMail transcript was created.')
+      return
+    }
+
     const title = selectedThread
       ? `BrokMail: ${selectedThread.subject}`
       : 'BrokMail Chat'
@@ -1902,7 +1937,7 @@ export function BrokMailApp() {
             </div>
           </aside>
 
-          <div className="border-b border-zinc-200/80 bg-[#fbfbf8] px-3 py-2.5 2xl:hidden">
+          <div className="border-b border-zinc-200/80 bg-[#fbfbf8] px-3 py-2.5 lg:hidden">
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-3 gap-2">
                 <Button
@@ -1976,7 +2011,7 @@ export function BrokMailApp() {
             </div>
           </div>
 
-          <div className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white sm:max-h-[42dvh] lg:max-h-none lg:w-[320px] lg:border-b-0 lg:border-r xl:w-[350px]">
+          <div className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-zinc-200/80 bg-white sm:max-h-[42dvh] lg:max-h-none lg:w-[320px] lg:border-b-0 lg:border-r xl:w-[360px]">
             <div className="border-b border-zinc-100 bg-white p-2.5 sm:p-3">
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />
