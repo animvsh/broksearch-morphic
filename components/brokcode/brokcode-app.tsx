@@ -2660,6 +2660,8 @@ export function BrokCodeApp({
       'Preparing real runtime request.'
     )
 
+    let runTimeout: number | null = null
+
     try {
       const runProject = await ensureProjectForRun(trimmed)
 
@@ -2672,7 +2674,7 @@ export function BrokCodeApp({
       )
 
       const controller = new AbortController()
-      const timeout = window.setTimeout(() => {
+      runTimeout = window.setTimeout(() => {
         controller.abort()
       }, BROKCODE_BROWSER_RUN_TIMEOUT_MS)
 
@@ -2708,8 +2710,6 @@ export function BrokCodeApp({
             { role: 'user', content: trimmed }
           ]
         })
-      }).finally(() => {
-        window.clearTimeout(timeout)
       })
 
       if (!response.ok) {
@@ -2752,6 +2752,12 @@ export function BrokCodeApp({
             )
           })
         : await response.json()
+
+      if (runTimeout) {
+        window.clearTimeout(runTimeout)
+        runTimeout = null
+      }
+
       const runtime = (body?.runtime ?? 'brok') as BrokCodeRuntime
       const content = body?.content
       const assistantContent =
@@ -2912,6 +2918,9 @@ export function BrokCodeApp({
         previewUrl: null
       })
     } finally {
+      if (runTimeout) {
+        window.clearTimeout(runTimeout)
+      }
       setIsRunning(false)
     }
   }
