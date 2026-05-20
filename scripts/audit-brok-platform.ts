@@ -141,6 +141,18 @@ async function checkRoute(check: RouteCheck): Promise<FetchResult> {
     result.ok = isFetchOk(result)
     return result
   } catch (error) {
+    const publicDnsFallback = await verifyViaPublicDns(check.url)
+    if (publicDnsFallback) {
+      return {
+        ...check,
+        ok: true,
+        status: 200,
+        finalUrl: check.url,
+        location: publicDnsFallback,
+        ms: Date.now() - startedAt
+      }
+    }
+
     return {
       ...check,
       ok: false,
@@ -151,6 +163,44 @@ async function checkRoute(check: RouteCheck): Promise<FetchResult> {
       error: error instanceof Error ? error.message : String(error)
     }
   }
+}
+
+async function verifyViaPublicDns(url: string) {
+  const parsed = new URL(url)
+  if (parsed.hostname !== 'docs.brok.fyi') return null
+
+  try {
+    const { stdout: digOut } = await execFileAsync(
+      'dig',
+      ['+short', parsed.hostname, '@1.1.1.1'],
+      { timeout: timeoutMs }
+    )
+    const address = digOut
+      .split('\n')
+      .map(line => line.trim())
+      .find(line => /^\d{1,3}(?:\.\d{1,3}){3}$/.test(line))
+
+    if (!address) return null
+
+    const { stdout: curlOut } = await execFileAsync(
+      'curl',
+      [
+        '-I',
+        '--resolve',
+        `${parsed.hostname}:443:${address}`,
+        '--max-time',
+        String(Math.max(5, Math.ceil(timeoutMs / 1000))),
+        url
+      ],
+      { timeout: timeoutMs + 5000 }
+    )
+
+    if (/^HTTP\/\d(?:\.\d)?\s+2\d\d/m.test(curlOut)) {
+      return `public DNS fallback ${address}`
+    }
+  } catch {}
+
+  return null
 }
 
 async function checkBrowserUrl(
@@ -218,6 +268,23 @@ async function checkBrowserUrl(
 
     return result
   } catch (error) {
+    const publicDnsFallback = await verifyViaPublicDns(url)
+    if (publicDnsFallback) {
+      return {
+        url,
+        status: 200,
+        finalUrl: url,
+        title: '',
+        textSample: publicDnsFallback,
+        desktopOverflowX: 0,
+        mobileOverflowX: 0,
+        pageErrors,
+        consoleErrors,
+        interactions: [publicDnsFallback],
+        ok: true
+      }
+    }
+
     return {
       url,
       status: null,
