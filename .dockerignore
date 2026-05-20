@@ -4,6 +4,7 @@ node_modules
 coverage
 .tmp
 .data
+.brokcode
 .env
 .env.*
 !.env.example

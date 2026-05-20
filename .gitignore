@@ -38,5 +38,6 @@ next-env.d.ts
 # temporary files
 .tmp/
 .data/
+.brokcode/
 .brokcode/sync/projects.json
 .brok-audits/
