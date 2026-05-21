@@ -420,9 +420,6 @@ export function ChatPanel({
             return
           }
           handleSubmit(e)
-          // Reset focus state after submission
-          setIsInputFocused(false)
-          inputRef.current?.blur()
         }}
         className={cn('relative mx-auto w-full max-w-3xl')}
       >
@@ -588,10 +585,15 @@ export function ChatPanel({
             }
             spellCheck={false}
             value={input}
-            disabled={isLoading || hasActiveToolInvocation}
-            className="min-h-14 w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-7 placeholder:text-zinc-400 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 md:min-h-16 md:p-5"
+            readOnly={isLoading || hasActiveToolInvocation}
+            aria-busy={isLoading || hasActiveToolInvocation}
+            className="min-h-14 w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-7 placeholder:text-zinc-400 focus-visible:outline-hidden read-only:cursor-default md:min-h-16 md:p-5"
             onChange={handleInputChange}
             onKeyDown={e => {
+              if (isLoading || hasActiveToolInvocation) {
+                return
+              }
+
               if (
                 e.key === 'Enter' &&
                 !e.shiftKey &&
@@ -610,9 +612,6 @@ export function ChatPanel({
                 e.preventDefault()
                 const textarea = e.target as HTMLTextAreaElement
                 textarea.form?.requestSubmit()
-                // Reset focus state after Enter key submission
-                setIsInputFocused(false)
-                textarea.blur()
               }
             }}
           />

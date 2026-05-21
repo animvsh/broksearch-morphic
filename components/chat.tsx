@@ -45,6 +45,18 @@ function escapeUploadedFileAttribute(value: string) {
     .replace(/>/g, '&gt;')
 }
 
+function getMessageText(message: UIMessage) {
+  return (
+    message.parts
+      ?.filter(
+        (part): part is { type: 'text'; text: string } =>
+          part.type === 'text' && typeof (part as any).text === 'string'
+      )
+      .map(part => part.text)
+      .join('\n') ?? ''
+  )
+}
+
 export function Chat({
   id: providedId,
   savedMessages = [],
@@ -72,6 +84,7 @@ export function Chat({
     const newId = generateId()
     setChatId(newId)
     // Clear other chat-related state that persists due to Next.js 16 component caching
+    setPendingUserMessage(null)
     setInput('')
     setUploadedFiles([])
     setErrorModal({
@@ -86,6 +99,8 @@ export function Chat({
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [input, setInput] = useState('')
+  const [pendingUserMessage, setPendingUserMessage] =
+    useState<UIMessage | null>(null)
   const [errorModal, setErrorModal] = useState<{
     open: boolean
     type: 'rate-limit' | 'auth' | 'forbidden' | 'general'
@@ -223,7 +238,7 @@ export function Chat({
         toast.error('Brok could not complete the request. Please try again.')
       }
     },
-    experimental_throttle: 80,
+    experimental_throttle: 24,
     generateId
   })
 
@@ -231,12 +246,44 @@ export function Chat({
     setInput(e.target.value)
   }
 
+  useEffect(() => {
+    if (!pendingUserMessage) return
+
+    const pendingText = getMessageText(pendingUserMessage)
+    const isCommitted = messages.some(
+      message =>
+        message.id === pendingUserMessage.id ||
+        (message.role === 'user' &&
+          pendingText.length > 0 &&
+          getMessageText(message) === pendingText)
+    )
+
+    if (isCommitted) {
+      setPendingUserMessage(null)
+    }
+  }, [messages, pendingUserMessage])
+
+  const visibleMessages = useMemo(() => {
+    if (!pendingUserMessage) return messages
+
+    const pendingText = getMessageText(pendingUserMessage)
+    const isAlreadyVisible = messages.some(
+      message =>
+        message.id === pendingUserMessage.id ||
+        (message.role === 'user' &&
+          pendingText.length > 0 &&
+          getMessageText(message) === pendingText)
+    )
+
+    return isAlreadyVisible ? messages : [...messages, pendingUserMessage]
+  }, [messages, pendingUserMessage])
+
   // Convert messages array to sections array
   const sections = useMemo<ChatSection[]>(() => {
     const result: ChatSection[] = []
     let currentSection: ChatSection | null = null
 
-    for (const message of messages) {
+    for (const message of visibleMessages) {
       if (message.role === 'user') {
         // Start a new section when a user message is found
         if (currentSection) {
@@ -260,7 +307,7 @@ export function Chat({
     }
 
     return result
-  }, [messages])
+  }, [visibleMessages])
 
   // Listen for copy message shortcut
   // Uses ref to avoid re-registering listener on every messages change.
@@ -316,10 +363,10 @@ export function Chat({
   useEffect(() => {
     window.dispatchEvent(
       new CustomEvent('messages-changed', {
-        detail: { hasMessages: messages.length > 0 }
+        detail: { hasMessages: visibleMessages.length > 0 }
       })
     )
-  }, [messages.length])
+  }, [visibleMessages.length])
 
   // Detect if scroll container is at the bottom
   useEffect(() => {
@@ -345,7 +392,7 @@ export function Chat({
       cancelAnimationFrame(frame)
       container.removeEventListener('scroll', handleScroll)
     }
-  }, [messages.length])
+  }, [visibleMessages.length])
 
   // Check scroll position when messages change (during generation)
   useEffect(() => {
@@ -361,7 +408,7 @@ export function Chat({
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [messages])
+  }, [visibleMessages])
 
   useEffect(() => {
     const container = scrollContainerRef.current
@@ -375,7 +422,7 @@ export function Chat({
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [messages, status])
+  }, [visibleMessages, status])
 
   // Scroll to the section when a new user message is sent
   useEffect(() => {
@@ -385,7 +432,7 @@ export function Chat({
       (window.location.pathname === '/' && sections.length > 0)
 
     if (isCurrentChat && sections.length > 0) {
-      const lastMessage = messages[messages.length - 1]
+      const lastMessage = visibleMessages[visibleMessages.length - 1]
       if (lastMessage && lastMessage.role === 'user') {
         // If the last message is from user, find the corresponding section
         const sectionId = lastMessage.id
@@ -396,12 +443,12 @@ export function Chat({
 
           container.scrollTo({
             top: Math.max(sectionElement.offsetTop - 16, 0),
-            behavior: 'smooth'
+            behavior: 'auto'
           })
         })
       }
     }
-  }, [sections, messages, chatId])
+  }, [sections, visibleMessages, chatId])
 
   const handleUpdateAndReloadMessage = async (
     editedMessageId: string,
@@ -517,9 +564,16 @@ export function Chat({
         })
       })
 
-      sendMessage({ role: 'user', parts })
+      const outgoingMessage = {
+        id: generateId(),
+        role: 'user',
+        parts
+      } as UIMessage
+
+      setPendingUserMessage(outgoingMessage)
       setInput('')
       setUploadedFiles([])
+      sendMessage(outgoingMessage)
 
       // Push URL state immediately after sending message (for new chats)
       // Check if we're on the root path (new chat)
@@ -552,7 +606,9 @@ export function Chat({
       <div
         className={cn(
           'relative flex h-full min-w-0 flex-1 flex-col bg-background',
-          messages.length === 0 ? 'items-center justify-center pb-10' : ''
+          visibleMessages.length === 0
+            ? 'items-center justify-center pb-10'
+            : ''
         )}
         data-testid="full-chat"
         onDragOver={handleDragOver}
@@ -610,7 +666,7 @@ export function Chat({
           handleInputChange={handleInputChange}
           handleSubmit={onSubmit}
           status={status}
-          messages={messages}
+          messages={visibleMessages}
           setMessages={setMessages}
           chatId={chatId}
           stop={stop}
@@ -638,8 +694,8 @@ export function Chat({
             errorModal.type !== 'rate-limit'
               ? () => {
                   // Retry the last message if not rate limited
-                  if (messages.length > 0) {
-                    const lastUserMessage = messages
+                  if (visibleMessages.length > 0) {
+                    const lastUserMessage = visibleMessages
                       .filter(m => m.role === 'user')
                       .pop()
                     if (lastUserMessage) {
