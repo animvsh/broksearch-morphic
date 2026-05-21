@@ -628,7 +628,7 @@ export function BrokMailApp() {
       if (!matchesView) return false
       if (!normalizedQuery) return true
 
-      return [
+      const searchableText = [
         thread.sender,
         thread.senderEmail,
         thread.subject,
@@ -643,7 +643,11 @@ export function BrokMailApp() {
       ]
         .join(' ')
         .toLowerCase()
-        .includes(normalizedQuery)
+
+      return normalizedQuery
+        .split(/\s+/)
+        .filter(Boolean)
+        .every(token => searchableText.includes(token))
     })
 
     return [...matches].sort((a, b) => {
@@ -914,7 +918,10 @@ export function BrokMailApp() {
           : thread
       )
     )
-    toast.success('Thread cleared from the active queue')
+    toast.success('Thread cleared locally', {
+      description:
+        'No Gmail action was taken. Ask BrokMail to archive it when you want an approval-gated mailbox change.'
+    })
   }
 
   function runPriorityBrief() {
@@ -1643,8 +1650,8 @@ export function BrokMailApp() {
         trigger: 'New email arrives',
         condition: approval.description,
         action: 'Apply Expenses label',
-        approval: 'Not required',
-        enabled: true,
+        approval: 'Approval required',
+        enabled: false,
         lastRun: 'Never'
       }
       setAutomationRules(current => {
@@ -2077,7 +2084,7 @@ export function BrokMailApp() {
                   ref={searchInputRef}
                   value={query}
                   onChange={event => setQuery(event.target.value)}
-                  placeholder="Search mail or ask BrokMail..."
+                  placeholder="Search sender, subject, label, or message..."
                   className="h-9 min-w-0"
                 />
               </div>
@@ -2270,6 +2277,7 @@ export function BrokMailApp() {
                 isSyncing={isSyncingCalendar}
                 isConnecting={isConnectingCalendar}
                 connectCalendar={connectCalendar}
+                refreshCalendar={loadComposioCalendarEvents}
                 runAgent={runAgent}
               />
             ) : selectedThread ? (
@@ -2591,7 +2599,7 @@ function ThreadView({
               onClick={onMarkDone}
             >
               <CheckCircle2 className="size-4" />
-              Done
+              Clear locally
             </Button>
           </div>
         </div>
@@ -3158,6 +3166,7 @@ function CalendarWorkspace({
   isSyncing,
   isConnecting,
   connectCalendar,
+  refreshCalendar,
   runAgent
 }: {
   events: BrokCalendarEvent[]
@@ -3168,6 +3177,7 @@ function CalendarWorkspace({
   isSyncing: boolean
   isConnecting: boolean
   connectCalendar: () => Promise<void>
+  refreshCalendar: () => Promise<BrokCalendarEvent[]>
   runAgent: (prompt: string) => void
 }) {
   return (
@@ -3204,10 +3214,11 @@ function CalendarWorkspace({
             <Button
               size="sm"
               className="flex-1 gap-2 sm:flex-none"
-              onClick={() => runAgent('Show my next calendar events.')}
+              onClick={() => void refreshCalendar()}
+              disabled={isSyncing}
             >
               <Sparkles className="size-4" />
-              Refresh
+              {isSyncing ? 'Refreshing...' : 'Refresh'}
             </Button>
           </div>
         </div>

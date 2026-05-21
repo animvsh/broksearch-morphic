@@ -17,22 +17,12 @@ function resolvePublicOrigin(request: Request, fallbackOrigin: string) {
 
 function buildRedirectUrl({
   baseOrigin,
-  next,
-  providerToken
+  next
 }: {
   baseOrigin: string
   next: string
-  providerToken?: string | null
 }) {
-  const redirectUrl = new URL(next, baseOrigin)
-
-  if (providerToken && next.startsWith('/brokmail')) {
-    const hash = new URLSearchParams()
-    hash.set('brokmail_google_token', providerToken)
-    redirectUrl.hash = hash.toString()
-  }
-
-  return redirectUrl
+  return new URL(next, baseOrigin)
 }
 
 export async function GET(request: Request) {
@@ -50,8 +40,7 @@ export async function GET(request: Request) {
       const redirectOrigin = isLocalEnv ? origin : publicOrigin
       const redirectUrl = buildRedirectUrl({
         baseOrigin: redirectOrigin,
-        next,
-        providerToken: data.session?.provider_token
+        next
       })
 
       return NextResponse.redirect(redirectUrl)
