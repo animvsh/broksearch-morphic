@@ -1740,6 +1740,7 @@ export function BrokMailApp() {
         }
       }
     ])
+    setAgentOpen(true)
   }
 
   function saveComposerDraft() {
