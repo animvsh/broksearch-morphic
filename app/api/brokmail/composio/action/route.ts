@@ -11,7 +11,10 @@ import {
   normalizeSignedApproval,
   verifyBrokMailApproval
 } from '@/lib/brokmail/action-approval'
-import { consumeBrokMailApproval } from '@/lib/brokmail/approval-consumption'
+import {
+  consumeBrokMailApproval,
+  releaseBrokMailApproval
+} from '@/lib/brokmail/approval-consumption'
 import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
   executeComposioTool,
@@ -336,30 +339,6 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  try {
-    const consumed = await consumeBrokMailApproval({
-      userId: user.id,
-      approval
-    })
-
-    if (!consumed) {
-      return NextResponse.json(
-        { error: 'BrokMail approval token has already been used.' },
-        { status: 409 }
-      )
-    }
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Could not record BrokMail approval consumption.'
-      },
-      { status: 503 }
-    )
-  }
-
   const text = buildActionText({
     action: payload.action,
     threads: payload.threads,
@@ -384,6 +363,30 @@ export async function POST(request: NextRequest) {
           'No connected Google account was found for this Brok user. Reconnect Gmail or Calendar from Integrations.'
       },
       { status: 409 }
+    )
+  }
+
+  try {
+    const consumed = await consumeBrokMailApproval({
+      userId: user.id,
+      approval
+    })
+
+    if (!consumed) {
+      return NextResponse.json(
+        { error: 'BrokMail approval token has already been used.' },
+        { status: 409 }
+      )
+    }
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Could not record BrokMail approval consumption.'
+      },
+      { status: 503 }
     )
   }
 
@@ -418,6 +421,13 @@ export async function POST(request: NextRequest) {
       })
     }
   }
+
+  await releaseBrokMailApproval({ userId: user.id, approval }).catch(error => {
+    console.error('Failed to release BrokMail approval after action error', {
+      approvalId: approval.id,
+      error
+    })
+  })
 
   return NextResponse.json(
     {

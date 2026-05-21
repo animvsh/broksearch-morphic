@@ -1,3 +1,5 @@
+import { and, eq } from 'drizzle-orm'
+
 import { db } from '@/lib/db'
 import { brokMailApprovalConsumptions } from '@/lib/db/schema'
 
@@ -22,4 +24,21 @@ export async function consumeBrokMailApproval({
     .returning({ id: brokMailApprovalConsumptions.id })
 
   return Boolean(consumed)
+}
+
+export async function releaseBrokMailApproval({
+  userId,
+  approval
+}: {
+  userId: string
+  approval: BrokMailSignedApproval
+}) {
+  await db
+    .delete(brokMailApprovalConsumptions)
+    .where(
+      and(
+        eq(brokMailApprovalConsumptions.approvalId, approval.id),
+        eq(brokMailApprovalConsumptions.userId, userId)
+      )
+    )
 }
