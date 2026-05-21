@@ -21,6 +21,11 @@ const DOCS_CLEAN_PATHS = new Set([
   '/security',
   '/tools'
 ])
+const PWA_PUBLIC_PATHS = new Set([
+  '/manifest.webmanifest',
+  '/sw.js',
+  '/offline.html'
+])
 
 function rewriteDocsSubdomain(request: NextRequest, host: string) {
   const hostname = host.split(':')[0]?.toLowerCase()
@@ -32,6 +37,7 @@ function rewriteDocsSubdomain(request: NextRequest, host: string) {
     pathname.startsWith('/api') ||
     pathname.startsWith('/auth') ||
     pathname.startsWith('/docs') ||
+    PWA_PUBLIC_PATHS.has(pathname) ||
     pathname === '/favicon.ico'
   ) {
     return null
@@ -98,6 +104,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * Feel free to modify this pattern to include more paths.
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'
+    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|offline.html|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'
   ]
 }
