@@ -299,10 +299,12 @@ async function persistGeneratedProjectOutput({
   if (!project) return null
 
   const extractedFiles = extractGeneratedBrokCodeFiles(content)
+  const usedFallback =
+    extractedFiles.length === 0 && shouldCreateFallbackGeneratedApp(command)
   const rawFiles =
     extractedFiles.length > 0
       ? extractedFiles
-      : shouldCreateFallbackGeneratedApp(command)
+      : usedFallback
         ? buildFallbackGeneratedAppFiles({
             command,
             fallbackTitle: project.name
@@ -391,8 +393,33 @@ async function persistGeneratedProjectOutput({
 
   return {
     files,
-    previewUrl
+    previewUrl,
+    usedFallback
   }
+}
+
+function buildManagedPreviewSummary({
+  command,
+  files,
+  previewUrl
+}: {
+  command: string
+  files: Array<{ path: string }>
+  previewUrl: string
+}) {
+  const fileList = files.map(file => file.path).join(', ')
+
+  return [
+    'Done. I updated the managed BrokCode preview.',
+    '',
+    `Built: ${command}`,
+    fileList ? `Files: ${fileList}.` : null,
+    `Preview: ${previewUrl}`,
+    '',
+    'You can keep editing this same cloud project from the chat.'
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 async function recordCodeExecutionUsage({
@@ -806,11 +833,19 @@ function createExecutionStream({
               const previewUrl =
                 persisted?.previewUrl ??
                 extractPreviewUrl(`${command}\n${result.content}`)
-              send('delta', { content: result.content })
+              const builderContent =
+                persisted?.usedFallback && previewUrl
+                  ? buildManagedPreviewSummary({
+                      command,
+                      files: persisted.files,
+                      previewUrl
+                    })
+                  : result.content
+              send('delta', { content: builderContent })
               send('result', {
                 runtime: 'pi',
                 model: result.model,
-                content: result.content,
+                content: builderContent,
                 usage: null,
                 preview_url: previewUrl,
                 task_id: taskId ?? null,
@@ -957,13 +992,21 @@ function createExecutionStream({
               const previewUrl =
                 persisted?.previewUrl ??
                 extractPreviewUrl(`${command}\n${content}`)
+              const builderContent =
+                persisted?.usedFallback && previewUrl
+                  ? buildManagedPreviewSummary({
+                      command,
+                      files: persisted.files,
+                      previewUrl
+                    })
+                  : content
 
               send('result', {
                 runtime: 'opencode',
                 model,
                 content:
-                  content.length > 0
-                    ? content
+                  builderContent.length > 0
+                    ? builderContent
                     : 'OpenCode completed the run but returned no text output.',
                 usage,
                 preview_url: previewUrl,
@@ -1558,6 +1601,14 @@ export async function POST(request: NextRequest) {
       const previewUrl =
         persisted?.previewUrl ??
         extractPreviewUrl(`${command}\n${result.content}`)
+      const builderContent =
+        persisted?.usedFallback && previewUrl
+          ? buildManagedPreviewSummary({
+              command,
+              files: persisted.files,
+              previewUrl
+            })
+          : result.content
 
       await recordCodeExecutionUsage({
         ...codeUsageContext,
@@ -1575,7 +1626,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         runtime: 'pi',
         model: result.model,
-        content: result.content,
+        content: builderContent,
         usage: null,
         preview_url: previewUrl,
         generated_files: persisted?.files.map(file => file.path) ?? [],
@@ -1649,6 +1700,14 @@ export async function POST(request: NextRequest) {
         })
         const previewUrl =
           persisted?.previewUrl ?? extractPreviewUrl(`${command}\n${content}`)
+        const builderContent =
+          persisted?.usedFallback && previewUrl
+            ? buildManagedPreviewSummary({
+                command,
+                files: persisted.files,
+                previewUrl
+              })
+            : content
         await recordCodeExecutionUsage({
           ...codeUsageContext,
           auth: authResult,
@@ -1666,8 +1725,8 @@ export async function POST(request: NextRequest) {
           runtime: 'opencode',
           model: payload?.model ?? model,
           content:
-            content.length > 0
-              ? content
+            builderContent.length > 0
+              ? builderContent
               : 'OpenCode completed the run but returned no text output.',
           usage: payload?.usage ?? null,
           preview_url: previewUrl,
@@ -1787,6 +1846,14 @@ export async function POST(request: NextRequest) {
   })
   const previewUrl =
     persisted?.previewUrl ?? extractPreviewUrl(`${command}\n${content}`)
+  const builderContent =
+    persisted?.usedFallback && previewUrl
+      ? buildManagedPreviewSummary({
+          command,
+          files: persisted.files,
+          previewUrl
+        })
+      : content
   await recordCodeExecutionUsage({
     ...codeUsageContext,
     auth: authResult,
@@ -1804,8 +1871,8 @@ export async function POST(request: NextRequest) {
     runtime: 'brok',
     model: responseModel,
     content:
-      content.length > 0
-        ? content
+      builderContent.length > 0
+        ? builderContent
         : 'Brok runtime completed the run but returned no text output.',
     usage,
     preview_url: previewUrl,
