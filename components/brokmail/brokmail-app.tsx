@@ -2047,35 +2047,66 @@ export function BrokMailApp() {
             </div>
           </div>
 
-          <div className="border-b border-zinc-200/80 bg-[#f8f8f5] px-3 py-1.5 lg:hidden">
-            <div className="grid grid-cols-3 rounded-full border border-zinc-200 bg-white p-0.5 shadow-none">
+          <div
+            className="border-b border-zinc-200/80 bg-[#f8f8f5] px-3 py-2 lg:hidden"
+            aria-label="BrokMail mobile workspace"
+          >
+            <div className="mb-2 flex items-center justify-between gap-3 text-xs text-zinc-500">
+              <span className="truncate">
+                {mobilePane === 'list'
+                  ? `${listCount} ${listLabel}`
+                  : selectedThread?.subject || 'Choose a conversation'}
+              </span>
+              <span className="shrink-0">
+                {connected ? 'Gmail ready' : 'Connect Gmail'}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 rounded-full border border-zinc-200 bg-white p-1 shadow-sm">
               <button
                 className={cn(
-                  'h-8 rounded-full text-xs font-medium transition-colors',
+                  'flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium transition-colors',
                   mobilePane === 'list'
-                    ? 'bg-zinc-950 text-white'
+                    ? 'bg-zinc-950 text-white shadow-sm'
                     : 'text-zinc-600 hover:bg-zinc-100'
                 )}
                 onClick={() => setMobilePane('list')}
               >
-                Inbox
+                <Inbox className="size-4 shrink-0" />
+                <span className="truncate">Inbox</span>
+                <span
+                  className={cn(
+                    'rounded-full px-1.5 py-0.5 text-[10px] leading-none',
+                    mobilePane === 'list'
+                      ? 'bg-white/15 text-white/80'
+                      : 'bg-zinc-100 text-zinc-500'
+                  )}
+                >
+                  {counts.inbox}
+                </span>
               </button>
               <button
                 className={cn(
-                  'h-8 rounded-full text-xs font-medium transition-colors',
+                  'flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium transition-colors',
                   mobilePane === 'thread'
-                    ? 'bg-zinc-950 text-white'
+                    ? 'bg-zinc-950 text-white shadow-sm'
                     : 'text-zinc-600 hover:bg-zinc-100'
                 )}
                 onClick={() => setMobilePane('thread')}
               >
-                Thread
+                <Mail className="size-4 shrink-0" />
+                <span className="truncate">Thread</span>
               </button>
               <button
-                className="h-8 rounded-full text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100"
+                className="flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100"
                 onClick={() => setAgentOpen(true)}
               >
-                Agent
+                <Bot className="size-4 shrink-0" />
+                <span className="truncate">Ask</span>
+                {messages.some(message => message.approval) ? (
+                  <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] leading-none text-amber-700">
+                    review
+                  </span>
+                ) : null}
               </button>
             </div>
           </div>

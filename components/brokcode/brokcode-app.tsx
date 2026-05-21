@@ -112,6 +112,7 @@ type BrokCodeRuntime = 'pi' | 'opencode' | 'brok' | 'not_connected'
 type GithubConnectionStatus = 'checking' | 'connected' | 'ready' | 'unavailable'
 type PreviewHealthStatus = 'idle' | 'checking' | 'online' | 'offline'
 type BrokCodeBackendProvider = 'none' | 'insforge'
+type BrokCodeMobilePane = 'chat' | 'preview' | 'ship'
 type BrokCodeBackendHealthStatus =
   | 'unknown'
   | 'checking'
@@ -1023,6 +1024,7 @@ export function BrokCodeApp({
   const [insForgeProjectUrl, setInsForgeProjectUrl] = useState('')
   const [insForgeDashboardUrl, setInsForgeDashboardUrl] = useState('')
   const [insForgeAdminKey, setInsForgeAdminKey] = useState('')
+  const [mobilePane, setMobilePane] = useState<BrokCodeMobilePane>('chat')
   const [isSharing, startShareTransition] = useTransition()
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -2108,6 +2110,7 @@ export function BrokCodeApp({
     setPreviewInput(normalized)
     setPreviewFrameKey(value => value + 1)
     setRuntimeError(null)
+    setMobilePane('preview')
   }
 
   function loadPreviewUrlIfAllowed(rawTarget: unknown) {
@@ -2143,6 +2146,7 @@ export function BrokCodeApp({
     setPreviewUrl(normalized)
     setPreviewInput(normalized)
     setPreviewFrameKey(value => value + 1)
+    setMobilePane(current => (current === 'chat' ? 'preview' : current))
   }, [
     activeProject,
     activeProject?.deploymentUrl,
@@ -3602,8 +3606,72 @@ export function BrokCodeApp({
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto bg-[#f6f6f3] lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[minmax(380px,460px)_minmax(0,1fr)]">
-        <section className="flex min-h-[52dvh] flex-col overflow-hidden border-b border-zinc-200/80 bg-white lg:min-h-0 lg:border-b-0 lg:border-r">
+      <nav
+        className="border-b border-zinc-200/80 bg-white/95 px-3 py-2 lg:hidden"
+        aria-label="Brok Code mobile workspace"
+      >
+        <div className="grid grid-cols-3 rounded-full border border-zinc-200 bg-zinc-50 p-1 shadow-sm">
+          {[
+            {
+              id: 'chat' as const,
+              label: 'Chat',
+              icon: Bot,
+              badge: isRunning ? 'live' : null
+            },
+            {
+              id: 'preview' as const,
+              label: 'Preview',
+              icon: Monitor,
+              badge: previewUrl.trim() ? 'app' : null
+            },
+            {
+              id: 'ship' as const,
+              label: 'Ship',
+              icon: Rocket,
+              badge: activeBackend.provider === 'insforge' ? 'db' : null
+            }
+          ].map(item => {
+            const Icon = item.icon
+            const active = mobilePane === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={cn(
+                  'flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium transition-colors',
+                  active
+                    ? 'bg-zinc-950 text-white shadow-sm'
+                    : 'text-zinc-600 hover:bg-white hover:text-zinc-950'
+                )}
+                onClick={() => setMobilePane(item.id)}
+              >
+                <Icon className="size-4 shrink-0" />
+                <span className="truncate">{item.label}</span>
+                {item.badge ? (
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 py-0.5 text-[10px] leading-none',
+                      active
+                        ? 'bg-white/15 text-white/80'
+                        : 'bg-white text-zinc-500'
+                    )}
+                  >
+                    {item.badge}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      </nav>
+
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#f6f6f3] lg:grid lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)] xl:grid-cols-[minmax(380px,460px)_minmax(0,1fr)]">
+        <section
+          className={cn(
+            'min-h-0 flex-col overflow-hidden border-b border-zinc-200/80 bg-white lg:flex lg:border-b-0 lg:border-r',
+            mobilePane === 'chat' ? 'flex flex-1' : 'hidden'
+          )}
+        >
           <div className="border-b border-zinc-200/80 bg-white px-3 py-2 sm:px-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -3813,7 +3881,204 @@ export function BrokCodeApp({
           </div>
         </section>
 
-        <aside className="flex min-h-[48dvh] flex-col overflow-hidden bg-[#f3f2ee] lg:min-h-0">
+        <section
+          className={cn(
+            'min-h-0 flex-1 overflow-y-auto bg-[#f6f6f3] p-3 lg:hidden',
+            mobilePane === 'ship' ? 'block' : 'hidden'
+          )}
+        >
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-zinc-950">
+                    Ship center
+                  </p>
+                  <p className="mt-1 truncate text-xs text-zinc-500">
+                    {activeProject?.name ?? 'Create a project from chat first'}
+                  </p>
+                </div>
+                <Badge
+                  variant={hasLiveRuntime ? 'default' : 'outline'}
+                  className="shrink-0 rounded-full"
+                >
+                  {hasLiveRuntime ? 'Cloud ready' : 'Sign in'}
+                </Badge>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button
+                  className="h-10 gap-2 rounded-xl"
+                  disabled={!hasLiveRuntime || isDeploying}
+                  onClick={() => {
+                    void deployBrokCodeCloud()
+                  }}
+                >
+                  {isDeploying ? (
+                    <RefreshCcw className="size-4 animate-spin" />
+                  ) : (
+                    <Rocket className="size-4" />
+                  )}
+                  Deploy
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="h-10 gap-2 rounded-xl"
+                >
+                  <Link href="/brokcode/tui">
+                    <TerminalSquare className="size-4" />
+                    TUI
+                  </Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-10 gap-2 rounded-xl"
+                  disabled={
+                    isConnectingGithub ||
+                    Boolean(isConnectingIntegration) ||
+                    githubStatus === 'connected'
+                  }
+                  onClick={() => handleChatAction('connect-github')}
+                >
+                  <Github className="size-4" />
+                  {githubStatus === 'connected' ? 'GitHub on' : 'GitHub'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-10 gap-2 rounded-xl"
+                  onClick={() => handleChatAction('run-checks')}
+                >
+                  <CheckCircle2 className="size-4" />
+                  Checks
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-zinc-950">
+                    Model and backend
+                  </p>
+                  <p className="truncate text-xs text-zinc-500">
+                    {activeBackend.provider === 'insforge'
+                      ? activeBackend.projectUrl || activeBackend.status
+                      : 'Add the shared cloud backend when the app needs data.'}
+                  </p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="shrink-0 rounded-full border-zinc-200 bg-zinc-50"
+                >
+                  {activeBackend.provider === 'insforge'
+                    ? activeBackend.health === 'online'
+                      ? 'Backend live'
+                      : activeBackend.status
+                    : 'No backend'}
+                </Badge>
+              </div>
+
+              <Label className="text-xs text-zinc-500">Builder model</Label>
+              <Select value={selectedModel} onValueChange={setSelectedModel}>
+                <SelectTrigger className="mt-1 h-10 rounded-xl border-zinc-200 bg-zinc-50">
+                  <SelectValue placeholder="Model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {codeModels.map(model => (
+                    <SelectItem key={model.id} value={model.id}>
+                      {model.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="mt-3 flex gap-2">
+                {activeBackend.provider === 'insforge' ? (
+                  <Button
+                    variant="outline"
+                    className="h-9 flex-1 rounded-xl"
+                    disabled={backendChecking}
+                    onClick={() => {
+                      void checkBackendHealth()
+                    }}
+                  >
+                    {backendChecking ? (
+                      <RefreshCcw className="size-4 animate-spin" />
+                    ) : (
+                      <Radar className="size-4" />
+                    )}
+                    Check backend
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="h-9 flex-1 rounded-xl"
+                    disabled={backendProvisioning || !hasLiveRuntime}
+                    onClick={() => {
+                      void provisionInsForgeBackend()
+                    }}
+                  >
+                    {backendProvisioning ? (
+                      <RefreshCcw className="size-4 animate-spin" />
+                    ) : (
+                      <PlugZap className="size-4" />
+                    )}
+                    Add backend
+                  </Button>
+                )}
+                {previewUrl.trim() ? (
+                  <Button
+                    variant="outline"
+                    className="h-9 rounded-xl px-3"
+                    onClick={() => setMobilePane('preview')}
+                  >
+                    <Eye className="size-4" />
+                    View
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-zinc-950">
+                  Agent activity
+                </p>
+                <Badge variant="outline" className="rounded-full">
+                  {executionRuns.length || 0}
+                </Badge>
+              </div>
+              <ExecutionVisualizer runs={executionRuns} />
+            </div>
+
+            <SyncedSessionPanel
+              session={activeSyncSession}
+              sessionId={syncSessionId}
+              loading={syncLoading}
+              onRefresh={() => {
+                void refreshSyncedSessions()
+              }}
+            />
+
+            <VersionHistoryPanel
+              versions={versions}
+              loading={versionsLoading}
+              onRefresh={() => {
+                if (apiKey) {
+                  void refreshVersions(apiKey)
+                }
+              }}
+            />
+          </div>
+        </section>
+
+        <aside
+          className={cn(
+            'min-h-0 flex-col overflow-hidden bg-[#f3f2ee] lg:flex',
+            mobilePane === 'preview' ? 'flex flex-1' : 'hidden'
+          )}
+        >
           <div className="border-b border-zinc-200/80 bg-white/90 px-3 py-2 backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
