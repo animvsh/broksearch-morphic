@@ -2552,15 +2552,17 @@ export function BrokCodeApp({
       const strategy =
         typeof body?.strategy === 'string' ? body.strategy : 'unknown'
       const previewCandidate =
-        body?.previewUrl ??
         body?.deploymentPreviewUrl ??
         body?.deployment?.previewUrl ??
         body?.deployment?.deploymentPreviewUrl ??
         body?.deployment?.deploymentUrl ??
-        body?.deployment?.url
+        body?.deployment?.url ??
+        body?.previewUrl
       const loadedPreviewUrl = loadPreviewUrlIfAllowed(previewCandidate)
       const message = loadedPreviewUrl
-        ? 'Preview is live.'
+        ? strategy === 'managed_live_preview'
+          ? 'App is live on its managed URL.'
+          : 'Deployment preview is live.'
         : typeof body?.message === 'string'
           ? body.message
           : 'Deployment started.'
