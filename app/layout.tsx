@@ -35,9 +35,27 @@ export const metadata: Metadata = {
   metadataBase: new URL(metadataBaseUrl),
   title,
   description,
+  applicationName: 'Brok',
+  manifest: '/manifest.webmanifest',
   openGraph: {
     title,
     description
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Brok'
+  },
+  formatDetection: {
+    telephone: false
+  },
+  icons: {
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/pwa/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/pwa/icon-512.png', sizes: '512x512', type: 'image/png' }
+    ],
+    apple: [{ url: '/pwa/apple-touch-icon.png', sizes: '180x180' }]
   },
   twitter: {
     title,
@@ -50,7 +68,9 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   minimumScale: 1,
-  maximumScale: 1
+  maximumScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#ffffff'
 }
 
 export default async function RootLayout({

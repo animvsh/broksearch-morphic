@@ -14,6 +14,8 @@ import ArtifactRoot from '@/components/artifact/artifact-root'
 import { FeatureRequestWidget } from '@/components/feature-request-widget'
 import Header from '@/components/header'
 import { KeyboardShortcutHandler } from '@/components/keyboard-shortcut-handler'
+import { MobileAppNav } from '@/components/mobile-app-nav'
+import { PwaLifecycle } from '@/components/pwa-lifecycle'
 
 export function AppChrome({
   user,
@@ -57,6 +59,7 @@ export function AppChrome({
     return (
       <main className="flex min-h-svh w-full overflow-y-auto bg-background">
         {children}
+        <PwaLifecycle />
       </main>
     )
   }
@@ -73,12 +76,14 @@ export function AppChrome({
         <Header user={user} />
         <main
           className={cn(
-            'app-scroll-root flex min-h-0 min-w-0 flex-1 bg-zinc-50/70',
+            'app-scroll-root flex min-h-0 min-w-0 flex-1 bg-zinc-50/70 pb-[calc(4.35rem+env(safe-area-inset-bottom))] md:pb-0',
             usesPageScroll ? 'overflow-y-auto' : 'overflow-hidden'
           )}
         >
           <ArtifactRoot>{children}</ArtifactRoot>
         </main>
+        <MobileAppNav />
+        <PwaLifecycle />
         <FeatureRequestWidget />
       </div>
     </SidebarProvider>

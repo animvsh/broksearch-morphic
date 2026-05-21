@@ -802,6 +802,51 @@
     transform: translateZ(0);
   }
 
+  html {
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    touch-action: manipulation;
+  }
+
+  button,
+  a,
+  input,
+  textarea,
+  select {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-app-nav {
+    transform: translateZ(0);
+    will-change: transform;
+  }
+
+  .mobile-app-nav a {
+    min-height: 3.15rem;
+    touch-action: manipulation;
+  }
+
+  @media (display-mode: standalone) {
+    body {
+      user-select: none;
+    }
+
+    input,
+    textarea,
+    [contenteditable='true'] {
+      user-select: text;
+    }
+
+    header {
+      padding-top: env(safe-area-inset-top);
+      height: calc(3.25rem + env(safe-area-inset-top));
+    }
+  }
+
   .morphic-surface {
     background: color-mix(in oklab, white 94%, var(--background));
     border: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
@@ -1382,6 +1427,10 @@
 }
 
 @media (max-width: 767px) {
+  .app-scroll-root {
+    scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+
   .brokmail-shell,
   .brokcode-lovable {
     min-height: calc(100dvh - 3.25rem);
