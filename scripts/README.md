@@ -6,6 +6,26 @@ This directory contains utility scripts for testing and development.
 
 A command-line interface for testing the chat API without a browser client. This script allows you to interact with the chat API directly, making it easier to debug server-side issues and test API functionality.
 
+## smoke-authenticated-platform.ts
+
+Browser smoke harness for protected Brok product surfaces. It can run without
+auth to verify clean redirects, or with an authenticated Playwright storage
+state to prove the signed-in experience.
+
+```bash
+# Unauthenticated smoke, useful for checking login redirects and public routes
+BROK_SMOKE_SCREENSHOTS=false bun run smoke:auth-platform
+
+# Authenticated release gate
+BROK_AUTH_STATE_PATH=/absolute/path/to/storage-state.json \
+BROK_SMOKE_REQUIRE_AUTH=true \
+bun run smoke:auth-platform
+```
+
+Optional credential mode is supported with `BROK_SMOKE_EMAIL` and
+`BROK_SMOKE_PASSWORD`, but storage state is preferred so secrets are never
+written into repo files. Reports are written under `.brok-smoke/`.
+
 ### Features
 
 - Send messages to the chat API via command line

@@ -18,6 +18,7 @@
     "chat": "bun run scripts/chat-cli.ts",
     "smoke:brokcode": "npx --yes tsx --env-file=.env.local scripts/smoke-brokcode.ts",
     "smoke:brokcode:browser": "bun run scripts/smoke-brokcode-browser.ts",
+    "smoke:auth-platform": "PATH=$HOME/.bun/bin:$PATH bun run scripts/smoke-authenticated-platform.ts",
     "smoke:platform": "npx --yes tsx --env-file=.env.local scripts/smoke-platform.ts",
     "stress:platform": "npx --yes tsx --env-file=.env.local scripts/stress-platform.ts"
   },
