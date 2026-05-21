@@ -28,6 +28,11 @@ export function PwaLifecycle() {
       }
     }
 
+    if (document.readyState === 'complete') {
+      void register()
+      return
+    }
+
     window.addEventListener('load', register, { once: true })
     return () => window.removeEventListener('load', register)
   }, [])
