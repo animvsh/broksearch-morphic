@@ -23,6 +23,7 @@ import {
   Inbox,
   Mail,
   MailCheck,
+  MoreHorizontal,
   Paperclip,
   PenLine,
   Reply,
@@ -54,6 +55,12 @@ import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
@@ -128,6 +135,14 @@ const viewLabels: Array<{
   { id: 'calendar', label: 'Calendar', icon: CalendarDays },
   { id: 'automations', label: 'Automations', icon: Zap }
 ]
+
+const primaryCompactViewIds = new Set<MailboxView>([
+  'inbox',
+  'needs-reply',
+  'follow-ups',
+  'drafts',
+  'calendar'
+])
 
 const quickPrompts = [
   'Triage today',
@@ -2111,31 +2126,66 @@ export function BrokMailApp() {
                 </div>
               </div>
               <div className="mobile-chip-row -mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:mt-3 2xl:hidden">
-                {viewLabels.map(item => {
-                  const Icon = item.icon
-                  return (
+                {viewLabels
+                  .filter(item => primaryCompactViewIds.has(item.id))
+                  .map(item => {
+                    const Icon = item.icon
+                    return (
+                      <button
+                        key={item.id}
+                        className={cn(
+                          'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-100',
+                          view === item.id &&
+                            'border-zinc-950 bg-zinc-950 text-white hover:bg-zinc-900'
+                        )}
+                        onClick={() => openMailboxView(item.id)}
+                      >
+                        <Icon className="size-3.5" />
+                        <span>{item.label}</span>
+                        <span
+                          className={cn(
+                            'hidden rounded-full bg-white/70 px-1.5 text-[10px] text-zinc-500 sm:inline-flex',
+                            view === item.id && 'bg-white/15 text-white/80'
+                          )}
+                        >
+                          {counts[item.id]}
+                        </span>
+                      </button>
+                    )
+                  })}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
                     <button
-                      key={item.id}
                       className={cn(
-                        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-100',
-                        view === item.id &&
+                        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-2.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-100',
+                        !primaryCompactViewIds.has(view) &&
                           'border-zinc-950 bg-zinc-950 text-white hover:bg-zinc-900'
                       )}
-                      onClick={() => openMailboxView(item.id)}
                     >
-                      <Icon className="size-3.5" />
-                      <span>{item.label}</span>
-                      <span
-                        className={cn(
-                          'hidden rounded-full bg-white/70 px-1.5 text-[10px] text-zinc-500 sm:inline-flex',
-                          view === item.id && 'bg-white/15 text-white/80'
-                        )}
-                      >
-                        {counts[item.id]}
-                      </span>
+                      <MoreHorizontal className="size-3.5" />
+                      More
                     </button>
-                  )
-                })}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    {viewLabels
+                      .filter(item => !primaryCompactViewIds.has(item.id))
+                      .map(item => {
+                        const Icon = item.icon
+                        return (
+                          <DropdownMenuItem
+                            key={item.id}
+                            onClick={() => openMailboxView(item.id)}
+                          >
+                            <Icon className="size-4" />
+                            <span className="flex-1">{item.label}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {counts[item.id]}
+                            </span>
+                          </DropdownMenuItem>
+                        )
+                      })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
