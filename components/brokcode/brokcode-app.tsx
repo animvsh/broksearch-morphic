@@ -624,6 +624,9 @@ function isBrokCodeWorkspaceUrl(value: string) {
     ) {
       return false
     }
+    if (parsed.pathname.startsWith('/brokcode/apps/')) {
+      return false
+    }
     return parsed.pathname.startsWith('/brokcode')
   } catch {
     return false
