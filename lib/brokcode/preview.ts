@@ -272,13 +272,30 @@ function injectHotReloadScript({
   project: PreviewProject
   files: PreviewFile[]
 }) {
-  if (content.includes('data-brokcode-hot-reload')) return content
+  let html = injectBuiltWithBrokBadge(content)
+
+  if (html.includes('data-brokcode-hot-reload')) return html
 
   const script = buildHotReloadScript({ project, files })
-  if (/<\/body>/i.test(content)) {
-    return content.replace(/<\/body>/i, `${script}</body>`)
+  if (/<\/body>/i.test(html)) {
+    return html.replace(/<\/body>/i, `${script}</body>`)
   }
-  return `${content}${script}`
+  return `${html}${script}`
+}
+
+function buildBuiltWithBrokBadge() {
+  return `<a href="/" target="_blank" rel="noopener noreferrer" data-brokcode-brand-badge style="position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));z-index:2147483647;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(9,9,11,.88);color:#fff;padding:8px 10px;font:600 12px/1 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-decoration:none;box-shadow:0 14px 40px rgba(0,0,0,.22);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);letter-spacing:0;">Built with Brok</a>`
+}
+
+function injectBuiltWithBrokBadge(content: string) {
+  if (content.includes('data-brokcode-brand-badge')) return content
+
+  const badge = buildBuiltWithBrokBadge()
+  if (/<\/body>/i.test(content)) {
+    return content.replace(/<\/body>/i, `${badge}</body>`)
+  }
+
+  return `${content}${badge}`
 }
 
 function buildHotReloadManifest({

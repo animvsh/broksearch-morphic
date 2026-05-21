@@ -33,12 +33,33 @@ describe('BrokCode managed preview', () => {
 
     expect(asset?.content).toContain('<h1>Coffee Shop</h1>')
     expect(asset?.content).toContain('data-brokcode-hot-reload')
+    expect(asset?.content).toContain('data-brokcode-brand-badge')
+    expect(asset?.content).toContain('Built with Brok')
     expect(asset?.isHtml).toBe(true)
     expect(asset).toMatchObject({
       contentType: 'text/html; charset=utf-8',
       path: 'index.html',
       status: 200
     })
+  })
+
+  it('does not duplicate the built with Brok badge when html is already branded', () => {
+    const asset = getManagedPreviewAsset({
+      project,
+      pathParts: ['index.html'],
+      files: [
+        {
+          path: 'index.html',
+          content:
+            '<!doctype html><html><body><h1>Coffee Shop</h1><a data-brokcode-brand-badge>Built with Brok</a></body></html>',
+          language: 'html'
+        }
+      ]
+    })
+
+    const badgeMatches =
+      asset?.content.match(/data-brokcode-brand-badge/g) ?? []
+    expect(badgeMatches).toHaveLength(1)
   })
 
   it('does not treat a placeholder as a renderable managed preview asset', () => {
@@ -65,6 +86,7 @@ describe('BrokCode managed preview', () => {
       files
     })
     expect(placeholder?.content).toContain('BrokCode Cloud preview is ready')
+    expect(placeholder?.content).toContain('Built with Brok')
   })
 
   it('adds restrictive security headers for generated html', () => {
