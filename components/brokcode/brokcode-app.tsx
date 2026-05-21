@@ -3406,20 +3406,20 @@ export function BrokCodeApp({
 
   return (
     <div
-      className="brokcode-buildspace flex h-full min-h-0 w-full flex-col overflow-hidden bg-black text-white"
+      className="brokcode-lovable flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#f6f6f3] text-zinc-950"
       data-testid="brokcode-app"
     >
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-black/90 px-3 py-2 backdrop-blur-md sm:px-5">
+      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 px-3 py-2 backdrop-blur-md sm:px-4">
         <div className="flex h-11 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white text-black shadow-sm">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-900 shadow-sm">
               <Code2 className="size-4" />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold text-white sm:text-base">
+              <h1 className="truncate text-sm font-semibold text-zinc-950 sm:text-base">
                 Brok Code
               </h1>
-              <p className="truncate text-xs text-white/55">
+              <p className="truncate text-xs text-zinc-500">
                 {isRunning
                   ? runStreamingHints[runHintIndex]
                   : getRuntimeLabel(activeRuntime)}
@@ -3427,12 +3427,12 @@ export function BrokCodeApp({
             </div>
           </div>
 
-          <div className="hidden min-w-0 items-center gap-2 text-xs text-white/55 xl:flex">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1">
+          <div className="hidden min-w-0 items-center gap-2 text-xs text-zinc-500 xl:flex">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1">
               <span
                 className={cn(
                   'size-1.5 rounded-full',
-                  hasLiveRuntime ? 'bg-emerald-400' : 'bg-white/25'
+                  hasLiveRuntime ? 'bg-emerald-500' : 'bg-zinc-300'
                 )}
               />
               {hasLiveKey
@@ -3440,15 +3440,15 @@ export function BrokCodeApp({
                 : hasAccountRuntime
                   ? 'Browser ready'
                   : 'Sign in required'}
-              <span className="text-white/25">/</span>
+              <span className="text-zinc-300">/</span>
               <span
                 className={cn(
                   'size-1.5 rounded-full',
                   githubStatus === 'connected'
                     ? 'bg-emerald-400'
                     : githubStatus === 'checking'
-                      ? 'animate-pulse bg-cyan-400'
-                      : 'bg-white/25'
+                      ? 'animate-pulse bg-cyan-500'
+                      : 'bg-zinc-300'
                 )}
               />
               GitHub{' '}
@@ -3457,7 +3457,7 @@ export function BrokCodeApp({
                 : githubStatus === 'checking'
                   ? 'checking'
                   : 'off'}
-              <span className="text-white/25">/</span>
+              <span className="text-zinc-300">/</span>
               <span
                 className={cn(
                   'size-1.5 rounded-full',
@@ -3465,8 +3465,8 @@ export function BrokCodeApp({
                     activeBackend.health === 'online'
                     ? 'bg-emerald-400'
                     : activeBackend.provider === 'insforge'
-                      ? 'bg-cyan-400'
-                      : 'bg-white/25'
+                      ? 'bg-cyan-500'
+                      : 'bg-zinc-300'
                 )}
               />
               {activeBackend.provider === 'insforge'
@@ -3474,7 +3474,7 @@ export function BrokCodeApp({
                 : 'Backend off'}
             </span>
             {isConnectingIntegration && (
-              <span className="truncate rounded-full border border-white/10 bg-white/[0.06] px-2 py-1">
+              <span className="truncate rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1">
                 Connecting {formatToolkitName(isConnectingIntegration)}
               </span>
             )}
@@ -3485,7 +3485,7 @@ export function BrokCodeApp({
               asChild
               variant="ghost"
               size="icon"
-              className="size-9 text-white/65 hover:bg-white/10 hover:text-white"
+              className="size-9 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
               title="Open TUI"
             >
               <Link href="/brokcode/tui">
@@ -3496,7 +3496,7 @@ export function BrokCodeApp({
             <Button
               variant="ghost"
               size="icon"
-              className="size-9 text-white/65 hover:bg-white/10 hover:text-white"
+              className="size-9 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
               disabled={isSharing}
               title="Share chat"
               onClick={() => {
@@ -3519,7 +3519,7 @@ export function BrokCodeApp({
                 <Button
                   variant="outline"
                   size="icon"
-                  className="size-9 border-white/15 bg-white/[0.06] text-white/75 hover:bg-white/10 hover:text-white"
+                  className="size-9 border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
                   data-testid="brokcode-actions-trigger"
                   title="Brok Code actions"
                 >
@@ -3597,28 +3597,27 @@ export function BrokCodeApp({
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto bg-black lg:grid-cols-[minmax(350px,42vw)_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[minmax(390px,560px)_minmax(0,1fr)]">
-        <section className="flex min-h-[54dvh] flex-col overflow-hidden border-b border-white/10 bg-black lg:min-h-0 lg:border-b-0 lg:border-r">
-          <div className="border-b border-white/10 bg-black px-4 py-4 sm:px-7 sm:py-6">
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto bg-[#f6f6f3] lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[minmax(380px,460px)_minmax(0,1fr)]">
+        <section className="flex min-h-[52dvh] flex-col overflow-hidden border-b border-zinc-200/80 bg-white lg:min-h-0 lg:border-b-0 lg:border-r">
+          <div className="border-b border-zinc-200/80 bg-white px-3 py-2 sm:px-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[clamp(2rem,6vw,4.4rem)] font-semibold leading-[0.92] tracking-normal text-white">
-                  build with brok.
+                <p className="text-sm font-semibold text-zinc-950">
+                  Builder chat
                 </p>
-                <p className="mt-3 max-w-sm text-sm leading-6 text-white/52 sm:text-base">
-                  Say what you want. Brok writes the app, keeps the preview
-                  live, and remembers the project.
+                <p className="hidden truncate text-xs text-zinc-500 sm:block">
+                  Tell Brok what to build. The preview updates on the right.
                 </p>
               </div>
               <Badge
-                variant="outline"
-                className="shrink-0 rounded-full border-white/15 bg-white/[0.06] px-3 py-1 text-white"
+                variant={isRunning ? 'default' : 'secondary'}
+                className="shrink-0 rounded-full border-zinc-200 bg-zinc-50 px-2.5 text-zinc-700"
               >
                 {isRunning ? 'Working' : 'Ready'}
               </Badge>
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-7">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
             <div className="flex flex-col gap-3 sm:gap-5">
               <div className="hidden">
                 <SyncedSessionPanel
@@ -3732,13 +3731,13 @@ export function BrokCodeApp({
             </div>
           </div>
 
-          <div className="border-t border-white/10 bg-black/95 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur sm:p-7">
+          <div className="border-t border-zinc-200/80 bg-white/95 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur sm:p-4">
             <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
               {builderQuickPrompts.map(prompt => (
                 <button
                   key={prompt}
                   type="button"
-                  className="shrink-0 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs text-white/62 transition-colors hover:border-white/25 hover:bg-white/10 hover:text-white"
+                  className="shrink-0 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-950"
                   onClick={() => setInput(prompt)}
                 >
                   {prompt}
@@ -3747,7 +3746,7 @@ export function BrokCodeApp({
             </div>
             <div className="w-full">
               <form
-                className="relative flex items-end gap-2 overflow-hidden rounded-none border border-white/15 bg-white p-2 shadow-[0_26px_80px_-42px_rgba(255,255,255,0.5)]"
+                className="relative flex items-end gap-2 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-2 shadow-[0_18px_48px_-34px_rgba(24,24,27,0.5)]"
                 onSubmit={event => {
                   event.preventDefault()
                   runCommand(input)
@@ -3765,7 +3764,7 @@ export function BrokCodeApp({
                     }
                   }}
                   placeholder="Ask Brok Code to build, fix, audit, or ship..."
-                  className="max-h-32 min-h-11 resize-none border-0 bg-transparent text-sm leading-6 text-black placeholder:text-zinc-500 focus-visible:ring-0 focus-visible:ring-offset-0 sm:max-h-36 sm:min-h-12"
+                  className="max-h-32 min-h-11 resize-none border-0 bg-transparent text-sm leading-6 text-zinc-950 placeholder:text-zinc-400 focus-visible:ring-0 focus-visible:ring-offset-0 sm:max-h-36 sm:min-h-12"
                 />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -3773,7 +3772,7 @@ export function BrokCodeApp({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="mb-1 size-9 shrink-0 text-zinc-500 hover:bg-zinc-100 hover:text-black"
+                      className="mb-1 size-9 shrink-0 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-950"
                       disabled={isRunning}
                       title="Example commands"
                     >
@@ -3797,7 +3796,7 @@ export function BrokCodeApp({
                 <Button
                   type="submit"
                   size="icon"
-                  className="mb-1 size-9 shrink-0 rounded-none bg-black text-white hover:bg-zinc-800"
+                  className="mb-1 size-9 shrink-0 rounded-xl bg-zinc-950 text-white hover:bg-zinc-800"
                   data-testid="brokcode-command-submit"
                   disabled={isRunning || !input.trim()}
                 >
@@ -3809,19 +3808,18 @@ export function BrokCodeApp({
           </div>
         </section>
 
-        <aside className="relative flex min-h-[48dvh] flex-col overflow-hidden bg-[#10100f] lg:min-h-0">
-          <div className="pointer-events-none absolute inset-0 opacity-70 [background:linear-gradient(90deg,rgba(0,0,0,0.55)_0%,rgba(0,0,0,0.12)_38%,rgba(255,255,255,0.05)_100%)]" />
-          <div className="relative z-10 border-b border-white/10 bg-black/35 px-3 py-2 backdrop-blur">
+        <aside className="flex min-h-[48dvh] flex-col overflow-hidden bg-[#f3f2ee] lg:min-h-0">
+          <div className="border-b border-zinc-200/80 bg-white/90 px-3 py-2 backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">Preview</p>
-                <p className="truncate text-xs text-white/52">
+                <p className="text-sm font-semibold text-zinc-950">Preview</p>
+                <p className="truncate text-xs text-zinc-500">
                   Live cloud canvas. Generated files hot-reload here.
                 </p>
               </div>
               <Badge
                 variant="outline"
-                className="shrink-0 rounded-full border-white/15 bg-white/[0.08] text-white"
+                className="shrink-0 rounded-full border-zinc-200 bg-zinc-50 text-zinc-700"
               >
                 {previewHealth.status === 'online'
                   ? 'Live'
@@ -3836,14 +3834,14 @@ export function BrokCodeApp({
             </div>
           </div>
 
-          <div className="relative z-10 min-h-0 flex-1 p-2 sm:p-3">
-            <div className="mb-2 border border-white/10 bg-black/45 p-2 text-xs text-white/58 shadow-[0_28px_90px_-56px_rgba(0,0,0,0.85)] backdrop-blur">
+          <div className="min-h-0 flex-1 p-2">
+            <div className="mb-2 rounded-lg border border-zinc-200 bg-white p-2 text-xs text-zinc-600 shadow-sm">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <p className="font-medium text-white">
+                  <p className="font-medium text-zinc-950">
                     {activeProject?.name ?? 'No project yet'}
                   </p>
-                  <p className="truncate text-white/45">
+                  <p className="truncate text-zinc-500">
                     {activeBackend.provider === 'insforge'
                       ? activeBackend.projectUrl ||
                         'InsForge project URL not set'
@@ -3873,7 +3871,7 @@ export function BrokCodeApp({
                   )}
                   <Badge
                     variant="outline"
-                    className="shrink-0 rounded-full border-white/15 bg-white/[0.08] text-white/75"
+                    className="shrink-0 rounded-full border-zinc-200 bg-zinc-50 text-zinc-700"
                   >
                     {activeBackend.provider === 'insforge'
                       ? activeBackend.health === 'online'
@@ -3889,7 +3887,7 @@ export function BrokCodeApp({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 rounded-none border-white/15 bg-white text-black px-3 text-xs hover:bg-white/90"
+                      className="h-8 rounded-full px-3 text-xs"
                       disabled={backendChecking}
                       onClick={() => {
                         void checkBackendHealth()
@@ -3924,7 +3922,7 @@ export function BrokCodeApp({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 rounded-none border-white/15 bg-white px-3 text-xs text-black hover:bg-white/90"
+                    className="h-8 rounded-full px-3 text-xs"
                     disabled={backendProvisioning || !hasLiveRuntime}
                     onClick={() => {
                       void provisionInsForgeBackend()
@@ -3942,7 +3940,7 @@ export function BrokCodeApp({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 rounded-none px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+                    className="h-8 rounded-full px-3 text-xs text-zinc-600"
                     onClick={() =>
                       loadPreviewUrlIfAllowed(activeProject.previewUrl)
                     }
@@ -4157,22 +4155,22 @@ function ChatBubble({
       )}
     >
       {!isUser && !isSystem && (
-        <div className="hidden size-8 shrink-0 items-center justify-center rounded-none border border-white/15 bg-white text-black sm:flex">
+        <div className="hidden size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-950 text-white sm:flex">
           <Bot className="size-4" />
         </div>
       )}
       <div
         className={cn(
-          'max-w-[min(100%,42rem)] rounded-none border p-3 text-sm leading-6 shadow-[0_26px_72px_-48px_rgba(0,0,0,0.9)] sm:p-4',
-          isUser && 'border-white bg-white text-black',
+          'max-w-[min(100%,42rem)] rounded-2xl border p-3 text-sm leading-6 shadow-[0_18px_46px_-38px_rgba(24,24,27,0.55)] sm:p-4',
+          isUser && 'border-zinc-950 bg-zinc-950 text-white',
           isSystem &&
-            'border-dashed border-white/15 bg-white/[0.06] py-2 text-xs text-white/52 shadow-none',
-          !isUser && !isSystem && 'border-white/10 bg-white/[0.055] text-white'
+            'border-dashed border-zinc-200 bg-zinc-50 py-2 text-xs text-zinc-500 shadow-none',
+          !isUser && !isSystem && 'border-zinc-200 bg-white text-zinc-950'
         )}
       >
         {!isUser && !isSystem && (
-          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-2 py-1 text-[11px] font-medium text-white/50">
-            <span className="size-1.5 rounded-full bg-emerald-400" />
+          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] font-medium text-zinc-500">
+            <span className="size-1.5 rounded-full bg-emerald-500" />
             Brok Code
           </div>
         )}
@@ -4259,7 +4257,7 @@ function ChatBubble({
         )}
       </div>
       {isUser && (
-        <div className="hidden size-8 shrink-0 items-center justify-center rounded-none border border-white/15 bg-white/[0.06] text-white/70 sm:flex">
+        <div className="hidden size-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-600 sm:flex">
           <User className="size-4" />
         </div>
       )}
@@ -4319,17 +4317,17 @@ function AgentReasoningBar({
   const isCancelling = Boolean(run?.taskId) && cancellingTaskId === run?.taskId
 
   return (
-    <div className="mr-auto w-full max-w-[min(100%,42rem)] rounded-none border border-white/10 bg-white/[0.06] p-3 text-white shadow-[0_28px_72px_-56px_rgba(0,0,0,0.95)]">
+    <div className="mr-auto w-full max-w-[min(100%,42rem)] rounded-2xl border border-zinc-200 bg-zinc-50 p-3 text-zinc-950 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <div
             className={cn(
-              'flex size-7 shrink-0 items-center justify-center rounded-none',
+              'flex size-7 shrink-0 items-center justify-center rounded-lg text-white',
               status === 'error'
-                ? 'bg-rose-500 text-white'
+                ? 'bg-rose-500'
                 : status === 'done'
-                  ? 'bg-emerald-400 text-black'
-                  : 'bg-white text-black'
+                  ? 'bg-emerald-500'
+                  : 'bg-zinc-950'
             )}
           >
             {status === 'done' ? (
@@ -4342,7 +4340,7 @@ function AgentReasoningBar({
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium">{label}</p>
-            <p className="truncate text-xs text-white/52">{detail}</p>
+            <p className="truncate text-xs text-zinc-500">{detail}</p>
           </div>
         </div>
         {status === 'running' && (
@@ -4353,15 +4351,15 @@ function AgentReasoningBar({
           </span>
         )}
       </div>
-      <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
+      <div className="mt-3 h-1 overflow-hidden rounded-full bg-zinc-200">
         <div
           className={cn(
             'h-full rounded-full transition-all duration-500',
             status === 'error'
               ? 'bg-rose-500'
               : status === 'done'
-                ? 'bg-emerald-400'
-                : 'bg-white'
+                ? 'bg-emerald-500'
+                : 'bg-zinc-950'
           )}
           style={{ width: `${progress}%` }}
         />
@@ -4576,15 +4574,15 @@ function BrowserPreviewPanel({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden border border-white/10 bg-black/55 shadow-[0_34px_110px_-62px_rgba(0,0,0,0.95)] backdrop-blur"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_30px_80px_-58px_rgba(24,24,27,0.6)] sm:rounded-2xl"
       data-testid="brokcode-preview-panel"
     >
-      <div className="flex flex-col gap-2 border-b border-white/10 bg-black/45 p-2.5 sm:flex-row sm:items-center">
-        <div className="min-w-0 flex-1 border border-white/10 bg-white/[0.06] px-3 py-2">
-          <p className="truncate text-xs font-semibold text-white">
+      <div className="flex flex-col gap-2 border-b border-zinc-200/80 bg-white p-2.5 sm:flex-row sm:items-center">
+        <div className="min-w-0 flex-1 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-2">
+          <p className="truncate text-xs font-semibold text-zinc-950">
             {hasPreviewUrl ? 'Cloud preview' : 'Preview is waiting'}
           </p>
-          <p className="truncate text-[11px] text-white/45">
+          <p className="truncate text-[11px] text-zinc-500">
             {hasPreviewUrl
               ? previewInput || previewUrl
               : 'Brok opens the generated app here after the first build.'}
@@ -4609,7 +4607,7 @@ function BrowserPreviewPanel({
               <Button
                 variant="outline"
                 size="icon"
-                className="size-9 shrink-0 rounded-none border-white/15 bg-white text-black hover:bg-white/90"
+                className="size-9 shrink-0 rounded-full"
                 title="Load preview"
               >
                 <Globe className="size-4" />
@@ -4636,7 +4634,7 @@ function BrowserPreviewPanel({
           <Button
             variant="outline"
             size="icon"
-            className="size-9 shrink-0 rounded-none border-white/15 bg-white text-black hover:bg-white/90"
+            className="size-9 shrink-0 rounded-full"
             onClick={onReload}
             title="Reload preview"
           >
@@ -4648,7 +4646,7 @@ function BrowserPreviewPanel({
               asChild
               variant="outline"
               size="icon"
-              className="size-9 shrink-0 rounded-none border-white/15 bg-white text-black hover:bg-white/90"
+              className="size-9 shrink-0 rounded-full"
               title="Open preview in new tab"
             >
               <a href={previewUrl} target="_blank" rel="noreferrer">
@@ -4660,7 +4658,7 @@ function BrowserPreviewPanel({
             <Button
               variant="outline"
               size="icon"
-              className="size-9 shrink-0 rounded-none border-white/15 bg-white/20 text-white/45"
+              className="size-9 shrink-0 rounded-full"
               title="Open preview in new tab"
               disabled
             >
@@ -4671,14 +4669,14 @@ function BrowserPreviewPanel({
         </div>
       </div>
 
-      <div className="flex min-h-9 items-center justify-between gap-3 border-b border-white/10 bg-black/35 px-4 text-xs text-white/48">
+      <div className="flex min-h-9 items-center justify-between gap-3 border-b border-zinc-200/70 bg-white px-4 text-xs text-zinc-500">
         <p className="truncate">
           {previewMessage}
           {previewHealth.httpStatus ? ` (${previewHealth.httpStatus})` : ''}
         </p>
         {latestRun?.previewUrl && (
           <button
-            className="hidden max-w-[45%] truncate rounded-full border border-white/10 bg-white/[0.08] px-2.5 py-1 text-white/70 hover:bg-white/[0.12] xl:inline-flex"
+            className="hidden max-w-[45%] truncate rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-zinc-700 hover:bg-zinc-100 xl:inline-flex"
             onClick={() => onDirectLoad(latestRun.previewUrl ?? previewUrl)}
           >
             Use last run: {latestRun.previewUrl}
@@ -4687,7 +4685,7 @@ function BrowserPreviewPanel({
       </div>
 
       {isRunning && hasPreviewUrl && (
-        <div className="mx-2 mt-2 flex items-center gap-2 border border-white/15 bg-white/[0.08] px-3 py-2 text-xs text-white">
+        <div className="mx-2 mt-2 flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950">
           <RefreshCcw className="size-3.5 animate-spin" />
           Updating this cloud preview. The visible app is the last saved version
           until Brok finishes writing files.
@@ -4695,17 +4693,17 @@ function BrowserPreviewPanel({
       )}
 
       {runtimeError && (
-        <p className="m-2 border border-amber-300/50 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+        <p className="m-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
           {runtimeError}
         </p>
       )}
 
       {latestRun?.previewUrl && (
-        <div className="mx-2 mt-2 flex items-center gap-2 border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white/50 xl:hidden">
+        <div className="mx-2 mt-2 flex items-center gap-2 rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 xl:hidden">
           <Globe className="size-3.5" />
           Suggested from last run:
           <button
-            className="truncate text-white underline"
+            className="truncate text-zinc-950 underline"
             onClick={() => onDirectLoad(latestRun.previewUrl ?? previewUrl)}
           >
             {latestRun.previewUrl}
@@ -4713,24 +4711,24 @@ function BrowserPreviewPanel({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-hidden bg-[#141411]">
+      <div className="min-h-0 flex-1 overflow-hidden bg-white">
         {!hasPreviewUrl ? (
-          <div className="flex h-full min-h-[330px] w-full items-center justify-center bg-[radial-gradient(circle_at_65%_20%,rgba(255,255,255,0.13),transparent_28%),linear-gradient(135deg,#161614_0%,#2b2922_52%,#080808_100%)] px-6 text-center sm:min-h-[520px]">
+          <div className="flex h-full min-h-[330px] w-full items-center justify-center bg-[#fbfaf8] px-6 text-center sm:min-h-[520px]">
             <div className="max-w-sm">
-              <div className="mx-auto flex size-11 items-center justify-center border border-white/15 bg-white text-black shadow-sm">
-                <Monitor className="size-5" />
+              <div className="mx-auto flex size-11 items-center justify-center rounded-xl border border-zinc-200 bg-white shadow-sm">
+                <Monitor className="size-5 text-zinc-500" />
               </div>
-              <p className="mt-3 text-sm font-medium text-white">
+              <p className="mt-3 text-sm font-medium text-zinc-950">
                 Tell Brok what to build
               </p>
-              <p className="mt-1 text-xs leading-5 text-white/52">
+              <p className="mt-1 text-xs leading-5 text-zinc-500">
                 The cloud preview opens here automatically when the first build
                 finishes.
               </p>
             </div>
           </div>
         ) : isBlockedPreview ? (
-          <div className="flex h-full min-h-[330px] w-full items-center justify-center bg-black px-6 text-center text-sm text-white/52 sm:min-h-[520px]">
+          <div className="flex h-full min-h-[330px] w-full items-center justify-center bg-zinc-50 px-6 text-center text-sm text-zinc-500 sm:min-h-[520px]">
             BrokCode preview cannot render the BrokCode app itself. Load your
             generated app URL instead.
           </div>
@@ -4749,7 +4747,7 @@ function BrowserPreviewPanel({
               sandbox="allow-forms allow-modals allow-popups allow-scripts"
             />
             {isRunning && (
-              <div className="pointer-events-none absolute left-3 top-3 border border-white/15 bg-black/80 px-3 py-1.5 text-xs font-medium text-white shadow-sm backdrop-blur">
+              <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-zinc-200 bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm backdrop-blur">
                 Updating preview...
               </div>
             )}
