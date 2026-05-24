@@ -6,12 +6,19 @@ import {
 } from '@/lib/brokcode/account-guard'
 import { publicBrokCodeBackendMetadata } from '@/lib/brokcode/backend-provider'
 import {
+  applyBrokCodeFileOperations,
+  BrokCodeFileOperation,
+  BrokCodeFileOperationError
+} from '@/lib/brokcode/file-operations'
+import {
   type GeneratedBrokCodeFile,
   prepareGeneratedBrokCodeFiles
 } from '@/lib/brokcode/generated-files'
 import {
+  deleteBrokCodeProjectFile,
   getBrokCodeProject,
   listBrokCodeProjectFiles,
+  renameBrokCodeProjectFile,
   upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
 import { createBrokCodeRuntimeSpec } from '@/lib/brokcode/runtime/contract'
@@ -172,4 +179,102 @@ export async function PUT(
     }
     throw error
   }
+}
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  const access = await authorizeProject(request, id)
+  if (!access.ok) return access.response
+
+  const body = (await request.json().catch(() => null)) as {
+    operations?: unknown
+    conflictResolution?: unknown
+  } | null
+  const operations = Array.isArray(body?.operations)
+    ? (body.operations as BrokCodeFileOperation[])
+    : []
+  const applyAnyway = body?.conflictResolution === 'apply_anyway'
+  if (operations.length === 0) {
+    return NextResponse.json(
+      { error: 'At least one file operation is required.' },
+      { status: 400 }
+    )
+  }
+
+  const currentFiles = await listBrokCodeProjectFiles({
+    projectId: access.project.id,
+    workspaceId: access.authResult.workspace.id
+  })
+
+  let applied: ReturnType<typeof applyBrokCodeFileOperations>
+  try {
+    applied = applyBrokCodeFileOperations({
+      files: currentFiles,
+      operations,
+      applyAnyway
+    })
+  } catch (error) {
+    if (error instanceof BrokCodeFileOperationError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: error.code,
+          conflicts: error.conflicts,
+          resolutionChoices: [
+            'apply_anyway',
+            'review_diff',
+            'retry_latest_context'
+          ]
+        },
+        { status: error.code === 'conflict' ? 409 : 400 }
+      )
+    }
+    throw error
+  }
+
+  const byPath = new Map(applied.files.map(file => [file.path, file]))
+  for (const change of applied.changes) {
+    if (change.type === 'delete_file') {
+      await deleteBrokCodeProjectFile({
+        projectId: access.project.id,
+        workspaceId: access.authResult.workspace.id,
+        path: change.path
+      })
+      continue
+    }
+
+    if (change.type === 'rename_file' && change.toPath) {
+      await renameBrokCodeProjectFile({
+        projectId: access.project.id,
+        workspaceId: access.authResult.workspace.id,
+        fromPath: change.path,
+        toPath: change.toPath
+      })
+      continue
+    }
+
+    const file = byPath.get(change.path)
+    if (!file) continue
+    await upsertBrokCodeProjectFile({
+      projectId: access.project.id,
+      workspaceId: access.authResult.workspace.id,
+      path: file.path,
+      content: file.content,
+      language: file.language
+    })
+  }
+
+  const allFiles = await listBrokCodeProjectFiles({
+    projectId: access.project.id,
+    workspaceId: access.authResult.workspace.id
+  })
+
+  return NextResponse.json({
+    changes: applied.changes,
+    files: allFiles,
+    resolutionChoices: ['review_diff', 'retry_latest_context']
+  })
 }

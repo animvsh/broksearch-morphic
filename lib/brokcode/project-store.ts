@@ -822,6 +822,117 @@ export async function upsertBrokCodeProjectFile({
   return upsertedFile
 }
 
+export async function deleteBrokCodeProjectFile({
+  projectId,
+  workspaceId,
+  path
+}: {
+  projectId: string
+  workspaceId: string
+  path: string
+}) {
+  const now = new Date()
+  if (canUseDatabaseStore()) {
+    try {
+      await db
+        .delete(brokCodeProjectFiles)
+        .where(
+          and(
+            eq(brokCodeProjectFiles.projectId, projectId),
+            eq(brokCodeProjectFiles.workspaceId, workspaceId),
+            eq(brokCodeProjectFiles.path, path)
+          )
+        )
+      await db
+        .update(brokCodeProjects)
+        .set({ updatedAt: now })
+        .where(eq(brokCodeProjects.id, projectId))
+      return
+    } catch (error) {
+      console.error(
+        'BrokCode project file DB delete failed; using file store:',
+        error
+      )
+    }
+  }
+
+  await queueProjectStoreWrite(store => ({
+    ...store,
+    files: store.files.filter(
+      file =>
+        !(
+          file.projectId === projectId &&
+          file.workspaceId === workspaceId &&
+          file.path === path
+        )
+    ),
+    projects: store.projects.map(project =>
+      project.id === projectId ? { ...project, updatedAt: now } : project
+    )
+  }))
+}
+
+export async function renameBrokCodeProjectFile({
+  projectId,
+  workspaceId,
+  fromPath,
+  toPath
+}: {
+  projectId: string
+  workspaceId: string
+  fromPath: string
+  toPath: string
+}) {
+  const now = new Date()
+  if (canUseDatabaseStore()) {
+    try {
+      const [file] = await db
+        .update(brokCodeProjectFiles)
+        .set({ path: toPath, updatedAt: now })
+        .where(
+          and(
+            eq(brokCodeProjectFiles.projectId, projectId),
+            eq(brokCodeProjectFiles.workspaceId, workspaceId),
+            eq(brokCodeProjectFiles.path, fromPath)
+          )
+        )
+        .returning()
+      await db
+        .update(brokCodeProjects)
+        .set({ updatedAt: now })
+        .where(eq(brokCodeProjects.id, projectId))
+      return file ?? null
+    } catch (error) {
+      console.error(
+        'BrokCode project file DB rename failed; using file store:',
+        error
+      )
+    }
+  }
+
+  let renamedFile: BrokCodeProjectFile | null = null
+  await queueProjectStoreWrite(store => ({
+    ...store,
+    files: store.files.map(file => {
+      if (
+        file.projectId !== projectId ||
+        file.workspaceId !== workspaceId ||
+        file.path !== fromPath
+      ) {
+        return file
+      }
+
+      renamedFile = { ...file, path: toPath, updatedAt: now }
+      return renamedFile
+    }),
+    projects: store.projects.map(project =>
+      project.id === projectId ? { ...project, updatedAt: now } : project
+    )
+  }))
+
+  return renamedFile
+}
+
 function inferLanguage(path: string) {
   if (path.endsWith('.tsx')) return 'tsx'
   if (path.endsWith('.ts')) return 'ts'

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildFallbackGeneratedAppFiles,
+  extractGeneratedBrokCodeFileOperations,
   extractGeneratedBrokCodeFiles,
   inspectGeneratedBrokCodeAppQuality,
   prepareGeneratedBrokCodeFiles,
@@ -63,6 +64,31 @@ console.log("ok")
 `)
 
     expect(files.map(file => file.path)).toEqual(['safe/app.js'])
+  })
+
+  it('extracts explicit file operations from model JSON fences', () => {
+    const operations = extractGeneratedBrokCodeFileOperations(`
+\`\`\`json filename=brokcode.operations.json
+{
+  "operations": [
+    {
+      "type": "patch_file",
+      "path": "src/App.tsx",
+      "expectedChecksum": "abc",
+      "search": "Old",
+      "replace": "New"
+    }
+  ]
+}
+\`\`\`
+`)
+
+    expect(operations).toHaveLength(1)
+    expect(operations[0]).toMatchObject({
+      type: 'patch_file',
+      path: 'src/App.tsx',
+      expectedChecksum: 'abc'
+    })
   })
 
   it('adds baseline preview hygiene to weak html files', () => {
