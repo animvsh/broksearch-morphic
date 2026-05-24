@@ -13,6 +13,7 @@ import {
   BrokCodeRuntimeStatus,
   createBrokCodeRuntimeSpec
 } from '@/lib/brokcode/runtime/contract'
+import { startBrokCodeRuntimeProcess } from '@/lib/brokcode/runtime/process-manager'
 import {
   createBrokCodeRuntimeSandbox,
   getLatestBrokCodeRuntimeSandbox,
@@ -108,6 +109,7 @@ export async function POST(
     context?: unknown
     status?: unknown
     force?: unknown
+    start?: unknown
   } | null
   const files = await listBrokCodeProjectFiles({
     projectId: access.project.id,
@@ -171,11 +173,25 @@ export async function POST(
       : await createBrokCodeRuntimeSandbox({
           spec: runtimeSpec
         })
+  const livePreview =
+    body?.start === true && runtime
+      ? await startBrokCodeRuntimeProcess({
+          runtime,
+          manifest: materialized.manifest
+        })
+      : null
 
   return NextResponse.json({
     runtime,
     spec: runtimeSpec,
     workspace: materialized.manifest,
+    livePreview: livePreview
+      ? {
+          status: livePreview.status,
+          port: livePreview.port,
+          previewUrl: `/api/brokcode/runtime/${encodeURIComponent(livePreview.runtimeId)}/`
+        }
+      : null,
     fallback: runtimeFallback()
   })
 }

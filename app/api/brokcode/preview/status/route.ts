@@ -134,7 +134,8 @@ export async function GET(request: NextRequest) {
 
   if (
     url.origin === publicOrigin &&
-    url.pathname.startsWith('/api/brokcode/previews/')
+    (url.pathname.startsWith('/api/brokcode/previews/') ||
+      url.pathname.startsWith('/api/brokcode/runtime/'))
   ) {
     return jsonNoStore({
       ok: true,
