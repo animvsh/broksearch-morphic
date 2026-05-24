@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createConnectedAccountLink } from '../composio'
+import { createConnectedAccountLink, listConnectedAccounts } from '../composio'
 
 describe('Composio integration', () => {
   afterEach(() => {
@@ -145,6 +145,18 @@ describe('Composio integration', () => {
 
     expect(requestedUrls).toEqual(['https://connect.composio.dev/mcp'])
     expect(toolkitNames).toEqual([[{ name: 'googleslides', action: 'add' }]])
+  })
+
+  it('keeps Connect MCP account listing non-blocking when a toolkit status request fails', async () => {
+    process.env.COMPOSIO_CONNECT_KEY = 'ck_test_connect_key'
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('', { status: 500 })
+    )
+
+    await expect(
+      listConnectedAccounts('user_123', 'googleslides')
+    ).resolves.toEqual([])
   })
 
   it('accepts v3.1 auth configs where toolkit is an object with a slug', async () => {

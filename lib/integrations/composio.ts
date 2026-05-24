@@ -614,21 +614,11 @@ export async function listConnectedAccounts(
     )
 
     const combined: ComposioConnectedAccount[] = []
-    let firstError: Error | null = null
 
     for (const item of settled) {
       if (item.status === 'fulfilled') {
         combined.push(...item.value)
-      } else if (!firstError) {
-        firstError =
-          item.reason instanceof Error
-            ? item.reason
-            : new Error('Failed to query Composio Connect accounts')
       }
-    }
-
-    if (combined.length === 0 && firstError) {
-      throw firstError
     }
 
     return combined.slice(0, limit)
