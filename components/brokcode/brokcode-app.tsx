@@ -28,11 +28,13 @@ import {
   ListChecks,
   Monitor,
   MoreHorizontal,
+  Pencil,
   Play,
   PlugZap,
   Radar,
   RefreshCcw,
   Rocket,
+  Save,
   Send,
   Share2,
   TerminalSquare,
@@ -295,6 +297,14 @@ type BrokCodeRuntimeDiagnostics = {
     url?: string
     startedAt?: string
   } | null
+}
+
+type BrokCodeProjectFile = {
+  id?: string
+  path: string
+  content: string
+  language?: string | null
+  updatedAt?: string
 }
 
 type BrokCodeStreamResult = {
@@ -1083,6 +1093,16 @@ export function BrokCodeApp({
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [projects, setProjects] = useState<BrokCodeProject[]>([])
   const [activeProjectId, setActiveProjectId] = useState('')
+  const [projectFiles, setProjectFiles] = useState<BrokCodeProjectFile[]>([])
+  const [projectFilesLoading, setProjectFilesLoading] = useState(false)
+  const [projectFilesError, setProjectFilesError] = useState<string | null>(
+    null
+  )
+  const [selectedFilePath, setSelectedFilePath] = useState('')
+  const selectedFilePathRef = useRef('')
+  const [fileDraft, setFileDraft] = useState('')
+  const [fileEditMode, setFileEditMode] = useState(false)
+  const [fileSaving, setFileSaving] = useState(false)
   const [projectRuntime, setProjectRuntime] =
     useState<BrokCodeRuntimeSandbox | null>(null)
   const [runtimeDiagnostics, setRuntimeDiagnostics] =
@@ -1232,6 +1252,17 @@ export function BrokCodeApp({
       health: 'unknown',
       adminKeyConfigured: false
     } satisfies BrokCodeBackendMetadata)
+  const selectedProjectFile =
+    projectFiles.find(file => file.path === selectedFilePath) ??
+    projectFiles[0] ??
+    null
+  const hasUnsavedFileChanges =
+    Boolean(selectedProjectFile) && fileDraft !== selectedProjectFile?.content
+
+  useEffect(() => {
+    selectedFilePathRef.current = selectedFilePath
+  }, [selectedFilePath])
+
   const activeSyncSession = useMemo(
     () =>
       syncedSessions.find(session => session.id === syncSessionId) ??
@@ -1487,6 +1518,62 @@ export function BrokCodeApp({
     [activeProject, apiKey, getAuthHeaders]
   )
 
+  const refreshProjectFiles = useCallback(
+    async (project = activeProject, key = apiKey) => {
+      if (!project?.id) {
+        setProjectFiles([])
+        setSelectedFilePath('')
+        setFileDraft('')
+        return []
+      }
+      if (key && !isValidBrokApiKey(key)) {
+        setProjectFiles([])
+        return []
+      }
+
+      setProjectFilesLoading(true)
+      setProjectFilesError(null)
+      try {
+        const response = await fetch(
+          `/api/brokcode/projects/${encodeURIComponent(project.id)}/files`,
+          {
+            headers: getAuthHeaders(key)
+          }
+        )
+        const body = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(body?.error ?? 'Could not load project files.')
+        }
+
+        const files = Array.isArray(body?.files)
+          ? (body.files as BrokCodeProjectFile[])
+          : []
+        setProjectFiles(files)
+        const currentFilePath = selectedFilePathRef.current
+        const nextSelected =
+          currentFilePath && files.some(file => file.path === currentFilePath)
+            ? currentFilePath
+            : (files[0]?.path ?? '')
+        setSelectedFilePath(nextSelected)
+        setFileDraft(
+          files.find(file => file.path === nextSelected)?.content ?? ''
+        )
+        setFileEditMode(false)
+        return files
+      } catch (error) {
+        setProjectFilesError(
+          error instanceof Error
+            ? error.message
+            : 'Could not load project files.'
+        )
+        return []
+      } finally {
+        setProjectFilesLoading(false)
+      }
+    },
+    [activeProject, apiKey, getAuthHeaders]
+  )
+
   const refreshRuntimeDiagnostics = useCallback(
     async (runtime = projectRuntime) => {
       if (!runtime?.id) {
@@ -1578,6 +1665,10 @@ export function BrokCodeApp({
   useEffect(() => {
     void refreshProjectRuntime()
   }, [refreshProjectRuntime])
+
+  useEffect(() => {
+    void refreshProjectFiles()
+  }, [refreshProjectFiles])
 
   useEffect(() => {
     if (!projectRuntime?.id) {
@@ -2233,6 +2324,58 @@ export function BrokCodeApp({
       )
     } finally {
       setCancellingTaskId(null)
+    }
+  }
+
+  function selectProjectFile(path: string) {
+    if (hasUnsavedFileChanges) {
+      const proceed = window.confirm(
+        'You have unsaved file edits. Discard them and switch files?'
+      )
+      if (!proceed) return
+    }
+
+    const file = projectFiles.find(candidate => candidate.path === path)
+    setSelectedFilePath(path)
+    setFileDraft(file?.content ?? '')
+    setFileEditMode(false)
+  }
+
+  async function saveProjectFile() {
+    if (!activeProject?.id || !selectedProjectFile) return
+
+    setFileSaving(true)
+    setRuntimeError(null)
+    try {
+      const response = await fetch(
+        `/api/brokcode/projects/${encodeURIComponent(activeProject.id)}/files`,
+        {
+          method: 'PUT',
+          headers: {
+            ...getAuthHeaders(apiKey),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            path: selectedProjectFile.path,
+            content: fileDraft,
+            language: selectedProjectFile.language
+          })
+        }
+      )
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.error ?? 'Could not save file.')
+      }
+      await refreshProjectFiles(activeProject)
+      await refreshProjectRuntime(activeProject)
+      setPreviewFrameKey(key => key + 1)
+      setFileEditMode(false)
+    } catch (error) {
+      setRuntimeError(
+        error instanceof Error ? error.message : 'Could not save file.'
+      )
+    } finally {
+      setFileSaving(false)
     }
   }
 
@@ -3154,6 +3297,12 @@ export function BrokCodeApp({
   async function runCommand(command: string) {
     const trimmed = command.trim()
     if (!trimmed || isRunning) return
+    if (hasUnsavedFileChanges) {
+      const proceed = window.confirm(
+        'You have unsaved file edits. Run BrokCode without saving them?'
+      )
+      if (!proceed) return
+    }
 
     const integrationToolkit = detectIntegrationConnectIntent(trimmed)
     if (integrationToolkit) {
@@ -3390,6 +3539,7 @@ export function BrokCodeApp({
           projectId: runProject.id,
           files: generatedFiles
         })
+        await refreshProjectFiles(runProject)
         runRuntime = await createProjectRuntimeRecord({
           project: runProject,
           status: 'building'
@@ -4511,6 +4661,25 @@ export function BrokCodeApp({
                 )}
               </div>
             </div>
+            <ProjectFilesPanel
+              files={projectFiles}
+              loading={projectFilesLoading}
+              error={projectFilesError}
+              selectedFile={selectedProjectFile}
+              draft={fileDraft}
+              editMode={fileEditMode}
+              saving={fileSaving}
+              hasUnsavedChanges={hasUnsavedFileChanges}
+              onSelectFile={selectProjectFile}
+              onDraftChange={setFileDraft}
+              onEditModeChange={setFileEditMode}
+              onSave={() => {
+                void saveProjectFile()
+              }}
+              onRefresh={() => {
+                void refreshProjectFiles()
+              }}
+            />
             <BrowserPreviewPanel
               isRunning={isRunning}
               previewInput={previewInput}
@@ -5087,6 +5256,391 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function languageLabel(file: BrokCodeProjectFile | null) {
+  if (!file) return 'File'
+  if (file.language) return file.language.toUpperCase()
+  const ext = file.path.split('.').pop()
+  return ext ? ext.toUpperCase() : 'TXT'
+}
+
+function isUnsupportedViewerFile(file: BrokCodeProjectFile | null) {
+  if (!file) return false
+  return /\.(png|jpe?g|gif|webp|ico|pdf|zip|woff2?)$/i.test(file.path)
+}
+
+type HighlightTone =
+  | 'plain'
+  | 'keyword'
+  | 'string'
+  | 'number'
+  | 'comment'
+  | 'punctuation'
+  | 'property'
+  | 'tag'
+  | 'heading'
+
+type HighlightSegment = {
+  text: string
+  tone: HighlightTone
+}
+
+const javascriptKeywords = new Set([
+  'as',
+  'async',
+  'await',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'default',
+  'else',
+  'export',
+  'extends',
+  'false',
+  'for',
+  'from',
+  'function',
+  'if',
+  'import',
+  'interface',
+  'let',
+  'new',
+  'null',
+  'return',
+  'switch',
+  'throw',
+  'true',
+  'try',
+  'type',
+  'undefined',
+  'var',
+  'while'
+])
+
+function getFileLanguage(file: BrokCodeProjectFile | null) {
+  const explicit = file?.language?.toLowerCase()
+  if (explicit) return explicit
+  const extension = file?.path.split('.').pop()?.toLowerCase()
+  if (extension === 'tsx') return 'tsx'
+  if (extension === 'ts') return 'typescript'
+  if (extension === 'jsx') return 'jsx'
+  if (extension === 'js') return 'javascript'
+  if (extension === 'html') return 'html'
+  if (extension === 'css') return 'css'
+  if (extension === 'json') return 'json'
+  if (extension === 'md' || extension === 'mdx') return 'markdown'
+  return extension ?? 'text'
+}
+
+function segmentWithPattern(
+  line: string,
+  pattern: RegExp,
+  classify: (token: string) => HighlightTone
+): HighlightSegment[] {
+  const segments: HighlightSegment[] = []
+  let cursor = 0
+
+  for (const match of line.matchAll(pattern)) {
+    const token = match[0]
+    const index = match.index ?? 0
+    if (index > cursor) {
+      segments.push({ text: line.slice(cursor, index), tone: 'plain' })
+    }
+    segments.push({ text: token, tone: classify(token) })
+    cursor = index + token.length
+  }
+
+  if (cursor < line.length) {
+    segments.push({ text: line.slice(cursor), tone: 'plain' })
+  }
+
+  return segments.length > 0 ? segments : [{ text: line, tone: 'plain' }]
+}
+
+function segmentCodeLine(line: string, language: string): HighlightSegment[] {
+  if (!line) return [{ text: ' ', tone: 'plain' }] satisfies HighlightSegment[]
+
+  if (
+    ['javascript', 'typescript', 'jsx', 'tsx', 'js', 'ts'].includes(language)
+  ) {
+    const commentStart = line.indexOf('//')
+    if (commentStart >= 0) {
+      return [
+        ...segmentCodeLine(line.slice(0, commentStart), language),
+        { text: line.slice(commentStart), tone: 'comment' as const }
+      ]
+    }
+
+    return segmentWithPattern(
+      line,
+      /('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|\b[A-Za-z_$][\w$]*\b|\b\d+(?:\.\d+)?\b)/g,
+      token => {
+        if (/^['"`]/.test(token)) return 'string'
+        if (/^\d/.test(token)) return 'number'
+        if (javascriptKeywords.has(token)) return 'keyword'
+        return 'plain'
+      }
+    )
+  }
+
+  if (language === 'html') {
+    return segmentWithPattern(
+      line,
+      /(<!--.*?-->|<\/?[A-Za-z][^\s>/]*|\/?>|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/g,
+      token => {
+        if (token.startsWith('<!--')) return 'comment'
+        if (token.startsWith('<')) return 'tag'
+        if (/^['"]/.test(token)) return 'string'
+        return 'punctuation'
+      }
+    )
+  }
+
+  if (language === 'css') {
+    return segmentWithPattern(
+      line,
+      /(\/\*.*?\*\/|#[\da-fA-F]{3,8}\b|[A-Za-z-]+(?=\s*:)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b\d+(?:\.\d+)?(?:px|rem|em|%|vh|vw)?\b)/g,
+      token => {
+        if (token.startsWith('/*')) return 'comment'
+        if (/^['"]/.test(token) || token.startsWith('#')) return 'string'
+        if (/^\d/.test(token)) return 'number'
+        return 'property'
+      }
+    )
+  }
+
+  if (language === 'json') {
+    return segmentWithPattern(
+      line,
+      /("(?:\\.|[^"\\])*"(?=\s*:)|"(?:\\.|[^"\\])*"|\btrue\b|\bfalse\b|\bnull\b|-?\b\d+(?:\.\d+)?\b|[{}\[\]:,])/g,
+      token => {
+        if (
+          /^".*"$/.test(token) &&
+          /:\s*$/.test(line.slice(line.indexOf(token)))
+        ) {
+          return 'property'
+        }
+        if (/^"/.test(token)) return 'string'
+        if (/^-?\d/.test(token)) return 'number'
+        if (/^(true|false|null)$/.test(token)) return 'keyword'
+        return 'punctuation'
+      }
+    )
+  }
+
+  if (language === 'markdown') {
+    if (/^#{1,6}\s/.test(line)) return [{ text: line, tone: 'heading' }]
+    return segmentWithPattern(line, /(`[^`]+`|\*\*[^*]+\*\*)/g, token => {
+      if (token.startsWith('`')) return 'string'
+      return 'keyword'
+    })
+  }
+
+  return [{ text: line, tone: 'plain' }]
+}
+
+function highlightToneClass(tone: HighlightTone) {
+  switch (tone) {
+    case 'keyword':
+      return 'text-sky-300'
+    case 'string':
+      return 'text-emerald-300'
+    case 'number':
+      return 'text-orange-300'
+    case 'comment':
+      return 'text-zinc-500'
+    case 'punctuation':
+      return 'text-zinc-300'
+    case 'property':
+      return 'text-violet-300'
+    case 'tag':
+      return 'text-cyan-300'
+    case 'heading':
+      return 'text-amber-200'
+    default:
+      return 'text-zinc-100'
+  }
+}
+
+function HighlightedCode({ file }: { file: BrokCodeProjectFile }) {
+  const language = getFileLanguage(file)
+  const lines = file.content.split('\n')
+
+  return (
+    <pre className="min-h-44 overflow-auto p-3 font-mono text-[11px] leading-5">
+      <code>
+        {lines.map((line, index) => (
+          <span
+            key={`${file.path}-${index}`}
+            className="grid grid-cols-[2.25rem_minmax(0,1fr)]"
+          >
+            <span className="select-none pr-3 text-right text-zinc-600">
+              {index + 1}
+            </span>
+            <span className="whitespace-pre">
+              {segmentCodeLine(line, language).map((segment, segmentIndex) => (
+                <span
+                  key={`${index}-${segmentIndex}`}
+                  className={highlightToneClass(segment.tone)}
+                >
+                  {segment.text}
+                </span>
+              ))}
+            </span>
+          </span>
+        ))}
+      </code>
+    </pre>
+  )
+}
+
+function ProjectFilesPanel({
+  files,
+  loading,
+  error,
+  selectedFile,
+  draft,
+  editMode,
+  saving,
+  hasUnsavedChanges,
+  onSelectFile,
+  onDraftChange,
+  onEditModeChange,
+  onSave,
+  onRefresh
+}: {
+  files: BrokCodeProjectFile[]
+  loading: boolean
+  error: string | null
+  selectedFile: BrokCodeProjectFile | null
+  draft: string
+  editMode: boolean
+  saving: boolean
+  hasUnsavedChanges: boolean
+  onSelectFile: (path: string) => void
+  onDraftChange: (value: string) => void
+  onEditModeChange: (value: boolean) => void
+  onSave: () => void
+  onRefresh: () => void
+}) {
+  const unsupported = isUnsupportedViewerFile(selectedFile)
+
+  return (
+    <div className="mb-2 grid max-h-[34vh] min-h-[190px] overflow-hidden rounded-lg border border-zinc-200 bg-white text-xs shadow-sm md:grid-cols-[170px_minmax(0,1fr)]">
+      <div className="min-h-0 border-b border-zinc-200 bg-zinc-50 md:border-b-0 md:border-r">
+        <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-2.5 py-2">
+          <div className="min-w-0">
+            <p className="font-medium text-zinc-950">Files</p>
+            <p className="text-[11px] text-zinc-500">{files.length} saved</p>
+          </div>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-7 rounded-full"
+            onClick={onRefresh}
+            disabled={loading}
+            title="Refresh files"
+          >
+            <RefreshCcw className={cn('size-3.5', loading && 'animate-spin')} />
+            <span className="sr-only">Refresh files</span>
+          </Button>
+        </div>
+        <div className="max-h-28 overflow-auto p-1 md:max-h-[calc(34vh-42px)]">
+          {loading && files.length === 0 ? (
+            <p className="px-2 py-3 text-zinc-500">Loading files...</p>
+          ) : error ? (
+            <p className="px-2 py-3 text-rose-600">{error}</p>
+          ) : files.length === 0 ? (
+            <p className="px-2 py-3 text-zinc-500">No generated files yet.</p>
+          ) : (
+            files.map(file => (
+              <button
+                key={file.path}
+                type="button"
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-zinc-600 hover:bg-white hover:text-zinc-950',
+                  selectedFile?.path === file.path &&
+                    'bg-white font-medium text-zinc-950 shadow-sm'
+                )}
+                onClick={() => onSelectFile(file.path)}
+              >
+                <FileCode2 className="size-3.5 shrink-0" />
+                <span className="truncate">{file.path}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-col">
+        <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-2.5 py-2">
+          <div className="min-w-0">
+            <p className="truncate font-medium text-zinc-950">
+              {selectedFile?.path ?? 'No file selected'}
+            </p>
+            <p className="text-[11px] text-zinc-500">
+              {selectedFile
+                ? `${languageLabel(selectedFile)}${hasUnsavedChanges ? ' - unsaved' : ''}`
+                : 'Open a generated file to inspect it.'}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={editMode ? 'secondary' : 'outline'}
+              className="h-7 rounded-full px-2.5 text-[11px]"
+              disabled={!selectedFile || unsupported}
+              onClick={() => onEditModeChange(!editMode)}
+            >
+              <Pencil className="size-3.5" />
+              {editMode ? 'Viewing' : 'Edit'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 rounded-full px-2.5 text-[11px]"
+              disabled={!selectedFile || !hasUnsavedChanges || saving}
+              onClick={onSave}
+            >
+              {saving ? (
+                <RefreshCcw className="size-3.5 animate-spin" />
+              ) : (
+                <Save className="size-3.5" />
+              )}
+              Save
+            </Button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto bg-[#101012] text-zinc-100">
+          {!selectedFile ? (
+            <div className="flex h-full min-h-28 items-center justify-center px-4 text-center text-zinc-400">
+              Select a file to inspect its source.
+            </div>
+          ) : unsupported ? (
+            <div className="flex h-full min-h-28 items-center justify-center px-4 text-center text-zinc-400">
+              This file type can be saved and previewed, but inline viewing is
+              not supported here.
+            </div>
+          ) : editMode ? (
+            <Textarea
+              value={draft}
+              onChange={event => onDraftChange(event.target.value)}
+              className="min-h-44 rounded-none border-0 bg-[#101012] font-mono text-[11px] leading-5 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+              spellCheck={false}
+            />
+          ) : (
+            <HighlightedCode file={selectedFile} />
+          )}
+        </div>
+      </div>
     </div>
   )
 }
