@@ -270,6 +270,19 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
 
   async function connectToolkit(toolkit: string) {
     const name = rowsBySlug.get(toolkit)?.name || formatToolkitName(toolkit)
+    const popup = openComposioPopup(
+      'about:blank',
+      `brok-integration-connect-${toolkit}`
+    )
+
+    if (!popup) {
+      const message =
+        'Popup blocked. Allow popups for Brok, then click Connect again.'
+      setRowMessages(current => ({ ...current, [toolkit]: message }))
+      toast.error(message)
+      return
+    }
+
     setConnectingToolkit(toolkit)
     setRowMessages(current => ({
       ...current,
@@ -291,6 +304,7 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
       const payload = await response.json().catch(() => null)
 
       if (!response.ok) {
+        popup.close()
         throw new Error(
           messageFromPayload(payload, `Could not start ${name} connection.`)
         )
@@ -300,6 +314,7 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
         typeof payload?.connectionUrl !== 'string' ||
         !payload.connectionUrl
       ) {
+        popup.close()
         throw new Error(
           messageFromPayload(
             payload,
@@ -308,18 +323,7 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
         )
       }
 
-      const popup = openComposioPopup(
-        payload.connectionUrl,
-        `brok-integration-connect-${toolkit}`
-      )
-
-      if (!popup) {
-        const message =
-          'Popup blocked. Allow popups for Brok, then click Connect again.'
-        setRowMessages(current => ({ ...current, [toolkit]: message }))
-        toast.error(message)
-        return
-      }
+      popup.location.href = payload.connectionUrl
 
       setRowMessages(current => ({
         ...current,
@@ -350,6 +354,9 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
       setRowMessages(current => ({ ...current, [toolkit]: message }))
       toast.error(message)
     } catch (error) {
+      if (!popup.closed) {
+        popup.close()
+      }
       const message =
         error instanceof Error ? error.message : `Could not connect ${name}.`
       setRowMessages(current => ({ ...current, [toolkit]: message }))
