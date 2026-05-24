@@ -2,7 +2,10 @@ import { and, desc, eq } from 'drizzle-orm'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import type { BrokCodeRunDiff } from '@/lib/brokcode/diff-summary'
+import type {
+  BrokCodeDiffFileInput,
+  BrokCodeRunDiff
+} from '@/lib/brokcode/diff-summary'
 import { db } from '@/lib/db'
 import { brokCodeVersions } from '@/lib/db/schema-brok'
 
@@ -12,14 +15,18 @@ export type BrokCodeVersion = {
   workspaceId?: string
   userId?: string
   command: string
+  checkpointName?: string | null
+  projectId?: string | null
   summary: string
   runtime: 'pi' | 'opencode' | 'brok' | 'not_connected'
   status: 'done' | 'error'
   previewUrl?: string | null
+  deploymentUrl?: string | null
   branch?: string | null
   commitSha?: string | null
   prUrl?: string | null
   diff?: BrokCodeRunDiff | null
+  files?: BrokCodeDiffFileInput[] | null
   createdAt: string
 }
 
@@ -65,14 +72,18 @@ function buildVersionFromRow(
     workspaceId: row.workspaceId,
     userId: row.userId,
     command: row.command,
+    checkpointName: row.checkpointName,
+    projectId: row.projectId,
     summary: row.summary,
     runtime: row.runtime as BrokCodeVersion['runtime'],
     status: row.status as BrokCodeVersion['status'],
     previewUrl: row.previewUrl,
+    deploymentUrl: row.deploymentUrl,
     branch: row.branch,
     commitSha: row.commitSha,
     prUrl: row.prUrl,
     diff: (row.diffMetadata as BrokCodeRunDiff | null) ?? null,
+    files: (row.fileSnapshot as BrokCodeDiffFileInput[] | null) ?? null,
     createdAt: toIso(row.createdAt)
   }
 }
@@ -178,14 +189,18 @@ export async function createBrokCodeVersion(input: {
   workspaceId?: string
   userId?: string
   command: string
+  checkpointName?: string | null
+  projectId?: string | null
   summary: string
   runtime: BrokCodeVersion['runtime']
   status: BrokCodeVersion['status']
   previewUrl?: string | null
+  deploymentUrl?: string | null
   branch?: string | null
   commitSha?: string | null
   prUrl?: string | null
   diff?: BrokCodeRunDiff | null
+  files?: BrokCodeDiffFileInput[] | null
 }) {
   if (canUseDatabaseStore() && input.workspaceId && input.userId) {
     try {
@@ -196,14 +211,18 @@ export async function createBrokCodeVersion(input: {
         workspaceId: truncate(input.workspaceId, 200),
         userId: truncate(input.userId, 200),
         command: truncate(input.command, 1000, 'Untitled command'),
+        checkpointName: truncateNullable(input.checkpointName, 200),
+        projectId: truncateNullable(input.projectId, 200),
         summary: truncate(input.summary, 3000, 'No summary'),
         runtime: input.runtime,
         status: input.status,
         previewUrl: truncateNullable(input.previewUrl, 2000),
+        deploymentUrl: truncateNullable(input.deploymentUrl, 2000),
         branch: truncateNullable(input.branch, 200),
         commitSha: truncateNullable(input.commitSha, 120),
         prUrl: truncateNullable(input.prUrl, 2000),
         diffMetadata: input.diff ?? null,
+        fileSnapshot: input.files ?? null,
         createdAt: now
       }
 
@@ -227,14 +246,18 @@ export async function createBrokCodeVersion(input: {
       workspaceId: truncateNullable(input.workspaceId, 200) ?? undefined,
       userId: truncateNullable(input.userId, 200) ?? undefined,
       command: truncate(input.command, 1000, 'Untitled command'),
+      checkpointName: truncateNullable(input.checkpointName, 200),
+      projectId: truncateNullable(input.projectId, 200),
       summary: truncate(input.summary, 3000, 'No summary'),
       runtime: input.runtime,
       status: input.status,
       previewUrl: truncateNullable(input.previewUrl, 2000),
+      deploymentUrl: truncateNullable(input.deploymentUrl, 2000),
       branch: truncateNullable(input.branch, 200),
       commitSha: truncateNullable(input.commitSha, 120),
       prUrl: truncateNullable(input.prUrl, 2000),
       diff: input.diff ?? null,
+      files: input.files ?? null,
       createdAt: now
     }
 
@@ -244,6 +267,58 @@ export async function createBrokCodeVersion(input: {
 
     await writeStore({ versions: nextVersions })
     return version
+  })
+
+  writeQueue = operation.catch(() => {})
+  return operation
+}
+
+export async function updateBrokCodeVersion({
+  id,
+  workspaceId,
+  checkpointName
+}: {
+  id: string
+  workspaceId: string
+  checkpointName?: string | null
+}) {
+  const name = truncateNullable(checkpointName, 200)
+
+  if (canUseDatabaseStore()) {
+    try {
+      const rows = await db
+        .update(brokCodeVersions)
+        .set({ checkpointName: name })
+        .where(
+          and(
+            eq(brokCodeVersions.id, id),
+            eq(brokCodeVersions.workspaceId, workspaceId)
+          )
+        )
+        .returning()
+
+      if (rows[0]) return buildVersionFromRow(rows[0])
+    } catch (error) {
+      console.error(
+        'BrokCode version DB update failed; using file store:',
+        error
+      )
+    }
+  }
+
+  const operation = writeQueue.then(async () => {
+    const store = await readStore()
+    let updated: BrokCodeVersion | null = null
+    const versions = store.versions.map(version => {
+      if (version.id !== id || version.workspaceId !== workspaceId) {
+        return version
+      }
+      updated = { ...version, checkpointName: name }
+      return updated
+    })
+
+    await writeStore({ versions })
+    return updated
   })
 
   writeQueue = operation.catch(() => {})

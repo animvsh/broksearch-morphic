@@ -52,6 +52,7 @@ import {
 } from '@/lib/brokcode/data'
 import {
   type BrokCodeDiffFile,
+  type BrokCodeDiffFileInput,
   type BrokCodeRunDiff,
   buildBrokCodeRunDiff
 } from '@/lib/brokcode/diff-summary'
@@ -228,14 +229,18 @@ type BrokCodeVersion = {
   id: string
   sessionId: string
   command: string
+  checkpointName?: string | null
+  projectId?: string | null
   summary: string
   runtime: BrokCodeRuntime
   status: 'done' | 'error'
   previewUrl?: string | null
+  deploymentUrl?: string | null
   branch?: string | null
   commitSha?: string | null
   prUrl?: string | null
   diff?: BrokCodeRunDiff | null
+  files?: BrokCodeDiffFileInput[] | null
   createdAt: string
 }
 
@@ -1776,10 +1781,12 @@ export function BrokCodeApp({
 
   async function createProjectRuntimeRecord({
     project,
-    status
+    status,
+    versionId
   }: {
     project: BrokCodeProject
     status: BrokCodeRuntimeSandbox['status']
+    versionId?: string | null
   }) {
     const response = await fetch(
       `/api/brokcode/projects/${encodeURIComponent(project.id)}/runtime`,
@@ -1791,6 +1798,7 @@ export function BrokCodeApp({
         },
         body: JSON.stringify({
           sessionId: syncSessionId,
+          versionId: versionId ?? null,
           status,
           force: true
         })
@@ -2828,20 +2836,28 @@ export function BrokCodeApp({
 
   async function persistVersionSnapshot({
     command,
+    checkpointName,
+    projectId,
     summary,
     runtime,
     status,
     previewUrl,
+    deploymentUrl,
     prUrl,
-    diff
+    diff,
+    files
   }: {
     command: string
+    checkpointName?: string | null
+    projectId?: string | null
     summary: string
     runtime: BrokCodeRuntime
     status: 'done' | 'error'
     previewUrl?: string | null
+    deploymentUrl?: string | null
     prUrl?: string | null
     diff?: BrokCodeRunDiff | null
+    files?: BrokCodeDiffFileInput[] | null
   }) {
     if (!hasLiveRuntime) return null
 
@@ -2855,15 +2871,19 @@ export function BrokCodeApp({
         body: JSON.stringify({
           session_id: syncSessionId,
           command,
+          checkpoint_name: checkpointName ?? null,
+          project_id: projectId ?? null,
           summary:
             summary.length > 1800 ? `${summary.slice(0, 1797)}...` : summary,
           runtime,
           status,
           preview_url: previewUrl ?? null,
+          deployment_url: deploymentUrl ?? null,
           branch: githubHeadBranch || repoContext?.currentBranch || null,
           commit_sha: repoContext?.commitSha || null,
           pr_url: prUrl ?? null,
-          diff: diff ?? null
+          diff: diff ?? null,
+          files: files ?? null
         })
       })
 
@@ -2883,6 +2903,156 @@ export function BrokCodeApp({
     } catch {
       return null
     }
+  }
+
+  function getVersionSnapshotFiles(version: BrokCodeVersion) {
+    return Array.isArray(version.files) ? version.files : []
+  }
+
+  async function renameVersionCheckpoint(version: BrokCodeVersion) {
+    const name = window.prompt(
+      'Checkpoint name',
+      version.checkpointName ?? version.command
+    )
+    if (name === null) return
+
+    const response = await fetch(
+      `/api/brokcode/versions/${encodeURIComponent(version.id)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          ...getAuthHeaders(apiKey),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ checkpoint_name: name.trim() || null })
+      }
+    )
+    const body = await response.json().catch(() => null)
+    if (!response.ok || !body?.version) {
+      throw new Error(body?.error ?? 'Could not rename checkpoint.')
+    }
+
+    const updated = body.version as BrokCodeVersion
+    setVersions(current =>
+      current.map(candidate =>
+        candidate.id === updated.id ? updated : candidate
+      )
+    )
+    toast.success('Checkpoint renamed.')
+  }
+
+  async function restoreVersionSnapshot(version: BrokCodeVersion) {
+    if (!activeProject?.id) return
+    const files = getVersionSnapshotFiles(version)
+    if (files.length === 0) {
+      toast.error('This version does not include a restorable file snapshot.')
+      return
+    }
+    if (hasUnsavedFileChanges) {
+      const proceed = window.confirm(
+        'You have unsaved file edits. Restore this version and discard them?'
+      )
+      if (!proceed) return
+    }
+
+    const currentFiles = await fetchProjectFilesForDiff(activeProject)
+    const snapshotPaths = new Set(files.map(file => file.path))
+    const operations = [
+      ...files.map(file => ({
+        type: 'replace_file' as const,
+        path: file.path,
+        content: file.content,
+        summary: `Restored ${file.path} from ${version.checkpointName ?? version.command}.`
+      })),
+      ...currentFiles
+        .filter(file => !snapshotPaths.has(file.path))
+        .map(file => ({
+          type: 'delete_file' as const,
+          path: file.path,
+          summary: `Removed ${file.path} during version restore.`
+        }))
+    ]
+
+    const response = await fetch(
+      `/api/brokcode/projects/${encodeURIComponent(activeProject.id)}/files`,
+      {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(apiKey),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          operations,
+          conflictResolution: 'apply_anyway'
+        })
+      }
+    )
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(body?.error ?? 'Could not restore version.')
+    }
+
+    await refreshProjectFiles(activeProject)
+    const runtime = await createProjectRuntimeRecord({
+      project: activeProject,
+      status: 'healthy',
+      versionId: version.id
+    })
+    if (runtime) {
+      setPreviewFrameKey(key => key + 1)
+    }
+    toast.success('Version restored.')
+  }
+
+  async function duplicateVersionSnapshot(version: BrokCodeVersion) {
+    const files = getVersionSnapshotFiles(version)
+    if (files.length === 0) {
+      toast.error('This version does not include files to duplicate.')
+      return
+    }
+
+    const response = await fetch('/api/brokcode/projects', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(apiKey),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: `${version.checkpointName ?? version.command} copy`
+      })
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok || !body?.project) {
+      throw new Error(body?.error ?? 'Could not duplicate version.')
+    }
+
+    const project = body.project as BrokCodeProject
+    await Promise.all(
+      files.map(file =>
+        fetch(`/api/brokcode/projects/${project.id}/files`, {
+          method: 'PUT',
+          headers: {
+            ...getAuthHeaders(apiKey),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(file)
+        }).then(async saveResponse => {
+          if (saveResponse.ok) return
+          const saveBody = await saveResponse.json().catch(() => null)
+          throw new Error(saveBody?.error ?? `Could not copy ${file.path}`)
+        })
+      )
+    )
+
+    setProjects(current => [project, ...current])
+    setActiveProjectId(project.id)
+    await refreshProjectFiles(project)
+    await createProjectRuntimeRecord({
+      project,
+      status: 'healthy',
+      versionId: version.id
+    })
+    toast.success('Version duplicated into a new project.')
   }
 
   async function runPlatformChecks() {
@@ -3745,11 +3915,19 @@ export function BrokCodeApp({
       })
       const savedVersion = await persistVersionSnapshot({
         command: trimmed,
+        checkpointName: trimmed,
+        projectId: runProject.id,
         summary: assistantContent,
         runtime,
         status: 'done',
         previewUrl: discoveredPreviewUrl ?? null,
-        diff: runDiff
+        deploymentUrl: runProject.deploymentUrl ?? null,
+        diff: runDiff,
+        files: afterRunFiles.map(file => ({
+          path: file.path,
+          content: file.content,
+          language: file.language
+        }))
       })
       if (savedVersion) {
         attachVersionToRunDiff(runDiff.id, savedVersion.id)
@@ -4259,6 +4437,15 @@ export function BrokCodeApp({
                       void refreshVersions(apiKey)
                     }
                   }}
+                  onRename={version => {
+                    void renameVersionCheckpoint(version)
+                  }}
+                  onRestore={version => {
+                    void restoreVersionSnapshot(version)
+                  }}
+                  onDuplicate={version => {
+                    void duplicateVersionSnapshot(version)
+                  }}
                 />
               </div>
 
@@ -4616,6 +4803,15 @@ export function BrokCodeApp({
                   void refreshVersions(apiKey)
                 }
               }}
+              onRename={version => {
+                void renameVersionCheckpoint(version)
+              }}
+              onRestore={version => {
+                void restoreVersionSnapshot(version)
+              }}
+              onDuplicate={version => {
+                void duplicateVersionSnapshot(version)
+              }}
             />
           </div>
         </section>
@@ -4798,6 +4994,23 @@ export function BrokCodeApp({
               onSelectFile={file => setSelectedDiffFilePath(file.path)}
               onOpenFile={openDiffFileInEditor}
             />
+            <VersionHistoryPanel
+              versions={versions}
+              loading={versionsLoading}
+              compact
+              onRefresh={() => {
+                void refreshVersions(apiKey)
+              }}
+              onRename={version => {
+                void renameVersionCheckpoint(version)
+              }}
+              onRestore={version => {
+                void restoreVersionSnapshot(version)
+              }}
+              onDuplicate={version => {
+                void duplicateVersionSnapshot(version)
+              }}
+            />
             <BrowserPreviewPanel
               isRunning={isRunning}
               previewInput={previewInput}
@@ -4901,14 +5114,27 @@ function SyncedSessionPanel({
 function VersionHistoryPanel({
   versions,
   loading,
-  onRefresh
+  compact = false,
+  onRefresh,
+  onRename,
+  onRestore,
+  onDuplicate
 }: {
   versions: BrokCodeVersion[]
   loading: boolean
+  compact?: boolean
   onRefresh: () => void
+  onRename: (version: BrokCodeVersion) => void
+  onRestore: (version: BrokCodeVersion) => void
+  onDuplicate: (version: BrokCodeVersion) => void
 }) {
   return (
-    <div className="rounded-md border bg-background p-3 shadow-[0_16px_40px_-32px_rgba(15,23,42,0.45)]">
+    <div
+      className={cn(
+        'rounded-md border bg-background p-3 shadow-[0_16px_40px_-32px_rgba(15,23,42,0.45)]',
+        compact && 'mb-2 max-h-[24vh] overflow-auto'
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-sm font-semibold">Version History</p>
@@ -4936,7 +5162,9 @@ function VersionHistoryPanel({
               className="rounded-md border bg-muted/20 p-2 text-xs"
             >
               <div className="flex items-start justify-between gap-2">
-                <p className="line-clamp-1 font-medium">{version.command}</p>
+                <p className="line-clamp-1 font-medium">
+                  {version.checkpointName ?? version.command}
+                </p>
                 <Badge
                   variant={version.status === 'done' ? 'secondary' : 'outline'}
                   className="rounded-md text-[10px]"
@@ -4944,12 +5172,21 @@ function VersionHistoryPanel({
                   {version.status}
                 </Badge>
               </div>
+              {version.checkpointName && (
+                <p className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">
+                  {version.command}
+                </p>
+              )}
               <p className="mt-1 line-clamp-2 text-muted-foreground">
                 {version.summary}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                 <span>{new Date(version.createdAt).toLocaleTimeString()}</span>
                 {version.runtime && <span>· {version.runtime}</span>}
+                {version.files?.length ? (
+                  <span>· {version.files.length} files</span>
+                ) : null}
+                {version.deploymentUrl && <span>· live provenance</span>}
                 {version.branch && <span>· {version.branch}</span>}
                 {version.commitSha && (
                   <span>· {version.commitSha.slice(0, 8)}</span>
@@ -4965,6 +5202,37 @@ function VersionHistoryPanel({
                     PR
                   </a>
                 )}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 rounded-full px-2 text-[11px]"
+                  onClick={() => onRename(version)}
+                >
+                  Name
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 rounded-full px-2 text-[11px]"
+                  disabled={!version.files?.length}
+                  onClick={() => onRestore(version)}
+                >
+                  Restore
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 rounded-full px-2 text-[11px]"
+                  disabled={!version.files?.length}
+                  onClick={() => onDuplicate(version)}
+                >
+                  Duplicate
+                </Button>
               </div>
             </div>
           ))}
