@@ -275,18 +275,12 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
       `brok-integration-connect-${toolkit}`
     )
 
-    if (!popup) {
-      const message =
-        'Popup blocked. Allow popups for Brok, then click Connect again.'
-      setRowMessages(current => ({ ...current, [toolkit]: message }))
-      toast.error(message)
-      return
-    }
-
     setConnectingToolkit(toolkit)
     setRowMessages(current => ({
       ...current,
-      [toolkit]: 'Creating a Composio connection link...'
+      [toolkit]: popup
+        ? 'Creating a Composio connection link...'
+        : 'Popup was blocked. Creating an authorization link in this tab...'
     }))
 
     try {
@@ -304,7 +298,7 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
       const payload = await response.json().catch(() => null)
 
       if (!response.ok) {
-        popup.close()
+        popup?.close()
         throw new Error(
           messageFromPayload(payload, `Could not start ${name} connection.`)
         )
@@ -314,13 +308,19 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
         typeof payload?.connectionUrl !== 'string' ||
         !payload.connectionUrl
       ) {
-        popup.close()
+        popup?.close()
         throw new Error(
           messageFromPayload(
             payload,
             `Composio did not return a connection link for ${name}.`
           )
         )
+      }
+
+      if (!popup) {
+        toast.info(`Opening ${name} authorization in this tab`)
+        window.location.href = payload.connectionUrl
+        return
       }
 
       popup.location.href = payload.connectionUrl
@@ -354,7 +354,7 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
       setRowMessages(current => ({ ...current, [toolkit]: message }))
       toast.error(message)
     } catch (error) {
-      if (!popup.closed) {
+      if (popup && !popup.closed) {
         popup.close()
       }
       const message =
