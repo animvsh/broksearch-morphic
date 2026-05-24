@@ -51,6 +51,11 @@ import {
   SubagentStatus
 } from '@/lib/brokcode/data'
 import {
+  type BrokCodeDiffFile,
+  type BrokCodeRunDiff,
+  buildBrokCodeRunDiff
+} from '@/lib/brokcode/diff-summary'
+import {
   extractGeneratedBrokCodeFiles,
   GeneratedBrokCodeFile
 } from '@/lib/brokcode/generated-files'
@@ -230,6 +235,7 @@ type BrokCodeVersion = {
   branch?: string | null
   commitSha?: string | null
   prUrl?: string | null
+  diff?: BrokCodeRunDiff | null
   createdAt: string
 }
 
@@ -1103,6 +1109,9 @@ export function BrokCodeApp({
   const [fileDraft, setFileDraft] = useState('')
   const [fileEditMode, setFileEditMode] = useState(false)
   const [fileSaving, setFileSaving] = useState(false)
+  const [runDiffs, setRunDiffs] = useState<BrokCodeRunDiff[]>([])
+  const [selectedRunDiffId, setSelectedRunDiffId] = useState('')
+  const [selectedDiffFilePath, setSelectedDiffFilePath] = useState('')
   const [projectRuntime, setProjectRuntime] =
     useState<BrokCodeRuntimeSandbox | null>(null)
   const [runtimeDiagnostics, setRuntimeDiagnostics] =
@@ -1258,10 +1267,43 @@ export function BrokCodeApp({
     null
   const hasUnsavedFileChanges =
     Boolean(selectedProjectFile) && fileDraft !== selectedProjectFile?.content
+  const selectedRunDiff =
+    runDiffs.find(diff => diff.id === selectedRunDiffId) ?? runDiffs[0] ?? null
+  const selectedDiffFile =
+    selectedRunDiff?.files.find(file => file.path === selectedDiffFilePath) ??
+    selectedRunDiff?.files[0] ??
+    null
 
   useEffect(() => {
     selectedFilePathRef.current = selectedFilePath
   }, [selectedFilePath])
+
+  useEffect(() => {
+    const versionDiffs: BrokCodeRunDiff[] = versions.flatMap(version =>
+      version.diff
+        ? [
+            {
+              ...version.diff,
+              versionId: version.diff.versionId ?? version.id
+            }
+          ]
+        : []
+    )
+
+    if (versionDiffs.length === 0) return
+
+    setRunDiffs(current => {
+      const byId = new Map(current.map(diff => [diff.id, diff]))
+      versionDiffs.forEach(diff => byId.set(diff.id, diff))
+      return Array.from(byId.values())
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 8)
+    })
+    setSelectedRunDiffId(current => current || versionDiffs[0]?.id || '')
+    setSelectedDiffFilePath(
+      current => current || versionDiffs[0]?.files[0]?.path || ''
+    )
+  }, [versions])
 
   const activeSyncSession = useMemo(
     () =>
@@ -1570,6 +1612,26 @@ export function BrokCodeApp({
       } finally {
         setProjectFilesLoading(false)
       }
+    },
+    [activeProject, apiKey, getAuthHeaders]
+  )
+
+  const fetchProjectFilesForDiff = useCallback(
+    async (project = activeProject, key = apiKey) => {
+      if (!project?.id || (key && !isValidBrokApiKey(key))) return []
+
+      const response = await fetch(
+        `/api/brokcode/projects/${encodeURIComponent(project.id)}/files`,
+        {
+          headers: getAuthHeaders(key)
+        }
+      )
+      const body = await response.json().catch(() => null)
+      if (!response.ok) return []
+
+      return Array.isArray(body?.files)
+        ? (body.files as BrokCodeProjectFile[])
+        : []
     },
     [activeProject, apiKey, getAuthHeaders]
   )
@@ -2379,6 +2441,25 @@ export function BrokCodeApp({
     }
   }
 
+  function recordRunDiff(diff: BrokCodeRunDiff) {
+    setRunDiffs(current =>
+      [diff, ...current.filter(existing => existing.id !== diff.id)].slice(0, 8)
+    )
+    setSelectedRunDiffId(diff.id)
+    setSelectedDiffFilePath(diff.files[0]?.path ?? '')
+  }
+
+  function attachVersionToRunDiff(diffId: string, versionId: string) {
+    setRunDiffs(current =>
+      current.map(diff => (diff.id === diffId ? { ...diff, versionId } : diff))
+    )
+  }
+
+  function openDiffFileInEditor(path: string) {
+    selectProjectFile(path)
+    setSelectedFilePath(path)
+  }
+
   function updateExecutionStep(
     runId: string,
     stepId: string,
@@ -2751,7 +2832,8 @@ export function BrokCodeApp({
     runtime,
     status,
     previewUrl,
-    prUrl
+    prUrl,
+    diff
   }: {
     command: string
     summary: string
@@ -2759,6 +2841,7 @@ export function BrokCodeApp({
     status: 'done' | 'error'
     previewUrl?: string | null
     prUrl?: string | null
+    diff?: BrokCodeRunDiff | null
   }) {
     if (!hasLiveRuntime) return null
 
@@ -2779,7 +2862,8 @@ export function BrokCodeApp({
           preview_url: previewUrl ?? null,
           branch: githubHeadBranch || repoContext?.currentBranch || null,
           commit_sha: repoContext?.commitSha || null,
-          pr_url: prUrl ?? null
+          pr_url: prUrl ?? null,
+          diff: diff ?? null
         })
       })
 
@@ -3398,6 +3482,7 @@ export function BrokCodeApp({
 
     try {
       const runProject = await ensureProjectForRun(trimmed)
+      const beforeRunFiles = await fetchProjectFilesForDiff(runProject)
       let runRuntime = await createProjectRuntimeRecord({
         project: runProject,
         status: 'preparing'
@@ -3526,6 +3611,7 @@ export function BrokCodeApp({
       const generatedFiles = extractGeneratedPreviewFiles(assistantContent)
 
       let managedPreviewUrl: string | null = null
+      let afterRunFiles = beforeRunFiles
       if (generatedFiles.length > 0) {
         updateExecutionStep(
           run.id,
@@ -3539,7 +3625,7 @@ export function BrokCodeApp({
           projectId: runProject.id,
           files: generatedFiles
         })
-        await refreshProjectFiles(runProject)
+        afterRunFiles = await refreshProjectFiles(runProject)
         runRuntime = await createProjectRuntimeRecord({
           project: runProject,
           status: 'building'
@@ -3547,10 +3633,27 @@ export function BrokCodeApp({
         managedPreviewUrl = await openCloudProjectPreview(runProject.id)
       } else if (!externalPreviewUrl) {
         runRuntime = await refreshProjectRuntime(runProject)
+        afterRunFiles = await fetchProjectFilesForDiff(runProject)
         managedPreviewUrl = await openCloudProjectPreview(runProject.id)
       }
 
       const discoveredPreviewUrl = managedPreviewUrl ?? externalPreviewUrl
+      const runDiff = buildBrokCodeRunDiff({
+        id: createId('diff'),
+        command: trimmed,
+        beforeFiles: beforeRunFiles,
+        afterFiles: afterRunFiles,
+        jobId:
+          typeof body?.task_id === 'string'
+            ? body.task_id
+            : (run.taskId ?? null),
+        previewUrl: discoveredPreviewUrl ?? null,
+        runtimeChanges: [`${getRuntimeLabel(runtime)} completed`],
+        deployChanges: discoveredPreviewUrl
+          ? [`Preview updated: ${discoveredPreviewUrl}`]
+          : []
+      })
+      recordRunDiff(runDiff)
       if (runRuntime?.id) {
         const status = discoveredPreviewUrl ? 'healthy' : 'stopped'
         const response = await fetch(
@@ -3640,13 +3743,17 @@ export function BrokCodeApp({
               : null
         }
       })
-      void persistVersionSnapshot({
+      const savedVersion = await persistVersionSnapshot({
         command: trimmed,
         summary: assistantContent,
         runtime,
         status: 'done',
-        previewUrl: discoveredPreviewUrl ?? null
+        previewUrl: discoveredPreviewUrl ?? null,
+        diff: runDiff
       })
+      if (savedVersion) {
+        attachVersionToRunDiff(runDiff.id, savedVersion.id)
+      }
       if (apiKey) {
         await refreshUsage(apiKey)
       }
@@ -4680,6 +4787,17 @@ export function BrokCodeApp({
                 void refreshProjectFiles()
               }}
             />
+            <RunDiffPanel
+              diffs={runDiffs}
+              selectedDiff={selectedRunDiff}
+              selectedFile={selectedDiffFile}
+              onSelectDiff={diff => {
+                setSelectedRunDiffId(diff.id)
+                setSelectedDiffFilePath(diff.files[0]?.path ?? '')
+              }}
+              onSelectFile={file => setSelectedDiffFilePath(file.path)}
+              onOpenFile={openDiffFileInEditor}
+            />
             <BrowserPreviewPanel
               isRunning={isRunning}
               previewInput={previewInput}
@@ -5497,6 +5615,220 @@ function HighlightedCode({ file }: { file: BrokCodeProjectFile }) {
         ))}
       </code>
     </pre>
+  )
+}
+
+function diffTone(status: BrokCodeDiffFile['status']) {
+  if (status === 'created') return 'text-emerald-700'
+  if (status === 'deleted') return 'text-rose-700'
+  return 'text-sky-700'
+}
+
+function formatDiffBytes(value: number) {
+  if (value < 1000) return `${value} B`
+  return `${Math.round(value / 100) / 10} KB`
+}
+
+function DiffCodeBlock({
+  label,
+  content,
+  empty
+}: {
+  label: string
+  content: string | null
+  empty: string
+}) {
+  return (
+    <div className="min-w-0 overflow-hidden rounded-md border border-zinc-800 bg-[#101012]">
+      <div className="border-b border-zinc-800 px-2.5 py-1.5 text-[11px] font-medium text-zinc-400">
+        {label}
+      </div>
+      <pre className="max-h-44 overflow-auto p-2.5 font-mono text-[11px] leading-5 text-zinc-100">
+        {content ?? empty}
+      </pre>
+    </div>
+  )
+}
+
+function RunDiffPanel({
+  diffs,
+  selectedDiff,
+  selectedFile,
+  onSelectDiff,
+  onSelectFile,
+  onOpenFile
+}: {
+  diffs: BrokCodeRunDiff[]
+  selectedDiff: BrokCodeRunDiff | null
+  selectedFile: BrokCodeDiffFile | null
+  onSelectDiff: (diff: BrokCodeRunDiff) => void
+  onSelectFile: (file: BrokCodeDiffFile) => void
+  onOpenFile: (path: string) => void
+}) {
+  return (
+    <div className="mb-2 grid max-h-[34vh] min-h-[190px] overflow-hidden rounded-lg border border-zinc-200 bg-white text-xs shadow-sm md:grid-cols-[190px_minmax(0,1fr)]">
+      <div className="min-h-0 border-b border-zinc-200 bg-zinc-50 md:border-b-0 md:border-r">
+        <div className="border-b border-zinc-200 px-2.5 py-2">
+          <p className="font-medium text-zinc-950">Changes</p>
+          <p className="text-[11px] text-zinc-500">
+            {selectedDiff
+              ? `${selectedDiff.totalFilesChanged} files changed`
+              : 'Run BrokCode to review diffs.'}
+          </p>
+        </div>
+        <div className="max-h-28 overflow-auto p-1 md:max-h-[calc(34vh-42px)]">
+          {diffs.length === 0 ? (
+            <p className="px-2 py-3 text-zinc-500">No run diffs yet.</p>
+          ) : (
+            diffs.map(diff => (
+              <button
+                key={diff.id}
+                type="button"
+                className={cn(
+                  'w-full rounded-md px-2 py-1.5 text-left text-zinc-600 hover:bg-white hover:text-zinc-950',
+                  selectedDiff?.id === diff.id &&
+                    'bg-white font-medium text-zinc-950 shadow-sm'
+                )}
+                onClick={() => onSelectDiff(diff)}
+              >
+                <span className="block truncate">{diff.command}</span>
+                <span className="block truncate text-[11px] text-zinc-500">
+                  {diff.summary}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-col">
+        <div className="flex items-start justify-between gap-2 border-b border-zinc-200 px-2.5 py-2">
+          <div className="min-w-0">
+            <p className="truncate font-medium text-zinc-950">
+              {selectedDiff?.summary ?? 'No diff selected'}
+            </p>
+            <p className="truncate text-[11px] text-zinc-500">
+              {selectedDiff
+                ? [
+                    selectedDiff.jobId ? `job ${selectedDiff.jobId}` : null,
+                    selectedDiff.versionId
+                      ? `version ${selectedDiff.versionId}`
+                      : null,
+                    new Date(selectedDiff.createdAt).toLocaleTimeString()
+                  ]
+                    .filter(Boolean)
+                    .join(' - ')
+                : 'Diffs are tied to run jobs and saved versions.'}
+            </p>
+          </div>
+          {selectedFile && selectedFile.status !== 'deleted' && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 rounded-full px-2.5 text-[11px]"
+              onClick={() => onOpenFile(selectedFile.path)}
+            >
+              <FileCode2 className="size-3.5" />
+              Open file
+            </Button>
+          )}
+        </div>
+
+        {!selectedDiff ? (
+          <div className="flex h-full min-h-28 items-center justify-center px-4 text-center text-zinc-500">
+            Changes from each run will appear here.
+          </div>
+        ) : selectedDiff.files.length === 0 ? (
+          <div className="grid gap-2 p-3 text-zinc-600">
+            <p>No file changes in this run.</p>
+            {[...selectedDiff.runtimeChanges, ...selectedDiff.deployChanges]
+              .filter(Boolean)
+              .map(change => (
+                <p key={change} className="rounded-md bg-zinc-50 px-2 py-1">
+                  {change}
+                </p>
+              ))}
+          </div>
+        ) : (
+          <div className="grid min-h-0 flex-1 md:grid-cols-[180px_minmax(0,1fr)]">
+            <div className="min-h-0 overflow-auto border-b border-zinc-200 p-1 md:border-b-0 md:border-r">
+              {selectedDiff.files.map(file => (
+                <button
+                  key={file.path}
+                  type="button"
+                  className={cn(
+                    'w-full rounded-md px-2 py-1.5 text-left hover:bg-zinc-50',
+                    selectedFile?.path === file.path && 'bg-zinc-50 shadow-sm'
+                  )}
+                  onClick={() => onSelectFile(file)}
+                >
+                  <span className="block truncate font-medium text-zinc-800">
+                    {file.path}
+                  </span>
+                  <span
+                    className={cn(
+                      'block text-[11px] capitalize',
+                      diffTone(file.status)
+                    )}
+                  >
+                    {file.status} +{file.additions} -{file.deletions}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="min-h-0 overflow-auto p-2">
+              {selectedFile ? (
+                <div className="grid gap-2">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+                    <Badge variant="secondary" className="rounded-full">
+                      {selectedFile.status}
+                    </Badge>
+                    <span>
+                      {formatDiffBytes(selectedFile.beforeSize)} to{' '}
+                      {formatDiffBytes(selectedFile.afterSize)}
+                    </span>
+                    {selectedFile.truncated && (
+                      <span>large diff summarized</span>
+                    )}
+                  </div>
+                  <div className="grid gap-2 xl:grid-cols-2">
+                    <DiffCodeBlock
+                      label="Before"
+                      content={selectedFile.before}
+                      empty="File did not exist."
+                    />
+                    <DiffCodeBlock
+                      label="After"
+                      content={selectedFile.after}
+                      empty="File was deleted."
+                    />
+                  </div>
+                  {selectedDiff.runtimeChanges.length > 0 ||
+                  selectedDiff.deployChanges.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 text-[11px] text-zinc-500">
+                      {[
+                        ...selectedDiff.runtimeChanges,
+                        ...selectedDiff.deployChanges
+                      ].map(change => (
+                        <span
+                          key={change}
+                          className="rounded-full border border-zinc-200 px-2 py-1"
+                        >
+                          {change}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="p-3 text-zinc-500">Select a changed file.</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 

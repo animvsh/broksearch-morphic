@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
       ? body.runtime
       : 'not_connected'
   const status = body?.status === 'error' ? 'error' : 'done'
+  const diff = body?.diff && typeof body.diff === 'object' ? body.diff : null
 
   if (!command || !summary) {
     return jsonNoStore(
@@ -84,7 +85,8 @@ export async function POST(request: NextRequest) {
     previewUrl: typeof body?.preview_url === 'string' ? body.preview_url : null,
     branch: typeof body?.branch === 'string' ? body.branch : null,
     commitSha: typeof body?.commit_sha === 'string' ? body.commit_sha : null,
-    prUrl: typeof body?.pr_url === 'string' ? body.pr_url : null
+    prUrl: typeof body?.pr_url === 'string' ? body.pr_url : null,
+    diff
   })
 
   return jsonNoStore({ version })

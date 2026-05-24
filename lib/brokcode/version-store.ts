@@ -2,6 +2,7 @@ import { and, desc, eq } from 'drizzle-orm'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import type { BrokCodeRunDiff } from '@/lib/brokcode/diff-summary'
 import { db } from '@/lib/db'
 import { brokCodeVersions } from '@/lib/db/schema-brok'
 
@@ -18,6 +19,7 @@ export type BrokCodeVersion = {
   branch?: string | null
   commitSha?: string | null
   prUrl?: string | null
+  diff?: BrokCodeRunDiff | null
   createdAt: string
 }
 
@@ -70,6 +72,7 @@ function buildVersionFromRow(
     branch: row.branch,
     commitSha: row.commitSha,
     prUrl: row.prUrl,
+    diff: (row.diffMetadata as BrokCodeRunDiff | null) ?? null,
     createdAt: toIso(row.createdAt)
   }
 }
@@ -182,6 +185,7 @@ export async function createBrokCodeVersion(input: {
   branch?: string | null
   commitSha?: string | null
   prUrl?: string | null
+  diff?: BrokCodeRunDiff | null
 }) {
   if (canUseDatabaseStore() && input.workspaceId && input.userId) {
     try {
@@ -199,6 +203,7 @@ export async function createBrokCodeVersion(input: {
         branch: truncateNullable(input.branch, 200),
         commitSha: truncateNullable(input.commitSha, 120),
         prUrl: truncateNullable(input.prUrl, 2000),
+        diffMetadata: input.diff ?? null,
         createdAt: now
       }
 
@@ -229,6 +234,7 @@ export async function createBrokCodeVersion(input: {
       branch: truncateNullable(input.branch, 200),
       commitSha: truncateNullable(input.commitSha, 120),
       prUrl: truncateNullable(input.prUrl, 2000),
+      diff: input.diff ?? null,
       createdAt: now
     }
 
