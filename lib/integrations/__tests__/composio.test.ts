@@ -147,6 +147,7 @@ describe('Composio integration', () => {
     expect(toolkitNames).toEqual([[{ name: 'googleslides', action: 'add' }]])
   })
 
+<<<<<<< HEAD
   it('keeps Connect MCP account listing non-blocking when a toolkit status request fails', async () => {
     process.env.COMPOSIO_CONNECT_KEY = 'ck_test_connect_key'
 
