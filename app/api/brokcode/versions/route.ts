@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
       : 'not_connected'
   const status = body?.status === 'error' ? 'error' : 'done'
   const diff = body?.diff && typeof body.diff === 'object' ? body.diff : null
+  const files = Array.isArray(body?.files) ? body.files : null
 
   if (!command || !summary) {
     return jsonNoStore(
@@ -79,14 +80,20 @@ export async function POST(request: NextRequest) {
     workspaceId: authResult.workspace.id,
     userId: authResult.apiKey.userId,
     command,
+    checkpointName:
+      typeof body?.checkpoint_name === 'string' ? body.checkpoint_name : null,
+    projectId: typeof body?.project_id === 'string' ? body.project_id : null,
     summary,
     runtime,
     status,
     previewUrl: typeof body?.preview_url === 'string' ? body.preview_url : null,
+    deploymentUrl:
+      typeof body?.deployment_url === 'string' ? body.deployment_url : null,
     branch: typeof body?.branch === 'string' ? body.branch : null,
     commitSha: typeof body?.commit_sha === 'string' ? body.commit_sha : null,
     prUrl: typeof body?.pr_url === 'string' ? body.pr_url : null,
-    diff
+    diff,
+    files
   })
 
   return jsonNoStore({ version })

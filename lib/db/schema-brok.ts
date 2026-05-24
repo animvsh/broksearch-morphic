@@ -283,14 +283,18 @@ export const brokCodeVersions = pgTable(
       .notNull(),
     userId: text('user_id').notNull(),
     command: text('command').notNull(),
+    checkpointName: text('checkpoint_name'),
+    projectId: text('project_id'),
     summary: text('summary').notNull(),
     runtime: text('runtime').notNull(),
     status: text('status').notNull(),
     previewUrl: text('preview_url'),
+    deploymentUrl: text('deployment_url'),
     branch: text('branch'),
     commitSha: text('commit_sha'),
     prUrl: text('pr_url'),
     diffMetadata: jsonb('diff_metadata').$type<Record<string, unknown>>(),
+    fileSnapshot: jsonb('file_snapshot').$type<Record<string, unknown>[]>(),
     createdAt: timestamp('created_at').defaultNow().notNull()
   },
   table => ({
