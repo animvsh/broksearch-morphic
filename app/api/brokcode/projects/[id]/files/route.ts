@@ -14,6 +14,11 @@ import {
   listBrokCodeProjectFiles,
   upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
+import { createBrokCodeRuntimeSpec } from '@/lib/brokcode/runtime/contract'
+import {
+  BrokCodeRuntimeWorkspaceError,
+  materializeBrokCodeRuntimeWorkspace
+} from '@/lib/brokcode/runtime/workspace'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -139,5 +144,32 @@ export async function PUT(
     throw error
   }
 
-  return NextResponse.json({ file: savedFiles[0] ?? null, files: savedFiles })
+  const allFiles = await listBrokCodeProjectFiles({
+    projectId: access.project.id,
+    workspaceId: access.authResult.workspace.id
+  })
+  const spec = createBrokCodeRuntimeSpec({
+    projectId: access.project.id,
+    workspaceId: access.authResult.workspace.id,
+    userId: access.authResult.apiKey.userId,
+    files: allFiles
+  })
+
+  try {
+    const runtimeWorkspace = await materializeBrokCodeRuntimeWorkspace({
+      spec,
+      files: allFiles,
+      projectName: access.project.name
+    })
+    return NextResponse.json({
+      file: savedFiles[0] ?? null,
+      files: savedFiles,
+      runtimeWorkspace: runtimeWorkspace.manifest
+    })
+  } catch (error) {
+    if (error instanceof BrokCodeRuntimeWorkspaceError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    throw error
+  }
 }

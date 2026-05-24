@@ -232,6 +232,13 @@
       "when": 1778917200000,
       "tag": "0032_brokcode_runtime_sandboxes",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1778920800000,
+      "tag": "0033_brokcode_runtime_app_types",
+      "breakpoints": true
     }
   ]
 }

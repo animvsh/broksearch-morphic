@@ -19,6 +19,10 @@ import {
   listBrokCodeRuntimeSandboxes,
   updateBrokCodeRuntimeSandbox
 } from '@/lib/brokcode/runtime/store'
+import {
+  BrokCodeRuntimeWorkspaceError,
+  materializeBrokCodeRuntimeWorkspace
+} from '@/lib/brokcode/runtime/workspace'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -125,6 +129,29 @@ export async function POST(
     files,
     status: body?.status
   })
+  let materialized: Awaited<
+    ReturnType<typeof materializeBrokCodeRuntimeWorkspace>
+  >
+  try {
+    materialized = await materializeBrokCodeRuntimeWorkspace({
+      spec,
+      files,
+      projectName: access.project.name
+    })
+  } catch (error) {
+    if (error instanceof BrokCodeRuntimeWorkspaceError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    throw error
+  }
+  const runtimeSpec = {
+    ...spec,
+    appType: materialized.manifest.appType,
+    metadata: {
+      ...spec.metadata,
+      workspace: materialized.manifest
+    }
+  }
   const latest =
     body?.force === true
       ? null
@@ -135,14 +162,20 @@ export async function POST(
         })
   const runtime =
     latest && latest.versionId === spec.versionId
-      ? latest
+      ? await updateBrokCodeRuntimeSandbox({
+          id: latest.id,
+          workspaceId: access.authResult.workspace.id,
+          userId: access.authResult.apiKey.userId,
+          metadata: runtimeSpec.metadata
+        })
       : await createBrokCodeRuntimeSandbox({
-          spec
+          spec: runtimeSpec
         })
 
   return NextResponse.json({
     runtime,
-    spec,
+    spec: runtimeSpec,
+    workspace: materialized.manifest,
     fallback: runtimeFallback()
   })
 }

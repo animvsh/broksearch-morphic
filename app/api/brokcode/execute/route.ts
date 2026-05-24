@@ -51,6 +51,8 @@ import {
   updateBrokCodeProjectPreview,
   upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
+import { createBrokCodeRuntimeSpec } from '@/lib/brokcode/runtime/contract'
+import { materializeBrokCodeRuntimeWorkspace } from '@/lib/brokcode/runtime/workspace'
 import {
   isDeepSecSecurityScanCommand,
   runDeepSecSecurityScan
@@ -344,6 +346,19 @@ async function persistGeneratedProjectOutput({
       language: file.language
     })
   }
+  const runtimeSpec = createBrokCodeRuntimeSpec({
+    projectId: project.id,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId,
+    versionId: taskId ?? null,
+    sessionId: taskId ?? null,
+    files
+  })
+  const runtimeWorkspace = await materializeBrokCodeRuntimeWorkspace({
+    spec: runtimeSpec,
+    files,
+    projectName: project.name
+  })
 
   send?.('files', {
     project_id: project.id,
@@ -352,6 +367,7 @@ async function persistGeneratedProjectOutput({
       path: file.path,
       language: file.language
     })),
+    runtime_workspace: runtimeWorkspace.manifest,
     quality
   })
 
@@ -368,6 +384,7 @@ async function persistGeneratedProjectOutput({
       mode: 'managed_static',
       fileCount: files.length,
       quality,
+      runtimeWorkspace: runtimeWorkspace.manifest,
       generatedAt: new Date().toISOString(),
       source: 'runtime_output'
     }
