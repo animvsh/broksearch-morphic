@@ -24,6 +24,7 @@ import {
   decryptInsForgeAdminKey,
   publicBrokCodeBackendMetadata
 } from '@/lib/brokcode/backend-provider'
+import { buildBrokCodeProjectContextPack } from '@/lib/brokcode/context-packer'
 import {
   buildFallbackGeneratedAppFiles,
   extractGeneratedBrokCodeFiles,
@@ -48,6 +49,7 @@ import {
 import {
   getBrokCodeProject,
   getBrokCodeProjectBackend,
+  listBrokCodeProjectFiles,
   updateBrokCodeProjectPreview,
   upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
@@ -638,6 +640,27 @@ async function buildBrokCodeProjectContext({
   if (!project) return ''
 
   const backend = getBrokCodeProjectBackend(project)
+  const files = await listBrokCodeProjectFiles({
+    projectId: project.id,
+    workspaceId: auth.workspace.id
+  }).catch(error => {
+    console.error('BrokCode project file context lookup failed:', error)
+    return []
+  })
+  const contextPack = buildBrokCodeProjectContextPack({
+    project,
+    files,
+    backend,
+    currentPreviewUrl: project.previewUrl,
+    recentErrors:
+      typeof project.metadata?.lastRuntimeError === 'string'
+        ? [project.metadata.lastRuntimeError]
+        : [],
+    priorRequests:
+      typeof project.metadata?.lastCommand === 'string'
+        ? [project.metadata.lastCommand]
+        : []
+  })
   const projectLines = [
     'Saved BrokCode project context:',
     `Project: ${project.name} (${project.id})`,
@@ -647,7 +670,7 @@ async function buildBrokCodeProjectContext({
   ].filter(Boolean)
 
   if (backend.provider !== 'insforge' || !backend.projectUrl) {
-    return projectLines.join('\n')
+    return [projectLines.join('\n'), contextPack].filter(Boolean).join('\n\n')
   }
 
   const liveContext = await fetchInsForgeBackendContext({
@@ -670,6 +693,7 @@ async function buildBrokCodeProjectContext({
         : 'Public app key is not configured yet; use the public auth config endpoint before requiring login.',
       'Never write the InsForge admin access key into generated source, browser env, logs, or previews.'
     ].join('\n'),
+    contextPack,
     formatInsForgeBackendContextForPrompt(liveContext)
   ]
     .filter(Boolean)
