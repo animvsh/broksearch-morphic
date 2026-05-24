@@ -220,6 +220,25 @@ export async function getLatestBrokCodeRuntimeSandbox({
   return runtime ?? null
 }
 
+export async function getBrokCodeRuntimeSandboxById({ id }: { id: string }) {
+  if (canUseDatabaseStore()) {
+    try {
+      const [runtime] = await db
+        .select()
+        .from(brokCodeRuntimeSandboxes)
+        .where(eq(brokCodeRuntimeSandboxes.id, id))
+        .limit(1)
+
+      return runtime ?? null
+    } catch (error) {
+      console.error('BrokCode runtime DB get failed; using file store:', error)
+    }
+  }
+
+  const store = await readRuntimeStore()
+  return store.runtimes.find(runtime => runtime.id === id) ?? null
+}
+
 export async function updateBrokCodeRuntimeSandbox({
   id,
   workspaceId,

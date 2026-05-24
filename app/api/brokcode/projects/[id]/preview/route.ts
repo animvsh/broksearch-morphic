@@ -15,6 +15,16 @@ import {
   listBrokCodeProjectFiles,
   updateBrokCodeProjectPreview
 } from '@/lib/brokcode/project-store'
+import { createBrokCodeRuntimeSpec } from '@/lib/brokcode/runtime/contract'
+import { startBrokCodeRuntimeProcess } from '@/lib/brokcode/runtime/process-manager'
+import {
+  createBrokCodeRuntimeSandbox,
+  getLatestBrokCodeRuntimeSandbox
+} from '@/lib/brokcode/runtime/store'
+import {
+  BrokCodeRuntimeWorkspaceError,
+  materializeBrokCodeRuntimeWorkspace
+} from '@/lib/brokcode/runtime/workspace'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -80,6 +90,65 @@ export async function POST(
     projectId: access.project.id,
     workspaceId: access.authResult.workspace.id
   })
+  const runtimeSpec = createBrokCodeRuntimeSpec({
+    projectId: access.project.id,
+    workspaceId: access.authResult.workspace.id,
+    userId: access.authResult.apiKey.userId,
+    files,
+    status: 'running'
+  })
+  if (
+    runtimeSpec.appType === 'vite_react' ||
+    runtimeSpec.appType === 'nextjs'
+  ) {
+    try {
+      const workspace = await materializeBrokCodeRuntimeWorkspace({
+        spec: runtimeSpec,
+        files,
+        projectName: access.project.name
+      })
+      const specWithWorkspace = {
+        ...runtimeSpec,
+        metadata: {
+          ...runtimeSpec.metadata,
+          workspace: workspace.manifest
+        }
+      }
+      const runtime =
+        (await getLatestBrokCodeRuntimeSandbox({
+          projectId: access.project.id,
+          workspaceId: access.authResult.workspace.id,
+          userId: access.authResult.apiKey.userId
+        })) ??
+        (await createBrokCodeRuntimeSandbox({
+          spec: specWithWorkspace
+        }))
+      const processEntry = await startBrokCodeRuntimeProcess({
+        runtime,
+        manifest: workspace.manifest
+      })
+      if (processEntry?.status === 'ready') {
+        const previewUrl = `${resolvePublicPreviewOrigin(request)}/api/brokcode/runtime/${encodeURIComponent(runtime.id)}/`
+        return NextResponse.json({
+          status: 'ready',
+          strategy: 'live_runtime',
+          message: 'BrokCode live runtime preview is ready.',
+          previewUrl,
+          deploymentPreviewUrl: previewUrl,
+          fileCount: workspace.manifest.files.length,
+          runtime,
+          workspace: workspace.manifest,
+          project: publicProject(access.project)
+        })
+      }
+    } catch (error) {
+      if (error instanceof BrokCodeRuntimeWorkspaceError) {
+        return NextResponse.json({ error: error.message }, { status: 400 })
+      }
+      console.error('BrokCode live runtime start failed:', error)
+    }
+  }
+
   if (!hasRenderableManagedPreview(files)) {
     return NextResponse.json(
       {
