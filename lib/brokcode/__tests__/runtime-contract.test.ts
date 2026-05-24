@@ -75,6 +75,35 @@ describe('BrokCode runtime contract', () => {
     expect(spec.status).toBe('running')
   })
 
+  it('detects Next.js and unsupported projects', () => {
+    const nextFiles = [
+      {
+        path: 'app/page.tsx',
+        content: 'export default function Page() { return <main /> }'
+      }
+    ]
+    const nextSpec = createBrokCodeRuntimeSpec({
+      projectId: 'project-next',
+      workspaceId: 'workspace-next',
+      userId: 'user-next',
+      files: nextFiles
+    })
+
+    expect(detectBrokCodeRuntimeAppType(nextFiles)).toBe('nextjs')
+    expect(nextSpec.packageManager).toBe('bun')
+    expect(nextSpec.ports[0]).toMatchObject({ port: 3000 })
+
+    const unsupportedSpec = createBrokCodeRuntimeSpec({
+      projectId: 'project-unsupported',
+      workspaceId: 'workspace-unsupported',
+      userId: 'user-unsupported',
+      files: [{ path: 'script.py', content: 'print("hi")' }]
+    })
+    expect(unsupportedSpec.appType).toBe('unsupported')
+    expect(unsupportedSpec.packageManager).toBe('none')
+    expect(unsupportedSpec.devCommand).toBe('unsupported-runtime')
+  })
+
   it('normalizes unknown runtime statuses to preparing', () => {
     expect(normalizeBrokCodeRuntimeStatus('healthy')).toBe('healthy')
     expect(normalizeBrokCodeRuntimeStatus('booting')).toBe('preparing')

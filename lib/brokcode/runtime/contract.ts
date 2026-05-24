@@ -11,7 +11,12 @@ export const BROKCODE_RUNTIME_STATUSES = [
 
 export type BrokCodeRuntimeStatus = (typeof BROKCODE_RUNTIME_STATUSES)[number]
 
-export const BROKCODE_RUNTIME_APP_TYPES = ['static_html', 'vite_react'] as const
+export const BROKCODE_RUNTIME_APP_TYPES = [
+  'static_html',
+  'vite_react',
+  'nextjs',
+  'unsupported'
+] as const
 
 export type BrokCodeRuntimeAppType = (typeof BROKCODE_RUNTIME_APP_TYPES)[number]
 
@@ -91,7 +96,7 @@ function safeSegment(value: string) {
   )
 }
 
-function parsePackageJson(files: BrokCodeRuntimeFile[]) {
+export function parseBrokCodePackageJson(files: BrokCodeRuntimeFile[]) {
   const file = files.find(item => item.path === 'package.json')
   if (!file) return null
 
@@ -119,7 +124,34 @@ function hasDependency(packageJson: Record<string, unknown>, name: string) {
 export function detectBrokCodeRuntimeAppType(
   files: BrokCodeRuntimeFile[]
 ): BrokCodeRuntimeAppType {
-  const packageJson = parsePackageJson(files)
+  if (files.length === 0) return 'unsupported'
+
+  const packageJson = parseBrokCodePackageJson(files)
+  if (
+    packageJson &&
+    (hasDependency(packageJson, 'next') ||
+      files.some(
+        file =>
+          file.path === 'next.config.js' ||
+          file.path === 'next.config.mjs' ||
+          file.path === 'next.config.ts'
+      ))
+  ) {
+    return 'nextjs'
+  }
+
+  if (
+    files.some(
+      file =>
+        file.path === 'app/page.tsx' ||
+        file.path === 'app/page.jsx' ||
+        file.path === 'pages/index.tsx' ||
+        file.path === 'pages/index.jsx'
+    )
+  ) {
+    return 'nextjs'
+  }
+
   if (
     packageJson &&
     (hasDependency(packageJson, 'vite') || hasDependency(packageJson, 'react'))
@@ -139,7 +171,19 @@ export function detectBrokCodeRuntimeAppType(
     return 'vite_react'
   }
 
-  return 'static_html'
+  if (
+    files.some(
+      file =>
+        file.path === 'index.html' ||
+        file.path.endsWith('.html') ||
+        file.path.endsWith('.css') ||
+        file.path.endsWith('.js')
+    )
+  ) {
+    return 'static_html'
+  }
+
+  return 'unsupported'
 }
 
 export function detectBrokCodePackageManager({
@@ -149,6 +193,7 @@ export function detectBrokCodePackageManager({
   files: BrokCodeRuntimeFile[]
   appType: BrokCodeRuntimeAppType
 }): BrokCodePackageManager {
+  if (appType === 'unsupported') return 'none'
   if (appType === 'static_html') return 'none'
   if (
     files.some(file => file.path === 'bun.lockb' || file.path === 'bun.lock')
@@ -158,7 +203,7 @@ export function detectBrokCodePackageManager({
   if (files.some(file => file.path === 'pnpm-lock.yaml')) return 'pnpm'
   if (files.some(file => file.path === 'yarn.lock')) return 'yarn'
 
-  const packageJson = parsePackageJson(files)
+  const packageJson = parseBrokCodePackageJson(files)
   const packageManager = packageJson?.packageManager
   if (typeof packageManager === 'string') {
     const [name] = packageManager.split('@')
@@ -176,7 +221,20 @@ function installCommandFor(packageManager: BrokCodePackageManager) {
   return 'bun install'
 }
 
-function runCommandFor(packageManager: BrokCodePackageManager) {
+function unsupportedRunCommandFor(appType: BrokCodeRuntimeAppType) {
+  if (appType === 'unsupported') return 'unsupported-runtime'
+  return null
+}
+
+function devCommandFor({
+  appType,
+  packageManager
+}: {
+  appType: BrokCodeRuntimeAppType
+  packageManager: BrokCodePackageManager
+}) {
+  const unsupportedCommand = unsupportedRunCommandFor(appType)
+  if (unsupportedCommand) return unsupportedCommand
   if (packageManager === 'none') return 'static-preview --host 0.0.0.0'
   if (packageManager === 'npm') return 'npm run dev -- --host 0.0.0.0'
   if (packageManager === 'pnpm') return 'pnpm dev --host 0.0.0.0'
@@ -190,6 +248,12 @@ function buildCommandFor(packageManager: BrokCodePackageManager) {
   if (packageManager === 'pnpm') return 'pnpm build'
   if (packageManager === 'yarn') return 'yarn build'
   return 'bun run build'
+}
+
+function defaultPortFor(appType: BrokCodeRuntimeAppType) {
+  if (appType === 'vite_react') return 5173
+  if (appType === 'nextjs') return 3000
+  return 4173
 }
 
 export function createBrokCodeRuntimeSpec({
@@ -213,7 +277,7 @@ export function createBrokCodeRuntimeSpec({
 }): BrokCodeRuntimeSpec {
   const appType = detectBrokCodeRuntimeAppType(files)
   const packageManager = detectBrokCodePackageManager({ files, appType })
-  const port = appType === 'static_html' ? 4173 : 5173
+  const port = defaultPortFor(appType)
   const cleanVersion = versionId ? safeSegment(versionId) : 'latest'
 
   return {
@@ -238,7 +302,7 @@ export function createBrokCodeRuntimeSpec({
       cleanVersion
     ].join('/'),
     installCommand: installCommandFor(packageManager),
-    devCommand: runCommandFor(packageManager),
+    devCommand: devCommandFor({ appType, packageManager }),
     buildCommand: buildCommandFor(packageManager),
     ports: [
       {
