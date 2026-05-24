@@ -728,23 +728,29 @@ export async function createConnectedAccountLink(params: {
       )
     }
 
-    const payload = await composioManageConnectionsConnect({
-      toolkits: [{ name: toolkitSlug, action: 'add' }],
-      sessionId: buildConnectSessionId(params.userId, toolkitSlug),
-      ...(params.redirectUrl ? { redirectUrl: params.redirectUrl } : {})
-    })
+    try {
+      const payload = await composioManageConnectionsConnect({
+        toolkits: [{ name: toolkitSlug, action: 'add' }],
+        sessionId: buildConnectSessionId(params.userId, toolkitSlug),
+        ...(params.redirectUrl ? { redirectUrl: params.redirectUrl } : {})
+      })
 
-    const toolkitResults = extractToolkitResultsFromConnect(payload)
-    const toolkitPayload =
-      toolkitResults[toolkitSlug] &&
-      typeof toolkitResults[toolkitSlug] === 'object'
-        ? (toolkitResults[toolkitSlug] as Record<string, unknown>)
-        : null
+      const toolkitResults = extractToolkitResultsFromConnect(payload)
+      const toolkitPayload =
+        toolkitResults[toolkitSlug] &&
+        typeof toolkitResults[toolkitSlug] === 'object'
+          ? (toolkitResults[toolkitSlug] as Record<string, unknown>)
+          : null
 
-    const url = resolveConnectionUrl(toolkitPayload || payload)
-    return {
-      raw: payload,
-      url
+      const url = resolveConnectionUrl(toolkitPayload || payload)
+      return {
+        raw: payload,
+        url
+      }
+    } catch (error) {
+      if (!resolveBackendApiKey()) {
+        throw error
+      }
     }
   }
 

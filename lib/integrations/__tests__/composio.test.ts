@@ -159,6 +159,59 @@ describe('Composio integration', () => {
     ).resolves.toEqual([])
   })
 
+  it('falls back to backend auth config links when Connect MCP cannot start OAuth', async () => {
+    process.env.COMPOSIO_CONNECT_KEY = 'ck_test_connect_key'
+    process.env.COMPOSIO_API_KEY = 'test-backend-key'
+    process.env.COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID = 'ac_slides'
+
+    const requestedUrls: string[] = []
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const url = String(input)
+      requestedUrls.push(url)
+
+      if (url.includes('/mcp')) {
+        return new Response('', { status: 500 })
+      }
+
+      if (url.includes('/auth_configs/ac_slides')) {
+        return Response.json({
+          data: {
+            id: 'ac_slides',
+            status: 'ENABLED',
+            toolkit: {
+              slug: 'googleslides'
+            }
+          }
+        })
+      }
+
+      if (url.includes('/connected_accounts/link')) {
+        return Response.json({
+          data: {
+            redirect_url: 'https://backend.composio.dev/slides-oauth'
+          }
+        })
+      }
+
+      return Response.json({ error: 'unexpected url' }, { status: 404 })
+    })
+
+    await expect(
+      createConnectedAccountLink({
+        userId: 'user_123',
+        toolkitSlug: 'google-slides'
+      })
+    ).resolves.toMatchObject({
+      url: 'https://backend.composio.dev/slides-oauth'
+    })
+
+    expect(requestedUrls).toEqual([
+      'https://connect.composio.dev/mcp',
+      'https://backend.composio.dev/api/v3.1/connected_accounts/link'
+    ])
+  })
+
   it('accepts v3.1 auth configs where toolkit is an object with a slug', async () => {
     process.env.COMPOSIO_API_KEY = 'test-composio-key'
     process.env.COMPOSIO_GMAIL_AUTH_CONFIG_ID = 'ac_gmail'
