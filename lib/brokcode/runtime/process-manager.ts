@@ -11,13 +11,42 @@ type RuntimeProcess = {
   runtimeId: string
   port: number
   url: string
-  process: ReturnType<typeof spawn>
+  process: ReturnType<typeof spawn> | null
   status: 'starting' | 'ready' | 'crashed' | 'stopped'
-  logs: Array<Record<string, unknown>>
+  logs: BrokCodeRuntimeLog[]
   startedAt: Date
 }
 
+export type BrokCodeRuntimeLog = {
+  level: 'info' | 'warn' | 'error'
+  source: 'install' | 'dev-server' | 'browser' | 'system'
+  message: string
+  at: string
+  command?: string
+  file?: string
+  line?: number
+  column?: number
+  stack?: string
+}
+
+export type BrokCodeRuntimeBrowserEvent = {
+  level?: unknown
+  message?: unknown
+  stack?: unknown
+  source?: unknown
+  file?: unknown
+  line?: unknown
+  column?: unknown
+}
+
 const runtimeProcesses = new Map<string, RuntimeProcess>()
+const MAX_RUNTIME_LOGS = 250
+const MAX_RUNTIME_LOG_MESSAGE_LENGTH = 2000
+const SECRET_VALUE_PATTERN =
+  /\b(api[_-]?key|token|secret|password|authorization|bearer)\b\s*[:=]\s*["']?[^"'\s,;]+/gi
+const ENV_SECRET_PATTERN =
+  /\b[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*=["']?[^"'\s,;]+/g
+const ANSI_PATTERN = /\x1B\[[0-?]*[ -/]*[@-~]/g
 
 function getRuntimeProcesses() {
   const globalState = globalThis as typeof globalThis & {
@@ -31,17 +60,69 @@ function getRuntimeProcesses() {
 
 function appendLog(
   entry: RuntimeProcess,
-  level: 'info' | 'error',
-  message: string
+  level: BrokCodeRuntimeLog['level'],
+  message: string,
+  options: Partial<Omit<BrokCodeRuntimeLog, 'level' | 'message' | 'at'>> = {}
 ) {
-  entry.logs = [
-    ...entry.logs.slice(-199),
-    {
-      level,
-      message,
-      at: new Date().toISOString()
-    }
-  ]
+  const logs = createRuntimeLogs({
+    level,
+    message,
+    ...options
+  })
+  entry.logs = [...entry.logs, ...logs].slice(-MAX_RUNTIME_LOGS)
+}
+
+export function redactBrokCodeRuntimeLog(value: string) {
+  return value
+    .replace(ANSI_PATTERN, '')
+    .replace(SECRET_VALUE_PATTERN, '$1=[redacted]')
+    .replace(ENV_SECRET_PATTERN, match => {
+      const [name] = match.split('=')
+      return `${name}=[redacted]`
+    })
+}
+
+export function createRuntimeLogs({
+  level,
+  message,
+  source,
+  command,
+  file,
+  line: lineNumber,
+  column,
+  stack
+}: {
+  level: BrokCodeRuntimeLog['level']
+  message: string
+  source?: BrokCodeRuntimeLog['source']
+  command?: string
+  file?: string
+  line?: number
+  column?: number
+  stack?: string
+}) {
+  const sanitized = redactBrokCodeRuntimeLog(message)
+  const lines = sanitized
+    .split(/\r?\n/)
+    .map(line => line.trimEnd())
+    .filter(Boolean)
+    .slice(-40)
+
+  const at = new Date().toISOString()
+  return (lines.length > 0 ? lines : ['']).map(line => ({
+    level,
+    source: source ?? 'system',
+    message:
+      line.length > MAX_RUNTIME_LOG_MESSAGE_LENGTH
+        ? `${line.slice(0, MAX_RUNTIME_LOG_MESSAGE_LENGTH)}...`
+        : line,
+    at,
+    ...(command ? { command: redactBrokCodeRuntimeLog(command) } : {}),
+    ...(file ? { file: redactBrokCodeRuntimeLog(file) } : {}),
+    ...(typeof lineNumber === 'number' ? { line: lineNumber } : {}),
+    ...(typeof column === 'number' ? { column } : {}),
+    ...(stack ? { stack: redactBrokCodeRuntimeLog(stack).slice(0, 4000) } : {})
+  }))
 }
 
 async function findFreePort() {
@@ -96,13 +177,19 @@ function commandFor({
 
 async function installDependencies({
   manifest,
-  workspacePath
+  workspacePath,
+  entry
 }: {
   manifest: BrokCodeRuntimeWorkspaceManifest
   workspacePath: string
+  entry: RuntimeProcess
 }) {
   if (manifest.packageManager === 'none') return
 
+  appendLog(entry, 'info', 'Installing dependencies with bun install.', {
+    source: 'install',
+    command: 'bun install'
+  })
   await new Promise<void>((resolve, reject) => {
     const child = spawn('bun', ['install'], {
       cwd: workspacePath,
@@ -113,8 +200,18 @@ async function installDependencies({
       stdio: ['ignore', 'pipe', 'pipe']
     })
     let stderr = ''
+    child.stdout.on('data', chunk => {
+      appendLog(entry, 'info', String(chunk), {
+        source: 'install',
+        command: 'bun install'
+      })
+    })
     child.stderr.on('data', chunk => {
       stderr += String(chunk)
+      appendLog(entry, 'error', String(chunk), {
+        source: 'install',
+        command: 'bun install'
+      })
     })
     child.on('error', reject)
     child.on('exit', code => {
@@ -126,6 +223,84 @@ async function installDependencies({
 
 export function getBrokCodeRuntimeProcess(runtimeId: string) {
   return getRuntimeProcesses().get(runtimeId) ?? null
+}
+
+export function getBrokCodeRuntimeDiagnostics(runtime: BrokCodeRuntimeSandbox) {
+  const processEntry = getBrokCodeRuntimeProcess(runtime.id)
+  const logs = (
+    processEntry?.logs.length ? processEntry.logs : (runtime.logs ?? [])
+  ) as BrokCodeRuntimeLog[]
+  const normalizedLogs = logs.slice(-MAX_RUNTIME_LOGS)
+  const lastError =
+    [...normalizedLogs].reverse().find(log => log.level === 'error') ?? null
+
+  return {
+    runtimeId: runtime.id,
+    status: processEntry?.status ?? runtime.status,
+    process: processEntry
+      ? {
+          port: processEntry.port,
+          url: processEntry.url,
+          startedAt: processEntry.startedAt.toISOString()
+        }
+      : null,
+    logs: normalizedLogs,
+    lastError
+  }
+}
+
+export async function appendBrokCodeRuntimeBrowserEvent({
+  runtime,
+  event
+}: {
+  runtime: BrokCodeRuntimeSandbox
+  event: BrokCodeRuntimeBrowserEvent
+}) {
+  const processEntry = getBrokCodeRuntimeProcess(runtime.id)
+  const message =
+    typeof event.message === 'string' && event.message.trim()
+      ? event.message
+      : 'Browser runtime event'
+  const level = event.level === 'warn' ? 'warn' : 'error'
+  const file =
+    typeof event.file === 'string'
+      ? event.file
+      : typeof event.source === 'string'
+        ? event.source
+        : undefined
+  const line = typeof event.line === 'number' ? event.line : undefined
+  const column = typeof event.column === 'number' ? event.column : undefined
+  const stack = typeof event.stack === 'string' ? event.stack : undefined
+  const logs = createRuntimeLogs({
+    level,
+    source: 'browser',
+    message,
+    file,
+    line,
+    column,
+    stack
+  })
+  const nextLogs = [
+    ...((processEntry?.logs.length
+      ? processEntry.logs
+      : (runtime.logs ?? [])) as
+      | BrokCodeRuntimeLog[]
+      | Array<Record<string, unknown>>),
+    ...logs
+  ].slice(-MAX_RUNTIME_LOGS)
+
+  if (processEntry) {
+    processEntry.logs = nextLogs as BrokCodeRuntimeLog[]
+  }
+
+  await updateBrokCodeRuntimeSandbox({
+    id: runtime.id,
+    workspaceId: runtime.workspaceId,
+    userId: runtime.userId,
+    logs: nextLogs
+  })
+
+  return logs
 }
 
 export async function startBrokCodeRuntimeProcess({
@@ -146,6 +321,16 @@ export async function startBrokCodeRuntimeProcess({
 
   const command = commandFor({ manifest, port: 0 })
   if (!command) return null
+  const entry: RuntimeProcess = {
+    runtimeId: runtime.id,
+    port: 0,
+    url: '',
+    process: null,
+    status: 'starting',
+    logs: [],
+    startedAt: new Date()
+  }
+  getRuntimeProcesses().set(runtime.id, entry)
 
   await updateBrokCodeRuntimeSandbox({
     id: runtime.id,
@@ -161,10 +346,35 @@ export async function startBrokCodeRuntimeProcess({
     }
   })
 
-  await installDependencies({
-    manifest,
-    workspacePath: manifest.workspacePath
-  })
+  try {
+    await installDependencies({
+      manifest,
+      workspacePath: manifest.workspacePath,
+      entry
+    })
+  } catch (error) {
+    entry.status = 'crashed'
+    appendLog(
+      entry,
+      'error',
+      error instanceof Error ? error.message : 'Dependency install failed.',
+      { source: 'install', command: 'bun install' }
+    )
+    await updateBrokCodeRuntimeSandbox({
+      id: runtime.id,
+      workspaceId: runtime.workspaceId,
+      userId: runtime.userId,
+      status: 'crashed',
+      logs: entry.logs,
+      health: {
+        ok: false,
+        checkedAt: new Date().toISOString(),
+        message: 'Dependency install failed.'
+      },
+      metadata: runtime.metadata ?? {}
+    })
+    throw error
+  }
 
   const port = await findFreePort()
   const resolvedCommand = commandFor({ manifest, port })
@@ -179,22 +389,36 @@ export async function startBrokCodeRuntimeProcess({
     },
     stdio: ['ignore', 'pipe', 'pipe']
   })
-  const entry: RuntimeProcess = {
-    runtimeId: runtime.id,
-    port,
-    url,
-    process: child,
-    status: 'starting',
-    logs: [],
-    startedAt: new Date()
-  }
-  getRuntimeProcesses().set(runtime.id, entry)
+  entry.port = port
+  entry.url = url
+  entry.process = child
 
-  child.stdout.on('data', chunk => appendLog(entry, 'info', String(chunk)))
-  child.stderr.on('data', chunk => appendLog(entry, 'error', String(chunk)))
+  appendLog(
+    entry,
+    'info',
+    `${resolvedCommand.command} ${resolvedCommand.args.join(' ')}`,
+    {
+      source: 'dev-server',
+      command: `${resolvedCommand.command} ${resolvedCommand.args.join(' ')}`
+    }
+  )
+  child.stdout.on('data', chunk =>
+    appendLog(entry, 'info', String(chunk), {
+      source: 'dev-server',
+      command: `${resolvedCommand.command} ${resolvedCommand.args.join(' ')}`
+    })
+  )
+  child.stderr.on('data', chunk =>
+    appendLog(entry, 'error', String(chunk), {
+      source: 'dev-server',
+      command: `${resolvedCommand.command} ${resolvedCommand.args.join(' ')}`
+    })
+  )
   child.on('exit', code => {
     entry.status = code === 0 ? 'stopped' : 'crashed'
-    appendLog(entry, code === 0 ? 'info' : 'error', `Runtime exited ${code}.`)
+    appendLog(entry, code === 0 ? 'info' : 'error', `Runtime exited ${code}.`, {
+      source: 'dev-server'
+    })
   })
 
   const ready = await waitForRuntime(url)

@@ -231,6 +231,72 @@ type BrokCodeVersion = {
   createdAt: string
 }
 
+type BrokCodeRuntimeSandbox = {
+  id: string
+  projectId: string
+  workspaceId: string
+  userId: string
+  versionId?: string | null
+  sessionId?: string | null
+  institutionId?: string | null
+  courseId?: string | null
+  sectionId?: string | null
+  assignmentId?: string | null
+  appType: 'static_html' | 'vite_react' | 'nextjs' | 'unsupported'
+  packageManager: 'none' | 'bun' | 'npm' | 'pnpm' | 'yarn'
+  workspacePath: string
+  installCommand?: string | null
+  devCommand: string
+  buildCommand?: string | null
+  status:
+    | 'preparing'
+    | 'installing'
+    | 'building'
+    | 'running'
+    | 'healthy'
+    | 'crashed'
+    | 'timed_out'
+    | 'stopped'
+  ports?: Array<{
+    name?: string
+    port?: number
+    protocol?: string
+    visibility?: string
+  }>
+  health?: {
+    ok?: boolean
+    message?: string
+    checkedAt?: string
+    url?: string
+  } | null
+  metadata?: Record<string, unknown> | null
+  updatedAt?: string
+}
+
+type BrokCodeRuntimeLog = {
+  level: 'info' | 'warn' | 'error'
+  source: 'install' | 'dev-server' | 'browser' | 'system'
+  message: string
+  at: string
+  command?: string
+  file?: string
+  line?: number
+  column?: number
+  stack?: string
+}
+
+type BrokCodeRuntimeDiagnostics = {
+  runtimeId: string
+  status: string
+  logs: BrokCodeRuntimeLog[]
+  lastError?: BrokCodeRuntimeLog | null
+  process?: {
+    port?: number
+    url?: string
+    startedAt?: string
+  } | null
+}
+
 type BrokCodeStreamResult = {
   runtime: BrokCodeRuntime
   model?: string
@@ -1017,6 +1083,11 @@ export function BrokCodeApp({
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [projects, setProjects] = useState<BrokCodeProject[]>([])
   const [activeProjectId, setActiveProjectId] = useState('')
+  const [projectRuntime, setProjectRuntime] =
+    useState<BrokCodeRuntimeSandbox | null>(null)
+  const [runtimeDiagnostics, setRuntimeDiagnostics] =
+    useState<BrokCodeRuntimeDiagnostics | null>(null)
+  const [projectRuntimeLoading, setProjectRuntimeLoading] = useState(false)
   const [backendSaving, setBackendSaving] = useState(false)
   const [backendProvisioning, setBackendProvisioning] = useState(false)
   const [backendChecking, setBackendChecking] = useState(false)
@@ -1371,6 +1442,81 @@ export function BrokCodeApp({
     [apiKey, getAuthHeaders]
   )
 
+  const refreshProjectRuntime = useCallback(
+    async (project = activeProject, key = apiKey) => {
+      if (!project?.id) {
+        setProjectRuntime(null)
+        return null
+      }
+      if (key && !isValidBrokApiKey(key)) {
+        setProjectRuntime(null)
+        return null
+      }
+
+      setProjectRuntimeLoading(true)
+      try {
+        const response = await fetch(
+          `/api/brokcode/projects/${encodeURIComponent(project.id)}/runtime`,
+          {
+            headers: getAuthHeaders(key)
+          }
+        )
+        const body = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(body?.error ?? 'Runtime lookup failed.')
+        }
+
+        const runtime =
+          body?.runtime && typeof body.runtime === 'object'
+            ? (body.runtime as BrokCodeRuntimeSandbox)
+            : null
+        setProjectRuntime(runtime)
+        return runtime
+      } catch (error) {
+        setProjectRuntime(null)
+        setRuntimeError(
+          error instanceof Error
+            ? error.message
+            : 'Could not load project runtime.'
+        )
+        return null
+      } finally {
+        setProjectRuntimeLoading(false)
+      }
+    },
+    [activeProject, apiKey, getAuthHeaders]
+  )
+
+  const refreshRuntimeDiagnostics = useCallback(
+    async (runtime = projectRuntime) => {
+      if (!runtime?.id) {
+        setRuntimeDiagnostics(null)
+        return null
+      }
+
+      try {
+        const response = await fetch(
+          `/api/brokcode/runtime/${encodeURIComponent(runtime.id)}/logs`,
+          { cache: 'no-store' }
+        )
+        const body = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(body?.error ?? 'Runtime diagnostics lookup failed.')
+        }
+
+        const diagnostics =
+          body?.diagnostics && typeof body.diagnostics === 'object'
+            ? (body.diagnostics as BrokCodeRuntimeDiagnostics)
+            : null
+        setRuntimeDiagnostics(diagnostics)
+        return diagnostics
+      } catch {
+        return null
+      }
+    },
+    [projectRuntime]
+  )
+
   const refreshRepoContext = useCallback(
     async (key = apiKey) => {
       if (key && !isValidBrokApiKey(key)) {
@@ -1429,6 +1575,24 @@ export function BrokCodeApp({
     [apiKey, getAuthHeaders]
   )
 
+  useEffect(() => {
+    void refreshProjectRuntime()
+  }, [refreshProjectRuntime])
+
+  useEffect(() => {
+    if (!projectRuntime?.id) {
+      setRuntimeDiagnostics(null)
+      return
+    }
+
+    void refreshRuntimeDiagnostics(projectRuntime)
+    const interval = window.setInterval(() => {
+      void refreshRuntimeDiagnostics(projectRuntime)
+    }, 2500)
+
+    return () => window.clearInterval(interval)
+  }, [projectRuntime, refreshRuntimeDiagnostics])
+
   async function ensureProjectForRun(command: string) {
     if (activeProject) return activeProject
 
@@ -1455,6 +1619,41 @@ export function BrokCodeApp({
     setProjects(current => [project, ...current])
     setActiveProjectId(project.id)
     return project
+  }
+
+  async function createProjectRuntimeRecord({
+    project,
+    status
+  }: {
+    project: BrokCodeProject
+    status: BrokCodeRuntimeSandbox['status']
+  }) {
+    const response = await fetch(
+      `/api/brokcode/projects/${encodeURIComponent(project.id)}/runtime`,
+      {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(apiKey),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sessionId: syncSessionId,
+          status,
+          force: true
+        })
+      }
+    )
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(body?.error ?? 'Could not create runtime contract.')
+    }
+
+    const runtime =
+      body?.runtime && typeof body.runtime === 'object'
+        ? (body.runtime as BrokCodeRuntimeSandbox)
+        : null
+    setProjectRuntime(runtime)
+    return runtime
   }
 
   async function saveGeneratedPreviewFiles({
@@ -3050,6 +3249,10 @@ export function BrokCodeApp({
 
     try {
       const runProject = await ensureProjectForRun(trimmed)
+      let runRuntime = await createProjectRuntimeRecord({
+        project: runProject,
+        status: 'preparing'
+      })
 
       updateExecutionStep(run.id, 'plan', 'done', 'Project is ready.')
       updateExecutionStep(
@@ -3187,12 +3390,46 @@ export function BrokCodeApp({
           projectId: runProject.id,
           files: generatedFiles
         })
+        runRuntime = await createProjectRuntimeRecord({
+          project: runProject,
+          status: 'building'
+        })
         managedPreviewUrl = await openCloudProjectPreview(runProject.id)
       } else if (!externalPreviewUrl) {
+        runRuntime = await refreshProjectRuntime(runProject)
         managedPreviewUrl = await openCloudProjectPreview(runProject.id)
       }
 
       const discoveredPreviewUrl = managedPreviewUrl ?? externalPreviewUrl
+      if (runRuntime?.id) {
+        const status = discoveredPreviewUrl ? 'healthy' : 'stopped'
+        const response = await fetch(
+          `/api/brokcode/projects/${encodeURIComponent(runProject.id)}/runtime`,
+          {
+            method: 'PATCH',
+            headers: {
+              ...getAuthHeaders(apiKey),
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              runtimeId: runRuntime.id,
+              status,
+              health: {
+                ok: Boolean(discoveredPreviewUrl),
+                checkedAt: new Date().toISOString(),
+                url: discoveredPreviewUrl,
+                message: discoveredPreviewUrl
+                  ? 'Preview URL is ready.'
+                  : 'Run completed without a live preview URL.'
+              }
+            })
+          }
+        )
+        const runtimeBody = await response.json().catch(() => null)
+        if (response.ok && runtimeBody?.runtime) {
+          setProjectRuntime(runtimeBody.runtime as BrokCodeRuntimeSandbox)
+        }
+      }
 
       setActiveRuntime(runtime)
       updateExecutionStep(run.id, 'execute', 'done', 'Build finished.')
@@ -3329,6 +3566,59 @@ export function BrokCodeApp({
       }
       setIsRunning(false)
     }
+  }
+
+  function fixRuntimeFailure() {
+    const logs = runtimeDiagnostics?.logs.slice(-14) ?? []
+    const lastError = runtimeDiagnostics?.lastError
+    const errorLocation = lastError
+      ? [
+          lastError.file,
+          typeof lastError.line === 'number' ? lastError.line : null,
+          typeof lastError.column === 'number' ? lastError.column : null
+        ]
+          .filter(
+            value => value !== null && value !== undefined && value !== ''
+          )
+          .join(':')
+      : ''
+    const prompt = [
+      'Fix the current BrokCode preview/runtime failure and keep the app functional.',
+      activeProject
+        ? `Project: ${activeProject.name} (${activeProject.id}). Use the current project files as the source of truth.`
+        : 'Use the current project files as the source of truth.',
+      projectRuntime
+        ? `Runtime: ${projectRuntime.status}; app type ${projectRuntime.appType}; dev command ${projectRuntime.devCommand}; workspace ${projectRuntime.workspacePath}.`
+        : 'Runtime: unavailable.',
+      lastError
+        ? `Last error: ${lastError.message}${errorLocation ? ` at ${errorLocation}` : ''}.`
+        : 'Last error: none captured yet; inspect the recent logs.',
+      logs.length > 0
+        ? `Recent runtime logs:\n${logs
+            .map(log => {
+              const location =
+                log.file || typeof log.line === 'number'
+                  ? ` (${[
+                      log.file,
+                      typeof log.line === 'number' ? log.line : null,
+                      typeof log.column === 'number' ? log.column : null
+                    ]
+                      .filter(
+                        value =>
+                          value !== null && value !== undefined && value !== ''
+                      )
+                      .join(':')})`
+                  : ''
+              return `- [${log.source}/${log.level}]${location} ${log.message}`
+            })
+            .join('\n')}`
+        : 'Recent runtime logs: none captured yet.',
+      'After fixing, regenerate the preview and verify the error is gone.'
+    ].join('\n\n')
+
+    setInput(prompt)
+    setMobilePane('chat')
+    void runCommandRef.current?.(prompt)
   }
 
   runCommandRef.current = runCommand
@@ -4230,6 +4520,10 @@ export function BrokCodeApp({
               onDirectLoad={loadPreviewTarget}
               onReload={reloadPreview}
               runtimeError={runtimeError}
+              runtimeLoading={projectRuntimeLoading}
+              runtimeSandbox={projectRuntime}
+              runtimeDiagnostics={runtimeDiagnostics}
+              onFixRuntimeError={fixRuntimeFailure}
               latestRun={executionRuns[0]}
             />
           </div>
@@ -4806,7 +5100,11 @@ function BrowserPreviewPanel({
   latestRun,
   onDirectLoad,
   onReload,
-  runtimeError
+  runtimeLoading,
+  runtimeSandbox,
+  runtimeError,
+  runtimeDiagnostics,
+  onFixRuntimeError
 }: {
   isRunning: boolean
   previewInput: string
@@ -4816,7 +5114,11 @@ function BrowserPreviewPanel({
   latestRun?: ExecutionRun
   onDirectLoad: (value: string) => void
   onReload: () => void
+  runtimeLoading: boolean
+  runtimeSandbox: BrokCodeRuntimeSandbox | null
   runtimeError: string | null
+  runtimeDiagnostics: BrokCodeRuntimeDiagnostics | null
+  onFixRuntimeError: () => void
 }) {
   const hasPreviewUrl = Boolean(previewUrl.trim())
   const isBlockedPreview = isBrokCodeWorkspaceUrl(previewUrl)
@@ -4841,6 +5143,12 @@ function BrowserPreviewPanel({
       : previewStatus === 'loaded'
         ? 'Preview loaded. Health check may be blocked by the preview origin.'
         : previewHealth.message
+  const runtimePorts = runtimeSandbox?.ports
+    ?.map(port => port.port)
+    .filter((port): port is number => typeof port === 'number')
+    .join(', ')
+  const recentRuntimeLogs = runtimeDiagnostics?.logs.slice(-8) ?? []
+  const lastRuntimeError = runtimeDiagnostics?.lastError ?? null
 
   return (
     <div
@@ -4968,6 +5276,99 @@ function BrowserPreviewPanel({
         </p>
       )}
 
+      {(runtimeSandbox || runtimeLoading) && (
+        <div className="mx-2 mt-2 grid gap-2 rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div className="min-w-0">
+              <p className="font-medium text-zinc-950">
+                {runtimeLoading
+                  ? 'Loading runtime contract...'
+                  : `Runtime ${runtimeSandbox?.status ?? 'preparing'}`}
+              </p>
+              <p className="mt-0.5 truncate">
+                {runtimeSandbox
+                  ? `${runtimeSandbox.appType.replace('_', ' ')} · ${runtimeSandbox.packageManager} · ${runtimeSandbox.workspacePath}`
+                  : 'BrokCode is checking the latest project sandbox.'}
+              </p>
+            </div>
+            {runtimeSandbox && (
+              <div className="flex flex-wrap gap-1.5 sm:justify-end">
+                <Badge variant="secondary" className="rounded-full">
+                  {runtimeSandbox.devCommand}
+                </Badge>
+                {runtimePorts ? (
+                  <Badge variant="outline" className="rounded-full">
+                    ports {runtimePorts}
+                  </Badge>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          {(lastRuntimeError || recentRuntimeLogs.length > 0) && (
+            <div className="rounded-md border border-zinc-200 bg-white">
+              <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-2.5 py-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-zinc-950">Runtime logs</p>
+                  <p className="truncate text-[11px] text-zinc-500">
+                    {lastRuntimeError
+                      ? `${lastRuntimeError.source} error captured`
+                      : `${recentRuntimeLogs.length} recent event${recentRuntimeLogs.length === 1 ? '' : 's'}`}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 shrink-0 rounded-full px-3 text-xs"
+                  disabled={!lastRuntimeError && recentRuntimeLogs.length === 0}
+                  onClick={onFixRuntimeError}
+                >
+                  <Wand2 className="size-3.5" />
+                  Fix this
+                </Button>
+              </div>
+              <div className="max-h-36 overflow-auto px-2.5 py-2 font-mono text-[11px] leading-5 text-zinc-600">
+                {recentRuntimeLogs.map((log, index) => {
+                  const location =
+                    log.file || typeof log.line === 'number'
+                      ? [
+                          log.file,
+                          typeof log.line === 'number' ? log.line : null,
+                          typeof log.column === 'number' ? log.column : null
+                        ]
+                          .filter(
+                            value =>
+                              value !== null &&
+                              value !== undefined &&
+                              value !== ''
+                          )
+                          .join(':')
+                      : ''
+                  return (
+                    <div
+                      key={`${log.at}-${index}`}
+                      className={cn(
+                        'grid gap-1 border-b border-zinc-100 py-1 last:border-b-0 sm:grid-cols-[96px_1fr]',
+                        log.level === 'error' && 'text-rose-700'
+                      )}
+                    >
+                      <span className="uppercase text-zinc-400">
+                        {log.source}
+                      </span>
+                      <span className="min-w-0 break-words">
+                        {location ? `${location} ` : ''}
+                        {log.message}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {latestRun?.previewUrl && (
         <div className="mx-2 mt-2 flex items-center gap-2 rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 xl:hidden">
           <Globe className="size-3.5" />
@@ -5014,7 +5415,7 @@ function BrowserPreviewPanel({
                 isRunning && 'opacity-70'
               )}
               referrerPolicy="no-referrer"
-              sandbox="allow-forms allow-modals allow-popups allow-scripts"
+              sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts"
             />
             {isRunning && (
               <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-zinc-200 bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm backdrop-blur">
