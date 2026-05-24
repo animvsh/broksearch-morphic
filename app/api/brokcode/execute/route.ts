@@ -60,7 +60,9 @@ import {
 import { runPiAgentPrompt } from '@/lib/pi/coding-agent'
 import {
   appendBackgroundTaskEvent,
+  appendBackgroundTaskStreamEvent,
   createBackgroundTask,
+  getBackgroundTask,
   updateBackgroundTask
 } from '@/lib/tasks/background-tasks'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
@@ -1262,6 +1264,283 @@ function createExecutionStream({
   )
 }
 
+type BrokCodeQueuedExecution = Parameters<typeof createExecutionStream>[0]
+
+const BROKCODE_JOB_TIMEOUT_MS = Number(
+  process.env.BROKCODE_JOB_TIMEOUT_MS ?? 10 * 60 * 1000
+)
+const TERMINAL_TASK_STATUSES = new Set(['succeeded', 'failed', 'cancelled'])
+
+function getBrokCodeJobRegistry() {
+  const globalState = globalThis as typeof globalThis & {
+    __brokCodeJobWorkers?: Set<string>
+  }
+  if (!globalState.__brokCodeJobWorkers) {
+    globalState.__brokCodeJobWorkers = new Set()
+  }
+  return globalState.__brokCodeJobWorkers
+}
+
+function phaseForBrokCodeEvent(event: string, payload: unknown) {
+  if (event === 'delta') return 'generating'
+  if (event === 'files') return 'writing_files'
+  if (event === 'preview') return 'previewing'
+  if (event === 'result') return 'done'
+  if (event === 'error') return 'failed'
+
+  const message =
+    payload && typeof payload === 'object'
+      ? String((payload as Record<string, unknown>).message ?? '')
+      : ''
+  const lower = message.toLowerCase()
+  if (lower.includes('queued')) return 'queued'
+  if (lower.includes('install')) return 'installing'
+  if (lower.includes('build') || lower.includes('writing')) return 'building'
+  if (lower.includes('preview')) return 'previewing'
+  if (lower.includes('runtime') || lower.includes('agent')) return 'running'
+  return event === 'status' ? 'running' : undefined
+}
+
+function progressForBrokCodeEvent(event: string) {
+  if (event === 'delta') return 48
+  if (event === 'files') return 72
+  if (event === 'preview') return 88
+  if (event === 'result') return 100
+  return undefined
+}
+
+function parseSseBlocks(buffer: string) {
+  return buffer.split(/\n\n/).filter(Boolean)
+}
+
+function parseSseBlock(block: string) {
+  let event = 'message'
+  const dataLines: string[] = []
+
+  for (const line of block.split(/\r?\n/)) {
+    if (line.startsWith('event:')) {
+      event = line.slice(6).trim()
+      continue
+    }
+    if (line.startsWith('data:')) {
+      dataLines.push(line.slice(5).trim())
+    }
+  }
+
+  if (dataLines.length === 0) return null
+
+  try {
+    return {
+      event,
+      payload: JSON.parse(dataLines.join('\n')) as unknown
+    }
+  } catch {
+    return null
+  }
+}
+
+async function startDetachedBrokCodeExecutionJob(
+  taskId: string,
+  execution: BrokCodeQueuedExecution
+) {
+  const registry = getBrokCodeJobRegistry()
+  if (registry.has(taskId)) return
+
+  registry.add(taskId)
+  const userId = execution.auth.apiKey.userId
+  let finished = false
+
+  const timeout = setTimeout(() => {
+    if (finished) return
+    void appendBackgroundTaskStreamEvent({
+      id: taskId,
+      userId,
+      event: 'error',
+      payload: {
+        message: 'BrokCode job timed out.'
+      },
+      phase: 'timed_out',
+      progress: 100
+    })
+    void updateBackgroundTask({
+      id: taskId,
+      userId,
+      status: 'failed',
+      error: 'BrokCode job timed out.',
+      metadata: {
+        phase: 'timed_out',
+        progress: 100
+      }
+    })
+  }, BROKCODE_JOB_TIMEOUT_MS)
+
+  void (async () => {
+    try {
+      const response = createExecutionStream(execution)
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('BrokCode job did not create a worker stream.')
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const current = await getBackgroundTask({ userId, id: taskId })
+        if (current?.status === 'cancelled') {
+          break
+        }
+
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const blocks = buffer.split(/\n\n/)
+        buffer = blocks.pop() ?? ''
+
+        for (const block of blocks) {
+          const parsed = parseSseBlock(block)
+          if (!parsed) continue
+
+          await appendBackgroundTaskStreamEvent({
+            id: taskId,
+            userId,
+            event: parsed.event,
+            payload: parsed.payload,
+            phase: phaseForBrokCodeEvent(parsed.event, parsed.payload),
+            progress: progressForBrokCodeEvent(parsed.event)
+          }).catch(error => {
+            console.error('Failed to append BrokCode stream event:', error)
+          })
+        }
+      }
+
+      for (const block of parseSseBlocks(buffer.trim())) {
+        const parsed = parseSseBlock(block)
+        if (!parsed) continue
+        await appendBackgroundTaskStreamEvent({
+          id: taskId,
+          userId,
+          event: parsed.event,
+          payload: parsed.payload,
+          phase: phaseForBrokCodeEvent(parsed.event, parsed.payload),
+          progress: progressForBrokCodeEvent(parsed.event)
+        }).catch(error => {
+          console.error('Failed to append BrokCode stream event:', error)
+        })
+      }
+    } catch (error) {
+      const message = formatBrokCodeRuntimeError(error)
+      await appendBackgroundTaskStreamEvent({
+        id: taskId,
+        userId,
+        event: 'error',
+        payload: { message },
+        phase: 'failed',
+        progress: 100
+      }).catch(appendError => {
+        console.error('Failed to append BrokCode job failure:', appendError)
+      })
+      await updateBackgroundTask({
+        id: taskId,
+        userId,
+        status: 'failed',
+        error: message,
+        metadata: {
+          phase: 'failed',
+          progress: 100
+        }
+      }).catch(updateError => {
+        console.error('Failed to mark BrokCode job failed:', updateError)
+      })
+    } finally {
+      finished = true
+      clearTimeout(timeout)
+      registry.delete(taskId)
+    }
+  })()
+}
+
+function observeBrokCodeExecutionTask({
+  taskId,
+  userId
+}: {
+  taskId: string
+  userId: string
+}) {
+  const encoder = new TextEncoder()
+  let closed = false
+  let lastEventId = 0
+
+  return new Response(
+    new ReadableStream({
+      async start(controller) {
+        const send = (event: string, payload: unknown) => {
+          if (closed) return
+          try {
+            controller.enqueue(encoder.encode(formatSseEvent(event, payload)))
+          } catch {
+            closed = true
+          }
+        }
+
+        send('task', {
+          task_id: taskId,
+          status_url: `/api/tasks/${taskId}`,
+          events_url: `/api/tasks/${taskId}/events`
+        })
+
+        while (!closed) {
+          const task = await getBackgroundTask({ userId, id: taskId })
+          if (!task) {
+            send('error', { message: 'BrokCode job is no longer available.' })
+            break
+          }
+
+          const streamEvents = Array.isArray(task.metadata?.streamEvents)
+            ? task.metadata.streamEvents
+            : []
+          for (const entry of streamEvents) {
+            if (
+              !entry ||
+              typeof entry !== 'object' ||
+              typeof entry.id !== 'number' ||
+              entry.id <= lastEventId
+            ) {
+              continue
+            }
+            lastEventId = entry.id
+            if (typeof entry.event === 'string') {
+              send(entry.event, entry.payload)
+            }
+          }
+
+          if (TERMINAL_TASK_STATUSES.has(task.status)) {
+            break
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 750))
+        }
+
+        if (!closed) {
+          controller.close()
+          closed = true
+        }
+      },
+      cancel() {
+        closed = true
+      }
+    }),
+    {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive'
+      }
+    }
+  )
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
   const requestId = generateRequestId()
@@ -1540,7 +1819,22 @@ export async function POST(request: NextRequest) {
         source: codeUsageContext.source,
         sessionId: codeUsageContext.sessionId,
         commandType: codeUsageContext.commandType,
+        phase: 'queued',
         progress: 0,
+        originalRequest: {
+          command,
+          model,
+          source: codeUsageContext.source,
+          sessionId: codeUsageContext.sessionId,
+          projectId: codeUsageContext.projectId,
+          backendProvider: codeUsageContext.backendProvider,
+          backendStatus: codeUsageContext.backendStatus,
+          backendProjectUrl: codeUsageContext.backendProjectUrl,
+          preferPi,
+          requirePi,
+          requireOpenCode,
+          allowBrokFallback: body?.allow_brok_fallback === true
+        },
         events: [
           {
             at: new Date().toISOString(),
@@ -1554,7 +1848,30 @@ export async function POST(request: NextRequest) {
       return null
     })
 
-    return createExecutionStream({
+    if (!task) {
+      return NextResponse.json(
+        {
+          error: {
+            type: 'runtime_error',
+            message: 'Could not create a durable BrokCode job.'
+          }
+        },
+        { status: 500 }
+      )
+    }
+
+    await appendBackgroundTaskStreamEvent({
+      id: task.id,
+      userId: authResult.apiKey.userId,
+      event: 'status',
+      payload: { message: 'Queued BrokCode run.' },
+      phase: 'queued',
+      progress: 0
+    }).catch(error => {
+      console.error('Failed to append BrokCode queued stream event:', error)
+    })
+
+    await startDetachedBrokCodeExecutionJob(task.id, {
       auth: authResult,
       requestId,
       startTime,
@@ -1572,6 +1889,11 @@ export async function POST(request: NextRequest) {
       taskId: task?.id,
       requestOrigin: publicOrigin,
       usageContext: codeUsageContext
+    })
+
+    return observeBrokCodeExecutionTask({
+      taskId: task.id,
+      userId: authResult.apiKey.userId
     })
   }
 

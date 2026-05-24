@@ -10,6 +10,13 @@ export type BackgroundTaskStatus =
   | 'failed'
   | 'cancelled'
 
+export type BackgroundTaskStreamEvent = {
+  id: number
+  event: string
+  payload: unknown
+  at: string
+}
+
 export async function createBackgroundTask({
   id = generateId(),
   userId,
@@ -131,6 +138,62 @@ export async function appendBackgroundTaskEvent({
           ...(typeof progress === 'number' ? { progress } : {})
         }
       ]
+    }
+
+    const [task] = await tx
+      .update(backgroundTasks)
+      .set({
+        metadata: nextMetadata,
+        updatedAt: new Date()
+      })
+      .where(eq(backgroundTasks.id, id))
+      .returning()
+
+    return task ?? null
+  })
+}
+
+export async function appendBackgroundTaskStreamEvent({
+  id,
+  userId,
+  event,
+  payload,
+  phase,
+  progress
+}: {
+  id: string
+  userId: string
+  event: string
+  payload: unknown
+  phase?: string
+  progress?: number
+}) {
+  return withRLS(userId, async tx => {
+    const [existing] = await tx
+      .select({ metadata: backgroundTasks.metadata })
+      .from(backgroundTasks)
+      .where(eq(backgroundTasks.id, id))
+      .limit(1)
+
+    const currentMetadata = existing?.metadata ?? {}
+    const currentStreamEvents = Array.isArray(currentMetadata.streamEvents)
+      ? (currentMetadata.streamEvents as BackgroundTaskStreamEvent[])
+      : []
+    const nextEvent: BackgroundTaskStreamEvent = {
+      id:
+        typeof currentMetadata.streamEventCursor === 'number'
+          ? currentMetadata.streamEventCursor + 1
+          : currentStreamEvents.length + 1,
+      event,
+      payload,
+      at: new Date().toISOString()
+    }
+    const nextMetadata = {
+      ...currentMetadata,
+      ...(phase ? { phase } : {}),
+      ...(typeof progress === 'number' ? { progress } : {}),
+      streamEventCursor: nextEvent.id,
+      streamEvents: [...currentStreamEvents.slice(-119), nextEvent]
     }
 
     const [task] = await tx
