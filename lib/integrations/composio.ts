@@ -426,7 +426,10 @@ function authConfigMatchesToolkit(
   if (!config.id) return false
   if (!toolkitSlug) return true
 
-  return config.toolkit_slug === toolkitSlug
+  return (
+    normalizeConnectorToolkit(config.toolkit_slug) ===
+    normalizeConnectorToolkit(toolkitSlug)
+  )
 }
 
 function resolveToolkitSlug(data: Record<string, unknown>) {
@@ -572,11 +575,11 @@ async function composioRequest(
 }
 
 export function isComposioConnectMode() {
-  if (process.env.COMPOSIO_FORCE_CONNECT_MODE === 'true') {
-    return Boolean(resolveConnectApiKey())
+  if (process.env.COMPOSIO_FORCE_BACKEND_MODE === 'true') {
+    return false
   }
 
-  return Boolean(resolveConnectApiKey() && !resolveBackendApiKey())
+  return Boolean(resolveConnectApiKey())
 }
 
 export function isComposioConfigured() {
@@ -592,8 +595,14 @@ export async function listConnectedAccounts(
   toolkitSlug?: string,
   limit: number = 20
 ): Promise<ComposioConnectedAccount[]> {
+  const normalizedToolkitSlug = toolkitSlug
+    ? normalizeConnectorToolkit(toolkitSlug)
+    : undefined
+
   if (isComposioConnectMode()) {
-    const toolkits = toolkitSlug ? [toolkitSlug] : resolveConnectToolkits()
+    const toolkits = normalizedToolkitSlug
+      ? [normalizedToolkitSlug]
+      : resolveConnectToolkits()
     const settled = await Promise.allSettled(
       toolkits.map(async slug => {
         const payload = await composioManageConnectionsConnect({
@@ -628,7 +637,9 @@ export async function listConnectedAccounts(
   const query = new URLSearchParams()
   query.set('limit', String(limit))
   if (userId) query.append('user_ids', userId)
-  if (toolkitSlug) query.append('toolkit_slugs', toolkitSlug)
+  if (normalizedToolkitSlug) {
+    query.append('toolkit_slugs', normalizedToolkitSlug)
+  }
 
   const payload = await composioRequest('/connected_accounts', { query })
   const items = extractArrayPayload(payload)
@@ -655,8 +666,14 @@ export async function listConnectedAccounts(
 export async function listAuthConfigs(
   toolkitSlug?: string
 ): Promise<ComposioAuthConfig[]> {
+  const normalizedToolkitSlug = toolkitSlug
+    ? normalizeConnectorToolkit(toolkitSlug)
+    : undefined
+
   if (isComposioConnectMode()) {
-    const toolkits = toolkitSlug ? [toolkitSlug] : resolveConnectToolkits()
+    const toolkits = normalizedToolkitSlug
+      ? [normalizedToolkitSlug]
+      : resolveConnectToolkits()
     return toolkits.map(slug => ({
       id: `connect-${slug}`,
       toolkit_slug: slug,
@@ -666,7 +683,9 @@ export async function listAuthConfigs(
   }
 
   const query = new URLSearchParams()
-  if (toolkitSlug) query.append('toolkit_slugs', toolkitSlug)
+  if (normalizedToolkitSlug) {
+    query.append('toolkit_slugs', normalizedToolkitSlug)
+  }
 
   const payload = await composioRequest('/auth_configs', { query })
   const items = extractArrayPayload(payload)
@@ -705,9 +724,13 @@ export async function createConnectedAccountLink(params: {
   toolkitSlug?: string
   redirectUrl?: string
 }) {
+  const normalizedToolkitSlug = params.toolkitSlug
+    ? normalizeConnectorToolkit(params.toolkitSlug)
+    : undefined
+
   if (isComposioConnectMode()) {
     const toolkitSlug =
-      params.toolkitSlug || inferToolkitFromAuthConfigId(params.authConfigId)
+      normalizedToolkitSlug || inferToolkitFromAuthConfigId(params.authConfigId)
 
     if (!toolkitSlug) {
       throw new Error(
@@ -737,13 +760,13 @@ export async function createConnectedAccountLink(params: {
 
   const authConfigId = await resolveBackendAuthConfigId(
     params.authConfigId,
-    params.toolkitSlug
+    normalizedToolkitSlug
   )
 
   if (!authConfigId) {
     throw new Error(
-      params.toolkitSlug
-        ? `Could not find a Composio auth config for ${params.toolkitSlug}. Set COMPOSIO_${params.toolkitSlug.toUpperCase()}_AUTH_CONFIG_ID or create an enabled auth config.`
+      normalizedToolkitSlug
+        ? `Could not find a Composio auth config for ${normalizedToolkitSlug}. Set COMPOSIO_${normalizedToolkitSlug.toUpperCase()}_AUTH_CONFIG_ID or create an enabled auth config.`
         : 'authConfigId is required for backend Composio mode.'
     )
   }
@@ -753,7 +776,7 @@ export async function createConnectedAccountLink(params: {
     body: {
       auth_config_id: authConfigId,
       user_id: params.userId,
-      ...(params.toolkitSlug ? { toolkit_slug: params.toolkitSlug } : {}),
+      ...(normalizedToolkitSlug ? { toolkit_slug: normalizedToolkitSlug } : {}),
       ...(params.redirectUrl
         ? {
             redirect_url: params.redirectUrl,
