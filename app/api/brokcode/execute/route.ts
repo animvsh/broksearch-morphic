@@ -26,7 +26,13 @@ import {
 } from '@/lib/brokcode/backend-provider'
 import { buildBrokCodeProjectContextPack } from '@/lib/brokcode/context-packer'
 import {
+  applyBrokCodeFileOperations,
+  BrokCodeFileOperation,
+  BrokCodeFileOperationError
+} from '@/lib/brokcode/file-operations'
+import {
   buildFallbackGeneratedAppFiles,
+  extractGeneratedBrokCodeFileOperations,
   extractGeneratedBrokCodeFiles,
   inspectGeneratedBrokCodeAppQuality,
   prepareGeneratedBrokCodeFiles,
@@ -47,9 +53,11 @@ import {
   resolvePublicPreviewOrigin
 } from '@/lib/brokcode/preview'
 import {
+  deleteBrokCodeProjectFile,
   getBrokCodeProject,
   getBrokCodeProjectBackend,
   listBrokCodeProjectFiles,
+  renameBrokCodeProjectFile,
   updateBrokCodeProjectPreview,
   upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
@@ -304,6 +312,121 @@ async function persistGeneratedProjectOutput({
     userId: auth.apiKey.userId
   })
   if (!project) return null
+
+  const currentFiles = await listBrokCodeProjectFiles({
+    projectId: project.id,
+    workspaceId: auth.workspace.id
+  })
+  const operations = extractGeneratedBrokCodeFileOperations(content)
+  if (operations.length > 0) {
+    let applied: ReturnType<typeof applyBrokCodeFileOperations>
+    try {
+      applied = applyBrokCodeFileOperations({
+        files: currentFiles,
+        operations: operations as BrokCodeFileOperation[]
+      })
+    } catch (error) {
+      if (taskId && error instanceof BrokCodeFileOperationError) {
+        await appendBackgroundTaskEvent({
+          id: taskId,
+          userId: auth.apiKey.userId,
+          message:
+            error.code === 'conflict'
+              ? 'File operation conflict. Review diff or retry with latest context.'
+              : error.message,
+          progress: 70,
+          metadata: {
+            fileOperationError: {
+              code: error.code,
+              message: error.message,
+              conflicts: error.conflicts
+            }
+          }
+        }).catch(() => {})
+      }
+      throw error
+    }
+
+    for (const change of applied.changes) {
+      if (change.type === 'delete_file') {
+        await deleteBrokCodeProjectFile({
+          projectId: project.id,
+          workspaceId: auth.workspace.id,
+          path: change.path
+        })
+        continue
+      }
+      if (change.type === 'rename_file' && change.toPath) {
+        await renameBrokCodeProjectFile({
+          projectId: project.id,
+          workspaceId: auth.workspace.id,
+          fromPath: change.path,
+          toPath: change.toPath
+        })
+        continue
+      }
+      const file = applied.files.find(
+        candidate => candidate.path === change.path
+      )
+      if (!file) continue
+      await upsertBrokCodeProjectFile({
+        projectId: project.id,
+        workspaceId: auth.workspace.id,
+        path: file.path,
+        content: file.content,
+        language: file.language
+      })
+    }
+
+    send?.('files', {
+      project_id: project.id,
+      count: applied.changes.length,
+      operations: applied.changes
+    })
+
+    const runtimeSpec = createBrokCodeRuntimeSpec({
+      projectId: project.id,
+      workspaceId: auth.workspace.id,
+      userId: auth.apiKey.userId,
+      versionId: taskId ?? null,
+      sessionId: taskId ?? null,
+      files: applied.files
+    })
+    const runtimeWorkspace = await materializeBrokCodeRuntimeWorkspace({
+      spec: runtimeSpec,
+      files: applied.files,
+      projectName: project.name
+    })
+    const previewUrl = makeManagedPreviewUrl({
+      origin,
+      projectId: project.id
+    })
+    await updateBrokCodeProjectPreview({
+      projectId: project.id,
+      workspaceId: auth.workspace.id,
+      userId: auth.apiKey.userId,
+      previewUrl,
+      metadata: {
+        mode: 'managed_static',
+        fileOperations: applied.changes,
+        runtimeWorkspace: runtimeWorkspace.manifest,
+        generatedAt: new Date().toISOString(),
+        source: 'runtime_operations'
+      }
+    })
+    send?.('preview', {
+      project_id: project.id,
+      preview_url: previewUrl,
+      file_count: applied.files.length,
+      operations: applied.changes
+    })
+
+    return {
+      files: applied.files,
+      previewUrl,
+      usedFallback: false
+    }
+  }
 
   const extractedFiles = extractGeneratedBrokCodeFiles(content)
   const usedFallback =

@@ -15,6 +15,19 @@ export type GeneratedBrokCodeQualityReport = {
   issues: string[]
 }
 
+export type GeneratedBrokCodeFileOperation = {
+  type: string
+  path?: string
+  fromPath?: string
+  toPath?: string
+  content?: string
+  search?: string
+  replace?: string
+  patch?: string
+  expectedChecksum?: string | null
+  summary?: string | null
+}
+
 function filePathFromFenceInfo(info: string, language: string | null) {
   const filenameMatch = info.match(
     /(?:^|\s)(?:file|filename|path)=["']?([^"'\s]+)["']?/i
@@ -72,6 +85,46 @@ export function extractGeneratedBrokCodeFiles(text: string) {
   }
 
   return [...files.values()]
+}
+
+export function extractGeneratedBrokCodeFileOperations(text: string) {
+  const operations: GeneratedBrokCodeFileOperation[] = []
+  const fencePattern = /```([^\n`]*)\n([\s\S]*?)```/g
+  let match: RegExpExecArray | null
+
+  while ((match = fencePattern.exec(text)) !== null) {
+    const info = match[1]?.trim().toLowerCase() ?? ''
+    const content = match[2]?.trim() ?? ''
+    if (!content || !info.includes('json')) continue
+    if (
+      !info.includes('operation') &&
+      !info.includes('patch') &&
+      !content.includes('"operations"')
+    ) {
+      continue
+    }
+
+    try {
+      const parsed = JSON.parse(content) as unknown
+      const maybeOperations =
+        parsed && typeof parsed === 'object'
+          ? (parsed as Record<string, unknown>).operations
+          : null
+      const list = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(maybeOperations)
+          ? maybeOperations
+          : []
+
+      for (const operation of list) {
+        if (operation && typeof operation === 'object') {
+          operations.push(operation as GeneratedBrokCodeFileOperation)
+        }
+      }
+    } catch {}
+  }
+
+  return operations
 }
 
 function toReadableTitle(value: string) {
