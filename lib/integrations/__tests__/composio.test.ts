@@ -7,9 +7,11 @@ describe('Composio integration', () => {
     vi.restoreAllMocks()
     delete process.env.COMPOSIO_API_KEY
     delete process.env.COMPOSIO_CONNECT_KEY
+    delete process.env.COMPOSIO_FORCE_BACKEND_MODE
     delete process.env.COMPOSIO_GITHUB_AUTH_CONFIG_ID
     delete process.env.COMPOSIO_GMAIL_AUTH_CONFIG_ID
     delete process.env.COMPOSIO_GOOGLEDOCS_AUTH_CONFIG_ID
+    delete process.env.COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID
     delete process.env.COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID
   })
 
@@ -87,6 +89,62 @@ describe('Composio integration', () => {
     } finally {
       fetchMock.mockRestore()
     }
+  })
+
+  it('prefers Connect MCP for OAuth links when both connect and backend keys exist', async () => {
+    process.env.COMPOSIO_CONNECT_KEY = 'ck_test_connect_key'
+    process.env.COMPOSIO_API_KEY = 'test-backend-key'
+    process.env.COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID = 'ac_slides'
+
+    const requestedUrls: string[] = []
+    const toolkitNames: unknown[] = []
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      requestedUrls.push(url)
+
+      if (typeof init?.body === 'string') {
+        const parsedBody = JSON.parse(init.body)
+        toolkitNames.push(parsedBody.params?.arguments?.toolkits)
+      }
+
+      if (url.includes('/mcp')) {
+        return Response.json({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  data: {
+                    results: {
+                      googleslides: {
+                        connect_url: 'https://connect.composio.dev/googleslides'
+                      }
+                    }
+                  }
+                })
+              }
+            ]
+          }
+        })
+      }
+
+      return Response.json({ error: 'unexpected url' }, { status: 404 })
+    })
+
+    await expect(
+      createConnectedAccountLink({
+        userId: 'user_123',
+        toolkitSlug: 'google-slides'
+      })
+    ).resolves.toMatchObject({
+      url: 'https://connect.composio.dev/googleslides'
+    })
+
+    expect(requestedUrls).toEqual(['https://connect.composio.dev/mcp'])
+    expect(toolkitNames).toEqual([[{ name: 'googleslides', action: 'add' }]])
   })
 
   it('accepts v3.1 auth configs where toolkit is an object with a slug', async () => {
