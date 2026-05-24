@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 
-import { Globe2 } from 'lucide-react'
+import { ExternalLink, Globe2 } from 'lucide-react'
 
 import type { SearchResultItem } from '@/lib/types'
 import { displayUrlName } from '@/lib/utils/domain'
@@ -69,21 +69,27 @@ export function SourceStrip({
   }
 
   return (
-    <div className="-mx-1 flex flex-wrap items-center gap-2 px-1 pb-1">
-      {sources.map(source => (
+    <div className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 pb-2 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {sources.map((source, index) => (
         <Link
           key={source.url}
           href={source.url}
           target="_blank"
           rel="noreferrer noopener"
-          className="group"
+          className="group min-w-0 shrink-0"
         >
           <Badge
             variant="secondary"
-            className="max-w-full gap-1.5 rounded-md px-2 py-1 text-xs transition-colors group-hover:bg-muted"
+            className="h-8 max-w-[240px] gap-2 rounded-full border border-border/70 bg-background px-3 text-xs shadow-xs transition-all duration-200 group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:shadow-sm"
           >
-            <Globe2 className="size-3" />
-            <span className="truncate">{displayUrlName(source.url)}</span>
+            <span className="grid size-5 shrink-0 place-items-center rounded-full bg-muted text-[11px] font-medium text-foreground">
+              {index + 1}
+            </span>
+            <Globe2 className="size-3 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:rotate-12" />
+            <span className="truncate font-medium">
+              {source.title || displayUrlName(source.url)}
+            </span>
+            <ExternalLink className="size-3 shrink-0 text-muted-foreground" />
           </Badge>
         </Link>
       ))}

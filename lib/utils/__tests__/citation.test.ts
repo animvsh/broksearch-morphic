@@ -112,8 +112,14 @@ describe('processCitations', () => {
     const content = 'Text with [1](#toolCall1) citation'
     const result = processCitations(content, {})
 
-    // When citation maps are empty, content is returned unchanged
-    expect(result).toBe('Text with [1](#toolCall1) citation')
+    expect(result).toBe('Text with [1] citation')
+  })
+
+  it('supports source-specific citation references', () => {
+    const content = 'Specific source [1](#toolCall1:2)'
+    const result = processCitations(content, mockCitationMaps)
+
+    expect(result).toBe('Specific source [1](https://docs.github.com)')
   })
 
   it('encodes URLs to prevent injection', () => {

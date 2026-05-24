@@ -389,6 +389,58 @@ export const brokCodeDeployments = pgTable(
   })
 )
 
+export const brokCodeRuntimeSandboxes = pgTable(
+  'brokcode_runtime_sandboxes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .references(() => brokCodeProjects.id)
+      .notNull(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    versionId: text('version_id'),
+    sessionId: text('session_id'),
+    institutionId: text('institution_id'),
+    courseId: text('course_id'),
+    sectionId: text('section_id'),
+    assignmentId: text('assignment_id'),
+    appType: text('app_type').notNull(),
+    packageManager: text('package_manager').notNull(),
+    workspacePath: text('workspace_path').notNull(),
+    installCommand: text('install_command'),
+    devCommand: text('dev_command').notNull(),
+    buildCommand: text('build_command'),
+    status: text('status').default('preparing').notNull(),
+    ports: jsonb('ports').$type<Array<Record<string, unknown>>>().default([]),
+    logs: jsonb('logs').$type<Array<Record<string, unknown>>>().default([]),
+    health: jsonb('health').$type<Record<string, unknown>>(),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    startedAt: timestamp('started_at'),
+    stoppedAt: timestamp('stopped_at'),
+    lastHealthcheckAt: timestamp('last_healthcheck_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => ({
+    projectIdx: index('brokcode_runtime_sandboxes_project_idx').on(
+      table.projectId
+    ),
+    workspaceIdx: index('brokcode_runtime_sandboxes_workspace_idx').on(
+      table.workspaceId
+    ),
+    userIdx: index('brokcode_runtime_sandboxes_user_idx').on(table.userId),
+    statusIdx: index('brokcode_runtime_sandboxes_status_idx').on(table.status),
+    versionIdx: index('brokcode_runtime_sandboxes_version_idx').on(
+      table.versionId
+    ),
+    updatedAtIdx: index('brokcode_runtime_sandboxes_updated_at_idx').on(
+      table.updatedAt.desc()
+    )
+  })
+)
+
 export const brokMailApprovalConsumptions = pgTable(
   'brokmail_approval_consumptions',
   {
@@ -410,6 +462,90 @@ export const brokMailApprovalConsumptions = pgTable(
   })
 )
 
+export const connectorActionRuns = pgTable(
+  'connector_action_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    chatId: text('chat_id'),
+    toolkit: text('toolkit').notNull(),
+    action: text('action').notNull(),
+    toolSlug: text('tool_slug'),
+    status: text('status').default('pending').notNull(),
+    requiresApproval: boolean('requires_approval').default(true).notNull(),
+    approvalId: text('approval_id'),
+    payloadHash: text('payload_hash').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    result: jsonb('result').$type<Record<string, unknown>>(),
+    error: text('error'),
+    approvedAt: timestamp('approved_at'),
+    startedAt: timestamp('started_at'),
+    completedAt: timestamp('completed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => ({
+    userStatusIdx: index('connector_action_runs_user_status_idx').on(
+      table.userId,
+      table.status
+    ),
+    toolkitIdx: index('connector_action_runs_toolkit_idx').on(table.toolkit),
+    createdAtIdx: index('connector_action_runs_created_at_idx').on(
+      table.createdAt.desc()
+    )
+  })
+)
+
+export const connectorApprovalRequests = pgTable(
+  'connector_approval_requests',
+  {
+    id: text('id').primaryKey(),
+    runId: uuid('run_id')
+      .references(() => connectorActionRuns.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    status: text('status').default('pending').notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    expiresAt: timestamp('expires_at').notNull(),
+    approvedAt: timestamp('approved_at'),
+    consumedAt: timestamp('consumed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => ({
+    runIdx: index('connector_approval_requests_run_idx').on(table.runId),
+    userStatusIdx: index('connector_approval_requests_user_status_idx').on(
+      table.userId,
+      table.status
+    ),
+    expiresAtIdx: index('connector_approval_requests_expires_at_idx').on(
+      table.expiresAt
+    )
+  })
+)
+
+export const connectorActionEvents = pgTable(
+  'connector_action_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    runId: uuid('run_id')
+      .references(() => connectorActionRuns.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    eventType: text('event_type').notNull(),
+    message: text('message'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => ({
+    runIdx: index('connector_action_events_run_idx').on(table.runId),
+    userIdx: index('connector_action_events_user_idx').on(table.userId),
+    createdAtIdx: index('connector_action_events_created_at_idx').on(
+      table.createdAt.desc()
+    )
+  })
+)
+
 // Relations
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
   apiKeys: many(apiKeys),
@@ -417,7 +553,9 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
   brokCodeRuntimeKeys: many(brokCodeRuntimeKeys),
   brokCodeSessions: many(brokCodeSessions),
   brokCodeVersions: many(brokCodeVersions),
-  brokCodeProjects: many(brokCodeProjects)
+  brokCodeProjects: many(brokCodeProjects),
+  brokCodeRuntimeSandboxes: many(brokCodeRuntimeSandboxes),
+  connectorActionRuns: many(connectorActionRuns)
 }))
 
 export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
@@ -427,6 +565,34 @@ export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
   }),
   usageEvents: many(usageEvents)
 }))
+
+export const connectorActionRunsRelations = relations(
+  connectorActionRuns,
+  ({ many }) => ({
+    approvals: many(connectorApprovalRequests),
+    events: many(connectorActionEvents)
+  })
+)
+
+export const connectorApprovalRequestsRelations = relations(
+  connectorApprovalRequests,
+  ({ one }) => ({
+    run: one(connectorActionRuns, {
+      fields: [connectorApprovalRequests.runId],
+      references: [connectorActionRuns.id]
+    })
+  })
+)
+
+export const connectorActionEventsRelations = relations(
+  connectorActionEvents,
+  ({ one }) => ({
+    run: one(connectorActionRuns, {
+      fields: [connectorActionEvents.runId],
+      references: [connectorActionRuns.id]
+    })
+  })
+)
 
 export const brokCodeRuntimeKeysRelations = relations(
   brokCodeRuntimeKeys,
@@ -461,7 +627,8 @@ export const brokCodeProjectsRelations = relations(
       references: [workspaces.id]
     }),
     files: many(brokCodeProjectFiles),
-    deployments: many(brokCodeDeployments)
+    deployments: many(brokCodeDeployments),
+    runtimeSandboxes: many(brokCodeRuntimeSandboxes)
   })
 )
 
@@ -488,6 +655,20 @@ export const brokCodeDeploymentsRelations = relations(
     }),
     workspace: one(workspaces, {
       fields: [brokCodeDeployments.workspaceId],
+      references: [workspaces.id]
+    })
+  })
+)
+
+export const brokCodeRuntimeSandboxesRelations = relations(
+  brokCodeRuntimeSandboxes,
+  ({ one }) => ({
+    project: one(brokCodeProjects, {
+      fields: [brokCodeRuntimeSandboxes.projectId],
+      references: [brokCodeProjects.id]
+    }),
+    workspace: one(workspaces, {
+      fields: [brokCodeRuntimeSandboxes.workspaceId],
       references: [workspaces.id]
     })
   })

@@ -1,3 +1,9 @@
+import {
+  getConnectorToolkitEnvKeys,
+  getDefaultConnectorToolkitSlugs,
+  normalizeConnectorToolkit
+} from '@/lib/integrations/toolkit-registry'
+
 type ComposioRequestOptions = {
   method?: 'GET' | 'POST'
   query?: URLSearchParams
@@ -43,16 +49,7 @@ type ComposioConnectToolkitAction = 'add' | 'rename' | 'list' | 'remove'
 
 const DEFAULT_COMPOSIO_BASE_URL = 'https://backend.composio.dev'
 const DEFAULT_COMPOSIO_CONNECT_MCP_URL = 'https://connect.composio.dev/mcp'
-const DEFAULT_CONNECT_TOOLKITS = [
-  'googlesuper',
-  'linear',
-  'github',
-  'gmail',
-  'googlecalendar',
-  'googledocs',
-  'googlemeet',
-  'slack'
-]
+const DEFAULT_CONNECT_TOOLKITS = getDefaultConnectorToolkitSlugs()
 const CONNECT_KEY_PREFIX = 'ck_'
 
 const TOOLKIT_AUTH_CONFIG_ENV_KEYS: Record<string, string[]> = {
@@ -72,6 +69,10 @@ const TOOLKIT_AUTH_CONFIG_ENV_KEYS: Record<string, string[]> = {
     'COMPOSIO_GOOGLEDOCS_AUTH_CONFIG_ID',
     'COMPOSIO_GOOGLE_DOCS_AUTH_CONFIG_ID'
   ],
+  google_slides: [
+    'COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_SLIDES_AUTH_CONFIG_ID'
+  ],
   google_meet: [
     'COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID',
     'COMPOSIO_GOOGLE_MEET_AUTH_CONFIG_ID'
@@ -84,6 +85,10 @@ const TOOLKIT_AUTH_CONFIG_ENV_KEYS: Record<string, string[]> = {
   googledocs: [
     'COMPOSIO_GOOGLEDOCS_AUTH_CONFIG_ID',
     'COMPOSIO_GOOGLE_DOCS_AUTH_CONFIG_ID'
+  ],
+  googleslides: [
+    'COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_SLIDES_AUTH_CONFIG_ID'
   ],
   googlemeet: [
     'COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID',
@@ -98,6 +103,10 @@ const TOOLKIT_AUTH_CONFIG_ENV_KEYS: Record<string, string[]> = {
     'COMPOSIO_GOOGLE_SUPER_AUTH_CONFIG_ID'
   ],
   linear: ['COMPOSIO_LINEAR_AUTH_CONFIG_ID'],
+  slides: [
+    'COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_SLIDES_AUTH_CONFIG_ID'
+  ],
   slack: ['COMPOSIO_SLACK_AUTH_CONFIG_ID'],
   supabase: ['COMPOSIO_SUPABASE_AUTH_CONFIG_ID']
 }
@@ -142,7 +151,7 @@ function resolveConnectToolkits() {
   const unique = new Set(
     raw
       .split(',')
-      .map(value => value.trim().toLowerCase())
+      .map(value => normalizeConnectorToolkit(value.trim().toLowerCase()))
       .filter(Boolean)
   )
 
@@ -391,7 +400,7 @@ function inferToolkitFromAuthConfigId(authConfigId?: string) {
 function resolveToolkitEnvKeys(toolkitSlug?: string) {
   if (!toolkitSlug) return []
 
-  const normalized = toolkitSlug.trim().toLowerCase()
+  const normalized = normalizeConnectorToolkit(toolkitSlug)
   const compact = normalized.replace(/[-_]+/g, '')
   const upper = toolkitSlug
     .trim()
@@ -402,6 +411,7 @@ function resolveToolkitEnvKeys(toolkitSlug?: string) {
 
   const keys = [
     `COMPOSIO_${upper}_AUTH_CONFIG_ID`,
+    ...getConnectorToolkitEnvKeys(normalized),
     ...(TOOLKIT_AUTH_CONFIG_ENV_KEYS[normalized] ?? []),
     ...(TOOLKIT_AUTH_CONFIG_ENV_KEYS[compact] ?? [])
   ]

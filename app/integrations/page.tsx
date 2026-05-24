@@ -83,6 +83,24 @@ const FEATURED_TOOLKITS = [
     ]
   },
   {
+    slug: 'googleslides',
+    aliases: [
+      'googleslides',
+      'google_slides',
+      'google-slides',
+      'slides',
+      'deck',
+      'presentation'
+    ],
+    name: 'Google Slides',
+    description:
+      'Create and update presentation decks through approval-aware Brok actions.',
+    envKeys: [
+      'COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID',
+      'COMPOSIO_GOOGLE_SLIDES_AUTH_CONFIG_ID'
+    ]
+  },
+  {
     slug: 'googlemeet',
     aliases: ['googlemeet', 'google_meet', 'google-meet', 'meet'],
     name: 'Google Meet',

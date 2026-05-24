@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import {
   isComposioConfigured,
@@ -7,30 +8,13 @@ import {
   listAuthConfigs,
   listConnectedAccounts
 } from '@/lib/integrations/composio'
+import { normalizeConnectorToolkit } from '@/lib/integrations/toolkit-registry'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 function normalizeToolkit(value: string) {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, '')
-
-  const aliases: Record<string, string> = {
-    calendar: 'googlecalendar',
-    docs: 'googledocs',
-    gcal: 'googlecalendar',
-    'google-calendar': 'googlecalendar',
-    google_calendar: 'googlecalendar',
-    'google-docs': 'googledocs',
-    google_docs: 'googledocs',
-    'google-meet': 'googlemeet',
-    google_meet: 'googlemeet',
-    meet: 'googlemeet'
-  }
-
-  return aliases[normalized] || normalized
+  return normalizeConnectorToolkit(value)
 }
 
 function isActiveAccountStatus(status?: string) {
@@ -74,6 +58,27 @@ export async function GET(
   }
 
   try {
+    const access = await requireFeatureAccessForApi('tools')
+    if (!access.ok) {
+      const payload = await access.response.json().catch(() => ({
+        error: 'Feature access denied'
+      }))
+      return NextResponse.json(
+        {
+          configured: true,
+          connected: false,
+          status: 'unavailable',
+          toolkit,
+          provider: isComposioConnectMode() ? 'composio-connect' : 'composio',
+          message:
+            typeof payload.error === 'string'
+              ? payload.error
+              : 'Feature access denied'
+        },
+        { status: access.response.status }
+      )
+    }
+
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json(

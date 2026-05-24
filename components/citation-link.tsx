@@ -42,13 +42,16 @@ export const CitationLink = memo(function CitationLink({
 
   const linkClasses = cn(
     isCitation
-      ? 'text-[10px] bg-muted/50 text-muted-foreground/60 rounded-full h-4 px-1.5 inline-flex items-center justify-center hover:bg-primary hover:text-primary-foreground duration-200 no-underline -translate-y-0.5 whitespace-nowrap'
+      ? 'text-[11px] bg-muted text-muted-foreground rounded-full h-5 min-w-5 px-1.5 inline-flex items-center justify-center hover:bg-primary hover:text-primary-foreground hover:scale-105 duration-200 no-underline -translate-y-0.5 whitespace-nowrap'
       : 'hover:underline inline-flex items-center gap-1.5',
     className
   )
 
-  // If no citation data, render as simple link
   if (!citationData) {
+    if (isCitation && href.startsWith('#')) {
+      return <span className={linkClasses}>{children}</span>
+    }
+
     return (
       <a
         href={href}
