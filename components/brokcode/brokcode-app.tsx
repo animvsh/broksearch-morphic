@@ -62,6 +62,11 @@ import {
   GeneratedBrokCodeFile
 } from '@/lib/brokcode/generated-files'
 import { buildBrokCodeCommandPrompt } from '@/lib/brokcode/generation-prompt'
+import {
+  type BrokCodeProjectBrain,
+  buildBrokCodeProjectBrain,
+  normalizeBrokCodeProjectBrain
+} from '@/lib/brokcode/project-brain'
 import { openComposioPopup } from '@/lib/composio-popup'
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
@@ -166,6 +171,7 @@ type BrokCodeProject = {
   deploymentUrl?: string | null
   metadata?: {
     backend?: BrokCodeBackendMetadata
+    productBrain?: BrokCodeProjectBrain
     [key: string]: unknown
   } | null
 }
@@ -1473,6 +1479,29 @@ export function BrokCodeApp({
       health: 'unknown',
       adminKeyConfigured: false
     } satisfies BrokCodeBackendMetadata)
+  const projectBrain = useMemo(() => {
+    const persistedBrain = normalizeBrokCodeProjectBrain(
+      activeProject?.metadata?.productBrain
+    )
+    if (persistedBrain) return persistedBrain
+
+    const latestUserMessage = [...messages]
+      .reverse()
+      .find(message => message.role === 'user')
+    const latestCommand =
+      versions[0]?.command ?? latestUserMessage?.content ?? input
+
+    return buildBrokCodeProjectBrain({
+      projectName: activeProject?.name ?? 'BrokCode App',
+      command: latestCommand,
+      files: projectFiles.map(file => ({
+        path: file.path,
+        content: file.content,
+        language: file.language ?? null
+      })),
+      backend: activeBackend
+    })
+  }, [activeBackend, activeProject, input, messages, projectFiles, versions])
   const selectedProjectFile =
     projectFiles.find(file => file.path === selectedFilePath) ??
     projectFiles[0] ??
@@ -4143,6 +4172,7 @@ export function BrokCodeApp({
       }
       if (apiKey) {
         await refreshUsage(apiKey)
+        await refreshProjects(apiKey)
       }
     } catch (error) {
       const message =
@@ -5297,53 +5327,113 @@ export function BrokCodeApp({
                 )}
               </div>
             </div>
-            <ProjectFilesPanel
-              files={projectFiles}
-              loading={projectFilesLoading}
-              error={projectFilesError}
-              selectedFile={selectedProjectFile}
-              draft={fileDraft}
-              editMode={fileEditMode}
-              saving={fileSaving}
-              hasUnsavedChanges={hasUnsavedFileChanges}
-              onSelectFile={selectProjectFile}
-              onDraftChange={setFileDraft}
-              onEditModeChange={setFileEditMode}
-              onSave={() => {
-                void saveProjectFile()
-              }}
-              onRefresh={() => {
-                void refreshProjectFiles()
-              }}
-            />
-            <RunDiffPanel
-              diffs={runDiffs}
-              selectedDiff={selectedRunDiff}
-              selectedFile={selectedDiffFile}
-              onSelectDiff={diff => {
-                setSelectedRunDiffId(diff.id)
-                setSelectedDiffFilePath(diff.files[0]?.path ?? '')
-              }}
-              onSelectFile={file => setSelectedDiffFilePath(file.path)}
-              onOpenFile={openDiffFileInEditor}
-            />
-            <VersionHistoryPanel
-              versions={versions}
-              loading={versionsLoading}
-              compact
-              onRefresh={() => {
-                void refreshVersions(apiKey)
-              }}
-              onRename={version => {
-                void renameVersionCheckpoint(version)
-              }}
-              onRestore={version => {
-                void restoreVersionSnapshot(version)
-              }}
-              onDuplicate={version => {
-                void duplicateVersionSnapshot(version)
-              }}
-            />
+            <Tabs defaultValue="brain" className="mb-2">
+              <TabsList className="grid h-auto grid-cols-3 rounded-lg border border-zinc-200 bg-white p-1 text-xs shadow-sm xl:grid-cols-6">
+                <TabsTrigger value="brain" className="rounded-md text-xs">
+                  Brain
+                </TabsTrigger>
+                <TabsTrigger value="files" className="rounded-md text-xs">
+                  Files
+                </TabsTrigger>
+                <TabsTrigger value="backend" className="rounded-md text-xs">
+                  Backend
+                </TabsTrigger>
+                <TabsTrigger value="diff" className="rounded-md text-xs">
+                  Diff
+                </TabsTrigger>
+                <TabsTrigger value="logs" className="rounded-md text-xs">
+                  Logs
+                </TabsTrigger>
+                <TabsTrigger value="versions" className="rounded-md text-xs">
+                  Versions
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="brain" className="mt-2">
+                <ProjectBrainPanel
+                  brain={projectBrain}
+                  hasProject={Boolean(activeProject)}
+                  onSuggestedAction={action => {
+                    setInput(action)
+                    setMobilePane('chat')
+                  }}
+                />
+              </TabsContent>
+              <TabsContent value="files" className="mt-2">
+                <ProjectFilesPanel
+                  files={projectFiles}
+                  loading={projectFilesLoading}
+                  error={projectFilesError}
+                  selectedFile={selectedProjectFile}
+                  draft={fileDraft}
+                  editMode={fileEditMode}
+                  saving={fileSaving}
+                  hasUnsavedChanges={hasUnsavedFileChanges}
+                  onSelectFile={selectProjectFile}
+                  onDraftChange={setFileDraft}
+                  onEditModeChange={setFileEditMode}
+                  onSave={() => {
+                    void saveProjectFile()
+                  }}
+                  onRefresh={() => {
+                    void refreshProjectFiles()
+                  }}
+                />
+              </TabsContent>
+              <TabsContent value="backend" className="mt-2">
+                <ProjectBackendPanel
+                  backend={activeBackend}
+                  backendChecking={backendChecking}
+                  backendProvisioning={backendProvisioning}
+                  hasLiveRuntime={hasLiveRuntime}
+                  onCheck={() => {
+                    void checkBackendHealth()
+                  }}
+                  onProvision={() => {
+                    void provisionInsForgeBackend()
+                  }}
+                />
+              </TabsContent>
+              <TabsContent value="diff" className="mt-2">
+                <RunDiffPanel
+                  diffs={runDiffs}
+                  selectedDiff={selectedRunDiff}
+                  selectedFile={selectedDiffFile}
+                  onSelectDiff={diff => {
+                    setSelectedRunDiffId(diff.id)
+                    setSelectedDiffFilePath(diff.files[0]?.path ?? '')
+                  }}
+                  onSelectFile={file => setSelectedDiffFilePath(file.path)}
+                  onOpenFile={openDiffFileInEditor}
+                />
+              </TabsContent>
+              <TabsContent value="logs" className="mt-2">
+                <RuntimeLogsPanel
+                  runtimeDiagnostics={runtimeDiagnostics}
+                  latestRun={executionRuns[0]}
+                  runtimeError={runtimeError}
+                  onFixRuntimeError={fixRuntimeFailure}
+                />
+              </TabsContent>
+              <TabsContent value="versions" className="mt-2">
+                <VersionHistoryPanel
+                  versions={versions}
+                  loading={versionsLoading}
+                  compact
+                  onRefresh={() => {
+                    void refreshVersions(apiKey)
+                  }}
+                  onRename={version => {
+                    void renameVersionCheckpoint(version)
+                  }}
+                  onRestore={version => {
+                    void restoreVersionSnapshot(version)
+                  }}
+                  onDuplicate={version => {
+                    void duplicateVersionSnapshot(version)
+                  }}
+                />
+              </TabsContent>
+            </Tabs>
             <BrowserPreviewPanel
               isRunning={isRunning}
               previewInput={previewInput}
@@ -6435,6 +6525,312 @@ function RunDiffPanel({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function formatProjectBrainUpdatedAt(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'just now'
+
+  return date.toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}
+
+function ProjectBrainPanel({
+  brain,
+  hasProject,
+  onSuggestedAction
+}: {
+  brain: BrokCodeProjectBrain
+  hasProject: boolean
+  onSuggestedAction: (action: string) => void
+}) {
+  return (
+    <div className="grid max-h-[34vh] min-h-[250px] gap-3 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Bot className="size-4 text-zinc-700" />
+            <p className="font-semibold text-zinc-950">Project Brain</p>
+          </div>
+          <p className="mt-1 text-zinc-500">
+            {hasProject
+              ? `Updated ${formatProjectBrainUpdatedAt(brain.updatedAt)}`
+              : 'Start a project to persist the product memory.'}
+          </p>
+        </div>
+        <Badge variant="outline" className="shrink-0 rounded-full">
+          {brain.currentPages.length} pages
+        </Badge>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+          <p className="text-[11px] uppercase text-zinc-400">Product</p>
+          <p className="mt-1 font-medium text-zinc-950">{brain.product}</p>
+        </div>
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+          <p className="text-[11px] uppercase text-zinc-400">Audience</p>
+          <p className="mt-1 text-zinc-700">{brain.audience}</p>
+        </div>
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+          <p className="text-[11px] uppercase text-zinc-400">Experience</p>
+          <p className="mt-1 line-clamp-3 text-zinc-700">
+            {brain.coreExperience}
+          </p>
+        </div>
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+          <p className="text-[11px] uppercase text-zinc-400">Design</p>
+          <p className="mt-1 text-zinc-700">{brain.designDirection}</p>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[11px] uppercase text-zinc-400">
+          Current app map
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {(brain.currentPages.length > 0
+            ? brain.currentPages
+            : ['First screen pending']
+          ).map(page => (
+            <Badge key={page} variant="secondary" className="rounded-full">
+              {page}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div>
+          <p className="mb-1.5 text-[11px] uppercase text-zinc-400">
+            AI features
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {(brain.aiFeatures.length > 0
+              ? brain.aiFeatures
+              : ['Not detected yet']
+            ).map(feature => (
+              <Badge key={feature} variant="outline" className="rounded-full">
+                {feature}
+              </Badge>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="mb-1.5 text-[11px] uppercase text-zinc-400">Backend</p>
+          <p className="rounded-lg border border-zinc-200 bg-zinc-50 p-2 text-zinc-700">
+            {brain.backendSummary}
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[11px] uppercase text-zinc-400">
+          Suggested next actions
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {brain.suggestedNextActions.map(action => (
+            <Button
+              key={action}
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 rounded-full px-2.5 text-[11px]"
+              onClick={() => onSuggestedAction(action)}
+            >
+              <Wand2 className="size-3.5" />
+              {action}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ProjectBackendPanel({
+  backend,
+  backendChecking,
+  backendProvisioning,
+  hasLiveRuntime,
+  onCheck,
+  onProvision
+}: {
+  backend: BrokCodeBackendMetadata
+  backendChecking: boolean
+  backendProvisioning: boolean
+  hasLiveRuntime: boolean
+  onCheck: () => void
+  onProvision: () => void
+}) {
+  const capabilities = Object.entries(backend.capabilities ?? {})
+    .filter(([, enabled]) => enabled)
+    .map(([name]) => name)
+
+  return (
+    <div className="grid max-h-[34vh] min-h-[220px] gap-3 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <PlugZap className="size-4 text-zinc-700" />
+            <p className="font-semibold text-zinc-950">Backend</p>
+          </div>
+          <p className="mt-1 truncate text-zinc-500">
+            {backend.provider === 'insforge'
+              ? backend.projectUrl || backend.status
+              : 'No cloud backend connected.'}
+          </p>
+        </div>
+        <Badge variant="outline" className="shrink-0 rounded-full">
+          {backend.provider === 'insforge'
+            ? backend.health === 'online'
+              ? 'Online'
+              : backend.status
+            : 'None'}
+        </Badge>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+          <p className="text-[11px] uppercase text-zinc-400">Provider</p>
+          <p className="mt-1 font-medium text-zinc-950">{backend.provider}</p>
+        </div>
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+          <p className="text-[11px] uppercase text-zinc-400">Admin key</p>
+          <p className="mt-1 text-zinc-700">
+            {backend.adminKeyConfigured ? 'Configured' : 'Not configured'}
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[11px] uppercase text-zinc-400">
+          Capabilities
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {(capabilities.length > 0 ? capabilities : ['pending']).map(item => (
+            <Badge key={item} variant="secondary" className="rounded-full">
+              {item}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      {backend.error ? (
+        <p className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-700">
+          {backend.error}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        {backend.provider === 'insforge' ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-full px-3 text-xs"
+            disabled={backendChecking}
+            onClick={onCheck}
+          >
+            {backendChecking ? (
+              <RefreshCcw className="size-3.5 animate-spin" />
+            ) : (
+              <Radar className="size-3.5" />
+            )}
+            Check backend
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-full px-3 text-xs"
+            disabled={backendProvisioning || !hasLiveRuntime}
+            onClick={onProvision}
+          >
+            {backendProvisioning ? (
+              <RefreshCcw className="size-3.5 animate-spin" />
+            ) : (
+              <PlugZap className="size-3.5" />
+            )}
+            Add backend
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function RuntimeLogsPanel({
+  runtimeDiagnostics,
+  latestRun,
+  runtimeError,
+  onFixRuntimeError
+}: {
+  runtimeDiagnostics: BrokCodeRuntimeDiagnostics | null
+  latestRun?: ExecutionRun
+  runtimeError: string | null
+  onFixRuntimeError: () => void
+}) {
+  const recentLogs = runtimeDiagnostics?.logs.slice(-12) ?? []
+
+  return (
+    <div className="grid max-h-[34vh] min-h-[220px] gap-3 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <TerminalSquare className="size-4 text-zinc-700" />
+            <p className="font-semibold text-zinc-950">Logs</p>
+          </div>
+          <p className="mt-1 text-zinc-500">
+            {runtimeDiagnostics
+              ? `Runtime ${runtimeDiagnostics.status}`
+              : latestRun?.note || 'No runtime logs yet.'}
+          </p>
+        </div>
+        {runtimeError ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 rounded-full px-3 text-xs"
+            onClick={onFixRuntimeError}
+          >
+            <Wand2 className="size-3.5" />
+            Fix
+          </Button>
+        ) : null}
+      </div>
+
+      {runtimeError ? (
+        <p className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-700">
+          {runtimeError}
+        </p>
+      ) : null}
+
+      {recentLogs.length > 0 ? (
+        <div className="space-y-1.5">
+          {recentLogs.map((log, index) => (
+            <div
+              key={`${log.at}-${index}`}
+              className="rounded-lg border border-zinc-200 bg-zinc-950 p-2 font-mono text-[11px] leading-5 text-zinc-100"
+            >
+              <p className="text-zinc-400">
+                {log.level} / {log.source}
+              </p>
+              <p>{log.message}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 p-3 text-zinc-500">
+          Run the app to see install, dev-server, browser, and system logs here.
+        </p>
+      )}
     </div>
   )
 }
