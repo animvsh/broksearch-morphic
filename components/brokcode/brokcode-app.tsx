@@ -3548,8 +3548,8 @@ export function BrokCodeApp({
     const head = githubHeadBranch.trim()
     const base = githubBaseBranch.trim() || 'main'
 
-    if (!repository || !head) {
-      setRuntimeError('Set repository and head branch before opening a PR.')
+    if (!repository) {
+      setRuntimeError('Set repository before opening a PR.')
       return
     }
 
@@ -3562,8 +3562,14 @@ export function BrokCodeApp({
       'Opened by Brok Code Cloud.',
       '',
       `Repository: ${repository}`,
-      `Head: ${head}`,
+      `Head: ${head || 'auto-generated BrokCode branch'}`,
       `Base: ${base}`,
+      activeProject?.id ? `Project: ${activeProject.id}` : null,
+      versions[0]?.id ? `Version: ${versions[0].id}` : null,
+      latestRun?.previewUrl ? `Preview: ${latestRun.previewUrl}` : null,
+      activeProject?.deploymentUrl
+        ? `Deployment: ${activeProject.deploymentUrl}`
+        : null,
       latestRun?.note ? '' : null,
       latestRun?.note || null
     ].filter((line): line is string => Boolean(line))
@@ -3584,6 +3590,9 @@ export function BrokCodeApp({
           body: bodyLines.join('\n'),
           base,
           head,
+          project_id: activeProject?.id ?? undefined,
+          version_id: versions[0]?.id ?? undefined,
+          export_path: activeProject?.slug ?? undefined,
           draft: false
         })
       })
@@ -3597,8 +3606,15 @@ export function BrokCodeApp({
 
       const prUrl = payload?.pullRequest?.url
       const prNumber = payload?.pullRequest?.number
+      const filesCommitted = payload?.pullRequest?.export?.filesCommitted
       const message = prUrl
-        ? `Opened PR #${prNumber ?? 'new'}: ${prUrl}`
+        ? `Opened PR #${prNumber ?? 'new'}: ${prUrl}${
+            typeof filesCommitted === 'number'
+              ? `\n\nCommitted ${filesCommitted} project file${
+                  filesCommitted === 1 ? '' : 's'
+                } to the branch first.`
+              : ''
+          }`
         : 'Opened pull request successfully.'
 
       setMessages(current => [
