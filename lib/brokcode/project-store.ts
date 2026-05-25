@@ -26,6 +26,8 @@ type BrokCodeProjectStoreFile = {
   deployments: BrokCodeDeployment[]
 }
 
+const LOCAL_FALLBACK_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000'
+
 let projectWriteQueue: Promise<unknown> = Promise.resolve()
 
 function canUseDatabaseStore() {
@@ -33,6 +35,11 @@ function canUseDatabaseStore() {
     process.env.BROKCODE_PROJECT_STORAGE !== 'file' &&
     !!process.env.DATABASE_URL
   )
+}
+
+function canUseDatabaseStoreForWorkspace(workspaceId: string) {
+  if (workspaceId === LOCAL_FALLBACK_WORKSPACE_ID) return false
+  return canUseDatabaseStore()
 }
 
 function getProjectStorePath() {
@@ -138,7 +145,7 @@ export async function listBrokCodeProjects({
   workspaceId: string
   userId: string
 }) {
-  if (canUseDatabaseStore()) {
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       return await db
         .select()
@@ -203,7 +210,7 @@ function createProjectValue({
 async function makeUniqueProjectSlug(workspaceId: string, desiredSlug: string) {
   const existingSlugs = new Set<string>()
 
-  if (canUseDatabaseStore()) {
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       const rows = await db
         .select({ slug: brokCodeProjects.slug })
@@ -326,7 +333,7 @@ export async function createBrokCodeProject({
     slug
   })
 
-  if (canUseDatabaseStore()) {
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       const [project] = await db
         .insert(brokCodeProjects)
@@ -354,7 +361,7 @@ export async function getBrokCodeProject({
   workspaceId: string
   userId: string
 }) {
-  if (canUseDatabaseStore()) {
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       const [project] = await db
         .select()
@@ -386,7 +393,7 @@ export async function getBrokCodeProjectById({ id }: { id: string }) {
         .where(eq(brokCodeProjects.id, id))
         .limit(1)
 
-      return project ?? null
+      if (project) return project
     } catch (error) {
       console.error(
         'BrokCode project DB public get failed; using file store:',
@@ -427,7 +434,7 @@ export async function getBrokCodeProjectByHandle({
         .orderBy(desc(brokCodeProjects.updatedAt))
         .limit(1)
 
-      return project ?? null
+      if (project) return project
     } catch (error) {
       console.error(
         'BrokCode project DB public handle get failed; using file store:',
@@ -473,7 +480,7 @@ export async function updateBrokCodeProjectBackend({
     metadata: project.metadata,
     backend
   })
-  if (canUseDatabaseStore()) {
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       const [updatedProject] = await db
         .update(brokCodeProjects)
@@ -534,7 +541,7 @@ export async function updateBrokCodeProjectPreview({
       }
     : project.metadata
 
-  if (canUseDatabaseStore()) {
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       const [updatedProject] = await db
         .update(brokCodeProjects)
@@ -590,7 +597,7 @@ export async function updateBrokCodeProjectMetadata({
     ...metadata
   }
 
-  if (canUseDatabaseStore()) {
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       const [updatedProject] = await db
         .update(brokCodeProjects)
@@ -662,7 +669,7 @@ export async function recordBrokCodeProjectDeployment({
     updatedAt: now
   }
 
-  if (canUseDatabaseStore()) {
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       const [deployment] = await db
         .insert(brokCodeDeployments)
@@ -721,7 +728,7 @@ export async function listBrokCodeProjectFiles({
   projectId: string
   workspaceId: string
 }) {
-  if (canUseDatabaseStore()) {
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       return await db
         .select()
@@ -756,11 +763,12 @@ export async function listBrokCodeProjectFilesByProjectId({
 }) {
   if (canUseDatabaseStore()) {
     try {
-      return await db
+      const rows = await db
         .select()
         .from(brokCodeProjectFiles)
         .where(eq(brokCodeProjectFiles.projectId, projectId))
         .orderBy(asc(brokCodeProjectFiles.path))
+      if (rows.length > 0) return rows
     } catch (error) {
       console.error(
         'BrokCode project file DB public list failed; using file store:',
@@ -809,7 +817,7 @@ export async function upsertBrokCodeProjectFile({
     updatedAt: now
   }
 
-  if (canUseDatabaseStore()) {
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       const [file] = await db
         .insert(brokCodeProjectFiles)
@@ -882,7 +890,7 @@ export async function deleteBrokCodeProjectFile({
   path: string
 }) {
   const now = new Date()
-  if (canUseDatabaseStore()) {
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       await db
         .delete(brokCodeProjectFiles)
@@ -934,7 +942,7 @@ export async function renameBrokCodeProjectFile({
   toPath: string
 }) {
   const now = new Date()
-  if (canUseDatabaseStore()) {
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       const [file] = await db
         .update(brokCodeProjectFiles)
