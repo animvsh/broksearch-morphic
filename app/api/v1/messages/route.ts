@@ -248,6 +248,7 @@ export async function POST(request: NextRequest) {
               outputTokens,
               providerCostUsd: providerCost,
               billedUsd: applyBrokMarkup(providerCost),
+              billedUsd: applyBrokMarkup(providerCost),
               latencyMs,
               status: 'success',
               metadata: {
@@ -520,6 +521,11 @@ function createAnthropicStream(
           } else {
             await options?.onComplete?.(usageAccumulator.snapshot())
           }
+          if (aborted) {
+            await options?.onAbort?.(usageAccumulator.snapshot())
+          } else {
+            await options?.onComplete?.(usageAccumulator.snapshot())
+          }
           controller.close()
           return
         }
@@ -531,6 +537,9 @@ function createAnthropicStream(
         let emittedDelta = false
         for (const line of lines) {
           usageAccumulator.trackSseLine(line)
+          if (emitProviderLine(line, controller, encoder)) {
+            emittedDelta = true
+          }
           if (emitProviderLine(line, controller, encoder)) {
             emittedDelta = true
           }
