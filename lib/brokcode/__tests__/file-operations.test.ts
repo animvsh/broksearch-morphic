@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   applyBrokCodeFileOperations,
   BrokCodeFileOperationError,
-  checksumBrokCodeFileContent
+  checksumBrokCodeFileContent,
+  summarizeBrokCodeFullFileChanges
 } from '../file-operations'
 
 const files = [
@@ -150,5 +151,37 @@ describe('BrokCode file operations', () => {
     expect(result.changes[0].beforeChecksum).toBe(
       checksumBrokCodeFileContent('body { color: black; }')
     )
+  })
+
+  it('summarizes full-file generation changes with before and after checksums', () => {
+    const changes = summarizeBrokCodeFullFileChanges({
+      beforeFiles: files,
+      afterFiles: [
+        {
+          path: 'src/App.tsx',
+          language: 'tsx',
+          content: 'export default function App() { return <main>New</main> }'
+        },
+        files[1],
+        {
+          path: 'README.md',
+          language: 'markdown',
+          content: '# Student Planner'
+        }
+      ]
+    })
+
+    expect(changes).toHaveLength(2)
+    expect(changes[0]).toMatchObject({
+      type: 'create_file',
+      path: 'README.md',
+      beforeChecksum: null,
+      afterChecksum: checksumBrokCodeFileContent('# Student Planner')
+    })
+    expect(changes[1]).toMatchObject({
+      type: 'replace_file',
+      path: 'src/App.tsx',
+      beforeChecksum: checksumBrokCodeFileContent(files[0].content)
+    })
   })
 })
