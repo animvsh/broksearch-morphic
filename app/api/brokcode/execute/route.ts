@@ -54,11 +54,16 @@ import {
   resolvePublicPreviewOrigin
 } from '@/lib/brokcode/preview'
 import {
+  buildBrokCodeProjectBrain,
+  normalizeBrokCodeProjectBrain
+} from '@/lib/brokcode/project-brain'
+import {
   deleteBrokCodeProjectFile,
   getBrokCodeProject,
   getBrokCodeProjectBackend,
   listBrokCodeProjectFiles,
   renameBrokCodeProjectFile,
+  updateBrokCodeProjectMetadata,
   updateBrokCodeProjectPreview,
   upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
@@ -406,6 +411,17 @@ async function persistGeneratedProjectOutput({
       origin,
       projectId: project.id
     })
+    const productBrain = buildBrokCodeProjectBrain({
+      projectName: project.name,
+      command,
+      files: applied.files,
+      backend: publicBrokCodeBackendMetadata(
+        getBrokCodeProjectBackend(project)
+      ),
+      previousBrain: normalizeBrokCodeProjectBrain(
+        project.metadata?.productBrain
+      )
+    })
     await updateBrokCodeProjectPreview({
       projectId: project.id,
       workspaceId: auth.workspace.id,
@@ -419,6 +435,12 @@ async function persistGeneratedProjectOutput({
         generatedAt: new Date().toISOString(),
         source: 'runtime_operations'
       }
+    })
+    await updateBrokCodeProjectMetadata({
+      projectId: project.id,
+      workspaceId: auth.workspace.id,
+      userId: auth.apiKey.userId,
+      metadata: { productBrain }
     })
     send?.('preview', {
       project_id: project.id,
@@ -514,6 +536,13 @@ async function persistGeneratedProjectOutput({
     origin,
     projectId: project.id
   })
+  const productBrain = buildBrokCodeProjectBrain({
+    projectName: project.name,
+    command,
+    files,
+    backend: publicBrokCodeBackendMetadata(getBrokCodeProjectBackend(project)),
+    previousBrain: normalizeBrokCodeProjectBrain(project.metadata?.productBrain)
+  })
   await updateBrokCodeProjectPreview({
     projectId: project.id,
     workspaceId: auth.workspace.id,
@@ -529,6 +558,12 @@ async function persistGeneratedProjectOutput({
       generatedAt: new Date().toISOString(),
       source: 'runtime_output'
     }
+  })
+  await updateBrokCodeProjectMetadata({
+    projectId: project.id,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId,
+    metadata: { productBrain }
   })
 
   if (taskId) {

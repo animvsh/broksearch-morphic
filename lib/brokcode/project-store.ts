@@ -567,6 +567,56 @@ export async function updateBrokCodeProjectPreview({
   }))
 }
 
+export async function updateBrokCodeProjectMetadata({
+  projectId,
+  workspaceId,
+  userId,
+  metadata
+}: {
+  projectId: string
+  workspaceId: string
+  userId: string
+  metadata: Record<string, unknown>
+}) {
+  const project = await getBrokCodeProject({
+    id: projectId,
+    workspaceId,
+    userId
+  })
+  if (!project) return null
+
+  const nextMetadata = {
+    ...(project.metadata ?? {}),
+    ...metadata
+  }
+
+  if (canUseDatabaseStore()) {
+    try {
+      const [updatedProject] = await db
+        .update(brokCodeProjects)
+        .set({
+          metadata: nextMetadata,
+          updatedAt: new Date()
+        })
+        .where(eq(brokCodeProjects.id, projectId))
+        .returning()
+
+      return updatedProject ?? null
+    } catch (error) {
+      console.error(
+        'BrokCode project DB metadata update failed; using file store:',
+        error
+      )
+    }
+  }
+
+  return updateFallbackProject(projectId, current => ({
+    ...current,
+    metadata: nextMetadata,
+    updatedAt: new Date()
+  }))
+}
+
 export function getBrokCodeProjectBackend(
   project: { metadata?: Record<string, unknown> | null } | null | undefined
 ) {
