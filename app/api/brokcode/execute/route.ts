@@ -429,6 +429,7 @@ async function persistGeneratedProjectOutput({
 
     return {
       files: applied.files,
+      fileChanges: applied.changes,
       previewUrl,
       usedFallback: false
     }
@@ -551,6 +552,7 @@ async function persistGeneratedProjectOutput({
 
   return {
     files,
+    fileChanges,
     previewUrl,
     usedFallback
   }
@@ -1008,6 +1010,7 @@ function createExecutionStream({
                 status_url: taskId ? `/api/tasks/${taskId}` : null,
                 events_url: taskId ? `/api/tasks/${taskId}/events` : null,
                 generated_files: persisted?.files.map(file => file.path) ?? [],
+                file_changes: persisted?.fileChanges ?? [],
                 note: 'Built with BrokCode Cloud.'
               })
               await recordCodeExecutionUsage({
@@ -1167,6 +1170,7 @@ function createExecutionStream({
                 usage,
                 preview_url: previewUrl,
                 generated_files: persisted?.files.map(file => file.path) ?? [],
+                file_changes: persisted?.fileChanges ?? [],
                 note: 'Executed through OpenCode runtime.'
               })
               await recordCodeExecutionUsage({
@@ -1348,6 +1352,7 @@ function createExecutionStream({
             status_url: taskId ? `/api/tasks/${taskId}` : null,
             events_url: taskId ? `/api/tasks/${taskId}/events` : null,
             generated_files: persisted?.files.map(file => file.path) ?? [],
+            file_changes: persisted?.fileChanges ?? [],
             note:
               piFailure || opencodeFailure
                 ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} Routed through Brok runtime.`
@@ -2152,6 +2157,7 @@ export async function POST(request: NextRequest) {
         usage: null,
         preview_url: previewUrl,
         generated_files: persisted?.files.map(file => file.path) ?? [],
+        file_changes: persisted?.fileChanges ?? [],
         note: 'Built with BrokCode Cloud.'
       })
     } catch (error) {
@@ -2253,6 +2259,7 @@ export async function POST(request: NextRequest) {
           usage: payload?.usage ?? null,
           preview_url: previewUrl,
           generated_files: persisted?.files.map(file => file.path) ?? [],
+          file_changes: persisted?.fileChanges ?? [],
           note: 'Executed through OpenCode runtime.'
         })
       }
@@ -2399,6 +2406,7 @@ export async function POST(request: NextRequest) {
     usage,
     preview_url: previewUrl,
     generated_files: persisted?.files.map(file => file.path) ?? [],
+    file_changes: persisted?.fileChanges ?? [],
     note:
       piFailure || opencodeFailure
         ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} Routed through Brok runtime.`

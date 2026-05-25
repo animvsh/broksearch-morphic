@@ -56,6 +56,7 @@ import {
   type BrokCodeRunDiff,
   buildBrokCodeRunDiff
 } from '@/lib/brokcode/diff-summary'
+import type { BrokCodeAppliedFileChange } from '@/lib/brokcode/file-operations'
 import {
   extractGeneratedBrokCodeFiles,
   GeneratedBrokCodeFile
@@ -327,6 +328,7 @@ type BrokCodeStreamResult = {
   task_id?: string | null
   status_url?: string | null
   events_url?: string | null
+  file_changes?: BrokCodeAppliedFileChange[]
   note?: string
 }
 
@@ -344,6 +346,24 @@ type BrokCodeRetryRequest = {
   require_opencode?: boolean
   allow_brok_fallback?: boolean
   retry_of_task_id?: string
+}
+
+function normalizeBrokCodeFileChanges(value: unknown) {
+  if (!Array.isArray(value)) return []
+
+  return value.filter((change): change is BrokCodeAppliedFileChange => {
+    if (!change || typeof change !== 'object') return false
+    const candidate = change as Partial<BrokCodeAppliedFileChange>
+    return (
+      typeof candidate.type === 'string' &&
+      typeof candidate.path === 'string' &&
+      (candidate.beforeChecksum === null ||
+        typeof candidate.beforeChecksum === 'string') &&
+      (candidate.afterChecksum === null ||
+        typeof candidate.afterChecksum === 'string') &&
+      typeof candidate.summary === 'string'
+    )
+  })
 }
 
 type BrokCodeBackgroundTask = {
@@ -1160,6 +1180,7 @@ async function readBrokCodeExecutionStream(
       typeof result?.status_url === 'string' ? result.status_url : null,
     events_url:
       typeof result?.events_url === 'string' ? result.events_url : null,
+    file_changes: normalizeBrokCodeFileChanges(result?.file_changes),
     note: typeof result?.note === 'string' ? result.note : undefined
   }
 }
@@ -3965,6 +3986,7 @@ export function BrokCodeApp({
         typeof body?.preview_url === 'string'
           ? body.preview_url
           : extractPreviewUrlFromText(assistantContent)
+      const serverFileChanges = normalizeBrokCodeFileChanges(body?.file_changes)
       const generatedFiles = extractGeneratedPreviewFiles(assistantContent)
 
       let managedPreviewUrl: string | null = null
@@ -4005,7 +4027,10 @@ export function BrokCodeApp({
             ? body.task_id
             : (run.taskId ?? null),
         previewUrl: discoveredPreviewUrl ?? null,
-        runtimeChanges: [`${getRuntimeLabel(runtime)} completed`],
+        runtimeChanges: [
+          `${getRuntimeLabel(runtime)} completed`,
+          ...serverFileChanges.slice(0, 6).map(change => change.summary)
+        ],
         deployChanges: discoveredPreviewUrl
           ? [`Preview updated: ${discoveredPreviewUrl}`]
           : []
