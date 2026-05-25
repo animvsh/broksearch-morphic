@@ -122,6 +122,11 @@ export async function POST(request: NextRequest) {
     recency_days,
     domains
   } = body
+  if (typeof stream !== 'boolean') {
+    return invalidRequestResponse('invalid_stream', 'stream must be a boolean.')
+  }
+
+  const shouldStream = stream
   const depth = normalizeSearchDepth(body.depth ?? body.search_depth)
   const searchDomains = Array.isArray(domains)
     ? domains.filter((domain): domain is string => typeof domain === 'string')
@@ -175,6 +180,15 @@ export async function POST(request: NextRequest) {
   )
 
   if (!rateLimit.allowed) {
+    await recordRateLimitEvent(
+      auth.apiKey.id,
+      auth.workspace.id,
+      'rpm',
+      rateLimit.limit,
+      rateLimit.current + 1,
+      true
+    )
+
     return NextResponse.json(
       {
         error: {
@@ -207,7 +221,7 @@ export async function POST(request: NextRequest) {
     false
   )
 
-  if (stream) {
+  if (shouldStream) {
     const encoder = new TextEncoder()
 
     return new Response(

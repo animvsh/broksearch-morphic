@@ -27,6 +27,10 @@ function resolveToolkitCandidates() {
 }
 
 export async function GET() {
+  const access = await requireFeatureAccessForApi('brokmail')
+  if (!access.ok) return access.response
+  const user = access.user
+
   if (!isComposioConfigured()) {
     return NextResponse.json({
       configured: false,
@@ -38,10 +42,6 @@ export async function GET() {
   }
 
   try {
-    const access = await requireFeatureAccessForApi('brokmail')
-    if (!access.ok) return access.response
-    const user = access.user
-
     const settledAccountsByToolkit = await Promise.allSettled(
       resolveToolkitCandidates().map(async toolkit => {
         const accounts = await listConnectedAccounts(user.id, toolkit, 20)

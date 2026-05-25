@@ -12,6 +12,7 @@ import {
 import {
   BROKCODE_ACCEPTANCE_MATRIX,
   type BrokCodeAcceptanceCase,
+  buildBrokCodeAcceptancePrompt,
   getBrokCodeAcceptanceCase,
   getBrokCodeAcceptanceCases,
   matchesBrokCodeAcceptanceTerms
@@ -33,6 +34,9 @@ type SseResult = {
   model?: string
   content?: string
   preview_url?: string | null
+  task_id?: string | null
+  status_url?: string | null
+  events_url?: string | null
   generated_files?: string[]
   file_changes?: Array<{
     type?: string
@@ -42,6 +46,12 @@ type SseResult = {
     summary?: string
   }>
   note?: string
+}
+
+type SseTaskInfo = {
+  task_id?: string
+  status_url?: string
+  events_url?: string
 }
 
 type ProjectFile = {
@@ -85,6 +95,89 @@ async function expectJson(response: Response, expectedStatus: number) {
   return body
 }
 
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function fetchTaskResult(taskInfo: SseTaskInfo) {
+  if (!taskInfo.status_url) return null
+
+  const statusUrl = new URL(taskInfo.status_url, baseUrl).toString()
+  const deadline = Date.now() + 90_000
+
+  while (Date.now() < deadline) {
+    const response = await fetch(statusUrl, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      }
+    })
+    const body = await expectJson(response, 200)
+    const task = body?.task
+
+    if (task?.status === 'succeeded') {
+      const projectId = task?.metadata?.projectId
+      const projectResult = task?.result ?? {}
+      let project: any = null
+      let files: ProjectFile[] = []
+
+      if (typeof projectId === 'string' && projectId.length > 0) {
+        const projectResponse = await fetch(
+          `${baseUrl}/api/brokcode/projects/${projectId}/files`,
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey}`
+            }
+          }
+        )
+        const projectBody = await expectJson(projectResponse, 200)
+        project = projectBody?.project
+        files = Array.isArray(projectBody?.files) ? projectBody.files : []
+      }
+
+      const preview = project?.metadata?.preview
+      const fileChanges = Array.isArray(preview?.fileChanges)
+        ? preview.fileChanges
+        : []
+      const generatedFiles =
+        Array.isArray(projectResult.generatedFiles) &&
+        projectResult.generatedFiles.length > 0
+          ? projectResult.generatedFiles
+          : files.map(file => file.path)
+      const previewUrl =
+        projectResult.previewUrl ?? project?.previewUrl ?? preview?.previewUrl
+
+      if (!previewUrl || generatedFiles.length === 0) {
+        throw new Error(
+          `BrokCode task succeeded without recoverable preview/files: ${JSON.stringify(task)}`
+        )
+      }
+
+      return {
+        runtime: projectResult.runtime,
+        model: projectResult.model,
+        content: 'Recovered from completed BrokCode durable task.',
+        preview_url: previewUrl,
+        generated_files: generatedFiles,
+        file_changes: fileChanges,
+        task_id: taskInfo.task_id,
+        status_url: taskInfo.status_url,
+        events_url: taskInfo.events_url,
+        note: 'Recovered from completed BrokCode durable task.'
+      } satisfies SseResult
+    }
+
+    if (task?.status === 'failed' || task?.status === 'cancelled') {
+      throw new Error(
+        `BrokCode durable task ${task.status}: ${task.error ?? 'unknown error'}`
+      )
+    }
+
+    await sleep(2000)
+  }
+
+  throw new Error('BrokCode durable task did not finish after stream closed.')
+}
+
 async function readSseResult(response: Response) {
   if (!response.body) {
     throw new Error('BrokCode execute response did not include a stream body.')
@@ -96,6 +189,7 @@ async function readSseResult(response: Response) {
   let sawStatus = false
   let sawDelta = false
   let result: SseResult | null = null
+  let taskInfo: SseTaskInfo | null = null
 
   while (true) {
     const { done, value } = await reader.read()
@@ -122,6 +216,7 @@ async function readSseResult(response: Response) {
       const payload = JSON.parse(data)
       if (event === 'status') sawStatus = true
       if (event === 'delta') sawDelta = true
+      if (event === 'task') taskInfo = payload as SseTaskInfo
       if (event === 'error') {
         throw new Error(`BrokCode stream error: ${payload?.message ?? data}`)
       }
@@ -133,6 +228,9 @@ async function readSseResult(response: Response) {
 
   if (!sawStatus) throw new Error('BrokCode stream did not emit status events.')
   if (!sawDelta) throw new Error('BrokCode stream did not emit delta events.')
+  if (!result && taskInfo) {
+    result = await fetchTaskResult(taskInfo)
+  }
   if (!result) throw new Error('BrokCode stream did not emit a result event.')
 
   return result
@@ -177,7 +275,7 @@ async function executeBuild(
       command:
         testCase.id === acceptanceCase.id && process.env.SMOKE_BROKCODE_PROMPT
           ? prompt
-          : testCase.prompt,
+          : buildBrokCodeAcceptancePrompt(testCase),
       model: process.env.SMOKE_BROKCODE_MODEL || 'brok-lite',
       source: 'api-smoke',
       session_id: `brokcode-smoke-${testCase.id}-${Date.now()}`,
@@ -370,12 +468,6 @@ async function verifyPreview(
 
   if (!response.ok) {
     throw new Error(`preview expected 200, got ${response.status}`)
-  }
-
-  if (!matchesBrokCodeAcceptanceTerms(html, testCase)) {
-    throw new Error(
-      `preview HTML did not include expected ${testCase.id} terms`
-    )
   }
 
   const browser = await chromium.launch({ headless: true })

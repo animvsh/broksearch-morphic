@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 
 import { ensureWorkspaceForUser } from '@/lib/actions/api-keys'
+import { canUseUsageDashboardFallback } from '@/lib/actions/usage-dashboard-fallback'
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
 import { db } from '@/lib/db'
 import { withRLS } from '@/lib/db/with-rls'
@@ -606,8 +607,12 @@ export async function getUsageDashboardData(
       ]
     )
   } catch (error) {
-    console.error('Usage dashboard lookup failed; using empty data:', error)
-    return emptyUsageDashboardData(workspace as WorkspaceRow)
+    if (canUseUsageDashboardFallback(error)) {
+      console.error('Usage dashboard lookup failed; using empty data:', error)
+      return emptyUsageDashboardData(workspace as WorkspaceRow)
+    }
+
+    throw error
   }
 
   const daily = dailyRows.map(row => ({

@@ -202,4 +202,57 @@ console.log("ok")
 
     expect(strong.issues).toEqual([])
   })
+
+  it('allows responsive max-width containers while rejecting fixed large widths', () => {
+    const baseFiles = [
+      {
+        path: 'index.html',
+        content:
+          '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Club inventory</title><link rel="stylesheet" href="styles.css"></head><body><main><h1>Campus club inventory</h1><p>Track club equipment, add records, edit quantities, delete retired items, and keep student organization supplies ready for events.</p><form><input><button>Add item</button></form></main></body></html>',
+        language: 'html'
+      }
+    ]
+
+    expect(
+      inspectGeneratedBrokCodeAppQuality([
+        ...baseFiles,
+        {
+          path: 'styles.css',
+          content: 'main { max-width: 1200px; width: min(100%, 72rem); }',
+          language: 'css'
+        }
+      ]).issues
+    ).not.toContain('contains large fixed-width layout')
+
+    expect(
+      inspectGeneratedBrokCodeAppQuality([
+        ...baseFiles,
+        {
+          path: 'styles.css',
+          content: 'main { width: 1200px; }',
+          language: 'css'
+        }
+      ]).issues
+    ).toContain('contains large fixed-width layout')
+  })
+
+  it('adds generated CSS preview hygiene to avoid mobile overflow', () => {
+    const files = prepareGeneratedBrokCodeFiles([
+      {
+        path: 'index.html',
+        content:
+          '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bakery</title><link rel="stylesheet" href="styles.css"></head><body><main><h1>Bakery menu</h1><p>Fresh bakery menu cards, newsletter signup, order actions, and product copy for a student project preview.</p><form><input><button>Join newsletter</button></form></main></body></html>',
+        language: 'html'
+      },
+      {
+        path: 'styles.css',
+        content: '.wide-row { display: flex; gap: 20px; }',
+        language: 'css'
+      }
+    ])
+
+    expect(files.find(file => file.path === 'styles.css')?.content).toContain(
+      'data-brokcode-preview-hygiene'
+    )
+  })
 })

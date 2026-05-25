@@ -35,6 +35,10 @@ function resolveToolkitCandidates() {
 export async function POST(request: NextRequest) {
   const redirectUrl = resolveBrokMailCallbackUrl(request, '?gcal=connected')
 
+  const access = await requireFeatureAccessForApi('brokmail')
+  if (!access.ok) return access.response
+  const user = access.user
+
   if (!isComposioConfigured()) {
     return NextResponse.json(
       {
@@ -49,10 +53,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const access = await requireFeatureAccessForApi('brokmail')
-    if (!access.ok) return access.response
-    const user = access.user
-
     const candidates = resolveToolkitCandidates()
     const errors: string[] = []
 

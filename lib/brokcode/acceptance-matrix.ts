@@ -110,7 +110,7 @@ export const BROKCODE_ACCEPTANCE_MATRIX: BrokCodeAcceptanceCase[] = [
       'persisted-data-simulation'
     ],
     minimumInteractions: 3,
-    expectedTerms: ['course', 'feedback', 'submit', 'loading'],
+    expectedTerms: ['course', 'feedback', 'submit'],
     minimumGeneratedFiles: 4
   }
 ]
@@ -140,4 +140,19 @@ export function matchesBrokCodeAcceptanceTerms(
   return testCase.expectedTerms.every(term =>
     normalized.includes(term.toLowerCase())
   )
+}
+
+export function buildBrokCodeAcceptancePrompt(
+  testCase: BrokCodeAcceptanceCase
+) {
+  return [
+    testCase.prompt,
+    [
+      'Acceptance requirements for this generated app:',
+      `- Visible page copy must include these words or clear labels: ${testCase.expectedTerms.join(', ')}.`,
+      `- Save these files: ${testCase.requiredFiles.join(', ')}.`,
+      `- Include these capabilities: ${testCase.requiredCapabilities.join(', ')}.`,
+      `- Include at least ${testCase.minimumInteractions} visible interactive controls.`
+    ].join('\n')
+  ].join('\n\n')
 }

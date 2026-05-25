@@ -168,16 +168,42 @@ function cleanIntegrationError(
   fallback = 'This integration is not available right now.'
 ) {
   const summarized = summarizeBrokMailIntegrationError(message, fallback)
+  const normalized = summarized.toLowerCase()
 
-  if (summarized.toLowerCase().includes('connect google calendar')) {
+  if (normalized.includes('authentication required')) {
+    return 'Sign in to Brok before using BrokMail.'
+  }
+
+  if (
+    normalized.includes('feature access denied') ||
+    normalized.includes('access pending')
+  ) {
+    return 'BrokMail access is not enabled for this account yet.'
+  }
+
+  if (normalized.includes('connect google calendar')) {
     return 'Connect Google Calendar through Composio to load events.'
   }
 
-  if (summarized.toLowerCase().includes('connect gmail')) {
+  if (normalized.includes('connect gmail')) {
     return 'Connect Gmail through Composio to load your inbox.'
   }
 
   return summarized
+}
+
+function readBrokMailApiMessage(
+  payload: any,
+  fallback = 'This BrokMail integration is not available right now.'
+) {
+  const message =
+    typeof payload?.message === 'string'
+      ? payload.message
+      : typeof payload?.error === 'string'
+        ? payload.error
+        : fallback
+
+  return cleanIntegrationError(message, fallback)
 }
 
 function hasLabel(thread: MailThread, label: string) {
@@ -970,7 +996,15 @@ export function BrokMailApp() {
 
       const liveLoads: Array<Promise<unknown>> = []
 
-      if (gmailStatus.connected) {
+      if (!gmailResponse.ok) {
+        setConnected(false)
+        setConnectionStatus(
+          readBrokMailApiMessage(
+            gmailStatus,
+            'Could not check Gmail connection.'
+          )
+        )
+      } else if (gmailStatus.connected) {
         setConnected(true)
         setConnectionMode('composio')
         liveLoads.push(loadComposioGmailThreads())
@@ -981,7 +1015,15 @@ export function BrokMailApp() {
         )
       }
 
-      if (gcalStatus.connected) {
+      if (!gcalResponse.ok) {
+        setCalendarConnected(false)
+        setCalendarConnectionStatus(
+          readBrokMailApiMessage(
+            gcalStatus,
+            'Could not check Google Calendar connection.'
+          )
+        )
+      } else if (gcalStatus.connected) {
         setCalendarConnected(true)
         setCalendarConnectionMode('composio')
         liveLoads.push(loadComposioCalendarEvents())
@@ -1010,10 +1052,10 @@ export function BrokMailApp() {
       const body = await response.json().catch(() => null)
 
       if (!response.ok) {
-        const message =
-          typeof body?.message === 'string'
-            ? body.message
-            : 'Sign in to Brok before connecting Gmail.'
+        const message = readBrokMailApiMessage(
+          body,
+          'Sign in to Brok before connecting Gmail.'
+        )
         setConnectionStatus(message)
         toast.error(message)
         return
@@ -1061,6 +1103,13 @@ export function BrokMailApp() {
         toast.error('Could not confirm Gmail connection yet')
         return
       }
+
+      const message = readBrokMailApiMessage(
+        body,
+        'Composio did not return a Gmail connection link.'
+      )
+      setConnectionStatus(message)
+      toast.error(message)
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Could not connect Gmail.'
@@ -1080,10 +1129,10 @@ export function BrokMailApp() {
       const body = await response.json().catch(() => null)
 
       if (!response.ok) {
-        const message =
-          typeof body?.message === 'string'
-            ? body.message
-            : 'Sign in to Brok before connecting Calendar.'
+        const message = readBrokMailApiMessage(
+          body,
+          'Sign in to Brok before connecting Calendar.'
+        )
         setCalendarConnectionStatus(message)
         toast.error(message)
         return
@@ -1131,6 +1180,13 @@ export function BrokMailApp() {
         toast.error('Could not confirm Google Calendar connection yet')
         return
       }
+
+      const message = readBrokMailApiMessage(
+        body,
+        'Composio did not return a Google Calendar connection link.'
+      )
+      setCalendarConnectionStatus(message)
+      toast.error(message)
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Could not connect Calendar.'

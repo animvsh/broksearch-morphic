@@ -7,6 +7,7 @@ vi.mock('@/lib/auth/get-current-user', () => ({
 }))
 
 vi.mock('@/lib/integrations/composio', () => ({
+  canExecuteComposioTools: vi.fn(),
   executeComposioTool: vi.fn(),
   isComposioConfigured: vi.fn(),
   listConnectedAccounts: vi.fn()
@@ -23,12 +24,14 @@ import {
   releaseBrokMailApproval
 } from '@/lib/brokmail/approval-consumption'
 import {
+  canExecuteComposioTools,
   executeComposioTool,
   isComposioConfigured,
   listConnectedAccounts
 } from '@/lib/integrations/composio'
 
 import { POST as runBrokMailAction } from '../composio/action/route'
+import { POST as createBrokMailApproval } from '../composio/approval/route'
 
 const draftPayload = {
   action: 'create_draft' as const,
@@ -57,6 +60,7 @@ describe('BrokMail Composio action route', () => {
     delete process.env.COMPOSIO_GCAL_TOOLKIT_SLUGS
     vi.clearAllMocks()
     vi.mocked(isComposioConfigured).mockReturnValue(true)
+    vi.mocked(canExecuteComposioTools).mockReturnValue(true)
     vi.mocked(getCurrentUser).mockResolvedValue({ id: 'user_123' } as any)
     vi.mocked(listConnectedAccounts).mockResolvedValue([
       {
@@ -81,6 +85,39 @@ describe('BrokMail Composio action route', () => {
     expect(response.status).toBe(403)
     expect(body.error).toContain('server-issued approval token')
     expect(executeComposioTool).not.toHaveBeenCalled()
+  })
+
+  it('requires BrokMail access before checking action configuration', async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(null)
+    vi.mocked(isComposioConfigured).mockReturnValue(false)
+
+    const response = await runBrokMailAction(
+      actionRequest({
+        ...draftPayload
+      }) as any
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(401)
+    expect(body).toEqual({ error: 'Authentication required' })
+    expect(isComposioConfigured).not.toHaveBeenCalled()
+    expect(executeComposioTool).not.toHaveBeenCalled()
+  })
+
+  it('requires BrokMail access before issuing approval tokens', async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(null)
+    vi.mocked(canExecuteComposioTools).mockReturnValue(false)
+
+    const response = await createBrokMailApproval(
+      actionRequest({
+        ...draftPayload
+      }) as any
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(401)
+    expect(body).toEqual({ error: 'Authentication required' })
+    expect(canExecuteComposioTools).not.toHaveBeenCalled()
   })
 
   it('rejects approval tokens that do not match the requested action', async () => {
