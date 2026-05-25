@@ -47,8 +47,8 @@ describe('BrokCode project file store', () => {
       name: 'Demo App'
     })
 
-    expect(first.slug).toBe('demo-app')
-    expect(second.slug).toBe('demo-app-2')
+  expect(first.slug).toBe('demo-app')
+  expect(second.slug).toBe('demo-app-2')
   })
 
   it('renames projects with a unique slug in fallback storage', async () => {
@@ -122,7 +122,6 @@ describe('BrokCode project file store', () => {
       })
     ).resolves.toEqual([])
   })
-
   it('keeps local fallback workspace projects in file storage even when DATABASE_URL is set', async () => {
     const previousStorage = process.env.BROKCODE_PROJECT_STORAGE
     const previousDatabaseUrl = process.env.DATABASE_URL
