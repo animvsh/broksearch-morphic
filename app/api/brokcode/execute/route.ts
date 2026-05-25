@@ -26,6 +26,10 @@ import {
 } from '@/lib/brokcode/backend-provider'
 import { buildBrokCodeProjectContextPack } from '@/lib/brokcode/context-packer'
 import {
+  createBrokCodeWorkerMetadata,
+  getBrokCodeJobRegistry
+} from '@/lib/brokcode/durable-job'
+import {
   applyBrokCodeFileOperations,
   BrokCodeFileOperation,
   BrokCodeFileOperationError,
@@ -942,6 +946,7 @@ function createExecutionStream({
   requirePi,
   allowBrokFallback,
   taskId,
+  workerLeaseId,
   usageContext,
   requestOrigin
 }: {
@@ -960,6 +965,7 @@ function createExecutionStream({
   requirePi: boolean
   allowBrokFallback: boolean
   taskId?: string
+  workerLeaseId?: string
   requestOrigin: string
   usageContext: {
     source?: string
@@ -1017,6 +1023,10 @@ function createExecutionStream({
                 command,
                 projectId: usageContext.projectId,
                 sessionId: usageContext.sessionId,
+                ...createBrokCodeWorkerMetadata({
+                  taskId,
+                  leaseId: workerLeaseId ?? taskId
+                }),
                 progress: 12
               }
             }).catch(error => {
@@ -1502,16 +1512,6 @@ const BROKCODE_JOB_TIMEOUT_MS = Number(
 )
 const TERMINAL_TASK_STATUSES = new Set(['succeeded', 'failed', 'cancelled'])
 
-function getBrokCodeJobRegistry() {
-  const globalState = globalThis as typeof globalThis & {
-    __brokCodeJobWorkers?: Set<string>
-  }
-  if (!globalState.__brokCodeJobWorkers) {
-    globalState.__brokCodeJobWorkers = new Set()
-  }
-  return globalState.__brokCodeJobWorkers
-}
-
 function phaseForBrokCodeEvent(event: string, payload: unknown) {
   if (event === 'delta') return 'generating'
   if (event === 'files') return 'writing_files'
@@ -1619,6 +1619,7 @@ async function startDetachedBrokCodeExecutionJob(
 
   registry.add(taskId)
   const userId = execution.auth.apiKey.userId
+  const leaseId = `${taskId}:${Date.now().toString(36)}`
   let finished = false
 
   const timeout = setTimeout(() => {
@@ -1647,7 +1648,10 @@ async function startDetachedBrokCodeExecutionJob(
 
   void (async () => {
     try {
-      const response = createExecutionStream(execution)
+      const response = createExecutionStream({
+        ...execution,
+        workerLeaseId: leaseId
+      })
       const reader = response.body?.getReader()
       if (!reader) {
         throw new Error('BrokCode job did not create a worker stream.')

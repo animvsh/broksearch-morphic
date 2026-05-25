@@ -4,6 +4,7 @@ import {
   hasFeatureAccess,
   requireAnyFeatureAccessForApi
 } from '@/lib/auth/app-access'
+import { reconcileStaleBrokCodeTask } from '@/lib/brokcode/durable-job'
 import { listBackgroundTasks } from '@/lib/tasks/background-tasks'
 
 export const runtime = 'nodejs'
@@ -25,9 +26,16 @@ export async function GET(request: Request) {
     limit,
     chatId
   })
+  const reconciledTasks = await Promise.all(
+    tasks.map(task =>
+      task.kind === 'brokcode'
+        ? reconcileStaleBrokCodeTask({ task })
+        : Promise.resolve(task)
+    )
+  )
   const visibleTasks = hasFeatureAccess(access.access, 'search')
-    ? tasks
-    : tasks.filter(task => task.kind === 'brokcode')
+    ? reconciledTasks
+    : reconciledTasks.filter(task => task.kind === 'brokcode')
 
   return NextResponse.json({ tasks: visibleTasks })
 }
