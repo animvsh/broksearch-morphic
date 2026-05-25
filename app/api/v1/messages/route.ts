@@ -19,6 +19,10 @@ import {
 } from '@/lib/brok/provider-router'
 import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
 import {
+  createOpenAiStreamUsageAccumulator,
+  resolveStreamTokenUsage
+} from '@/lib/brok/streaming-usage'
+import {
   checkUsageLimits,
   generateRequestId,
   recordUsage,
@@ -182,25 +186,41 @@ export async function POST(request: NextRequest) {
         throw new Error('Brok stream did not include a response body')
       }
 
-      const latencyMs = Date.now() - startTime
-      await recordUsage({
-        requestId,
-        workspaceId: auth.workspace.id,
-        userId: auth.apiKey.userId,
-        apiKeyId: auth.apiKey.id,
-        endpoint: 'code',
-        model: modelId,
-        provider: 'Brok',
-        inputTokens: 0,
-        outputTokens: 0,
-        providerCostUsd: 0,
-        billedUsd: 0,
-        latencyMs,
-        status: 'success'
-      })
-
       return new Response(
-        createAnthropicStream(providerResponse.body, requestId, modelId),
+        createAnthropicStream(providerResponse.body, requestId, modelId, {
+          onComplete: async ({ content, usage }) => {
+            const latencyMs = Date.now() - startTime
+            const { inputTokens, outputTokens } = resolveStreamTokenUsage({
+              usage,
+              content,
+              messages: providerMessages
+            })
+            const providerCost = await calculateCost(
+              modelId,
+              inputTokens,
+              outputTokens
+            )
+            await recordUsage({
+              requestId,
+              workspaceId: auth.workspace.id,
+              userId: auth.apiKey.userId,
+              apiKeyId: auth.apiKey.id,
+              endpoint: 'code',
+              model: modelId,
+              provider: 'Brok',
+              inputTokens,
+              outputTokens,
+              providerCostUsd: providerCost,
+              billedUsd: providerCost * 1.5,
+              latencyMs,
+              status: 'success',
+              metadata: {
+                stream: true,
+                usageSource: usage ? 'provider' : 'estimated'
+              }
+            })
+          }
+        }),
         {
           headers: {
             'Content-Type': 'text/event-stream; charset=utf-8',
@@ -351,11 +371,15 @@ function contentToText(content: AnthropicContentBlock): string {
 function createAnthropicStream(
   providerBody: ReadableStream<Uint8Array>,
   requestId: string,
-  modelId: string
+  modelId: string,
+  options?: {
+    onComplete?: (usage: { content: string; usage: unknown }) => Promise<void>
+  }
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder()
   const encoder = new TextEncoder()
   const reader = providerBody.getReader()
+  const usageAccumulator = createOpenAiStreamUsageAccumulator()
   let buffer = ''
   let started = false
   let index = 0
@@ -396,6 +420,7 @@ function createAnthropicStream(
 
         if (done) {
           if (buffer.trim()) {
+            usageAccumulator.trackSseLine(buffer)
             emitProviderLine(buffer, controller, encoder, index)
           }
           controller.enqueue(
@@ -420,6 +445,7 @@ function createAnthropicStream(
               toAnthropicSse('message_stop', { type: 'message_stop' })
             )
           )
+          await options?.onComplete?.(usageAccumulator.snapshot())
           controller.close()
           return
         }
@@ -428,11 +454,15 @@ function createAnthropicStream(
         const lines = buffer.split(/\r?\n/)
         buffer = lines.pop() ?? ''
 
+        let emittedDelta = false
         for (const line of lines) {
-          index = emitProviderLine(line, controller, encoder, index)
+          usageAccumulator.trackSseLine(line)
+          const nextIndex = emitProviderLine(line, controller, encoder, index)
+          if (nextIndex > index) emittedDelta = true
+          index = nextIndex
         }
 
-        if (started && lines.length > 0) {
+        if (started && emittedDelta) {
           return
         }
       }
