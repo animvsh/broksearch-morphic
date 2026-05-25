@@ -169,7 +169,7 @@ type BrokCodeProject = {
   } | null
 }
 
-type ExecutionStepStatus = 'queued' | 'running' | 'done' | 'error'
+type ExecutionStepStatus = 'queued' | 'running' | 'done' | 'error' | 'skipped'
 
 type ExecutionStep = {
   id: string
@@ -344,6 +344,173 @@ type BrokCodeBackgroundTask = {
   completedAt?: string | null
 }
 
+function getPersistedLifecycleSteps(metadata: Record<string, any>) {
+  if (!Array.isArray(metadata.lifecycle)) return null
+
+  const steps = metadata.lifecycle
+    .map((step: unknown): ExecutionStep | null => {
+      if (!step || typeof step !== 'object') return null
+      const record = step as Record<string, unknown>
+      const status =
+        record.status === 'queued' ||
+        record.status === 'running' ||
+        record.status === 'done' ||
+        record.status === 'error' ||
+        record.status === 'skipped'
+          ? record.status
+          : null
+      if (!status) return null
+
+      return {
+        id: typeof record.id === 'string' ? record.id : createId('step'),
+        label:
+          typeof record.label === 'string' ? record.label : 'BrokCode step',
+        detail:
+          typeof record.detail === 'string'
+            ? record.detail
+            : 'Recovered from the background task ledger.',
+        status
+      }
+    })
+    .filter((step): step is ExecutionStep => Boolean(step))
+
+  return steps.length > 0 ? steps : null
+}
+
+function createExecutionRunFromTask(
+  task: BrokCodeBackgroundTask
+): ExecutionRun {
+  const metadata = task.metadata ?? {}
+  const result = task.result ?? {}
+  const command =
+    typeof metadata.command === 'string' && metadata.command.trim()
+      ? metadata.command.trim()
+      : task.title
+  const progress =
+    typeof metadata.progress === 'number'
+      ? Math.max(0, Math.min(100, metadata.progress))
+      : task.status === 'succeeded'
+        ? 100
+        : task.status === 'failed' || task.status === 'cancelled'
+          ? 100
+          : 18
+  const runtime =
+    result.runtime === 'pi' ||
+    result.runtime === 'opencode' ||
+    result.runtime === 'brok'
+      ? result.runtime
+      : 'brok'
+  const previewUrl =
+    typeof result.previewUrl === 'string' ? result.previewUrl : null
+  const startedAt =
+    typeof task.startedAt === 'string'
+      ? Date.parse(task.startedAt)
+      : typeof task.createdAt === 'string'
+        ? Date.parse(task.createdAt)
+        : Date.now()
+  const finishedAt =
+    typeof task.completedAt === 'string'
+      ? Date.parse(task.completedAt)
+      : undefined
+  const running = task.status === 'queued' || task.status === 'running'
+  const failed = task.status === 'failed' || task.status === 'cancelled'
+  const persistedLifecycleSteps = getPersistedLifecycleSteps(metadata)
+  const steps =
+    persistedLifecycleSteps ??
+    executionStepTemplate.map(step => {
+      if (step.id === 'parse') {
+        return { ...step, status: 'done' as ExecutionStepStatus }
+      }
+      if (step.id === 'plan') {
+        return {
+          ...step,
+          status:
+            progress >= 18
+              ? ('done' as const)
+              : running
+                ? ('running' as const)
+                : failed
+                  ? ('error' as const)
+                  : ('queued' as const),
+          detail:
+            typeof metadata.runtimePreference === 'string'
+              ? `Runtime preference: ${metadata.runtimePreference}.`
+              : step.detail
+        }
+      }
+      if (step.id === 'execute') {
+        return {
+          ...step,
+          status:
+            task.status === 'succeeded'
+              ? ('done' as const)
+              : failed
+                ? ('error' as const)
+                : progress >= 18
+                  ? ('running' as const)
+                  : ('queued' as const),
+          detail:
+            Array.isArray(metadata.events) && metadata.events.length > 0
+              ? String(
+                  metadata.events[metadata.events.length - 1]?.message ??
+                    step.detail
+                )
+              : step.detail
+        }
+      }
+      if (step.id === 'validate') {
+        return {
+          ...step,
+          status:
+            task.status === 'succeeded'
+              ? ('done' as const)
+              : failed
+                ? ('error' as const)
+                : progress >= 72
+                  ? ('running' as const)
+                  : ('queued' as const),
+          detail: previewUrl ? 'Cloud preview URL recorded.' : step.detail
+        }
+      }
+      return {
+        ...step,
+        status:
+          task.status === 'succeeded'
+            ? ('done' as const)
+            : failed
+              ? ('error' as const)
+              : ('queued' as const),
+        detail:
+          task.status === 'succeeded'
+            ? 'Recovered from the background task ledger.'
+            : failed
+              ? task.error || 'Recovered failed task from the ledger.'
+              : step.detail
+      }
+    })
+
+  return {
+    id: `task-${task.id}`,
+    taskId: task.id,
+    statusUrl: `/api/tasks/${task.id}`,
+    eventsUrl: `/api/tasks/${task.id}/events`,
+    command,
+    runtime,
+    status: task.status === 'succeeded' ? 'done' : failed ? 'error' : 'running',
+    startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
+    finishedAt: Number.isFinite(finishedAt) ? finishedAt : undefined,
+    note:
+      task.status === 'succeeded'
+        ? 'Recovered completed run from the background task ledger.'
+        : failed
+          ? task.error ||
+            'Recovered failed run from the background task ledger.'
+          : 'Recovered active run from the background task ledger.',
+    previewUrl,
+    steps
+  }
+}
+
 type GithubRepoContext = {
   repository: string | null
   remoteUrl: string | null
@@ -454,7 +621,9 @@ function createRuntimeSubagents(runs: ExecutionRun[]): BrokCodeSubagent[] {
       run.steps.find(step => step.status === 'running') ??
       [...run.steps].reverse().find(step => step.status === 'done') ??
       run.steps[0]
-    const completed = run.steps.filter(step => step.status === 'done').length
+    const completed = run.steps.filter(
+      step => step.status === 'done' || step.status === 'skipped'
+    ).length
     const progress =
       run.status === 'done'
         ? 100
@@ -2179,138 +2348,6 @@ export function BrokCodeApp({
         ...step,
         status: step.id === 'parse' ? 'running' : 'queued'
       }))
-    }
-  }
-
-  function createExecutionRunFromTask(
-    task: BrokCodeBackgroundTask
-  ): ExecutionRun {
-    const metadata = task.metadata ?? {}
-    const result = task.result ?? {}
-    const command =
-      typeof metadata.command === 'string' && metadata.command.trim()
-        ? metadata.command.trim()
-        : task.title
-    const progress =
-      typeof metadata.progress === 'number'
-        ? Math.max(0, Math.min(100, metadata.progress))
-        : task.status === 'succeeded'
-          ? 100
-          : task.status === 'failed' || task.status === 'cancelled'
-            ? 100
-            : 18
-    const runtime =
-      result.runtime === 'pi' ||
-      result.runtime === 'opencode' ||
-      result.runtime === 'brok'
-        ? result.runtime
-        : 'brok'
-    const previewUrl =
-      typeof result.previewUrl === 'string' ? result.previewUrl : null
-    const startedAt =
-      typeof task.startedAt === 'string'
-        ? Date.parse(task.startedAt)
-        : typeof task.createdAt === 'string'
-          ? Date.parse(task.createdAt)
-          : Date.now()
-    const finishedAt =
-      typeof task.completedAt === 'string'
-        ? Date.parse(task.completedAt)
-        : undefined
-    const running = task.status === 'queued' || task.status === 'running'
-    const failed = task.status === 'failed' || task.status === 'cancelled'
-    const steps = executionStepTemplate.map(step => {
-      if (step.id === 'parse') {
-        return { ...step, status: 'done' as ExecutionStepStatus }
-      }
-      if (step.id === 'plan') {
-        return {
-          ...step,
-          status:
-            progress >= 18
-              ? ('done' as const)
-              : running
-                ? ('running' as const)
-                : failed
-                  ? ('error' as const)
-                  : ('queued' as const),
-          detail:
-            typeof metadata.runtimePreference === 'string'
-              ? `Runtime preference: ${metadata.runtimePreference}.`
-              : step.detail
-        }
-      }
-      if (step.id === 'execute') {
-        return {
-          ...step,
-          status:
-            task.status === 'succeeded'
-              ? ('done' as const)
-              : failed
-                ? ('error' as const)
-                : progress >= 18
-                  ? ('running' as const)
-                  : ('queued' as const),
-          detail:
-            Array.isArray(metadata.events) && metadata.events.length > 0
-              ? String(
-                  metadata.events[metadata.events.length - 1]?.message ??
-                    step.detail
-                )
-              : step.detail
-        }
-      }
-      if (step.id === 'validate') {
-        return {
-          ...step,
-          status:
-            task.status === 'succeeded'
-              ? ('done' as const)
-              : failed
-                ? ('error' as const)
-                : progress >= 72
-                  ? ('running' as const)
-                  : ('queued' as const),
-          detail: previewUrl ? 'Cloud preview URL recorded.' : step.detail
-        }
-      }
-      return {
-        ...step,
-        status:
-          task.status === 'succeeded'
-            ? ('done' as const)
-            : failed
-              ? ('error' as const)
-              : ('queued' as const),
-        detail:
-          task.status === 'succeeded'
-            ? 'Recovered from the background task ledger.'
-            : failed
-              ? task.error || 'Recovered failed task from the ledger.'
-              : step.detail
-      }
-    })
-
-    return {
-      id: `task-${task.id}`,
-      taskId: task.id,
-      statusUrl: `/api/tasks/${task.id}`,
-      eventsUrl: `/api/tasks/${task.id}/events`,
-      command,
-      runtime,
-      status:
-        task.status === 'succeeded' ? 'done' : failed ? 'error' : 'running',
-      startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
-      finishedAt: Number.isFinite(finishedAt) ? finishedAt : undefined,
-      note:
-        task.status === 'succeeded'
-          ? 'Recovered completed run from the background task ledger.'
-          : failed
-            ? task.error ||
-              'Recovered failed run from the background task ledger.'
-            : 'Recovered active run from the background task ledger.',
-      previewUrl,
-      steps
     }
   }
 
@@ -5413,7 +5450,9 @@ function AgentReasoningBar({
         : 'Working'
   const detail = activeStep?.detail ?? fallbackHint
   const completed =
-    run?.steps.filter(step => step.status === 'done').length ?? 0
+    run?.steps.filter(
+      step => step.status === 'done' || step.status === 'skipped'
+    ).length ?? 0
   const total = Math.max(run?.steps.length ?? 5, 1)
   const progress =
     status === 'done'
@@ -5599,7 +5638,9 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
                   18,
                   Math.round(
                     (run.steps.reduce((total, step) => {
-                      if (step.status === 'done') return total + 1
+                      if (step.status === 'done' || step.status === 'skipped') {
+                        return total + 1
+                      }
                       if (step.status === 'running') return total + 0.55
                       return total
                     }, 0) /
@@ -5626,7 +5667,9 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
                             ? 'bg-cyan-500 animate-pulse'
                             : step.status === 'error'
                               ? 'bg-rose-500'
-                              : 'bg-muted-foreground/40'
+                              : step.status === 'skipped'
+                                ? 'bg-zinc-300'
+                                : 'bg-muted-foreground/40'
                       )}
                     />
                     <div className="min-w-0">
