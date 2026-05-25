@@ -150,6 +150,11 @@ export async function POST(
   const runtimeSpec = {
     ...spec,
     appType: materialized.manifest.appType,
+    packageManager: materialized.manifest.packageManager,
+    workspacePath: materialized.workspacePath,
+    installCommand: materialized.manifest.installCommand,
+    devCommand: materialized.manifest.devCommand,
+    buildCommand: materialized.manifest.buildCommand,
     metadata: {
       ...spec.metadata,
       workspace: materialized.manifest
