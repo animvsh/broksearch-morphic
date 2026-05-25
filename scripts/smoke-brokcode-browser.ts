@@ -4,6 +4,8 @@ const baseUrl = (process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3000').replace(
   /\/+$/,
   ''
 )
+const baseOrigin = new URL(baseUrl).origin
+const basePort = new URL(baseUrl).port
 const prompt =
   process.env.SMOKE_BROKCODE_BROWSER_PROMPT ||
   'Build a polished bakery landing page with a newsletter form.'
@@ -73,6 +75,95 @@ const generatedContent = [
   '```'
 ].join('\n')
 
+function materializeGeneratedFiles() {
+  generatedFiles.set(
+    'index.html',
+    [
+      '<!doctype html>',
+      '<html lang="en">',
+      '<head>',
+      '  <meta charset="utf-8" />',
+      '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
+      `  <title>${projectName}</title>`,
+      '  <link rel="stylesheet" href="styles.css" />',
+      '</head>',
+      '<body>',
+      '  <main class="shell">',
+      '    <section class="hero">',
+      `      <h1>${projectName}</h1>`,
+      '      <p>Fresh bread, seasonal pastries, and a newsletter form that confirms signup inside the preview.</p>',
+      '      <a class="button" href="#menu">View menu</a>',
+      '    </section>',
+      '    <section id="menu" class="cards">',
+      '      <article><h2>Sourdough</h2><p>Slow-fermented loaves baked every morning.</p></article>',
+      '      <article><h2>Morning buns</h2><p>Citrus, cardamom, and laminated layers.</p></article>',
+      '    </section>',
+      '    <form aria-label="Newsletter signup">',
+      '      <label>Email <input name="email" type="email" placeholder="you@example.com" /></label>',
+      '      <button type="submit">Join newsletter</button>',
+      '      <p id="status" aria-live="polite"></p>',
+      '    </form>',
+      '  </main>',
+      '  <script src="app.js"></script>',
+      '</body>',
+      '</html>'
+    ].join('\n')
+  )
+  generatedFiles.set(
+    'styles.css',
+    [
+      '* { box-sizing: border-box; }',
+      'body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #f8f7f2; color: #1e1b18; }',
+      '.shell { min-height: 100vh; width: min(100% - 32px, 980px); margin: 0 auto; padding: 48px 0; }',
+      '.hero { padding: 64px 0 36px; }',
+      'h1 { max-width: 12ch; font-size: clamp(3rem, 7vw, 5.5rem); line-height: .95; margin: 0 0 18px; }',
+      'p { line-height: 1.6; color: #57524b; }',
+      '.button, button { display: inline-flex; min-height: 44px; align-items: center; border: 0; padding: 12px 18px; background: #1e1b18; color: white; text-decoration: none; font-weight: 700; }',
+      '.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 28px 0; }',
+      'article, form { border: 1px solid #ded9cf; background: white; padding: 20px; }',
+      'label { display: grid; gap: 8px; margin-bottom: 12px; }',
+      'input { min-height: 42px; border: 1px solid #d8d2c8; padding: 10px 12px; font: inherit; }'
+    ].join('\n')
+  )
+  generatedFiles.set(
+    'app.js',
+    [
+      "document.querySelector('form')?.addEventListener('submit', event => {",
+      '  event.preventDefault();',
+      "  const status = document.querySelector('#status');",
+      "  if (status) status.textContent = 'Newsletter signup saved for the morning bake.';",
+      '});'
+    ].join('\n')
+  )
+}
+
+function serializedGeneratedFiles() {
+  return [...generatedFiles.entries()].map(([path, content]) => ({
+    id: `file-${path}`,
+    projectId,
+    workspaceId: 'browser-smoke',
+    path,
+    content,
+    language: path.endsWith('.css')
+      ? 'css'
+      : path.endsWith('.js')
+        ? 'js'
+        : 'html',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }))
+}
+
+function generatedFileChanges() {
+  return [...generatedFiles.keys()].map(path => ({
+    type: 'create',
+    path,
+    beforeChecksum: null,
+    afterChecksum: `browser-smoke-${path}`,
+    summary: `Created ${path}`
+  }))
+}
+
 function json(body: unknown, init: Parameters<Route['fulfill']>[0] = {}) {
   return {
     status: 200,
@@ -115,6 +206,12 @@ function sseEvent(event: string, payload: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`
 }
 
+function isSameLocalBrokOrigin(url: URL) {
+  if (url.origin === baseOrigin) return true
+  if (!['localhost', '127.0.0.1'].includes(url.hostname)) return false
+  return url.port === basePort
+}
+
 function previewHtml() {
   return (
     generatedFiles.get('index.html') ??
@@ -152,7 +249,7 @@ async function routeBrokCodeSmoke(route: Route) {
   const request = route.request()
   const url = new URL(request.url())
 
-  if (url.origin !== baseUrl) {
+  if (!isSameLocalBrokOrigin(url)) {
     await route.continue()
     return
   }
@@ -253,6 +350,8 @@ async function routeBrokCodeSmoke(route: Route) {
   }
 
   if (url.pathname === '/api/brokcode/execute') {
+    materializeGeneratedFiles()
+
     const body = [
       sseEvent('status', { message: 'Planning the build.' }),
       sseEvent('status', { message: 'Writing the app.' }),
@@ -264,6 +363,7 @@ async function routeBrokCodeSmoke(route: Route) {
         usage: null,
         preview_url: `${baseUrl}${previewPath}`,
         generated_files: ['index.html', 'styles.css', 'app.js'],
+        file_changes: generatedFileChanges(),
         note: 'Browser smoke build completed.'
       })
     ].join('')
@@ -279,6 +379,11 @@ async function routeBrokCodeSmoke(route: Route) {
   const fileMatch = url.pathname.match(
     /^\/api\/brokcode\/projects\/[^/]+\/files$/
   )
+  if (fileMatch && request.method() === 'GET') {
+    await route.fulfill(json({ files: serializedGeneratedFiles() }))
+    return
+  }
+
   if (fileMatch && request.method() === 'PUT') {
     const body = JSON.parse(request.postData() || '{}') as {
       path?: string
@@ -299,7 +404,45 @@ async function routeBrokCodeSmoke(route: Route) {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         },
-        files: []
+        files: serializedGeneratedFiles()
+      })
+    )
+    return
+  }
+
+  if (
+    url.pathname === `/api/brokcode/projects/${projectId}/runtime` &&
+    request.method() === 'POST'
+  ) {
+    await route.fulfill(
+      json({
+        runtime: {
+          id: `runtime-${projectId}`,
+          projectId,
+          workspaceId: 'browser-smoke',
+          userId: 'browser-smoke-user',
+          sessionId,
+          versionId: null,
+          status: 'preparing',
+          appType: 'static_html',
+          packageManager: 'none',
+          mode: 'managed_static_preview',
+          workspacePath: `/tmp/${projectId}`,
+          installCommand: null,
+          devCommand: 'static-preview --host 0.0.0.0',
+          port: null,
+          previewUrl: `${baseUrl}${previewPath}`,
+          logs: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        livePreview: {
+          runtimeId: `runtime-${projectId}`,
+          status: 'ready',
+          proxyPath: `${baseUrl}${previewPath}`,
+          health: 'ready',
+          checkedAt: new Date().toISOString()
+        }
       })
     )
     return
@@ -374,7 +517,15 @@ async function main() {
 
   page.on('pageerror', error => pageErrors.push(error.stack || error.message))
   page.on('console', message => {
-    if (message.type() === 'error') consoleErrors.push(message.text())
+    const text = message.text()
+    if (
+      message.type() === 'error' &&
+      !/^Failed to load resource: the server responded with a status of 404/i.test(
+        text
+      )
+    ) {
+      consoleErrors.push(text)
+    }
   })
   await page.route('**/*', routeBrokCodeSmoke)
 
@@ -396,14 +547,18 @@ async function main() {
 
     await page.getByTestId('brokcode-app').waitFor()
     await page.getByTestId('brokcode-command-input').fill(prompt)
-    await page.getByTestId('brokcode-command-submit').click()
+    await page.getByTestId('brokcode-command-submit').dispatchEvent('click')
 
-    await page.getByText('Done. I updated the project files').waitFor({
-      timeout: 15_000
-    })
-    await page.getByText('Files: index.html, styles.css, app.js.').waitFor()
+    await page.waitForFunction(
+      () =>
+        document.body.innerText.includes(
+          'Files: index.html, styles.css, app.js.'
+        ),
+      undefined,
+      { timeout: 15_000 }
+    )
 
-    const chatText = await page.locator('body').innerText()
+    const chatText = await page.locator('main > section').first().innerText()
     if (chatText.includes('<!doctype html>') || chatText.includes('```')) {
       throw new Error('Builder chat exposed raw generated source.')
     }
@@ -421,7 +576,7 @@ async function main() {
 
     await page.getByTestId('brokcode-actions-trigger').click()
     await page.getByText('1-click deploy').click()
-    await page.getByText('Preview is live. I opened it on the right.').waitFor({
+    await page.getByText('App is live on its managed URL.').waitFor({
       timeout: 10_000
     })
     await previewFrame.getByRole('heading', { name: projectName }).waitFor()

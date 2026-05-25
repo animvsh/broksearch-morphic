@@ -26,6 +26,31 @@ Optional credential mode is supported with `BROK_SMOKE_EMAIL` and
 `BROK_SMOKE_PASSWORD`, but storage state is preferred so secrets are never
 written into repo files. Reports are written under `.brok-smoke/`.
 
+## smoke-brokcode.ts
+
+End-to-end BrokCode builder smoke harness. It creates a project, runs the code
+builder stream, verifies generated files, opens the managed preview in
+Playwright at desktop and mobile sizes, checks for blank/overflowing previews,
+publishes a managed deployment URL, and exercises the TUI upload path.
+
+```bash
+# Fast single-case builder smoke
+bun run smoke:brokcode
+
+# Full generated-app acceptance matrix
+bun run smoke:brokcode:matrix
+
+# Run a subset of matrix cases
+SMOKE_BROKCODE_MATRIX=true \
+SMOKE_BROKCODE_CASES=landing-bakery,club-crud,mobile-study-planner \
+bun run smoke:brokcode
+```
+
+The matrix covers landing page, dashboard, CRUD app, form workflow,
+mobile-first utility, and backend-backed prototype prompts. Set
+`SMOKE_BROKCODE_SKIP_TUI=true` to skip the terminal smoke when the release gate
+only needs generated-app coverage.
+
 ### Features
 
 - Send messages to the chat API via command line
