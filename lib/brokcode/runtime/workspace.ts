@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import {
+  BrokCodePackageManager,
   BrokCodeRuntimeAppType,
   BrokCodeRuntimeFile,
   BrokCodeRuntimeSpec,
@@ -24,7 +25,7 @@ export type BrokCodeRuntimeWorkspaceManifest = {
   appType: BrokCodeRuntimeAppType
   activeEntrypoint: string | null
   workspacePath: string
-  packageManager: string
+  packageManager: BrokCodePackageManager
   installCommand: string | null
   devCommand: string
   buildCommand: string | null

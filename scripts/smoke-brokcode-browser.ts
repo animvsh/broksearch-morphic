@@ -620,7 +620,7 @@ async function main() {
 
   try {
     const response = await page.goto(`${baseUrl}/brokcode`, {
-      waitUntil: 'networkidle'
+      waitUntil: 'domcontentloaded'
     })
     const finalUrl = page.url()
 
