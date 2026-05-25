@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createBrokCodeRuntimeSpec } from '../runtime/contract'
 import {
   createRuntimeLogs,
+  getBrokCodeRuntimeProcessReuseDecision,
   persistBrokCodeRuntimeProcessExit,
   redactBrokCodeRuntimeLog
 } from '../runtime/process-manager'
@@ -13,12 +14,45 @@ import {
   createBrokCodeRuntimeSandbox,
   getLatestBrokCodeRuntimeSandbox
 } from '../runtime/store'
+import { BrokCodeRuntimeWorkspaceManifest } from '../runtime/workspace'
 
 const projectId = '00000000-0000-0000-0000-000000000301'
 const workspaceId = '00000000-0000-0000-0000-000000000302'
 const userId = 'user-runtime-process-test'
 
 let syncDir: string
+
+function createManifest(
+  overrides: Partial<BrokCodeRuntimeWorkspaceManifest> = {}
+): BrokCodeRuntimeWorkspaceManifest {
+  return {
+    appType: 'vite_react',
+    activeEntrypoint: 'index.html',
+    workspacePath: '/tmp/brokcode-runtime',
+    packageManager: 'bun',
+    installCommand: 'bun install',
+    devCommand: 'bun run dev --host 0.0.0.0',
+    buildCommand: 'bun run build',
+    files: [
+      {
+        path: 'package.json',
+        language: 'json',
+        sizeBytes: 24,
+        sha256: 'package-a'
+      },
+      {
+        path: 'src/App.tsx',
+        language: 'tsx',
+        sizeBytes: 24,
+        sha256: 'app-a'
+      }
+    ],
+    generatedFiles: [],
+    totalBytes: 48,
+    materializedAt: '2026-05-25T00:00:00.000Z',
+    ...overrides
+  }
+}
 
 describe('BrokCode runtime process diagnostics', () => {
   beforeEach(async () => {
@@ -122,6 +156,80 @@ describe('BrokCode runtime process diagnostics', () => {
         exitCode: 1,
         signal: null
       }
+    })
+  })
+
+  it('reuses a live runtime process for ordinary source-file hot reloads', () => {
+    const previousManifest = createManifest()
+    const nextManifest = createManifest({
+      files: previousManifest.files.map(file =>
+        file.path === 'src/App.tsx' ? { ...file, sha256: 'app-b' } : file
+      )
+    })
+
+    expect(
+      getBrokCodeRuntimeProcessReuseDecision({
+        runtime: {
+          appType: 'vite_react',
+          packageManager: 'bun',
+          workspacePath: previousManifest.workspacePath,
+          devCommand: previousManifest.devCommand,
+          metadata: { workspace: previousManifest }
+        },
+        manifest: nextManifest
+      })
+    ).toMatchObject({
+      action: 'reuse',
+      reason: 'Workspace files changed; live preview can hot reload.'
+    })
+  })
+
+  it('reinstalls dependencies before reusing a live process when package files change', () => {
+    const previousManifest = createManifest()
+    const nextManifest = createManifest({
+      files: previousManifest.files.map(file =>
+        file.path === 'package.json' ? { ...file, sha256: 'package-b' } : file
+      )
+    })
+
+    expect(
+      getBrokCodeRuntimeProcessReuseDecision({
+        runtime: {
+          appType: 'vite_react',
+          packageManager: 'bun',
+          workspacePath: previousManifest.workspacePath,
+          devCommand: previousManifest.devCommand,
+          metadata: { workspace: previousManifest }
+        },
+        manifest: nextManifest
+      })
+    ).toMatchObject({
+      action: 'install',
+      reason: 'Dependency manifest changed.'
+    })
+  })
+
+  it('restarts the live process when the runtime contract changes', () => {
+    const previousManifest = createManifest()
+    const nextManifest = createManifest({
+      appType: 'nextjs',
+      devCommand: 'bun run dev --hostname 0.0.0.0'
+    })
+
+    expect(
+      getBrokCodeRuntimeProcessReuseDecision({
+        runtime: {
+          appType: 'vite_react',
+          packageManager: 'bun',
+          workspacePath: previousManifest.workspacePath,
+          devCommand: previousManifest.devCommand,
+          metadata: { workspace: previousManifest }
+        },
+        manifest: nextManifest
+      })
+    ).toMatchObject({
+      action: 'restart',
+      reason: 'Runtime contract changed.'
     })
   })
 })
