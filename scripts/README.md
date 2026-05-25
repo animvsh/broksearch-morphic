@@ -32,6 +32,10 @@ End-to-end BrokCode builder smoke harness. It creates a project, runs the code
 builder stream, verifies generated files, opens the managed preview in
 Playwright at desktop and mobile sizes, checks for blank/overflowing previews,
 publishes a managed deployment URL, and exercises the TUI upload path.
+Each run persists a timestamped eval JSON, a Markdown admin review, and
+`latest.json` / `latest-admin-summary.md` under `.brok-smoke/brokcode/` so
+release reviewers can see the pass rate, case evidence, and blockers without
+reading terminal logs.
 
 ```bash
 # Fast single-case builder smoke

@@ -25,6 +25,11 @@ describe('BrokCode acceptance matrix', () => {
       expect(testCase.minimumGeneratedFiles).toBeGreaterThanOrEqual(3)
       expect(testCase.prompt).toContain('Return named files')
       expect(testCase.expectedTerms.length).toBeGreaterThanOrEqual(3)
+      expect(testCase.requiredFiles).toEqual(
+        expect.arrayContaining(['index.html', 'styles.css', 'app.js'])
+      )
+      expect(testCase.requiredCapabilities.length).toBeGreaterThanOrEqual(2)
+      expect(testCase.minimumInteractions).toBeGreaterThanOrEqual(2)
     }
 
     expect(
