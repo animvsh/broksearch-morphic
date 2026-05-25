@@ -61,6 +61,10 @@ import {
   updateBrokCodeProjectPreview,
   upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
+import {
+  advanceBrokCodeRunLifecycle,
+  createBrokCodeRunLifecycle
+} from '@/lib/brokcode/run-lifecycle'
 import { createBrokCodeRuntimeSpec } from '@/lib/brokcode/runtime/contract'
 import { materializeBrokCodeRuntimeWorkspace } from '@/lib/brokcode/runtime/workspace'
 import {
@@ -1456,6 +1460,46 @@ function progressForBrokCodeEvent(event: string) {
   return undefined
 }
 
+async function appendBrokCodeExecutionStreamEvent({
+  taskId,
+  userId,
+  event,
+  payload,
+  fallbackPhase,
+  fallbackProgress
+}: {
+  taskId: string
+  userId: string
+  event: string
+  payload: unknown
+  fallbackPhase?: string
+  fallbackProgress?: number
+}) {
+  const current = await getBackgroundTask({ userId, id: taskId }).catch(
+    () => null
+  )
+  const lifecycle = advanceBrokCodeRunLifecycle({
+    current: current?.metadata?.lifecycle,
+    event,
+    payload
+  })
+
+  return appendBackgroundTaskStreamEvent({
+    id: taskId,
+    userId,
+    event,
+    payload,
+    phase: lifecycle.phase ?? fallbackPhase,
+    progress:
+      typeof lifecycle.progress === 'number'
+        ? lifecycle.progress
+        : fallbackProgress,
+    metadata: {
+      lifecycle: lifecycle.steps
+    }
+  })
+}
+
 function parseSseBlocks(buffer: string) {
   return buffer.split(/\n\n/).filter(Boolean)
 }
@@ -1499,15 +1543,15 @@ async function startDetachedBrokCodeExecutionJob(
 
   const timeout = setTimeout(() => {
     if (finished) return
-    void appendBackgroundTaskStreamEvent({
-      id: taskId,
+    void appendBrokCodeExecutionStreamEvent({
+      taskId,
       userId,
       event: 'error',
       payload: {
         message: 'BrokCode job timed out.'
       },
-      phase: 'timed_out',
-      progress: 100
+      fallbackPhase: 'timed_out',
+      fallbackProgress: 100
     })
     void updateBackgroundTask({
       id: taskId,
@@ -1549,13 +1593,13 @@ async function startDetachedBrokCodeExecutionJob(
           const parsed = parseSseBlock(block)
           if (!parsed) continue
 
-          await appendBackgroundTaskStreamEvent({
-            id: taskId,
+          await appendBrokCodeExecutionStreamEvent({
+            taskId,
             userId,
             event: parsed.event,
             payload: parsed.payload,
-            phase: phaseForBrokCodeEvent(parsed.event, parsed.payload),
-            progress: progressForBrokCodeEvent(parsed.event)
+            fallbackPhase: phaseForBrokCodeEvent(parsed.event, parsed.payload),
+            fallbackProgress: progressForBrokCodeEvent(parsed.event)
           }).catch(error => {
             console.error('Failed to append BrokCode stream event:', error)
           })
@@ -1565,26 +1609,26 @@ async function startDetachedBrokCodeExecutionJob(
       for (const block of parseSseBlocks(buffer.trim())) {
         const parsed = parseSseBlock(block)
         if (!parsed) continue
-        await appendBackgroundTaskStreamEvent({
-          id: taskId,
+        await appendBrokCodeExecutionStreamEvent({
+          taskId,
           userId,
           event: parsed.event,
           payload: parsed.payload,
-          phase: phaseForBrokCodeEvent(parsed.event, parsed.payload),
-          progress: progressForBrokCodeEvent(parsed.event)
+          fallbackPhase: phaseForBrokCodeEvent(parsed.event, parsed.payload),
+          fallbackProgress: progressForBrokCodeEvent(parsed.event)
         }).catch(error => {
           console.error('Failed to append BrokCode stream event:', error)
         })
       }
     } catch (error) {
       const message = formatBrokCodeRuntimeError(error)
-      await appendBackgroundTaskStreamEvent({
-        id: taskId,
+      await appendBrokCodeExecutionStreamEvent({
+        taskId,
         userId,
         event: 'error',
         payload: { message },
-        phase: 'failed',
-        progress: 100
+        fallbackPhase: 'failed',
+        fallbackProgress: 100
       }).catch(appendError => {
         console.error('Failed to append BrokCode job failure:', appendError)
       })
@@ -1968,6 +2012,7 @@ export async function POST(request: NextRequest) {
         commandType: codeUsageContext.commandType,
         phase: 'queued',
         progress: 0,
+        lifecycle: createBrokCodeRunLifecycle(),
         originalRequest: {
           command,
           model,
@@ -2007,13 +2052,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    await appendBackgroundTaskStreamEvent({
-      id: task.id,
+    await appendBrokCodeExecutionStreamEvent({
+      taskId: task.id,
       userId: authResult.apiKey.userId,
       event: 'status',
       payload: { message: 'Queued BrokCode run.' },
-      phase: 'queued',
-      progress: 0
+      fallbackPhase: 'queued',
+      fallbackProgress: 0
     }).catch(error => {
       console.error('Failed to append BrokCode queued stream event:', error)
     })
