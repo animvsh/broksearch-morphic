@@ -15,8 +15,12 @@ const sessionId = `browser-smoke-${Date.now()}`
 const projectName = 'Browser Smoke Bakery'
 const previewPath = `/api/brokcode/previews/${projectId}/index.html`
 const deployPath = `/brokcode/apps/browser-smoke--${projectId}/index.html`
+const recoveredTaskId = 'browser-smoke-task'
 
 const generatedFiles = new Map<string, string>()
+let recoveredTaskStatus: 'running' | 'cancelled' = 'running'
+let taskEventFollowed = false
+let taskCancelRequested = false
 
 const generatedContent = [
   'Built the browser smoke bakery app.',
@@ -202,6 +206,63 @@ function project(previewUrl?: string | null, deploymentUrl?: string | null) {
   }
 }
 
+function recoveredTask() {
+  const now = new Date().toISOString()
+  const cancelled = recoveredTaskStatus === 'cancelled'
+
+  return {
+    id: recoveredTaskId,
+    kind: 'brokcode',
+    title: 'Recovered browser smoke task',
+    status: recoveredTaskStatus,
+    metadata: {
+      command: 'Recovered task from a previous browser smoke run',
+      progress: cancelled ? 100 : 42,
+      runtimePreference: 'brok',
+      lifecycle: [
+        {
+          id: 'context_load',
+          label: 'Context',
+          detail: 'Recovered task context from the durable ledger.',
+          status: 'done'
+        },
+        {
+          id: 'generation',
+          label: 'Generation',
+          detail: cancelled
+            ? 'Cancelled by browser smoke.'
+            : 'Recoverable generation is still running.',
+          status: cancelled ? 'error' : 'running'
+        },
+        {
+          id: 'preview',
+          label: 'Preview',
+          detail: 'Preview waits for the recovered task result.',
+          status: 'queued'
+        }
+      ],
+      events: [
+        {
+          type: cancelled ? 'cancelled' : 'status',
+          message: cancelled
+            ? 'Cancelled by browser smoke.'
+            : 'Recoverable generation is still running.',
+          at: now
+        }
+      ]
+    },
+    result: {
+      runtime: 'brok',
+      previewUrl: cancelled ? null : `${baseUrl}${previewPath}`
+    },
+    error: cancelled ? 'Cancelled by browser smoke.' : null,
+    createdAt: now,
+    updatedAt: now,
+    startedAt: now,
+    completedAt: cancelled ? now : null
+  }
+}
+
 function sseEvent(event: string, payload: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`
 }
@@ -336,6 +397,34 @@ async function routeBrokCodeSmoke(route: Route) {
     }
 
     await route.fulfill(json({ versions: [] }))
+    return
+  }
+
+  if (url.pathname === '/api/tasks' && request.method() === 'GET') {
+    await route.fulfill(json({ tasks: [recoveredTask()] }))
+    return
+  }
+
+  if (
+    url.pathname === `/api/tasks/${recoveredTaskId}/events` &&
+    request.method() === 'GET'
+  ) {
+    taskEventFollowed = true
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream; charset=utf-8',
+      body: sseEvent('task.update', { task: recoveredTask() })
+    })
+    return
+  }
+
+  if (
+    url.pathname === `/api/tasks/${recoveredTaskId}/cancel` &&
+    request.method() === 'POST'
+  ) {
+    taskCancelRequested = true
+    recoveredTaskStatus = 'cancelled'
+    await route.fulfill(json({ task: recoveredTask() }))
     return
   }
 
@@ -546,6 +635,30 @@ async function main() {
     }
 
     await page.getByTestId('brokcode-app').waitFor()
+    await page.getByRole('button', { name: 'Follow task' }).waitFor({
+      timeout: 10_000
+    })
+    await page.getByRole('button', { name: 'Follow task' }).click()
+    await page.waitForFunction(
+      () => document.body.innerText.includes('Recoverable generation'),
+      undefined,
+      { timeout: 10_000 }
+    )
+    if (!taskEventFollowed) {
+      throw new Error('BrokCode task recovery Follow task action was not hit.')
+    }
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page
+      .getByText('Needs attention', { exact: true })
+      .first()
+      .waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Retry' }).waitFor({
+      timeout: 10_000
+    })
+    if (!taskCancelRequested) {
+      throw new Error('BrokCode task recovery Cancel action was not hit.')
+    }
+
     await page.getByTestId('brokcode-command-input').fill(prompt)
     await page.getByTestId('brokcode-command-submit').dispatchEvent('click')
 
