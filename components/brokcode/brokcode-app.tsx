@@ -330,6 +330,22 @@ type BrokCodeStreamResult = {
   note?: string
 }
 
+type BrokCodeRetryRequest = {
+  command: string
+  model?: string
+  source?: string
+  session_id?: string
+  project_id?: string
+  backend_provider?: string
+  backend_status?: string
+  backend_project_url?: string | null
+  prefer_pi?: boolean
+  require_pi?: boolean
+  require_opencode?: boolean
+  allow_brok_fallback?: boolean
+  retry_of_task_id?: string
+}
+
 type BrokCodeBackgroundTask = {
   id: string
   kind: string
@@ -1920,7 +1936,36 @@ export function BrokCodeApp({
     return () => window.clearInterval(interval)
   }, [projectRuntime, refreshRuntimeDiagnostics])
 
-  async function ensureProjectForRun(command: string) {
+  async function ensureProjectForRun(
+    command: string,
+    preferredProjectId?: string
+  ) {
+    if (preferredProjectId) {
+      const existingProject = projects.find(
+        project => project.id === preferredProjectId
+      )
+      if (existingProject) {
+        setActiveProjectId(existingProject.id)
+        return existingProject
+      }
+
+      const response = await fetch('/api/brokcode/projects', {
+        headers: getAuthHeaders(apiKey)
+      })
+      const body = await response.json().catch(() => null)
+      if (response.ok && Array.isArray(body?.projects)) {
+        const nextProjects = body.projects as BrokCodeProject[]
+        setProjects(nextProjects)
+        const preferredProject = nextProjects.find(
+          project => project.id === preferredProjectId
+        )
+        if (preferredProject) {
+          setActiveProjectId(preferredProject.id)
+          return preferredProject
+        }
+      }
+    }
+
     if (activeProject) return activeProject
 
     const response = await fetch('/api/brokcode/projects', {
@@ -2431,6 +2476,44 @@ export function BrokCodeApp({
       )
     } finally {
       setCancellingTaskId(null)
+    }
+  }
+
+  async function retryExecutionRun(run: ExecutionRun) {
+    if (!run.taskId) {
+      await runCommand(run.command)
+      return
+    }
+
+    setRuntimeError(null)
+    try {
+      const response = await fetch(`/api/tasks/${run.taskId}/retry`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      })
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.error ?? 'Could not retry task.')
+      }
+
+      const retry =
+        body?.retry && typeof body.retry === 'object'
+          ? (body.retry as BrokCodeRetryRequest)
+          : null
+      if (!retry?.command) {
+        throw new Error('Retry endpoint did not return a command.')
+      }
+
+      if (body?.task) {
+        mergeExecutionRunFromTask(body.task as BrokCodeBackgroundTask)
+      }
+
+      await runCommand(retry.command, { retryRequest: retry })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Could not retry task.'
+      setRuntimeError(message)
+      toast.error(message)
     }
   }
 
@@ -3585,7 +3668,10 @@ export function BrokCodeApp({
     setInput(`Continue with ${agent.name}: ${agent.nextStep}`)
   }
 
-  async function runCommand(command: string) {
+  async function runCommand(
+    command: string,
+    options?: { retryRequest?: BrokCodeRetryRequest }
+  ) {
     const trimmed = command.trim()
     if (!trimmed || isRunning) return
     if (hasUnsavedFileChanges) {
@@ -3595,7 +3681,10 @@ export function BrokCodeApp({
       if (!proceed) return
     }
 
-    const integrationToolkit = detectIntegrationConnectIntent(trimmed)
+    const retryRequest = options?.retryRequest
+    const integrationToolkit = retryRequest
+      ? null
+      : detectIntegrationConnectIntent(trimmed)
     if (integrationToolkit) {
       setInput('')
       setMessages(current => [
@@ -3638,6 +3727,25 @@ export function BrokCodeApp({
       return
     }
 
+    const requestModel = retryRequest?.model ?? selectedModel
+    const requestSource = retryRequest?.source ?? 'browser'
+    const requestSessionId = retryRequest?.session_id ?? syncSessionId
+    const requestProjectId = retryRequest?.project_id
+    const requestBackendProvider =
+      retryRequest?.backend_provider ?? activeBackend.provider
+    const requestBackendStatus =
+      retryRequest?.backend_status ?? activeBackend.status
+    const requestBackendProjectUrl =
+      retryRequest && 'backend_project_url' in retryRequest
+        ? (retryRequest.backend_project_url ?? null)
+        : activeBackend.provider === 'insforge'
+          ? activeBackend.projectUrl
+          : null
+    const requestPreferPi = retryRequest?.prefer_pi ?? true
+    const requestRequirePi = retryRequest?.require_pi ?? false
+    const requestRequireOpenCode = retryRequest?.require_opencode ?? false
+    const requestAllowBrokFallback = retryRequest?.allow_brok_fallback ?? true
+
     const run = createExecutionRun(trimmed)
     const assistantMessageId = createId('assistant')
     setExecutionRuns(current => [run, ...current].slice(0, 8))
@@ -3660,14 +3768,11 @@ export function BrokCodeApp({
       content: trimmed,
       metadata: {
         runtime: 'cloud',
-        model: selectedModel,
-        projectId: activeProject?.id ?? null,
-        backendProvider: activeBackend.provider,
-        backendStatus: activeBackend.status,
-        backendUrl:
-          activeBackend.provider === 'insforge'
-            ? activeBackend.projectUrl
-            : null
+        model: requestModel,
+        projectId: requestProjectId ?? activeProject?.id ?? null,
+        backendProvider: requestBackendProvider,
+        backendStatus: requestBackendStatus,
+        backendUrl: requestBackendProjectUrl
       }
     })
 
@@ -3688,7 +3793,7 @@ export function BrokCodeApp({
     let runTimeout: number | null = null
 
     try {
-      const runProject = await ensureProjectForRun(trimmed)
+      const runProject = await ensureProjectForRun(trimmed, requestProjectId)
       const beforeRunFiles = await fetchProjectFilesForDiff(runProject)
       let runRuntime = await createProjectRuntimeRecord({
         project: runProject,
@@ -3719,23 +3824,23 @@ export function BrokCodeApp({
         },
         body: JSON.stringify({
           command: trimmed,
-          model: selectedModel,
-          source: 'browser',
-          session_id: syncSessionId,
+          model: requestModel,
+          source: requestSource,
+          session_id: requestSessionId,
           stream: true,
-          prefer_pi: true,
-          allow_brok_fallback: true,
-          project_id: runProject.id,
-          backend_provider: activeBackend.provider,
-          backend_status: activeBackend.status,
-          backend_project_url:
-            activeBackend.provider === 'insforge'
-              ? activeBackend.projectUrl
-              : null,
+          prefer_pi: requestPreferPi,
+          require_pi: requestRequirePi,
+          require_opencode: requestRequireOpenCode,
+          allow_brok_fallback: requestAllowBrokFallback,
+          retry_of_task_id: retryRequest?.retry_of_task_id,
+          project_id: requestProjectId ?? runProject.id,
+          backend_provider: requestBackendProvider,
+          backend_status: requestBackendStatus,
+          backend_project_url: requestBackendProjectUrl,
           messages: [
             {
               role: 'system',
-              content: `${buildCommandPrompt(trimmed)}\n\nProject context: ${runProject.name} (${runProject.id}).\nBackend context: ${activeBackend.provider === 'insforge' ? `InsForge ${activeBackend.status}; project URL ${activeBackend.projectUrl ?? 'not set'}; database/auth/storage/functions are available when configured. Never ask the browser for the InsForge admin key.` : 'No backend provider configured yet.'}`
+              content: `${buildCommandPrompt(trimmed)}\n\nProject context: ${runProject.name} (${requestProjectId ?? runProject.id}).\nBackend context: ${requestBackendProvider === 'insforge' ? `InsForge ${requestBackendStatus}; project URL ${requestBackendProjectUrl ?? 'not set'}; database/auth/storage/functions are available when configured. Never ask the browser for the InsForge admin key.` : 'No backend provider configured yet.'}`
             },
             { role: 'user', content: trimmed }
           ]
@@ -3940,14 +4045,11 @@ export function BrokCodeApp({
         content: assistantContent,
         metadata: {
           runtime,
-          model: selectedModel,
+          model: requestModel,
           projectId: runProject.id,
-          backendProvider: activeBackend.provider,
-          backendStatus: activeBackend.status,
-          backendUrl:
-            activeBackend.provider === 'insforge'
-              ? activeBackend.projectUrl
-              : null
+          backendProvider: requestBackendProvider,
+          backendStatus: requestBackendStatus,
+          backendUrl: requestBackendProjectUrl
         }
       })
       const savedVersion = await persistVersionSnapshot({
@@ -4015,14 +4117,11 @@ export function BrokCodeApp({
         content: message,
         metadata: {
           runtime: 'error',
-          model: selectedModel,
-          projectId: activeProject?.id ?? null,
-          backendProvider: activeBackend.provider,
-          backendStatus: activeBackend.status,
-          backendUrl:
-            activeBackend.provider === 'insforge'
-              ? activeBackend.projectUrl
-              : null
+          model: requestModel,
+          projectId: requestProjectId ?? activeProject?.id ?? null,
+          backendProvider: requestBackendProvider,
+          backendStatus: requestBackendStatus,
+          backendUrl: requestBackendProjectUrl
         }
       })
       void persistVersionSnapshot({
@@ -4568,7 +4667,7 @@ export function BrokCodeApp({
                     void cancelExecutionRun(run)
                   }}
                   onRetry={run => {
-                    void runCommand(run.command)
+                    void retryExecutionRun(run)
                   }}
                 />
               )}
