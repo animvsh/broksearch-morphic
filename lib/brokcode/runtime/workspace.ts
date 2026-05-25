@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import {
@@ -321,6 +321,55 @@ function activeEntrypointFor({
   return null
 }
 
+async function readPreviousManifest(workspaceRoot: string) {
+  try {
+    const raw = await readFile(
+      path.join(workspaceRoot, '.brokcode', 'manifest.json'),
+      'utf8'
+    )
+    const parsed = JSON.parse(raw) as Partial<BrokCodeRuntimeWorkspaceManifest>
+    const files = Array.isArray(parsed.files) ? parsed.files : []
+    const generatedFiles = Array.isArray(parsed.generatedFiles)
+      ? parsed.generatedFiles
+      : []
+
+    return {
+      files: files
+        .map(file => (typeof file?.path === 'string' ? file.path : null))
+        .filter((filePath): filePath is string => Boolean(filePath)),
+      generatedFiles: generatedFiles.filter(
+        (filePath): filePath is string => typeof filePath === 'string'
+      )
+    }
+  } catch {
+    return null
+  }
+}
+
+async function pruneStaleRuntimeFiles({
+  workspaceRoot,
+  previous,
+  nextPaths
+}: {
+  workspaceRoot: string
+  previous: Awaited<ReturnType<typeof readPreviousManifest>>
+  nextPaths: Set<string>
+}) {
+  if (!previous) return
+
+  const previousPaths = new Set([...previous.files, ...previous.generatedFiles])
+  await Promise.all(
+    [...previousPaths].map(async previousPath => {
+      if (nextPaths.has(previousPath)) return
+
+      const targetPath = path.resolve(workspaceRoot, previousPath)
+      if (!isInsidePath(workspaceRoot, targetPath)) return
+
+      await rm(targetPath, { force: true })
+    })
+  )
+}
+
 export async function materializeBrokCodeRuntimeWorkspace({
   spec,
   files,
@@ -357,8 +406,14 @@ export async function materializeBrokCodeRuntimeWorkspace({
     throw new BrokCodeRuntimeWorkspaceError('Invalid runtime workspace path')
   }
 
-  await rm(workspaceRoot, { recursive: true, force: true })
+  const previousManifest = await readPreviousManifest(workspaceRoot)
   await mkdir(workspaceRoot, { recursive: true })
+  const nextPaths = new Set(preparedFiles.map(file => file.path))
+  await pruneStaleRuntimeFiles({
+    workspaceRoot,
+    previous: previousManifest,
+    nextPaths
+  })
 
   const manifestFiles: BrokCodeRuntimeManifestFile[] = []
   for (const file of preparedFiles) {
