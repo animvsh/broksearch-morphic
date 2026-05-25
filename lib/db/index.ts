@@ -9,11 +9,14 @@ import * as schema from './schema'
 // Use restricted user for application if available, otherwise fall back to regular user
 const isDevelopment = process.env.NODE_ENV === 'development'
 const isTest = process.env.NODE_ENV === 'test'
+const isNextProductionBuild =
+  process.env.NEXT_PHASE === 'phase-production-build'
+const canUseBuildDatabaseFallback = isTest || isNextProductionBuild
 
 if (
   !process.env.DATABASE_URL &&
   !process.env.DATABASE_RESTRICTED_URL &&
-  !isTest
+  !canUseBuildDatabaseFallback
 ) {
   throw new Error(
     'DATABASE_URL or DATABASE_RESTRICTED_URL environment variable is not set'
@@ -25,7 +28,9 @@ if (
 const connectionString =
   process.env.DATABASE_RESTRICTED_URL ?? // Prefer restricted user
   process.env.DATABASE_URL ??
-  (isTest ? 'postgres://user:pass@localhost:5432/testdb' : undefined)
+  (canUseBuildDatabaseFallback
+    ? 'postgres://user:pass@localhost:5432/testdb'
+    : undefined)
 
 if (!connectionString) {
   throw new Error(
