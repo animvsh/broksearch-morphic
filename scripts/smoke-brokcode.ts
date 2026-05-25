@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -44,6 +44,29 @@ type ProjectFile = {
   path: string
   content: string
   language?: string | null
+}
+
+type SmokeCaseReport = {
+  id: string
+  title: string
+  category: BrokCodeAcceptanceCase['category']
+  status: 'passed' | 'failed'
+  checks: string[]
+  startedAt: string
+  completedAt?: string
+  projectId?: string
+  previewUrl?: string
+  deploymentUrl?: string
+  error?: string
+}
+
+type SmokeReport = {
+  startedAt: string
+  completedAt: string
+  baseUrl: string
+  matrixMode: boolean
+  cases: SmokeCaseReport[]
+  tuiStatus: 'passed' | 'skipped'
 }
 
 async function expectJson(response: Response, expectedStatus: number) {
@@ -471,12 +494,13 @@ async function verifyDeploy(
 
   await verifyPreview(deploymentUrl, testCase)
   console.log(`brokcode ok deploy case=${testCase.id} ${deploymentUrl}`)
+  return deploymentUrl
 }
 
 async function runTuiSmoke() {
   if (skipTui) {
     console.log('brokcode skip tui smoke')
-    return
+    return 'skipped' as const
   }
 
   const tempDir = await mkdtemp(path.join(tmpdir(), 'brokcode-smoke-'))
@@ -543,10 +567,52 @@ async function runTuiSmoke() {
   }
 
   console.log('brokcode ok tui project/file/preview/deploy sync')
+  return 'passed' as const
+}
+
+async function writeSmokeReport(report: SmokeReport) {
+  const safeTimestamp = report.startedAt.replace(/[:.]/g, '-')
+  const reportDir = path.join(process.cwd(), '.brok-smoke', 'brokcode')
+  const jsonPath = path.join(reportDir, `smoke-${safeTimestamp}.json`)
+  const markdownPath = path.join(reportDir, `smoke-${safeTimestamp}.md`)
+  await mkdir(reportDir, { recursive: true })
+  await writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+  await writeFile(
+    markdownPath,
+    [
+      '# BrokCode Smoke Report',
+      '',
+      `- Started: ${report.startedAt}`,
+      `- Completed: ${report.completedAt}`,
+      `- Base URL: ${report.baseUrl}`,
+      `- Matrix mode: ${report.matrixMode ? 'yes' : 'no'}`,
+      `- TUI: ${report.tuiStatus}`,
+      '',
+      '## Cases',
+      '',
+      ...report.cases.flatMap(testCase => [
+        `### ${testCase.title} (${testCase.id})`,
+        '',
+        `- Status: ${testCase.status}`,
+        `- Category: ${testCase.category}`,
+        `- Project: ${testCase.projectId ?? 'not created'}`,
+        `- Preview: ${testCase.previewUrl ?? 'not available'}`,
+        `- Deploy: ${testCase.deploymentUrl ?? 'not available'}`,
+        `- Checks: ${testCase.checks.join(', ') || 'none'}`,
+        ...(testCase.error ? [`- Error: ${testCase.error}`] : []),
+        ''
+      ])
+    ].join('\n'),
+    'utf8'
+  )
+  console.log(`brokcode ok report ${markdownPath}`)
 }
 
 async function main() {
   console.log(`brokcode smoke base ${baseUrl}`)
+  const startedAt = new Date().toISOString()
+  const reports: SmokeCaseReport[] = []
+  let tuiStatus: SmokeReport['tuiStatus'] = skipTui ? 'skipped' : 'passed'
   const cases = matrixMode
     ? getBrokCodeAcceptanceCases(
         process.env.SMOKE_BROKCODE_CASES?.split(',')
@@ -555,16 +621,60 @@ async function main() {
       )
     : [acceptanceCase]
 
-  for (const testCase of cases) {
-    const project = await createProject(testCase)
-    const result = await executeBuild(project.id, testCase)
-    await verifyFiles(project.id, testCase)
-    await verifyPreview(result.preview_url, testCase)
-    await verifyTwoEditPreservation(project.id, testCase)
-    await verifyDeploy(project.id, testCase)
+  try {
+    for (const testCase of cases) {
+      const caseReport: SmokeCaseReport = {
+        id: testCase.id,
+        title: testCase.title,
+        category: testCase.category,
+        status: 'failed',
+        checks: [],
+        startedAt: new Date().toISOString()
+      }
+      reports.push(caseReport)
+
+      try {
+        const project = await createProject(testCase)
+        caseReport.projectId = project.id
+        caseReport.checks.push('project-created')
+
+        const result = await executeBuild(project.id, testCase)
+        caseReport.previewUrl = result.preview_url
+        caseReport.checks.push('stream-result', 'file-changes')
+
+        await verifyFiles(project.id, testCase)
+        caseReport.checks.push('files-saved')
+
+        await verifyPreview(result.preview_url, testCase)
+        caseReport.checks.push('preview-desktop-mobile')
+
+        await verifyTwoEditPreservation(project.id, testCase)
+        caseReport.checks.push('two-edit-preservation')
+
+        caseReport.deploymentUrl = await verifyDeploy(project.id, testCase)
+        caseReport.checks.push('managed-deploy')
+        caseReport.status = 'passed'
+      } catch (error) {
+        caseReport.error =
+          error instanceof Error ? error.message : String(error)
+        throw error
+      } finally {
+        caseReport.completedAt = new Date().toISOString()
+      }
+    }
+
+    tuiStatus = await runTuiSmoke()
+  } finally {
+    await writeSmokeReport({
+      startedAt,
+      completedAt: new Date().toISOString(),
+      baseUrl,
+      matrixMode,
+      cases: reports,
+      tuiStatus
+    })
   }
 
-  await runTuiSmoke()
   console.log(
     `brokcode smoke ok cases=${cases.map(testCase => testCase.id).join(',')}`
   )
