@@ -8,4 +8,5 @@ export const MINIMAX_CHAT_MODEL = MINIMAX_MODEL
 export const MINIMAX_BASE_URL =
   process.env.OPENAI_COMPATIBLE_API_BASE_URL || 'https://api.minimax.io/v1'
 
-export const MINIMAX_API_KEY = process.env.OPENAI_COMPATIBLE_API_KEY || ''
+export const MINIMAX_API_KEY =
+  process.env.OPENAI_COMPATIBLE_API_KEY || process.env.MINIMAX_API_KEY || ''

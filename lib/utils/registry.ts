@@ -6,6 +6,8 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createProviderRegistry, LanguageModel } from 'ai'
 import { createOllama } from 'ai-sdk-ollama'
 
+import { MINIMAX_API_KEY, MINIMAX_BASE_URL } from '@/lib/ai/minimax'
+
 // Build providers object conditionally
 const providers: Record<string, any> = {
   openai,
@@ -13,9 +15,8 @@ const providers: Record<string, any> = {
   google,
   'openai-compatible': createOpenAICompatible({
     name: 'brok',
-    apiKey: process.env.OPENAI_COMPATIBLE_API_KEY,
-    baseURL:
-      process.env.OPENAI_COMPATIBLE_API_BASE_URL || 'https://api.minimax.io/v1',
+    apiKey: MINIMAX_API_KEY,
+    baseURL: MINIMAX_BASE_URL,
     includeUsage: true
   }),
   gateway: createGateway({
@@ -66,10 +67,7 @@ export function isProviderEnabled(providerId: string): boolean {
     case 'google':
       return !!process.env.GOOGLE_GENERATIVE_AI_API_KEY
     case 'openai-compatible':
-      return (
-        !!process.env.OPENAI_COMPATIBLE_API_KEY &&
-        !!process.env.OPENAI_COMPATIBLE_API_BASE_URL
-      )
+      return !!MINIMAX_API_KEY
     case 'gateway':
       return !!process.env.AI_GATEWAY_API_KEY
     case 'ollama':
