@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   createBrokCodeProject,
+  getBrokCodeProject,
   getBrokCodeProjectByHandle,
+  listBrokCodeProjectFiles,
   listBrokCodeProjects,
   recordBrokCodeProjectDeployment,
   updateBrokCodeProjectPreview,
@@ -44,6 +46,54 @@ describe('BrokCode project file store', () => {
 
     expect(first.slug).toBe('demo-app')
     expect(second.slug).toBe('demo-app-2')
+  })
+
+  it('keeps local fallback workspace projects in file storage even when DATABASE_URL is set', async () => {
+    const previousStorage = process.env.BROKCODE_PROJECT_STORAGE
+    const previousDatabaseUrl = process.env.DATABASE_URL
+    delete process.env.BROKCODE_PROJECT_STORAGE
+    process.env.DATABASE_URL =
+      previousDatabaseUrl ?? 'postgres://local-fallback-test'
+    const localWorkspaceId = '00000000-0000-0000-0000-000000000000'
+
+    try {
+      const project = await createBrokCodeProject({
+        workspaceId: localWorkspaceId,
+        userId,
+        name: 'Local Smoke App'
+      })
+      await upsertBrokCodeProjectFile({
+        projectId: project.id,
+        workspaceId: localWorkspaceId,
+        path: 'index.html',
+        content: '<h1>Local smoke app</h1>'
+      })
+
+      await expect(
+        getBrokCodeProject({
+          id: project.id,
+          workspaceId: localWorkspaceId,
+          userId
+        })
+      ).resolves.toMatchObject({ id: project.id })
+      await expect(
+        listBrokCodeProjectFiles({
+          projectId: project.id,
+          workspaceId: localWorkspaceId
+        })
+      ).resolves.toHaveLength(1)
+    } finally {
+      if (previousStorage === undefined) {
+        delete process.env.BROKCODE_PROJECT_STORAGE
+      } else {
+        process.env.BROKCODE_PROJECT_STORAGE = previousStorage
+      }
+      if (previousDatabaseUrl === undefined) {
+        delete process.env.DATABASE_URL
+      } else {
+        process.env.DATABASE_URL = previousDatabaseUrl
+      }
+    }
   })
 
   it('tracks triggered deploys as deploying until a real URL is available', async () => {
