@@ -24,7 +24,20 @@ type SseResult = {
   content?: string
   preview_url?: string | null
   generated_files?: string[]
+  file_changes?: Array<{
+    type?: string
+    path?: string
+    beforeChecksum?: string | null
+    afterChecksum?: string | null
+    summary?: string
+  }>
   note?: string
+}
+
+type ProjectFile = {
+  path: string
+  content: string
+  language?: string | null
 }
 
 async function expectJson(response: Response, expectedStatus: number) {
@@ -143,6 +156,7 @@ async function executeBuild(projectId: string) {
 
   const result = await readSseResult(response)
   const generatedFiles = result.generated_files ?? []
+  const fileChanges = result.file_changes ?? []
 
   if (generatedFiles.length < 1) {
     throw new Error(
@@ -154,8 +168,12 @@ async function executeBuild(projectId: string) {
     throw new Error('BrokCode result did not include preview_url')
   }
 
+  if (fileChanges.length < 1) {
+    throw new Error('BrokCode result did not include file_changes')
+  }
+
   console.log(
-    `brokcode ok execute runtime=${result.runtime} files=${generatedFiles.join(',')}`
+    `brokcode ok execute runtime=${result.runtime} files=${generatedFiles.join(',')} changes=${fileChanges.length}`
   )
 
   return result as SseResult & {
@@ -194,6 +212,108 @@ async function verifyFiles(projectId: string) {
   }
 
   console.log(`brokcode ok saved files ${filePaths.join(',')}`)
+}
+
+async function fetchProjectFiles(projectId: string) {
+  const response = await fetch(
+    `${baseUrl}/api/brokcode/projects/${projectId}/files`,
+    {
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      }
+    }
+  )
+  const body = await expectJson(response, 200)
+  return (Array.isArray(body.files) ? body.files : []) as ProjectFile[]
+}
+
+function requireProjectFile(files: ProjectFile[], filePath: string) {
+  const file = files.find(item => item.path === filePath)
+  if (!file) throw new Error(`expected ${filePath} to exist`)
+  return file
+}
+
+async function upsertProjectFile(projectId: string, file: ProjectFile) {
+  const response = await fetch(
+    `${baseUrl}/api/brokcode/projects/${projectId}/files`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(file)
+    }
+  )
+
+  await expectJson(response, 200)
+}
+
+async function verifyTwoEditPreservation(projectId: string) {
+  const initialFiles = await fetchProjectFiles(projectId)
+  const initialIndex = requireProjectFile(initialFiles, 'index.html')
+  const initialStyles = requireProjectFile(initialFiles, 'styles.css')
+  const initialApp = requireProjectFile(initialFiles, 'app.js')
+
+  for (const expected of [/menu/i, /newsletter/i]) {
+    if (!expected.test(initialIndex.content)) {
+      throw new Error(`initial index.html lost ${expected}`)
+    }
+  }
+
+  await upsertProjectFile(projectId, {
+    ...initialApp,
+    content: `${initialApp.content}
+
+document.body.dataset.brokcodeSmokeEditOne = 'loyalty-copy-preserved';
+`
+  })
+
+  const afterFirstEdit = await fetchProjectFiles(projectId)
+  const firstIndex = requireProjectFile(afterFirstEdit, 'index.html')
+  const firstApp = requireProjectFile(afterFirstEdit, 'app.js')
+
+  if (firstIndex.content !== initialIndex.content) {
+    throw new Error('first edit unexpectedly changed index.html')
+  }
+  if (!firstApp.content.includes('loyalty-copy-preserved')) {
+    throw new Error('first edit did not persist app.js change')
+  }
+
+  await upsertProjectFile(projectId, {
+    ...initialStyles,
+    content: `${initialStyles.content}
+
+.brokcode-smoke-loyalty-pill {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+}
+`
+  })
+
+  const afterSecondEdit = await fetchProjectFiles(projectId)
+  const secondIndex = requireProjectFile(afterSecondEdit, 'index.html')
+  const secondApp = requireProjectFile(afterSecondEdit, 'app.js')
+  const secondStyles = requireProjectFile(afterSecondEdit, 'styles.css')
+
+  if (secondIndex.content !== initialIndex.content) {
+    throw new Error('second edit did not preserve original index.html')
+  }
+  if (
+    !/menu/i.test(secondIndex.content) ||
+    !/newsletter/i.test(secondIndex.content)
+  ) {
+    throw new Error('second edit lost original menu/newsletter features')
+  }
+  if (!secondApp.content.includes('loyalty-copy-preserved')) {
+    throw new Error('second edit lost first edit in app.js')
+  }
+  if (!secondStyles.content.includes('brokcode-smoke-loyalty-pill')) {
+    throw new Error('second edit did not persist styles.css change')
+  }
+
+  console.log('brokcode ok two-edit preservation')
 }
 
 async function verifyPreview(previewUrl: string) {
@@ -400,6 +520,7 @@ async function main() {
   const result = await executeBuild(project.id)
   await verifyFiles(project.id)
   await verifyPreview(result.preview_url)
+  await verifyTwoEditPreservation(project.id)
   await verifyDeploy(project.id)
   await runTuiSmoke()
   console.log('brokcode smoke ok')
