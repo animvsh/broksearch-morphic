@@ -9,6 +9,18 @@ import {
   resolveBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 import {
+  type BrokCodeGithubExportFile,
+  buildGithubExportBranchName,
+  buildGithubExportCommitMessage,
+  buildGithubExportPullRequestBody,
+  normalizeGithubExportFiles,
+  sanitizeGithubExportPath
+} from '@/lib/brokcode/github-export'
+import {
+  getBrokCodeProject,
+  listBrokCodeProjectFiles
+} from '@/lib/brokcode/project-store'
+import {
   executeComposioTool,
   isComposioConfigured,
   listConnectedAccounts
@@ -45,6 +57,268 @@ function sanitizeBranch(value: unknown, fallback: string) {
   if (typeof value !== 'string') return fallback
   const trimmed = value.trim()
   return trimmed || fallback
+}
+
+function encodeGitRef(ref: string) {
+  return ref.split('/').map(encodeURIComponent).join('/')
+}
+
+async function githubApi<T>({
+  token,
+  repository,
+  path,
+  init
+}: {
+  token: string
+  repository: string
+  path: string
+  init?: RequestInit
+}) {
+  const response = await fetch(
+    `https://api.github.com/repos/${repository}/${path}`,
+    {
+      ...init,
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {})
+      }
+    }
+  )
+  const payload = (await response.json().catch(() => null)) as T & {
+    message?: string
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof payload?.message === 'string'
+        ? payload.message
+        : `GitHub request failed (${response.status}).`
+    throw new Error(message)
+  }
+
+  return payload
+}
+
+async function resolveGhCliToken() {
+  try {
+    const { stdout } = await execFileAsync('gh', ['auth', 'token'], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        GH_PROMPT_DISABLED: '1'
+      },
+      timeout: 10_000
+    })
+    return stdout.trim() || null
+  } catch {
+    return null
+  }
+}
+
+async function resolveGithubToken(allowGhCli: boolean) {
+  const envToken =
+    process.env.BROKCODE_GITHUB_TOKEN?.trim() ||
+    process.env.GITHUB_TOKEN?.trim() ||
+    process.env.GITHUB_ACCESS_TOKEN?.trim()
+
+  if (envToken) return envToken
+  return allowGhCli ? resolveGhCliToken() : null
+}
+
+async function loadProjectExportFiles({
+  projectId,
+  workspaceId,
+  userId,
+  exportPath
+}: {
+  projectId: string
+  workspaceId: string
+  userId: string
+  exportPath: string
+}) {
+  const project = await getBrokCodeProject({
+    id: projectId,
+    workspaceId,
+    userId
+  })
+
+  if (!project) {
+    throw new Error('BrokCode project was not found for this account.')
+  }
+
+  const files = await listBrokCodeProjectFiles({
+    projectId,
+    workspaceId
+  })
+  const exportFiles = normalizeGithubExportFiles({
+    exportPath,
+    files: files.map(file => ({
+      path: file.path,
+      content: file.content
+    }))
+  })
+
+  if (exportFiles.length === 0) {
+    throw new Error('BrokCode project has no exportable files.')
+  }
+
+  return { project, files: exportFiles }
+}
+
+async function getGithubRef({
+  token,
+  repository,
+  branch
+}: {
+  token: string
+  repository: string
+  branch: string
+}) {
+  try {
+    return await githubApi<{ object?: { sha?: string } }>({
+      token,
+      repository,
+      path: `git/ref/heads/${encodeGitRef(branch)}`
+    })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Not Found') return null
+    throw error
+  }
+}
+
+async function commitFilesToGithubBranch({
+  token,
+  repository,
+  base,
+  head,
+  message,
+  files
+}: {
+  token: string
+  repository: string
+  base: string
+  head: string
+  message: string
+  files: BrokCodeGithubExportFile[]
+}) {
+  if (base === head) {
+    throw new Error('Head branch must be different from base branch.')
+  }
+
+  const baseRef = await getGithubRef({ token, repository, branch: base })
+  const baseSha = baseRef?.object?.sha
+  if (!baseSha) {
+    throw new Error(`Base branch ${base} was not found.`)
+  }
+
+  const headRef = await getGithubRef({ token, repository, branch: head })
+  const parentSha = headRef?.object?.sha ?? baseSha
+  const parentCommit = await githubApi<{ tree?: { sha?: string } }>({
+    token,
+    repository,
+    path: `git/commits/${parentSha}`
+  })
+  const baseTree = parentCommit.tree?.sha
+  if (!baseTree) {
+    throw new Error('Could not resolve the GitHub base tree.')
+  }
+
+  const blobs = await Promise.all(
+    files.map(async file => {
+      const blob = await githubApi<{ sha?: string }>({
+        token,
+        repository,
+        path: 'git/blobs',
+        init: {
+          method: 'POST',
+          body: JSON.stringify({
+            content: file.content,
+            encoding: 'utf-8'
+          })
+        }
+      })
+      if (!blob.sha) {
+        throw new Error(`GitHub did not return a blob for ${file.path}.`)
+      }
+      return { file, sha: blob.sha }
+    })
+  )
+
+  const tree = await githubApi<{ sha?: string }>({
+    token,
+    repository,
+    path: 'git/trees',
+    init: {
+      method: 'POST',
+      body: JSON.stringify({
+        base_tree: baseTree,
+        tree: blobs.map(({ file, sha }) => ({
+          path: file.path,
+          mode: '100644',
+          type: 'blob',
+          sha
+        }))
+      })
+    }
+  })
+  if (!tree.sha) {
+    throw new Error('GitHub did not return a tree for the export.')
+  }
+
+  const commit = await githubApi<{ sha?: string; html_url?: string }>({
+    token,
+    repository,
+    path: 'git/commits',
+    init: {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        tree: tree.sha,
+        parents: [parentSha]
+      })
+    }
+  })
+  if (!commit.sha) {
+    throw new Error('GitHub did not return a commit for the export.')
+  }
+
+  if (headRef) {
+    await githubApi({
+      token,
+      repository,
+      path: `git/refs/heads/${encodeGitRef(head)}`,
+      init: {
+        method: 'PATCH',
+        body: JSON.stringify({
+          sha: commit.sha,
+          force: false
+        })
+      }
+    })
+  } else {
+    await githubApi({
+      token,
+      repository,
+      path: 'git/refs',
+      init: {
+        method: 'POST',
+        body: JSON.stringify({
+          ref: `refs/heads/${head}`,
+          sha: commit.sha
+        })
+      }
+    })
+  }
+
+  return {
+    commitSha: commit.sha,
+    commitUrl: commit.html_url ?? null,
+    filesCommitted: files.length,
+    branchCreated: !headRef
+  }
 }
 
 function jsonNoStore(body: unknown, init?: ResponseInit) {
@@ -247,15 +521,24 @@ export async function POST(request: NextRequest) {
   const prBody =
     typeof body?.body === 'string' ? body.body.trim().slice(0, 65_000) : ''
   const base = sanitizeBranch(body?.base, 'main')
-  const head = sanitizeBranch(body?.head, '')
+  const requestedHead = sanitizeBranch(body?.head, '')
   const draft = body?.draft === true
+  const projectId =
+    typeof body?.project_id === 'string' && body.project_id.trim()
+      ? body.project_id.trim()
+      : null
+  const versionId =
+    typeof body?.version_id === 'string' && body.version_id.trim()
+      ? body.version_id.trim()
+      : null
+  const exportPath = sanitizeGithubExportPath(body?.export_path)
 
-  if (!repository || !title || !head) {
+  if (!repository || !title) {
     return jsonNoStore(
       {
         error: {
           type: 'invalid_request_error',
-          message: 'repository, title, and head branch are required.'
+          message: 'repository and title are required.'
         }
       },
       { status: 400 }
@@ -263,8 +546,100 @@ export async function POST(request: NextRequest) {
   }
 
   let composioFailure: string | null = null
+  let projectExport: Awaited<ReturnType<typeof loadProjectExportFiles>> | null =
+    null
 
-  if (isComposioConfigured()) {
+  if (projectId) {
+    try {
+      projectExport = await loadProjectExportFiles({
+        projectId,
+        workspaceId: authResult.workspace.id,
+        userId: authResult.apiKey.userId,
+        exportPath
+      })
+    } catch (error) {
+      return jsonNoStore(
+        {
+          error: {
+            type: 'invalid_request_error',
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Could not load BrokCode project files.'
+          }
+        },
+        { status: 400 }
+      )
+    }
+  }
+
+  const head =
+    requestedHead ||
+    buildGithubExportBranchName({
+      projectName: projectExport?.project.name ?? title,
+      projectId
+    })
+  const prBodyWithExport = projectExport
+    ? buildGithubExportPullRequestBody({
+        body: prBody,
+        projectId,
+        versionId,
+        exportPath,
+        files: projectExport.files
+      })
+    : prBody
+  let exportCommit: {
+    commitSha: string
+    commitUrl: string | null
+    filesCommitted: number
+    branchCreated: boolean
+  } | null = null
+
+  const githubToken = await resolveGithubToken(
+    !isBrowserSession ||
+      process.env.BROKCODE_ALLOW_BROWSER_GH_CLI_EXPORT === 'true'
+  )
+
+  if (projectExport && githubToken) {
+    try {
+      exportCommit = await commitFilesToGithubBranch({
+        token: githubToken,
+        repository,
+        base,
+        head,
+        message: buildGithubExportCommitMessage({ projectId, versionId }),
+        files: projectExport.files
+      })
+    } catch (error) {
+      return jsonNoStore(
+        {
+          error: {
+            type: 'github_error',
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Could not commit BrokCode project files to GitHub.'
+          }
+        },
+        { status: 502 }
+      )
+    }
+  }
+
+  if (projectExport && !exportCommit) {
+    return jsonNoStore(
+      {
+        error: {
+          type: 'configuration_error',
+          message:
+            'GitHub file export requires BROKCODE_GITHUB_TOKEN, GITHUB_TOKEN, GITHUB_ACCESS_TOKEN, or gh CLI token access.'
+        }
+      },
+      { status: 503 }
+    )
+  }
+
+  if (isComposioConfigured() && !exportCommit) {
     try {
       const accounts = await listConnectedAccounts(
         authResult.apiKey.userId,
@@ -294,7 +669,7 @@ export async function POST(request: NextRequest) {
         connectedAccountId: connectedAccount.id,
         repository,
         title,
-        body: prBody,
+        body: prBodyWithExport,
         base,
         head,
         draft
@@ -321,7 +696,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (isBrowserSession) {
+  if (isBrowserSession && !exportCommit) {
     return jsonNoStore(
       {
         error: {
@@ -336,17 +711,12 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const githubToken =
-    process.env.BROKCODE_GITHUB_TOKEN?.trim() ||
-    process.env.GITHUB_TOKEN?.trim() ||
-    process.env.GITHUB_ACCESS_TOKEN?.trim()
-
   if (!githubToken) {
     try {
       const pullRequest = await createPullRequestWithGhCli({
         repository,
         title,
-        body: prBody,
+        body: prBodyWithExport,
         base,
         head,
         draft
@@ -359,6 +729,7 @@ export async function POST(request: NextRequest) {
           base,
           head,
           provider: 'gh-cli',
+          export: exportCommit,
           composioWarning: composioFailure
         }
       })
@@ -394,7 +765,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         title,
-        body: prBody || undefined,
+        body: prBodyWithExport || undefined,
         base,
         head,
         draft
@@ -441,6 +812,7 @@ export async function POST(request: NextRequest) {
       base,
       head,
       provider: 'github-token',
+      export: exportCommit,
       composioWarning: composioFailure
     }
   })
