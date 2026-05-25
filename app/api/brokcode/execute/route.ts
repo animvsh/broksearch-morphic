@@ -28,7 +28,8 @@ import { buildBrokCodeProjectContextPack } from '@/lib/brokcode/context-packer'
 import {
   applyBrokCodeFileOperations,
   BrokCodeFileOperation,
-  BrokCodeFileOperationError
+  BrokCodeFileOperationError,
+  summarizeBrokCodeFullFileChanges
 } from '@/lib/brokcode/file-operations'
 import {
   buildFallbackGeneratedAppFiles,
@@ -413,6 +414,7 @@ async function persistGeneratedProjectOutput({
       metadata: {
         mode: 'managed_static',
         fileOperations: applied.changes,
+        fileChanges: applied.changes,
         runtimeWorkspace: runtimeWorkspace.manifest,
         generatedAt: new Date().toISOString(),
         source: 'runtime_operations'
@@ -449,6 +451,10 @@ async function persistGeneratedProjectOutput({
   })
   if (files.length === 0) return null
   const quality = inspectGeneratedBrokCodeAppQuality(files)
+  const fileChanges = summarizeBrokCodeFullFileChanges({
+    beforeFiles: currentFiles,
+    afterFiles: files
+  })
 
   if (taskId) {
     await appendBackgroundTaskEvent({
@@ -498,6 +504,7 @@ async function persistGeneratedProjectOutput({
       path: file.path,
       language: file.language
     })),
+    changes: fileChanges,
     runtime_workspace: runtimeWorkspace.manifest,
     quality
   })
@@ -514,6 +521,8 @@ async function persistGeneratedProjectOutput({
     metadata: {
       mode: 'managed_static',
       fileCount: files.length,
+      fileChanges,
+      beforeFileCount: currentFiles.length,
       quality,
       runtimeWorkspace: runtimeWorkspace.manifest,
       generatedAt: new Date().toISOString(),

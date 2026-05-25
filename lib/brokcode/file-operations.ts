@@ -283,3 +283,36 @@ export function applyBrokCodeFileOperations({
     changes
   }
 }
+
+export function summarizeBrokCodeFullFileChanges({
+  beforeFiles,
+  afterFiles
+}: {
+  beforeFiles: GeneratedBrokCodeFile[]
+  afterFiles: GeneratedBrokCodeFile[]
+}) {
+  const beforeByPath = new Map(
+    beforeFiles.map(file => [normalizePath(file.path), file])
+  )
+  const changes: BrokCodeAppliedFileChange[] = []
+
+  for (const file of afterFiles
+    .map(item => ({ ...item, path: normalizePath(item.path) }))
+    .sort((a, b) => a.path.localeCompare(b.path))) {
+    const before = beforeByPath.get(file.path)
+    const beforeChecksum = currentChecksum(before?.content)
+    const afterChecksum = checksumBrokCodeFileContent(file.content)
+
+    if (beforeChecksum === afterChecksum) continue
+
+    changes.push({
+      type: before ? 'replace_file' : 'create_file',
+      path: file.path,
+      beforeChecksum,
+      afterChecksum,
+      summary: before ? `Updated ${file.path}.` : `Created ${file.path}.`
+    })
+  }
+
+  return changes
+}
