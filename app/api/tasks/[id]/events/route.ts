@@ -4,6 +4,7 @@ import {
   hasFeatureAccess,
   requireAnyFeatureAccessForApi
 } from '@/lib/auth/app-access'
+import { reconcileStaleBrokCodeTask } from '@/lib/brokcode/durable-job'
 import { getBackgroundTask } from '@/lib/tasks/background-tasks'
 
 export const runtime = 'nodejs'
@@ -58,7 +59,12 @@ export async function GET(
             return
           }
 
-          if (!canReadSearchTasks && task.kind !== 'brokcode') {
+          const reconciledTask =
+            task.kind === 'brokcode'
+              ? await reconcileStaleBrokCodeTask({ task })
+              : task
+
+          if (!canReadSearchTasks && reconciledTask.kind !== 'brokcode') {
             controller.enqueue(
               encoder.encode(
                 sse('task.error', {
@@ -72,9 +78,11 @@ export async function GET(
             return
           }
 
-          controller.enqueue(encoder.encode(sse('task.update', { task })))
+          controller.enqueue(
+            encoder.encode(sse('task.update', { task: reconciledTask }))
+          )
 
-          if (TERMINAL_STATUSES.has(task.status)) {
+          if (TERMINAL_STATUSES.has(reconciledTask.status)) {
             controller.enqueue(encoder.encode(sse('done', { id })))
             controller.close()
             closed = true
