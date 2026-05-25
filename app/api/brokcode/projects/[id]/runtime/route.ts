@@ -18,6 +18,7 @@ import {
   createBrokCodeRuntimeSandbox,
   getLatestBrokCodeRuntimeSandbox,
   listBrokCodeRuntimeSandboxes,
+  refreshBrokCodeRuntimeSandbox,
   updateBrokCodeRuntimeSandbox
 } from '@/lib/brokcode/runtime/store'
 import {
@@ -180,17 +181,20 @@ export async function POST(
           manifest: materialized.manifest
         })
       : null
+  const refreshedRuntime = await refreshBrokCodeRuntimeSandbox(runtime)
 
   return NextResponse.json({
-    runtime,
+    runtime: refreshedRuntime,
     spec: runtimeSpec,
     workspace: materialized.manifest,
     livePreview: livePreview
-      ? {
+      ? ((refreshedRuntime?.metadata?.livePreview as
+          | Record<string, unknown>
+          | undefined) ?? {
           status: livePreview.status,
           port: livePreview.port,
           previewUrl: `/api/brokcode/runtime/${encodeURIComponent(livePreview.runtimeId)}/`
-        }
+        })
       : null,
     fallback: runtimeFallback()
   })

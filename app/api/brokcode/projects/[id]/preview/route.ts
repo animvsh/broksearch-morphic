@@ -19,7 +19,8 @@ import { createBrokCodeRuntimeSpec } from '@/lib/brokcode/runtime/contract'
 import { startBrokCodeRuntimeProcess } from '@/lib/brokcode/runtime/process-manager'
 import {
   createBrokCodeRuntimeSandbox,
-  getLatestBrokCodeRuntimeSandbox
+  getLatestBrokCodeRuntimeSandbox,
+  refreshBrokCodeRuntimeSandbox
 } from '@/lib/brokcode/runtime/store'
 import {
   BrokCodeRuntimeWorkspaceError,
@@ -128,6 +129,8 @@ export async function POST(
         manifest: workspace.manifest
       })
       if (processEntry?.status === 'ready') {
+        const refreshedRuntime =
+          (await refreshBrokCodeRuntimeSandbox(runtime)) ?? runtime
         const previewUrl = `${resolvePublicPreviewOrigin(request)}/api/brokcode/runtime/${encodeURIComponent(runtime.id)}/`
         return NextResponse.json({
           status: 'ready',
@@ -136,7 +139,12 @@ export async function POST(
           previewUrl,
           deploymentPreviewUrl: previewUrl,
           fileCount: workspace.manifest.files.length,
-          runtime,
+          runtime: refreshedRuntime,
+          livePreview: refreshedRuntime.metadata?.livePreview ?? {
+            status: processEntry.status,
+            port: processEntry.port,
+            previewUrl
+          },
           workspace: workspace.manifest,
           project: publicProject(access.project)
         })
