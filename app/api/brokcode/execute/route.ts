@@ -767,10 +767,38 @@ async function runDirectBrokRuntime({
       throw new Error('Brok runtime did not include a stream body.')
     }
 
-    return forwardOpenAiCompatibleStream({
-      providerBody: providerResponse.body,
-      send: send ?? (() => {})
-    })
+    try {
+      return await forwardOpenAiCompatibleStream({
+        providerBody: providerResponse.body,
+        send: send ?? (() => {})
+      })
+    } catch (error) {
+      send?.('status', {
+        message:
+          'Provider stream ended early. Retrying once with buffered output.'
+      })
+      console.error('Brok runtime stream failed; retrying buffered:', error)
+      const retryResponse = await routeToProviderResponse(
+        model as BrokModelId,
+        {
+          model,
+          messages,
+          stream: false,
+          maxTokens: 4096
+        }
+      )
+      const retryPayload = await retryResponse.json().catch(() => null)
+      const retryContent = stripThinkingBlocks(
+        extractAssistantText(retryPayload)
+      ).trim()
+      if (retryContent) {
+        send?.('delta', { content: retryContent })
+      }
+      return {
+        content: retryContent,
+        usage: retryPayload?.usage ?? null
+      }
+    }
   }
 
   const payload = await providerResponse.json().catch(() => null)
