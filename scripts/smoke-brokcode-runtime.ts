@@ -16,9 +16,12 @@ process.env.BROKCODE_SYNC_DIR = syncRoot
 const { createBrokCodeRuntimeSpec } = await import(
   '../lib/brokcode/runtime/contract'
 )
-const { getBrokCodeRuntimeProcess, startBrokCodeRuntimeProcess } = await import(
-  '../lib/brokcode/runtime/process-manager'
-)
+const {
+  appendBrokCodeRuntimeBrowserEvent,
+  getBrokCodeRuntimeDiagnostics,
+  getBrokCodeRuntimeProcess,
+  startBrokCodeRuntimeProcess
+} = await import('../lib/brokcode/runtime/process-manager')
 const { createBrokCodeRuntimeSandbox, refreshBrokCodeRuntimeSandbox } =
   await import('../lib/brokcode/runtime/store')
 const { materializeBrokCodeRuntimeWorkspace } = await import(
@@ -210,12 +213,41 @@ async function main() {
     }
 
     const refreshedRuntime = await refreshBrokCodeRuntimeSandbox(runtime)
+    if (!refreshedRuntime) {
+      throw new Error('Runtime disappeared after hot reload.')
+    }
     const livePreview = refreshedRuntime?.metadata?.livePreview as
       | Record<string, unknown>
       | undefined
 
     if (livePreview?.hotReload !== true) {
       throw new Error('Runtime metadata did not record a hot reload update.')
+    }
+
+    const capturedLogs = await appendBrokCodeRuntimeBrowserEvent({
+      runtime: refreshedRuntime,
+      event: {
+        level: 'error',
+        message: 'Intentional broken preview smoke error',
+        file: 'src/App.tsx',
+        line: 7,
+        column: 13,
+        stack: 'Error: Intentional broken preview smoke error'
+      }
+    })
+    const diagnostics = getBrokCodeRuntimeDiagnostics(refreshedRuntime)
+    const lastError = diagnostics.lastError
+    if (
+      capturedLogs.length === 0 ||
+      lastError?.source !== 'browser' ||
+      lastError.message !== 'Intentional broken preview smoke error' ||
+      lastError.file !== 'src/App.tsx' ||
+      lastError.line !== 7 ||
+      lastError.column !== 13
+    ) {
+      throw new Error(
+        'Runtime diagnostics did not capture browser error context.'
+      )
     }
 
     console.log(
