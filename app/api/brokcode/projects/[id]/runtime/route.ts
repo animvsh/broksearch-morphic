@@ -235,6 +235,7 @@ export async function POST(
       : ((refreshedRuntime?.metadata?.livePreview as
           | Record<string, unknown>
           | undefined) ?? null),
+    fallback: runtimeFallback(fallbackRuntime)
       : ((refreshedRuntime?.metadata?.livePreview as
           | Record<string, unknown>
           | undefined) ?? null),
