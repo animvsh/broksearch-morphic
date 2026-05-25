@@ -1759,6 +1759,10 @@ export async function POST(request: NextRequest) {
         ? body.backend_project_url.trim()
         : null
   }
+  const retryOfTaskId =
+    typeof body?.retry_of_task_id === 'string' && body.retry_of_task_id.trim()
+      ? body.retry_of_task_id.trim()
+      : null
 
   if (!command) {
     return NextResponse.json(
@@ -2010,6 +2014,7 @@ export async function POST(request: NextRequest) {
         source: codeUsageContext.source,
         sessionId: codeUsageContext.sessionId,
         commandType: codeUsageContext.commandType,
+        retryOfTaskId,
         phase: 'queued',
         progress: 0,
         lifecycle: createBrokCodeRunLifecycle(),
