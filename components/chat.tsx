@@ -602,7 +602,18 @@ export function Chat({
   })
 
   return (
-    <ChatProvider sendMessage={sendMessage}>
+    <ChatProvider
+      sendMessage={message => {
+        const promptText = message.parts
+          .filter(
+            (part): part is { type: 'text'; text: string } =>
+              part.type === 'text' && typeof part.text === 'string'
+          )
+          .map(part => part.text)
+          .join('\n')
+        submitToSearch(promptText)
+      }}
+    >
       <div
         className={cn(
           'relative flex h-full min-w-0 flex-1 flex-col bg-background',

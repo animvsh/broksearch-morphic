@@ -59,6 +59,8 @@ Language:
 Output:
 - Use Markdown only when it improves scanning.
 - Prefer short paragraphs and concrete next steps.
+
+${getRelatedQuestionsSpecPrompt({ skipForTinyUtility: true })}
 `
 }
 
