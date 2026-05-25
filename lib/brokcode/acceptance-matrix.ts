@@ -9,6 +9,9 @@ export type BrokCodeAcceptanceCase = {
     | 'mobile_utility'
     | 'backend_backed'
   prompt: string
+  requiredFiles: string[]
+  requiredCapabilities: string[]
+  minimumInteractions: number
   expectedTerms: string[]
   minimumGeneratedFiles: number
 }
@@ -23,6 +26,9 @@ export const BROKCODE_ACCEPTANCE_MATRIX: BrokCodeAcceptanceCase[] = [
       'Return named files for index.html, styles.css, and app.js.',
       'Include a hero, menu cards, social proof, and a working newsletter form.'
     ].join(' '),
+    requiredFiles: ['index.html', 'styles.css', 'app.js'],
+    requiredCapabilities: ['responsive-layout', 'newsletter-form'],
+    minimumInteractions: 2,
     expectedTerms: ['bakery', 'menu', 'newsletter'],
     minimumGeneratedFiles: 3
   },
@@ -35,6 +41,9 @@ export const BROKCODE_ACCEPTANCE_MATRIX: BrokCodeAcceptanceCase[] = [
       'Return named files for index.html, styles.css, and app.js.',
       'Include course progress cards, upcoming deadlines, advisor notes, and a useful interactive filter.'
     ].join(' '),
+    requiredFiles: ['index.html', 'styles.css', 'app.js'],
+    requiredCapabilities: ['filter-control', 'dashboard-cards'],
+    minimumInteractions: 2,
     expectedTerms: ['student', 'dashboard', 'deadline', 'advisor'],
     minimumGeneratedFiles: 3
   },
@@ -47,6 +56,9 @@ export const BROKCODE_ACCEPTANCE_MATRIX: BrokCodeAcceptanceCase[] = [
       'Return named files for index.html, styles.css, and app.js.',
       'Include a table or list, add/edit/delete controls, empty state, and localStorage-backed sample data.'
     ].join(' '),
+    requiredFiles: ['index.html', 'styles.css', 'app.js'],
+    requiredCapabilities: ['create-record', 'update-record', 'delete-record'],
+    minimumInteractions: 3,
     expectedTerms: ['club', 'inventory', 'add', 'delete'],
     minimumGeneratedFiles: 3
   },
@@ -59,6 +71,9 @@ export const BROKCODE_ACCEPTANCE_MATRIX: BrokCodeAcceptanceCase[] = [
       'Return named files for index.html, styles.css, and app.js.',
       'Include validation, review state, submit confirmation, and clear accessible labels.'
     ].join(' '),
+    requiredFiles: ['index.html', 'styles.css', 'app.js'],
+    requiredCapabilities: ['validation', 'review-state', 'confirmation-state'],
+    minimumInteractions: 3,
     expectedTerms: ['lab', 'equipment', 'request', 'review'],
     minimumGeneratedFiles: 3
   },
@@ -71,6 +86,9 @@ export const BROKCODE_ACCEPTANCE_MATRIX: BrokCodeAcceptanceCase[] = [
       'Return named files for index.html, styles.css, and app.js.',
       'Include task chips, timer or checklist behavior, compact navigation, and a layout optimized for phones.'
     ].join(' '),
+    requiredFiles: ['index.html', 'styles.css', 'app.js'],
+    requiredCapabilities: ['mobile-layout', 'timer-or-checklist'],
+    minimumInteractions: 2,
     expectedTerms: ['study', 'planner', 'task', 'timer'],
     minimumGeneratedFiles: 3
   },
@@ -83,6 +101,15 @@ export const BROKCODE_ACCEPTANCE_MATRIX: BrokCodeAcceptanceCase[] = [
       'Return named files for index.html, styles.css, app.js, and api/mock-feedback.json.',
       'Include a feedback feed, submit form, loading/error states, and JavaScript that reads or simulates persisted feedback data.'
     ].join(' '),
+    requiredFiles: ['index.html', 'styles.css', 'app.js'],
+    requiredCapabilities: [
+      'feedback-feed',
+      'submit-flow',
+      'loading-state',
+      'error-state',
+      'persisted-data-simulation'
+    ],
+    minimumInteractions: 3,
     expectedTerms: ['course', 'feedback', 'submit', 'loading'],
     minimumGeneratedFiles: 4
   }

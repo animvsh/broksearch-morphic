@@ -6,6 +6,10 @@ import { promisify } from 'node:util'
 import { chromium } from 'playwright'
 
 import {
+  buildBrokCodeAcceptanceSuiteEval,
+  formatBrokCodeAcceptanceAdminReview
+} from '../lib/brokcode/acceptance-eval'
+import {
   BROKCODE_ACCEPTANCE_MATRIX,
   type BrokCodeAcceptanceCase,
   getBrokCodeAcceptanceCase,
@@ -233,18 +237,10 @@ async function verifyFiles(
   const files = Array.isArray(body.files) ? body.files : []
   const filePaths = files.map((file: { path?: string }) => file.path)
 
-  for (const required of ['index.html']) {
+  for (const required of testCase.requiredFiles) {
     if (!filePaths.includes(required)) {
       throw new Error(
         `expected saved file ${required}; got ${filePaths.join(',')}`
-      )
-    }
-  }
-
-  for (const expected of ['styles.css', 'app.js']) {
-    if (!filePaths.includes(expected)) {
-      throw new Error(
-        `expected smoke build to save ${expected}; got ${filePaths.join(',')}`
       )
     }
   }
@@ -452,8 +448,10 @@ async function verifyPreview(
     throw new Error('preview missing stylesheet or inline style')
   }
 
-  if (quality.interactionCount < 1) {
-    throw new Error('preview missing useful interaction')
+  if (quality.interactionCount < testCase.minimumInteractions) {
+    throw new Error(
+      `preview missing useful interactions: expected ${testCase.minimumInteractions}, got ${quality.interactionCount}`
+    )
   }
 
   if (quality.textLength < 120 || quality.hasPlaceholderCopy) {
@@ -575,37 +573,24 @@ async function writeSmokeReport(report: SmokeReport) {
   const reportDir = path.join(process.cwd(), '.brok-smoke', 'brokcode')
   const jsonPath = path.join(reportDir, `smoke-${safeTimestamp}.json`)
   const markdownPath = path.join(reportDir, `smoke-${safeTimestamp}.md`)
+  const latestJsonPath = path.join(reportDir, 'latest.json')
+  const latestMarkdownPath = path.join(reportDir, 'latest.md')
+  const adminSummaryPath = path.join(reportDir, 'latest-admin-summary.md')
+  const evalRecord = buildBrokCodeAcceptanceSuiteEval(report)
+  const adminSummary = formatBrokCodeAcceptanceAdminReview(evalRecord)
   await mkdir(reportDir, { recursive: true })
-  await writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+  await writeFile(jsonPath, `${JSON.stringify(evalRecord, null, 2)}\n`, 'utf8')
   await writeFile(
-    markdownPath,
-    [
-      '# BrokCode Smoke Report',
-      '',
-      `- Started: ${report.startedAt}`,
-      `- Completed: ${report.completedAt}`,
-      `- Base URL: ${report.baseUrl}`,
-      `- Matrix mode: ${report.matrixMode ? 'yes' : 'no'}`,
-      `- TUI: ${report.tuiStatus}`,
-      '',
-      '## Cases',
-      '',
-      ...report.cases.flatMap(testCase => [
-        `### ${testCase.title} (${testCase.id})`,
-        '',
-        `- Status: ${testCase.status}`,
-        `- Category: ${testCase.category}`,
-        `- Project: ${testCase.projectId ?? 'not created'}`,
-        `- Preview: ${testCase.previewUrl ?? 'not available'}`,
-        `- Deploy: ${testCase.deploymentUrl ?? 'not available'}`,
-        `- Checks: ${testCase.checks.join(', ') || 'none'}`,
-        ...(testCase.error ? [`- Error: ${testCase.error}`] : []),
-        ''
-      ])
-    ].join('\n'),
+    latestJsonPath,
+    `${JSON.stringify(evalRecord, null, 2)}\n`,
     'utf8'
   )
-  console.log(`brokcode ok report ${markdownPath}`)
+  await writeFile(markdownPath, adminSummary, 'utf8')
+  await writeFile(latestMarkdownPath, adminSummary, 'utf8')
+  await writeFile(adminSummaryPath, adminSummary, 'utf8')
+  console.log(
+    `brokcode ok report ${markdownPath} score=${evalRecord.score} status=${evalRecord.status}`
+  )
 }
 
 async function main() {
