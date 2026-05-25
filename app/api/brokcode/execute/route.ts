@@ -785,15 +785,12 @@ async function runDirectBrokRuntime({
           'Provider stream ended early. Retrying once with buffered output.'
       })
       console.error('Brok runtime stream failed; retrying buffered:', error)
-      const retryResponse = await routeToProviderResponse(
-        model as BrokModelId,
-        {
-          model,
-          messages,
-          stream: false,
-          maxTokens: BROKCODE_GENERATION_MAX_TOKENS
-        }
-      )
+      const retryResponse = await routeToProviderResponse(model as BrokModelId, {
+        model,
+        messages,
+        stream: false,
+        maxTokens: BROKCODE_GENERATION_MAX_TOKENS
+      })
       const retryPayload = await retryResponse.json().catch(() => null)
       const retryContent = stripThinkingBlocks(
         extractAssistantText(retryPayload)
