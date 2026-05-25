@@ -125,6 +125,14 @@ type BrokUsage = {
 type BrokCodeRuntime = 'pi' | 'opencode' | 'brok' | 'not_connected'
 type GithubConnectionStatus = 'checking' | 'connected' | 'ready' | 'unavailable'
 type PreviewHealthStatus = 'idle' | 'checking' | 'online' | 'offline'
+type PreviewHealthReason =
+  | 'ready'
+  | 'blocked'
+  | 'not_found'
+  | 'blank'
+  | 'timeout'
+  | 'unreachable'
+  | 'http_error'
 type BrokCodeBackendProvider = 'none' | 'insforge'
 type BrokCodeMobilePane = 'chat' | 'preview' | 'ship'
 type BrokCodeBackendHealthStatus =
@@ -572,6 +580,7 @@ type GithubRepositoryOption = {
 type PreviewHealth = {
   status: PreviewHealthStatus
   message: string
+  reason?: PreviewHealthReason
   checkedAt?: string
   httpStatus?: number
 }
@@ -2849,6 +2858,7 @@ export function BrokCodeApp({
       if (!target.trim()) {
         setPreviewHealth({
           status: 'idle',
+          reason: undefined,
           message:
             'Preview appears here after a run or when you paste an app URL.'
         })
@@ -2858,6 +2868,7 @@ export function BrokCodeApp({
       if (!normalized || isBrokCodeWorkspaceUrl(normalized)) {
         setPreviewHealth({
           status: 'offline',
+          reason: 'blocked',
           message: 'Choose a generated app URL, not Brok Code itself.'
         })
         return
@@ -2878,8 +2889,16 @@ export function BrokCodeApp({
         )
         const body = await response.json().catch(() => null)
 
+        const reason =
+          typeof body?.reason === 'string'
+            ? (body.reason as PreviewHealthReason)
+            : body?.ok
+              ? 'ready'
+              : 'unreachable'
+
         setPreviewHealth({
           status: body?.ok ? 'online' : 'offline',
+          reason,
           message:
             typeof body?.message === 'string'
               ? body.message
@@ -2895,6 +2914,7 @@ export function BrokCodeApp({
       } catch {
         setPreviewHealth({
           status: 'offline',
+          reason: 'unreachable',
           message: 'Preview health check failed.',
           checkedAt: new Date().toISOString()
         })
@@ -2907,6 +2927,7 @@ export function BrokCodeApp({
     if (!previewUrl.trim()) {
       setPreviewHealth({
         status: 'idle',
+        reason: undefined,
         message:
           'Preview appears here after a run or when you paste an app URL.'
       })
@@ -7133,11 +7154,91 @@ function BrowserPreviewPanel({
 }) {
   const hasPreviewUrl = Boolean(previewUrl.trim())
   const isBlockedPreview = isBrokCodeWorkspaceUrl(previewUrl)
+  const recentRuntimeLogs = runtimeDiagnostics?.logs.slice(-8) ?? []
+  const lastRuntimeError = runtimeDiagnostics?.lastError ?? null
+  const runtimeFailure =
+    runtimeSandbox?.status === 'crashed' ||
+    runtimeSandbox?.status === 'timed_out'
+      ? {
+          label:
+            runtimeSandbox.status === 'timed_out'
+              ? 'Runtime timeout'
+              : 'Runtime crash',
+          title:
+            runtimeSandbox.status === 'timed_out'
+              ? 'Runtime timed out'
+              : 'Runtime crashed',
+          detail:
+            runtimeSandbox.health?.message ??
+            lastRuntimeError?.message ??
+            'The live app runtime stopped before the preview could recover.'
+        }
+      : null
+  const healthFailure =
+    !isRunning && previewHealth.status === 'offline'
+      ? (() => {
+          if (previewHealth.reason === 'not_found') {
+            return {
+              label: '404',
+              title: 'Preview route missing',
+              detail:
+                previewHealth.message ||
+                'The preview URL returned 404. The app may be missing its active entrypoint.'
+            }
+          }
+          if (previewHealth.reason === 'blank') {
+            return {
+              label: 'Blank',
+              title: 'Preview is blank',
+              detail:
+                previewHealth.message ||
+                'The preview loaded, but no visible page content was detected.'
+            }
+          }
+          if (previewHealth.reason === 'timeout') {
+            return {
+              label: 'Timeout',
+              title: 'Preview timed out',
+              detail:
+                previewHealth.message ||
+                'The preview server did not respond before the health check timed out.'
+            }
+          }
+          if (previewHealth.reason === 'http_error') {
+            return {
+              label: previewHealth.httpStatus
+                ? `HTTP ${previewHealth.httpStatus}`
+                : 'HTTP error',
+              title: 'Preview returned an error',
+              detail:
+                previewHealth.message ||
+                'The preview server responded with an error status.'
+            }
+          }
+          if (previewHealth.reason === 'blocked') {
+            return {
+              label: 'Blocked',
+              title: 'Preview URL blocked',
+              detail: previewHealth.message
+            }
+          }
+          return {
+            label: 'Offline',
+            title: 'Preview is offline',
+            detail:
+              previewHealth.message ||
+              'The preview server is not reachable yet.'
+          }
+        })()
+      : null
+  const previewFailure = runtimeFailure ?? healthFailure
   const previewStatus = isRunning
     ? 'updating'
-    : previewHealth.status === 'offline' && hasPreviewUrl
-      ? 'loaded'
-      : previewHealth.status
+    : previewFailure
+      ? 'error'
+      : previewHealth.status === 'offline' && hasPreviewUrl
+        ? 'loaded'
+        : previewHealth.status
   const healthTone =
     previewStatus === 'online'
       ? 'default'
@@ -7151,15 +7252,15 @@ function BrowserPreviewPanel({
       ? hasPreviewUrl
         ? 'Building your changes. The preview below is the last saved version until the new run finishes.'
         : 'Building your first preview. It will open here automatically.'
-      : previewStatus === 'loaded'
-        ? 'Preview loaded. Health check may be blocked by the preview origin.'
-        : previewHealth.message
+      : previewFailure
+        ? previewFailure.detail
+        : previewStatus === 'loaded'
+          ? 'Preview loaded. Health check may be blocked by the preview origin.'
+          : previewHealth.message
   const runtimePorts = runtimeSandbox?.ports
     ?.map(port => port.port)
     .filter((port): port is number => typeof port === 'number')
     .join(', ')
-  const recentRuntimeLogs = runtimeDiagnostics?.logs.slice(-8) ?? []
-  const lastRuntimeError = runtimeDiagnostics?.lastError ?? null
 
   return (
     <div
@@ -7178,18 +7279,26 @@ function BrowserPreviewPanel({
           </p>
         </div>
         <div className="mobile-chip-row flex items-center justify-end gap-1.5 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0">
-          <Badge variant={healthTone} className="shrink-0 rounded-full">
+          <Badge
+            variant={healthTone}
+            className={cn(
+              'shrink-0 rounded-full',
+              previewStatus === 'error' && 'border-rose-200 text-rose-700'
+            )}
+          >
             {previewStatus === 'online'
               ? 'Live'
               : previewStatus === 'checking'
                 ? 'Checking'
                 : previewStatus === 'updating'
                   ? 'Updating'
-                  : previewStatus === 'loaded'
-                    ? 'Loaded'
-                    : previewStatus === 'offline'
-                      ? 'Offline'
-                      : 'Ready'}
+                  : previewStatus === 'error'
+                    ? (previewFailure?.label ?? 'Error')
+                    : previewStatus === 'loaded'
+                      ? 'Loaded'
+                      : previewStatus === 'offline'
+                        ? 'Offline'
+                        : 'Ready'}
           </Badge>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -7285,6 +7394,16 @@ function BrowserPreviewPanel({
         <p className="m-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
           {runtimeError}
         </p>
+      )}
+
+      {previewFailure && (
+        <div
+          className="mx-2 mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-950"
+          data-testid="brokcode-preview-failure-state"
+        >
+          <p className="font-medium">{previewFailure.title}</p>
+          <p className="mt-1 leading-5">{previewFailure.detail}</p>
+        </div>
       )}
 
       {(runtimeSandbox || runtimeLoading) && (

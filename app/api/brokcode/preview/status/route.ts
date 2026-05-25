@@ -97,6 +97,16 @@ function jsonNoStore(body: unknown, init?: ResponseInit) {
   return response
 }
 
+function htmlHasVisibleContent(value: string) {
+  const body = value.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] ?? value
+  const withoutHiddenBlocks = body
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
+  const text = withoutHiddenBlocks.replace(/<[^>]+>/g, '').trim()
+  return text.length > 0
+}
+
 export async function GET(request: NextRequest) {
   const publicOrigin = resolvePublicPreviewOrigin(request)
   const { authResult } = await resolveBrokCodeRequestAuth(request, {
@@ -139,6 +149,7 @@ export async function GET(request: NextRequest) {
   ) {
     return jsonNoStore({
       ok: true,
+      reason: 'ready',
       status: 200,
       url: url.toString(),
       checkedAt: new Date().toISOString(),
@@ -168,18 +179,41 @@ export async function GET(request: NextRequest) {
       signal: controller.signal
     })
 
+    const contentType = response.headers.get('content-type') ?? ''
+    const body =
+      response.ok && contentType.toLowerCase().includes('text/html')
+        ? await response.text()
+        : ''
+    const blankHtml = response.ok && body ? !htmlHasVisibleContent(body) : false
+    const reason = response.ok
+      ? blankHtml
+        ? 'blank'
+        : 'ready'
+      : response.status === 404
+        ? 'not_found'
+        : 'http_error'
+
     return jsonNoStore({
-      ok: response.ok,
+      ok: response.ok && !blankHtml,
+      reason,
       status: response.status,
       url: url.toString(),
       checkedAt: new Date().toISOString(),
       message: response.ok
-        ? 'Preview server is reachable.'
-        : `Preview server responded with ${response.status}.`
+        ? blankHtml
+          ? 'Preview loaded but appears blank.'
+          : 'Preview server is reachable.'
+        : response.status === 404
+          ? 'Preview route returned 404.'
+          : `Preview server responded with ${response.status}.`
     })
   } catch (error) {
     return jsonNoStore({
       ok: false,
+      reason:
+        error instanceof Error && error.name === 'AbortError'
+          ? 'timeout'
+          : 'unreachable',
       url: url.toString(),
       checkedAt: new Date().toISOString(),
       message:
