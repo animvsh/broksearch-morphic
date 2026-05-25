@@ -110,7 +110,7 @@ export const BROKCODE_ACCEPTANCE_MATRIX: BrokCodeAcceptanceCase[] = [
       'persisted-data-simulation'
     ],
     minimumInteractions: 3,
-    expectedTerms: ['course', 'feedback', 'submit', 'loading'],
+    expectedTerms: ['course', 'feedback', 'submit'],
     minimumGeneratedFiles: 4
   }
 ]

@@ -141,7 +141,6 @@ describe('BrokMail Composio action route', () => {
     expect(consumeBrokMailApproval).not.toHaveBeenCalled()
     expect(executeComposioTool).not.toHaveBeenCalled()
   })
-
   it('rejects approval tokens that do not match the requested action', async () => {
     const approval = signBrokMailApproval({
       userId: 'user_123',

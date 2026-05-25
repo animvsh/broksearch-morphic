@@ -48,22 +48,18 @@ type SseResult = {
   note?: string
 }
 
-<<<<<<< HEAD
 type SseTaskInfo = {
   task_id?: string
   status_url?: string
   events_url?: string
 }
 
-=======
->>>>>>> d06032c (Add BrokCode two-edit preservation smoke)
 type ProjectFile = {
   path: string
   content: string
   language?: string | null
 }
 
-<<<<<<< HEAD
 type SmokeCaseReport = {
   id: string
   title: string
@@ -87,8 +83,6 @@ type SmokeReport = {
   tuiStatus: 'passed' | 'skipped'
 }
 
-=======
->>>>>>> d06032c (Add BrokCode two-edit preservation smoke)
 async function expectJson(response: Response, expectedStatus: number) {
   const body = await response.json().catch(() => null)
 
@@ -316,11 +310,7 @@ async function executeBuild(
   }
 
   console.log(
-<<<<<<< HEAD
     `brokcode ok execute case=${testCase.id} runtime=${result.runtime} files=${generatedFiles.join(',')} changes=${fileChanges.length}`
-=======
-    `brokcode ok execute runtime=${result.runtime} files=${generatedFiles.join(',')} changes=${fileChanges.length}`
->>>>>>> d06032c (Add BrokCode two-edit preservation smoke)
   )
 
   return result as SseResult & {
@@ -399,28 +389,17 @@ async function upsertProjectFile(projectId: string, file: ProjectFile) {
   await expectJson(response, 200)
 }
 
-<<<<<<< HEAD
 async function verifyTwoEditPreservation(
   projectId: string,
   testCase: BrokCodeAcceptanceCase
 ) {
-=======
-async function verifyTwoEditPreservation(projectId: string) {
->>>>>>> d06032c (Add BrokCode two-edit preservation smoke)
   const initialFiles = await fetchProjectFiles(projectId)
   const initialIndex = requireProjectFile(initialFiles, 'index.html')
   const initialStyles = requireProjectFile(initialFiles, 'styles.css')
   const initialApp = requireProjectFile(initialFiles, 'app.js')
 
-<<<<<<< HEAD
   if (!matchesBrokCodeAcceptanceTerms(initialIndex.content, testCase)) {
     throw new Error(`initial index.html lost expected ${testCase.id} terms`)
-=======
-  for (const expected of [/menu/i, /newsletter/i]) {
-    if (!expected.test(initialIndex.content)) {
-      throw new Error(`initial index.html lost ${expected}`)
-    }
->>>>>>> d06032c (Add BrokCode two-edit preservation smoke)
   }
 
   await upsertProjectFile(projectId, {
@@ -462,16 +441,8 @@ document.body.dataset.brokcodeSmokeEditOne = 'loyalty-copy-preserved';
   if (secondIndex.content !== initialIndex.content) {
     throw new Error('second edit did not preserve original index.html')
   }
-<<<<<<< HEAD
   if (!matchesBrokCodeAcceptanceTerms(secondIndex.content, testCase)) {
     throw new Error(`second edit lost original ${testCase.id} features`)
-=======
-  if (
-    !/menu/i.test(secondIndex.content) ||
-    !/newsletter/i.test(secondIndex.content)
-  ) {
-    throw new Error('second edit lost original menu/newsletter features')
->>>>>>> d06032c (Add BrokCode two-edit preservation smoke)
   }
   if (!secondApp.content.includes('loyalty-copy-preserved')) {
     throw new Error('second edit lost first edit in app.js')
@@ -480,7 +451,6 @@ document.body.dataset.brokcodeSmokeEditOne = 'loyalty-copy-preserved';
     throw new Error('second edit did not persist styles.css change')
   }
 
-<<<<<<< HEAD
   console.log(`brokcode ok two-edit preservation case=${testCase.id}`)
 }
 
@@ -488,12 +458,6 @@ async function verifyPreview(
   previewUrl: string,
   testCase: BrokCodeAcceptanceCase
 ) {
-=======
-  console.log('brokcode ok two-edit preservation')
-}
-
-async function verifyPreview(previewUrl: string) {
->>>>>>> d06032c (Add BrokCode two-edit preservation smoke)
   const absolutePreviewUrl = new URL(previewUrl, baseUrl).toString()
   const response = await fetch(absolutePreviewUrl, {
     headers: {
