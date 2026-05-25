@@ -7,7 +7,7 @@ import {
 } from '@/lib/brokcode/runtime/store'
 import { BrokCodeRuntimeWorkspaceManifest } from '@/lib/brokcode/runtime/workspace'
 
-type RuntimeProcess = {
+export type RuntimeProcess = {
   runtimeId: string
   port: number
   url: string
@@ -303,6 +303,57 @@ export async function appendBrokCodeRuntimeBrowserEvent({
   return logs
 }
 
+export async function persistBrokCodeRuntimeProcessExit({
+  runtime,
+  entry,
+  code,
+  signal
+}: {
+  runtime: BrokCodeRuntimeSandbox
+  entry: RuntimeProcess
+  code: number | null
+  signal?: NodeJS.Signals | null
+}) {
+  const status = code === 0 ? 'stopped' : 'crashed'
+  const exitSummary =
+    code === 0
+      ? 'Runtime stopped cleanly.'
+      : signal
+        ? `Runtime exited after signal ${signal}.`
+        : `Runtime exited ${code ?? 'unexpectedly'}.`
+  entry.status = status
+  appendLog(entry, status === 'stopped' ? 'info' : 'error', exitSummary, {
+    source: 'dev-server'
+  })
+
+  await updateBrokCodeRuntimeSandbox({
+    id: runtime.id,
+    workspaceId: runtime.workspaceId,
+    userId: runtime.userId,
+    status,
+    logs: entry.logs,
+    health: {
+      ok: false,
+      checkedAt: new Date().toISOString(),
+      url: entry.url || undefined,
+      message: exitSummary
+    },
+    metadata: {
+      ...(runtime.metadata ?? {}),
+      livePreview: {
+        status,
+        port: entry.port || null,
+        url: entry.url || null,
+        proxyPath: `/api/brokcode/runtime/${encodeURIComponent(runtime.id)}/`,
+        startedAt: entry.startedAt.toISOString(),
+        stoppedAt: new Date().toISOString(),
+        exitCode: code,
+        signal: signal ?? null
+      }
+    }
+  })
+}
+
 export async function startBrokCodeRuntimeProcess({
   runtime,
   manifest
@@ -414,10 +465,14 @@ export async function startBrokCodeRuntimeProcess({
       command: `${resolvedCommand.command} ${resolvedCommand.args.join(' ')}`
     })
   )
-  child.on('exit', code => {
-    entry.status = code === 0 ? 'stopped' : 'crashed'
-    appendLog(entry, code === 0 ? 'info' : 'error', `Runtime exited ${code}.`, {
-      source: 'dev-server'
+  child.on('exit', (code, signal) => {
+    void persistBrokCodeRuntimeProcessExit({
+      runtime,
+      entry,
+      code,
+      signal
+    }).catch(error => {
+      console.error('BrokCode runtime exit persistence failed:', error)
     })
   })
 
