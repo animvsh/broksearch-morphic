@@ -6,7 +6,7 @@ import { Langfuse } from 'langfuse'
 import { researcher } from '@/lib/agents/researcher'
 import {
   getLatestUserMessage,
-  shouldForceInitialWebSearchForMessage
+  shouldForceInitialWebSearchForTurn
 } from '@/lib/utils/chat-routing'
 import { isTracingEnabled } from '@/lib/utils/telemetry'
 
@@ -90,10 +90,10 @@ export async function createEphemeralChatStreamResponse(
       parentTraceId,
       searchMode,
       chatId,
-      forceInitialSearch:
-        searchMode === 'search' ||
-        (searchMode === 'quick' &&
-          shouldForceInitialWebSearchForMessage(getLatestUserMessage(messages)))
+      forceInitialSearch: shouldForceInitialWebSearchForTurn({
+        searchMode,
+        message: getLatestUserMessage(messages)
+      })
     })
 
     const result = await researchAgent.stream({

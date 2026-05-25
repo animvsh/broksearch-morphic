@@ -6,6 +6,7 @@ import {
   hasUploadedFileContext,
   isSimpleUtilityText,
   shouldForceInitialWebSearchForMessage,
+  shouldForceInitialWebSearchForTurn,
   shouldForceSearchForText,
   shouldUseQuickReplyForMessage,
   shouldUseQuickSearchModeForMessage
@@ -103,6 +104,54 @@ describe('chat routing', () => {
     expect(shouldForceSearchForText('help me rewrite this paragraph')).toBe(
       false
     )
+  })
+
+  it('forces search and deep modes to start with web search', () => {
+    const conversationalMessage = {
+      role: 'user' as const,
+      parts: [{ type: 'text' as const, text: 'help me rewrite this paragraph' }]
+    }
+
+    expect(
+      shouldForceInitialWebSearchForTurn({
+        searchMode: 'search',
+        message: conversationalMessage
+      })
+    ).toBe(true)
+    expect(
+      shouldForceInitialWebSearchForTurn({
+        searchMode: 'deep',
+        message: conversationalMessage
+      })
+    ).toBe(true)
+    expect(
+      shouldForceInitialWebSearchForTurn({
+        searchMode: 'code',
+        message: conversationalMessage
+      })
+    ).toBe(false)
+  })
+
+  it('forces quick mode search only for factual or search-like prompts', () => {
+    expect(
+      shouldForceInitialWebSearchForTurn({
+        searchMode: 'quick',
+        message: {
+          role: 'user',
+          parts: [{ type: 'text', text: 'what is photosynthesis?' }]
+        }
+      })
+    ).toBe(true)
+
+    expect(
+      shouldForceInitialWebSearchForTurn({
+        searchMode: 'quick',
+        message: {
+          role: 'user',
+          parts: [{ type: 'text', text: 'help me rewrite this paragraph' }]
+        }
+      })
+    ).toBe(false)
   })
 
   it('does not downgrade uploaded-file questions', () => {

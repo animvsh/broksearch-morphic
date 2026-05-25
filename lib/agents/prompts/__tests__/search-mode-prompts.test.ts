@@ -12,6 +12,14 @@ describe('search mode prompts', () => {
     expect(prompt).toContain('skip the spec block entirely')
   })
 
+  test('fast chat prompt requires citations for search-backed answers', () => {
+    const prompt = getFastChatPrompt()
+
+    expect(prompt).toContain('every factual sentence')
+    expect(prompt).toContain('[number](#toolCallId)')
+    expect(prompt).toContain('Use only toolCallIds from searches executed')
+  })
+
   test('search prompt keeps the mandatory related questions contract', () => {
     const prompt = getQuickModePrompt()
 

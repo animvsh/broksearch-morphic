@@ -8,7 +8,7 @@ import { isTracingEnabled } from '@/lib/utils/telemetry'
 
 import { loadChat } from '../actions/chat'
 import { generateChatTitle } from '../agents/title-generator'
-import { shouldForceInitialWebSearchForMessage } from '../utils/chat-routing'
+import { shouldForceInitialWebSearchForTurn } from '../utils/chat-routing'
 import {
   getMaxAllowedTokens,
   shouldTruncateMessages,
@@ -128,10 +128,10 @@ export async function createChatStreamResponse(
       searchMode,
       userId,
       chatId,
-      forceInitialSearch:
-        searchMode === 'search' ||
-        (searchMode === 'quick' &&
-          shouldForceInitialWebSearchForMessage(message))
+      forceInitialSearch: shouldForceInitialWebSearchForTurn({
+        searchMode,
+        message
+      })
     })
 
     // For OpenAI models, strip reasoning parts from UIMessages before conversion
