@@ -561,6 +561,14 @@ type GithubRepoContext = {
   commitSha: string | null
 }
 
+type GithubRepositoryOption = {
+  fullName: string
+  defaultBranch?: string | null
+  private?: boolean
+  htmlUrl?: string | null
+  pushedAt?: string | null
+}
+
 type PreviewHealth = {
   status: PreviewHealthStatus
   message: string
@@ -1313,6 +1321,11 @@ export function BrokCodeApp({
   const [githubBaseBranch, setGithubBaseBranch] = useState('main')
   const [githubHeadBranch, setGithubHeadBranch] = useState('')
   const [githubExportPath, setGithubExportPath] = useState('')
+  const [githubRepositories, setGithubRepositories] = useState<
+    GithubRepositoryOption[]
+  >([])
+  const [githubRepositoriesLoading, setGithubRepositoriesLoading] =
+    useState(false)
   const [versions, setVersions] = useState<BrokCodeVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [projects, setProjects] = useState<BrokCodeProject[]>([])
@@ -1606,6 +1619,56 @@ export function BrokCodeApp({
       return false
     }
   }, [])
+
+  const refreshGithubRepositories = useCallback(
+    async (key = apiKey) => {
+      if (key && !isValidBrokApiKey(key)) {
+        setGithubRepositories([])
+        return []
+      }
+
+      setGithubRepositoriesLoading(true)
+      try {
+        const response = await fetch('/api/brokcode/github/repositories', {
+          headers: getAuthHeaders(key)
+        })
+        const body = await response.json().catch(() => null)
+        const repositories = Array.isArray(body?.repositories)
+          ? (body.repositories as GithubRepositoryOption[])
+          : []
+
+        if (!response.ok) {
+          throw new Error(
+            body?.message ??
+              body?.error?.message ??
+              'Could not load GitHub repositories.'
+          )
+        }
+
+        setGithubRepositories(repositories)
+        if (repositories.length > 0) {
+          setGithubRepository(current => current || repositories[0]!.fullName)
+          setGithubBaseBranch(current =>
+            current && current !== 'main'
+              ? current
+              : repositories[0]!.defaultBranch || 'main'
+          )
+        }
+        return repositories
+      } catch (error) {
+        setGithubRepositories([])
+        setGithubMessage(
+          error instanceof Error
+            ? error.message
+            : 'Could not load GitHub repositories.'
+        )
+        return []
+      } finally {
+        setGithubRepositoriesLoading(false)
+      }
+    },
+    [apiKey, getAuthHeaders]
+  )
 
   const refreshSyncedSessions = useCallback(
     async (key = apiKey) => {
@@ -1968,6 +2031,16 @@ export function BrokCodeApp({
     [apiKey, getAuthHeaders]
   )
 
+  function selectGithubRepository(value: string) {
+    setGithubRepository(value)
+    const repository = githubRepositories.find(
+      candidate => candidate.fullName === value
+    )
+    if (repository?.defaultBranch) {
+      setGithubBaseBranch(repository.defaultBranch)
+    }
+  }
+
   useEffect(() => {
     void refreshProjectRuntime()
   }, [refreshProjectRuntime])
@@ -2147,6 +2220,11 @@ export function BrokCodeApp({
   useEffect(() => {
     void refreshGithubStatus()
   }, [refreshGithubStatus])
+
+  useEffect(() => {
+    if (githubStatus !== 'connected') return
+    void refreshGithubRepositories()
+  }, [githubStatus, refreshGithubRepositories])
 
   useEffect(() => {
     if (!hasLiveRuntime) {
@@ -4379,6 +4457,15 @@ export function BrokCodeApp({
       className="brokcode-lovable flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#f6f6f3] text-zinc-950"
       data-testid="brokcode-app"
     >
+      <datalist id="brokcode-github-repositories">
+        {githubRepositories.map(repository => (
+          <option
+            key={repository.fullName}
+            value={repository.fullName}
+            label={`${repository.fullName} (${repository.defaultBranch ?? 'main'})`}
+          />
+        ))}
+      </datalist>
       <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 px-3 py-2 backdrop-blur-md sm:px-4">
         <div className="flex h-11 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -4934,7 +5021,10 @@ export function BrokCodeApp({
                 <div className="grid grid-cols-1 gap-2">
                   <Input
                     value={githubRepository}
-                    onChange={event => setGithubRepository(event.target.value)}
+                    onChange={event =>
+                      selectGithubRepository(event.target.value)
+                    }
+                    list="brokcode-github-repositories"
                     placeholder="owner/repo"
                     className="h-9 rounded-xl border-zinc-200 bg-zinc-50 text-xs"
                     aria-label="GitHub repository"
@@ -4966,7 +5056,22 @@ export function BrokCodeApp({
                     className="h-9 rounded-xl border-zinc-200 bg-zinc-50 text-xs"
                     aria-label="GitHub export path"
                   />
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      variant="outline"
+                      className="h-9 rounded-xl"
+                      disabled={githubRepositoriesLoading}
+                      onClick={() => {
+                        void refreshGithubRepositories(apiKey)
+                      }}
+                    >
+                      {githubRepositoriesLoading ? (
+                        <RefreshCcw className="size-4 animate-spin" />
+                      ) : (
+                        <Github className="size-4" />
+                      )}
+                      Repos
+                    </Button>
                     <Button
                       variant="outline"
                       className="h-9 rounded-xl"
@@ -5201,7 +5306,8 @@ export function BrokCodeApp({
               <div className="mt-2 grid grid-cols-1 gap-2 border-t border-zinc-100 pt-2 xl:grid-cols-[1.4fr_0.8fr_0.9fr_1fr_auto]">
                 <Input
                   value={githubRepository}
-                  onChange={event => setGithubRepository(event.target.value)}
+                  onChange={event => selectGithubRepository(event.target.value)}
+                  list="brokcode-github-repositories"
                   placeholder="owner/repo"
                   className="h-8 rounded-full border-zinc-200 bg-zinc-50 px-3 text-xs"
                   aria-label="GitHub repository"
@@ -5228,6 +5334,22 @@ export function BrokCodeApp({
                   aria-label="GitHub export path"
                 />
                 <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full px-3 text-xs"
+                    disabled={githubRepositoriesLoading}
+                    onClick={() => {
+                      void refreshGithubRepositories(apiKey)
+                    }}
+                  >
+                    {githubRepositoriesLoading ? (
+                      <RefreshCcw className="size-3.5 animate-spin" />
+                    ) : (
+                      <Github className="size-3.5" />
+                    )}
+                    Repos
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
