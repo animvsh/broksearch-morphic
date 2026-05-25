@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   BROKCODE_ACCEPTANCE_MATRIX,
+  buildBrokCodeAcceptancePrompt,
   getBrokCodeAcceptanceCases,
   matchesBrokCodeAcceptanceTerms
 } from '../acceptance-matrix'
@@ -61,5 +62,23 @@ describe('BrokCode acceptance matrix', () => {
         cases[1]
       )
     ).toBe(false)
+  })
+
+  it('builds explicit prompts that mirror the acceptance gates', () => {
+    const testCase = BROKCODE_ACCEPTANCE_MATRIX.find(
+      candidate => candidate.id === 'student-dashboard'
+    )
+    expect(testCase).toBeDefined()
+
+    const prompt = buildBrokCodeAcceptancePrompt(testCase!)
+
+    expect(prompt).toContain('Visible page copy must include')
+    for (const term of testCase!.expectedTerms) {
+      expect(prompt).toContain(term)
+    }
+    for (const file of testCase!.requiredFiles) {
+      expect(prompt).toContain(file)
+    }
+    expect(prompt).toContain(`${testCase!.minimumInteractions}`)
   })
 })

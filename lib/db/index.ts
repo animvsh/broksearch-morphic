@@ -57,11 +57,34 @@ const sslConfig = sslDisabled
     ? false
     : { rejectUnauthorized: false }
 
-const client = postgres(connectionString, {
-  ssl: sslConfig,
-  prepare: false,
-  max: 20 // Max 20 connections
-})
+function readMaxConnections() {
+  const value = Number(
+    process.env.DATABASE_MAX_CONNECTIONS ?? (isDevelopment ? 5 : 20)
+  )
+
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 5
+}
+
+type PostgresClient = ReturnType<typeof postgres>
+
+const globalForDb = globalThis as typeof globalThis & {
+  __brokPostgresClient?: PostgresClient
+  __brokPostgresVerified?: boolean
+}
+
+const client =
+  globalForDb.__brokPostgresClient ??
+  postgres(connectionString, {
+    ssl: sslConfig,
+    prepare: false,
+    max: readMaxConnections(),
+    idle_timeout: 20,
+    max_lifetime: 60 * 30
+  })
+
+if (isDevelopment) {
+  globalForDb.__brokPostgresClient = client
+}
 
 export const db = drizzle(client, {
   schema: { ...schema, ...relations }
@@ -71,7 +94,12 @@ export const db = drizzle(client, {
 export type Schema = typeof schema
 
 // Verify restricted user permissions on startup
-if (process.env.DATABASE_RESTRICTED_URL && !isTest) {
+if (
+  process.env.DATABASE_RESTRICTED_URL &&
+  !isTest &&
+  !globalForDb.__brokPostgresVerified
+) {
+  globalForDb.__brokPostgresVerified = true
   // Only run verification in server environments, not during build
   if (typeof window === 'undefined' && process.env.NODE_ENV !== 'production') {
     ;(async () => {

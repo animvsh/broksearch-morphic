@@ -14,6 +14,9 @@ import {
   SearchProviderType
 } from './search/providers'
 
+const SEARCH_UNAVAILABLE_MESSAGE =
+  'Search is temporarily unavailable for this request. Try again in a moment, or narrow the query to a specific source or domain.'
+
 /**
  * Creates a search tool with the appropriate schema for the given model.
  */
@@ -138,8 +141,13 @@ export function createSearchTool(fullModel: string) {
         }
       } catch (error) {
         console.error('Search API error:', error)
-        // Re-throw the error to let AI SDK handle it properly
-        throw error instanceof Error ? error : new Error('Unknown search error')
+        searchResult = {
+          results: [],
+          images: [],
+          query: filledQuery,
+          number_of_results: 0,
+          error: SEARCH_UNAVAILABLE_MESSAGE
+        }
       }
 
       // Add citation mapping and toolCallId to search results

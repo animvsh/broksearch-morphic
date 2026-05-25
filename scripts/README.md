@@ -26,6 +26,28 @@ Optional credential mode is supported with `BROK_SMOKE_EMAIL` and
 `BROK_SMOKE_PASSWORD`, but storage state is preferred so secrets are never
 written into repo files. Reports are written under `.brok-smoke/`.
 
+## smoke-local-product.ts
+
+Local whole-product smoke for the auth-disabled development path. It reuses a
+reachable local server or starts `bun dev` itself with auth/access gates
+disabled, then verifies the main search route, BrokCode, BrokMail, Playground,
+API keys, Usage, and `GET /api/v1/models`.
+
+```bash
+# Self-managed local smoke on http://127.0.0.1:3000
+bun run scripts/smoke-local-product.ts
+
+# Reuse an already-running local server
+BROK_LOCAL_SMOKE_START_SERVER=false \
+BROK_LOCAL_SMOKE_BASE_URL=http://127.0.0.1:3001 \
+bun run scripts/smoke-local-product.ts
+```
+
+The managed server path sets `ENABLE_AUTH=false`, `APP_ACCESS_GATE=false`,
+`BROK_CLOUD_DEPLOYMENT=false`, and
+`BROKCODE_ALLOW_LOCAL_BROWSER_SESSION_FALLBACK=true`. Reports are written under
+`.brok-smoke/local-product/`.
+
 ## smoke-brokcode.ts
 
 End-to-end BrokCode builder smoke harness. It creates a project, runs the code

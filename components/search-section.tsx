@@ -53,7 +53,9 @@ export function SearchSection({
     output?.state === 'complete' ? output : undefined
 
   const isError = tool.state === 'output-error'
-  const errorMessage = tool.errorText || 'Search failed'
+  const searchError = searchResults?.error
+  const shouldShowError = isError || Boolean(searchError)
+  const errorMessage = tool.errorText || searchError || 'Search failed'
   const query = tool.input?.query || output?.query || ''
   const includeDomains = tool.input?.include_domains
   const includeDomainsString =
@@ -158,7 +160,7 @@ export function SearchSection({
                   />
                 </Section>
               )}
-            {isError ? (
+            {shouldShowError ? (
               <Section>
                 <div className="bg-card rounded-lg">
                   <div className="flex items-center gap-2 w-full">

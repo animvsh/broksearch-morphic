@@ -98,6 +98,9 @@ type OpenAiMessage = {
 type SuccessfulAuth = BrokCodeAuthResult
 
 const DEFAULT_BROKCODE_MODEL = 'brok-code'
+const BROKCODE_GENERATION_MAX_TOKENS = Number(
+  process.env.BROKCODE_GENERATION_MAX_TOKENS ?? 8192
+)
 
 function resolveBrokCodeModel(value: unknown) {
   if (typeof value === 'string' && value.trim()) {
@@ -759,7 +762,7 @@ async function runDirectBrokRuntime({
     model,
     messages,
     stream,
-    maxTokens: 4096
+    maxTokens: BROKCODE_GENERATION_MAX_TOKENS
   })
 
   if (stream) {
@@ -784,7 +787,7 @@ async function runDirectBrokRuntime({
           model,
           messages,
           stream: false,
-          maxTokens: 4096
+          maxTokens: BROKCODE_GENERATION_MAX_TOKENS
         }
       )
       const retryPayload = await retryResponse.json().catch(() => null)

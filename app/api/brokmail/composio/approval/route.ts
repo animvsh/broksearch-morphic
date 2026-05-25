@@ -13,6 +13,10 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  const access = await requireFeatureAccessForApi('brokmail')
+  if (!access.ok) return access.response
+  const user = access.user
+
   if (!canExecuteComposioTools()) {
     return NextResponse.json(
       {
@@ -22,10 +26,6 @@ export async function POST(request: NextRequest) {
       { status: 503 }
     )
   }
-
-  const access = await requireFeatureAccessForApi('brokmail')
-  if (!access.ok) return access.response
-  const user = access.user
 
   const body = await request.json().catch(() => null)
   if (!isRecord(body)) {

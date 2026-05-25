@@ -218,6 +218,18 @@ a { color: inherit; }
   return html
 }
 
+function ensureCssPreviewHygiene(content: string) {
+  if (content.includes('data-brokcode-preview-hygiene')) return content
+
+  return `${content.trim()}
+
+/* data-brokcode-preview-hygiene */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { max-width: 100%; overflow-x: hidden; }
+img, svg, video, canvas, iframe { max-width: 100%; height: auto; }
+`
+}
+
 function assetReferenceFromHtmlPath(htmlPath: string, assetPath: string) {
   const clean = assetPath.trim().split(/[?#]/)[0] ?? ''
   if (
@@ -611,6 +623,13 @@ export function prepareGeneratedBrokCodeFiles(
     files.some(file => /\.css$/i.test(file.path)) || missingCss.size > 0
 
   const prepared = files.map(file => {
+    if (/\.css$/i.test(file.path)) {
+      return {
+        ...file,
+        content: ensureCssPreviewHygiene(file.content)
+      }
+    }
+
     if (!/\.html?$/i.test(file.path)) return file
 
     return {
@@ -826,7 +845,11 @@ export function inspectGeneratedBrokCodeAppQuality(
     report.issues.push('not enough visible product copy')
   }
   if (report.hasPlaceholderCopy) report.issues.push('contains placeholder copy')
-  if (/(?:width|min-width)\s*:\s*(?:1[1-9]\d{2,}|\d{4,})px/i.test(combined)) {
+  if (
+    /(?:^|[;{\s])(?:width|min-width)\s*:\s*(?:1[1-9]\d{2,}|\d{4,})px/i.test(
+      combined
+    )
+  ) {
     report.issues.push('contains large fixed-width layout')
   }
 
