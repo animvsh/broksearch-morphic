@@ -39,9 +39,12 @@ describe('BrokCode project context packer', () => {
     })
 
     expect(pack).toContain('App shape: Static app')
-    expect(pack).toContain('- index.html (included)')
+    expect(pack).toMatch(/- index\.html sha256=[a-f0-9]{12} \(included\)/)
+    expect(pack).toMatch(/--- index\.html \(html\) sha256=[a-f0-9]{64} ---/)
     expect(pack).toContain('Prior requested changes:')
     expect(pack).toContain('Preserve existing working behavior')
+    expect(pack).toContain('Prefer JSON file operations')
+    expect(pack).toContain('Include expectedChecksum')
   })
 
   it('prioritizes Vite entry files and redacts secrets', () => {
@@ -68,8 +71,10 @@ describe('BrokCode project context packer', () => {
     })
 
     expect(pack).toContain('App shape: Vite app')
-    expect(pack).toContain('src/main.tsx (included)')
+    expect(pack).toMatch(/src\/main\.tsx sha256=[a-f0-9]{12} \(included\)/)
     expect(pack).toContain('Secret/private files excluded: .env')
+    expect(pack).toContain('- .env')
+    expect(pack).not.toMatch(/- \.env sha256=/)
     expect(pack).not.toContain('sk-live-secret')
     expect(pack).toContain('token=[redacted]')
   })
