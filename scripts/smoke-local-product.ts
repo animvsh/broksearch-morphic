@@ -88,6 +88,16 @@ const pageChecks: PageCheck[] = [
     path: '/usage',
     requiredAny: ['Usage dashboard', 'Requests', 'API keys'],
     viewports: ['desktop']
+  },
+  {
+    label: 'presentations',
+    path: '/presentations',
+    requiredAny: [
+      'Brok Presentations',
+      'reveal.js preview',
+      'Editable deck script'
+    ],
+    viewports: ['desktop', 'mobile']
   }
 ]
 
