@@ -120,6 +120,28 @@ describe('BrokMail Composio action route', () => {
     expect(canExecuteComposioTools).not.toHaveBeenCalled()
   })
 
+  it('rejects connect-only Composio config before consuming approvals', async () => {
+    vi.mocked(canExecuteComposioTools).mockReturnValue(false)
+    const approval = signBrokMailApproval({
+      userId: 'user_123',
+      payload: draftPayload
+    })
+
+    const response = await runBrokMailAction(
+      actionRequest({
+        ...draftPayload,
+        approval
+      }) as any
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.error).toContain('backend COMPOSIO_API_KEY')
+    expect(listConnectedAccounts).not.toHaveBeenCalled()
+    expect(consumeBrokMailApproval).not.toHaveBeenCalled()
+    expect(executeComposioTool).not.toHaveBeenCalled()
+  })
+
   it('rejects approval tokens that do not match the requested action', async () => {
     const approval = signBrokMailApproval({
       userId: 'user_123',

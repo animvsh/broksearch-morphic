@@ -17,6 +17,7 @@ import {
 } from '@/lib/brokmail/approval-consumption'
 import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
+  canExecuteComposioTools,
   executeComposioTool,
   isComposioConfigured,
   listConnectedAccounts
@@ -290,6 +291,16 @@ export async function POST(request: NextRequest) {
       {
         error:
           'Composio is not configured. BrokMail Google actions require Composio; platform Google OAuth is disabled.'
+      },
+      { status: 503 }
+    )
+  }
+
+  if (!canExecuteComposioTools()) {
+    return NextResponse.json(
+      {
+        error:
+          'BrokMail Google actions require a backend COMPOSIO_API_KEY before they can run. Composio Connect can create links, but cannot execute Gmail or Calendar writes.'
       },
       { status: 503 }
     )
