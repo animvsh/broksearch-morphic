@@ -82,7 +82,10 @@ export async function POST(request: NextRequest) {
 
   const body = parsedBody.body
   const modelId = body.model ?? 'brok-code'
-  const stream = Boolean(body.stream)
+  if (body.stream !== undefined && typeof body.stream !== 'boolean') {
+    return invalidRequestResponse('invalid_stream', 'stream must be a boolean.')
+  }
+  const shouldStream = body.stream === true
 
   if (typeof modelId !== 'string') {
     return invalidRequestResponse('invalid_model', 'model must be a string.')
@@ -172,7 +175,7 @@ export async function POST(request: NextRequest) {
   const providerMessages = toOpenAiMessages(body.system, anthropicMessages)
 
   try {
-    if (stream) {
+    if (shouldStream) {
       const providerResponse = await routeToProviderResponse(modelId, {
         model: modelId,
         messages: providerMessages,

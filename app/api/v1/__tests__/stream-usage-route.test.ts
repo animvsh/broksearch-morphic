@@ -160,6 +160,27 @@ describe('streaming usage metering', () => {
     expect(usage.billedUsd).toBeCloseTo(0.00015)
   })
 
+  it('rejects non-boolean chat stream values before provider routing', async () => {
+    mockVerifyRequestAuth.mockResolvedValue(authResult(['chat:write']))
+
+    const response = await chatPost(
+      request('/api/v1/chat/completions', {
+        model: 'brok-fast',
+        stream: 'false',
+        messages: [{ role: 'user', content: 'Say hello' }]
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      code: 'invalid_stream',
+      message: 'stream must be a boolean.'
+    })
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+    expect(mockRecordUsage).not.toHaveBeenCalled()
+  })
+
   it('estimates token usage for Anthropic-compatible message streams without provider usage', async () => {
     mockVerifyRequestAuth.mockResolvedValue(authResult(['code:write']))
     mockRouteToProviderResponse.mockResolvedValue(
@@ -192,4 +213,25 @@ describe('streaming usage metering', () => {
     })
     expect(usage.billedUsd).toBeCloseTo(0.00015)
   }, 15000)
+
+  it('rejects non-boolean Anthropic message stream values before provider routing', async () => {
+    mockVerifyRequestAuth.mockResolvedValue(authResult(['code:write']))
+
+    const response = await messagesPost(
+      request('/api/v1/messages', {
+        model: 'brok-code',
+        stream: 'false',
+        messages: [{ role: 'user', content: 'Build a dashboard' }]
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      code: 'invalid_stream',
+      message: 'stream must be a boolean.'
+    })
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+    expect(mockRecordUsage).not.toHaveBeenCalled()
+  })
 })

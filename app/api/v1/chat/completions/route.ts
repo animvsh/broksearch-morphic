@@ -118,6 +118,9 @@ export async function POST(request: NextRequest) {
     )
   }
   const chatMessages = messages as Array<Record<string, unknown>>
+  if (stream !== undefined && typeof stream !== 'boolean') {
+    return invalidRequestResponse('invalid_stream', 'stream must be a boolean.')
+  }
   const shouldStream = stream === true
 
   // Validate model
