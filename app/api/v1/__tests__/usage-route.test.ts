@@ -80,6 +80,26 @@ describe('GET /api/v1/usage', () => {
     expect(mockSelect).not.toHaveBeenCalled()
   })
 
+  it('rejects unsupported usage periods', async () => {
+    mockVerifyRequestAuth.mockResolvedValue({
+      success: true,
+      apiKey: { id: 'key_1', scopes: ['usage:read'] },
+      workspace: { id: 'workspace_1' }
+    })
+
+    const response = await GET(
+      usageRequest('http://localhost/api/v1/usage?period=year')
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      code: 'invalid_period',
+      message: 'period must be one of day, week, or month.'
+    })
+    expect(mockSelect).not.toHaveBeenCalled()
+  })
+
   it('returns usage totals for a scoped key', async () => {
     mockVerifyRequestAuth.mockResolvedValue({
       success: true,

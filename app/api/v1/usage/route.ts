@@ -22,6 +22,18 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams
   const period = searchParams.get('period') || 'month'
+  if (period !== 'day' && period !== 'week' && period !== 'month') {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'invalid_request_error',
+          code: 'invalid_period',
+          message: 'period must be one of day, week, or month.'
+        }
+      },
+      { status: 400 }
+    )
+  }
 
   let dateFrom = new Date()
   if (period === 'day') {
