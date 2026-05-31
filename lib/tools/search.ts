@@ -17,6 +17,76 @@ import {
 const SEARCH_UNAVAILABLE_MESSAGE =
   'Search is temporarily unavailable for this request. Try again in a moment, or narrow the query to a specific source or domain.'
 
+async function runSearchProvider({
+  searchAPI,
+  filledQuery,
+  effectiveMaxResults,
+  effectiveSearchDepthForAPI,
+  includeDomains,
+  excludeDomains,
+  type,
+  contentTypes
+}: {
+  searchAPI: SearchProviderType
+  filledQuery: string
+  effectiveMaxResults: number
+  effectiveSearchDepthForAPI: 'basic' | 'advanced'
+  includeDomains: string[]
+  excludeDomains: string[]
+  type: 'general' | 'optimized'
+  contentTypes: Array<'web' | 'video' | 'image' | 'news'>
+}): Promise<SearchResults> {
+  if (searchAPI === 'searxng' && effectiveSearchDepthForAPI === 'advanced') {
+    const baseUrl = await getBaseUrlString()
+
+    const response = await fetch(`${baseUrl}/api/advanced-search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: filledQuery,
+        maxResults: effectiveMaxResults,
+        searchDepth: effectiveSearchDepthForAPI,
+        includeDomains,
+        excludeDomains
+      })
+    })
+    if (!response.ok) {
+      throw new Error(
+        `Advanced search API error: ${response.status} ${response.statusText}`
+      )
+    }
+    return response.json()
+  }
+
+  const searchProvider = createSearchProvider(searchAPI)
+
+  if (searchAPI === 'brave') {
+    return searchProvider.search(
+      filledQuery,
+      effectiveMaxResults,
+      effectiveSearchDepthForAPI,
+      includeDomains,
+      excludeDomains,
+      {
+        type,
+        content_types: contentTypes
+      }
+    )
+  }
+
+  return searchProvider.search(
+    filledQuery,
+    effectiveMaxResults,
+    effectiveSearchDepthForAPI,
+    includeDomains,
+    excludeDomains
+  )
+}
+
+function fallbackSearchProvider(searchAPI: SearchProviderType) {
+  return searchAPI === DEFAULT_PROVIDER ? null : DEFAULT_PROVIDER
+}
+
 /**
  * Creates a search tool with the appropriate schema for the given model.
  */
@@ -86,67 +156,58 @@ export function createSearchTool(fullModel: string) {
       )
 
       try {
-        if (
-          searchAPI === 'searxng' &&
-          effectiveSearchDepthForAPI === 'advanced'
-        ) {
-          // Get the base URL using the centralized utility function
-          const baseUrl = await getBaseUrlString()
-
-          const response = await fetch(`${baseUrl}/api/advanced-search`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              query: filledQuery,
-              maxResults: effectiveMaxResults,
-              searchDepth: effectiveSearchDepthForAPI,
-              includeDomains: include_domains,
-              excludeDomains: exclude_domains
-            })
-          })
-          if (!response.ok) {
-            throw new Error(
-              `Advanced search API error: ${response.status} ${response.statusText}`
-            )
-          }
-          searchResult = await response.json()
-        } else {
-          // Use the provider factory to get the appropriate search provider
-          const searchProvider = createSearchProvider(searchAPI)
-
-          // Pass content_types only for Brave provider
-          if (searchAPI === 'brave') {
-            searchResult = await searchProvider.search(
-              filledQuery,
-              effectiveMaxResults,
-              effectiveSearchDepthForAPI,
-              include_domains,
-              exclude_domains,
-              {
-                type: type as 'general' | 'optimized',
-                content_types: content_types as Array<
-                  'web' | 'video' | 'image' | 'news'
-                >
-              }
-            )
-          } else {
-            searchResult = await searchProvider.search(
-              filledQuery,
-              effectiveMaxResults,
-              effectiveSearchDepthForAPI,
-              include_domains,
-              exclude_domains
-            )
-          }
-        }
+        searchResult = await runSearchProvider({
+          searchAPI,
+          filledQuery,
+          effectiveMaxResults,
+          effectiveSearchDepthForAPI,
+          includeDomains: include_domains,
+          excludeDomains: exclude_domains,
+          type: type as 'general' | 'optimized',
+          contentTypes: content_types as Array<
+            'web' | 'video' | 'image' | 'news'
+          >
+        })
       } catch (error) {
-        console.error('Search API error:', error)
-        searchResult = {
-          results: [],
-          images: [],
-          query: filledQuery,
-          number_of_results: 0,
-          error: SEARCH_UNAVAILABLE_MESSAGE
+        console.error(`${searchAPI} search API error:`, error)
+        const fallbackProvider = fallbackSearchProvider(searchAPI)
+
+        if (fallbackProvider) {
+          try {
+            console.warn(
+              `Falling back from ${searchAPI} to ${fallbackProvider} search provider`
+            )
+            searchResult = await runSearchProvider({
+              searchAPI: fallbackProvider,
+              filledQuery,
+              effectiveMaxResults,
+              effectiveSearchDepthForAPI: effectiveSearchDepth,
+              includeDomains: include_domains,
+              excludeDomains: exclude_domains,
+              type: 'optimized',
+              contentTypes: ['web']
+            })
+          } catch (fallbackError) {
+            console.error(
+              `${fallbackProvider} search API error:`,
+              fallbackError
+            )
+            searchResult = {
+              results: [],
+              images: [],
+              query: filledQuery,
+              number_of_results: 0,
+              error: SEARCH_UNAVAILABLE_MESSAGE
+            }
+          }
+        } else {
+          searchResult = {
+            results: [],
+            images: [],
+            query: filledQuery,
+            number_of_results: 0,
+            error: SEARCH_UNAVAILABLE_MESSAGE
+          }
         }
       }
 
