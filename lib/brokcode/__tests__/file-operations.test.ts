@@ -131,6 +131,79 @@ describe('BrokCode file operations', () => {
     ])
   })
 
+  it('prevents renames from overwriting an existing file', () => {
+    expect(() =>
+      applyBrokCodeFileOperations({
+        files,
+        operations: [
+          {
+            type: 'rename_file',
+            fromPath: 'src/App.tsx',
+            toPath: 'styles.css'
+          }
+        ]
+      })
+    ).toThrow(BrokCodeFileOperationError)
+
+    try {
+      applyBrokCodeFileOperations({
+        files,
+        operations: [
+          {
+            type: 'rename_file',
+            fromPath: 'src/App.tsx',
+            toPath: 'styles.css'
+          }
+        ]
+      })
+    } catch (error) {
+      expect(error).toBeInstanceOf(BrokCodeFileOperationError)
+      expect((error as BrokCodeFileOperationError).code).toBe('conflict')
+      expect((error as BrokCodeFileOperationError).conflicts[0]).toMatchObject({
+        path: 'styles.css',
+        expectedChecksum: null,
+        message:
+          'Cannot rename src/App.tsx to styles.css because the target file already exists.'
+      })
+    }
+  })
+
+  it('reports expected missing-file deletes as conflicts', () => {
+    expect(() =>
+      applyBrokCodeFileOperations({
+        files,
+        operations: [
+          {
+            type: 'delete_file',
+            path: 'missing.ts',
+            expectedChecksum: 'previous-checksum'
+          }
+        ]
+      })
+    ).toThrow(BrokCodeFileOperationError)
+
+    try {
+      applyBrokCodeFileOperations({
+        files,
+        operations: [
+          {
+            type: 'delete_file',
+            path: 'missing.ts',
+            expectedChecksum: 'previous-checksum'
+          }
+        ]
+      })
+    } catch (error) {
+      expect(error).toBeInstanceOf(BrokCodeFileOperationError)
+      expect((error as BrokCodeFileOperationError).code).toBe('conflict')
+      expect((error as BrokCodeFileOperationError).conflicts[0]).toMatchObject({
+        path: 'missing.ts',
+        expectedChecksum: 'previous-checksum',
+        actualChecksum: null
+      })
+    }
+  })
+
   it('can apply anyway for conflict resolution and returns rollback data', () => {
     const result = applyBrokCodeFileOperations({
       files,

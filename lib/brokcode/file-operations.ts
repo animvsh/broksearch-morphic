@@ -108,6 +108,13 @@ function validateChecksum({
   })
 }
 
+function hasConflictForPath(
+  conflicts: BrokCodeFileOperationConflict[],
+  path: string
+) {
+  return conflicts.some(conflict => conflict.path === path)
+}
+
 function applyPatchOperation({
   content,
   operation
@@ -196,11 +203,30 @@ export function applyBrokCodeFileOperations({
         conflicts,
         applyAnyway
       })
+      if (hasConflictForPath(conflicts, fromPath)) {
+        continue
+      }
       if (!existing) {
         throw new BrokCodeFileOperationError(
           `Cannot rename missing file ${fromPath}.`,
           'invalid_operation'
         )
+      }
+      if (fromPath === toPath) {
+        throw new BrokCodeFileOperationError(
+          `Cannot rename ${fromPath} to itself.`,
+          'invalid_operation'
+        )
+      }
+      const target = byPath.get(toPath)
+      if (target) {
+        conflicts.push({
+          path: toPath,
+          expectedChecksum: null,
+          actualChecksum: currentChecksum(target.content),
+          message: `Cannot rename ${fromPath} to ${toPath} because the target file already exists.`
+        })
+        continue
       }
       byPath.delete(fromPath)
       byPath.set(toPath, { ...existing, path: toPath })
@@ -225,6 +251,9 @@ export function applyBrokCodeFileOperations({
       conflicts,
       applyAnyway
     })
+    if (hasConflictForPath(conflicts, path)) {
+      continue
+    }
 
     if (operation.type === 'delete_file') {
       if (!existing) {
