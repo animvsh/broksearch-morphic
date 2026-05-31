@@ -25,6 +25,10 @@ import {
 import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
 import { runSearchPipeline } from '@/lib/brok/search-pipeline'
 import {
+  createOpenAiStreamUsageAccumulator,
+  resolveStreamTokenUsage
+} from '@/lib/brok/streaming-usage'
+import {
   checkUsageLimits,
   generateRequestId,
   recordUsage,
@@ -302,26 +306,41 @@ export async function POST(request: NextRequest) {
         throw new Error('Brok stream did not include a response body')
       }
 
-      const latencyMs = Date.now() - startTime
-
-      await recordUsage({
-        requestId,
-        workspaceId: auth.workspace.id,
-        userId: auth.apiKey.userId,
-        apiKeyId: auth.apiKey.id,
-        endpoint: 'chat',
-        model: modelId,
-        provider: 'Brok',
-        inputTokens: 0,
-        outputTokens: 0,
-        providerCostUsd: 0,
-        billedUsd: 0,
-        latencyMs,
-        status: 'success'
-      })
-
       return new Response(
-        createBrokStream(providerResponse.body, requestId, modelId),
+        createBrokStream(providerResponse.body, requestId, modelId, {
+          onComplete: async ({ content, usage }) => {
+            const latencyMs = Date.now() - startTime
+            const { inputTokens, outputTokens } = resolveStreamTokenUsage({
+              usage,
+              content,
+              messages: chatMessages
+            })
+            const providerCost = await calculateCost(
+              modelId,
+              inputTokens,
+              outputTokens
+            )
+            await recordUsage({
+              requestId,
+              workspaceId: auth.workspace.id,
+              userId: auth.apiKey.userId,
+              apiKeyId: auth.apiKey.id,
+              endpoint: 'chat',
+              model: modelId,
+              provider: 'Brok',
+              inputTokens,
+              outputTokens,
+              providerCostUsd: providerCost,
+              billedUsd: providerCost * 1.5,
+              latencyMs,
+              status: 'success',
+              metadata: {
+                stream: true,
+                usageSource: usage ? 'provider' : 'estimated'
+              }
+            })
+          }
+        }),
         {
           headers: {
             'Content-Type': 'text/event-stream; charset=utf-8',
@@ -530,12 +549,16 @@ function createSearchToolStream(
 function createBrokStream(
   providerBody: ReadableStream<Uint8Array>,
   requestId: string,
-  modelId: string
+  modelId: string,
+  options?: {
+    onComplete?: (usage: { content: string; usage: unknown }) => Promise<void>
+  }
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder()
   const encoder = new TextEncoder()
   const reader = providerBody.getReader()
   const sanitizer = createStreamSanitizer()
+  const usageAccumulator = createOpenAiStreamUsageAccumulator()
   let buffer = ''
 
   return new ReadableStream({
@@ -545,12 +568,14 @@ function createBrokStream(
 
         if (done) {
           if (buffer.trim()) {
+            usageAccumulator.trackSseLine(buffer)
             controller.enqueue(
               encoder.encode(
                 formatSseLine(buffer, requestId, modelId, sanitizer)
               )
             )
           }
+          await options?.onComplete?.(usageAccumulator.snapshot())
           controller.close()
           return
         }
@@ -560,6 +585,7 @@ function createBrokStream(
         buffer = lines.pop() ?? ''
 
         for (const line of lines) {
+          usageAccumulator.trackSseLine(line)
           controller.enqueue(
             encoder.encode(formatSseLine(line, requestId, modelId, sanitizer))
           )
