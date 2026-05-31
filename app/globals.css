@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '../node_modules/reveal.js/dist/reveal.css';
 @source "../node_modules/streamdown/dist/index.js";
 
 @custom-variant dark (&:is(.dark *));
