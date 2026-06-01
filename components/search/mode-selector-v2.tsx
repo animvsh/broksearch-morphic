@@ -239,7 +239,10 @@ export function ModeDescription({ mode, className }: ModeDescriptionProps) {
   return (
     <div
       key={mode}
-      className={cn('flex items-center gap-2 text-xs text-muted-foreground', className)}
+      className={cn(
+        'flex items-center gap-2 text-xs text-muted-foreground',
+        className
+      )}
     >
       <Icon className="size-3.5" />
       <span>{opt.description}</span>

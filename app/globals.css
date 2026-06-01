@@ -1500,8 +1500,14 @@
 }
 
 @keyframes caret-blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
 }
 
 .citation-marker {
@@ -1524,8 +1530,8 @@
     animation: none;
     opacity: 0.6;
   }
-  [style*="fade-in-up"],
-  [style*="pop-in"] {
+  [style*='fade-in-up'],
+  [style*='pop-in'] {
     animation: none !important;
   }
 }
@@ -1534,6 +1540,11 @@
 .hero-input-ring {
   background:
     linear-gradient(var(--card), var(--card)) padding-box,
-    linear-gradient(135deg, oklch(0.7 0.15 250 / 0.4), oklch(0.7 0.15 320 / 0.4)) border-box;
+    linear-gradient(
+        135deg,
+        oklch(0.7 0.15 250 / 0.4),
+        oklch(0.7 0.15 320 / 0.4)
+      )
+      border-box;
   border: 1px solid transparent;
 }

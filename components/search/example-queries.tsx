@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-import { ArrowUpRight, Code2, Lightbulb, Newspaper, Repeat, Sparkles } from 'lucide-react'
+import {
+  ArrowUpRight,
+  Code2,
+  Lightbulb,
+  Newspaper,
+  Repeat,
+  Sparkles
+} from 'lucide-react'
 
 import type { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'

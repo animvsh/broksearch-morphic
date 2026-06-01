@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable react-hooks/set-state-in-effect -- sync defaultMode prop and cookie side-effect */
+
 import { useEffect, useRef, useState } from 'react'
 
 import { ArrowUp, Paperclip, Sparkles, Square } from 'lucide-react'
@@ -7,7 +9,11 @@ import { ArrowUp, Paperclip, Sparkles, Square } from 'lucide-react'
 import type { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
 import { setCookie } from '@/lib/utils/cookies'
-import { recordRecentSearch, RecentSearches } from '@/components/search/recent-searches'
+
+import {
+  RecentSearches,
+  recordRecentSearch
+} from '@/components/search/recent-searches'
 
 import { ExampleQueries } from './example-queries'
 import { ModeDescription, ModeSelectorV2 } from './mode-selector-v2'
@@ -189,11 +195,7 @@ export function Hero({
               >
                 <Paperclip className="size-4" />
               </button>
-              <ModeSelectorV2
-                value={mode}
-                onChange={setLocalMode}
-                size="sm"
-              />
+              <ModeSelectorV2 value={mode} onChange={setLocalMode} size="sm" />
             </div>
 
             <button
@@ -230,7 +232,10 @@ export function Hero({
       </div>
 
       <div className="mt-8 w-full space-y-6">
-        <RecentSearches onSelect={handleRecentSelect} storageKey={recentStorageKey} />
+        <RecentSearches
+          onSelect={handleRecentSelect}
+          storageKey={recentStorageKey}
+        />
         <div className="space-y-2.5">
           <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             <Sparkles className="size-3" />
@@ -248,7 +253,9 @@ function FileChip({ file, onRemove }: { file: File; onRemove: () => void }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background py-1 pl-2.5 pr-1 text-xs">
       <Paperclip className="size-3 text-muted-foreground" />
-      <span className="max-w-[160px] truncate text-foreground/80">{file.name}</span>
+      <span className="max-w-[160px] truncate text-foreground/80">
+        {file.name}
+      </span>
       <span className="text-muted-foreground/60">{sizeKb}KB</span>
       <button
         type="button"

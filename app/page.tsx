@@ -8,6 +8,7 @@ import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { getModelSelectorData } from '@/lib/model-selector/get-model-selector-data'
 
 import { Button } from '@/components/ui/button'
+
 import { SearchLanding } from '@/components/search/search-landing'
 
 export default async function Page() {

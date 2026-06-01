@@ -1,14 +1,17 @@
 'use client'
 
+/* eslint-disable react-hooks/set-state-in-effect -- typewriter uses setInterval callback */
+
 import { useEffect, useState } from 'react'
 
-import { useStreamingPhases, formatElapsed } from '@/hooks/use-streaming-phases'
 import { cn } from '@/lib/utils'
+
+import { formatElapsed, useStreamingPhases } from '@/hooks/use-streaming-phases'
 
 import { AnswerToolbar } from './answer-toolbar'
 import { renderCitations } from './citation-marker'
-import { FollowUpSuggestions, type FollowUp } from './follow-up-suggestions'
-import { SourcesPanel, type SourceCardData } from './source-card'
+import { type FollowUp, FollowUpSuggestions } from './follow-up-suggestions'
+import { type SourceCardData, SourcesPanel } from './source-card'
 import { StreamingProgress } from './streaming-progress'
 
 interface SearchAnswerProps {
@@ -77,7 +80,10 @@ export function SearchAnswer({
       )}
 
       {!isStreaming && followUps.length > 0 && (
-        <FollowUpSuggestions followUps={followUps} onSelect={onFollowUpSelect ?? (() => {})} />
+        <FollowUpSuggestions
+          followUps={followUps}
+          onSelect={onFollowUpSelect ?? (() => {})}
+        />
       )}
     </div>
   )
@@ -98,17 +104,17 @@ interface AnswerBodyProps {
 }
 
 function AnswerBody({ text, sources, isStreaming }: AnswerBodyProps) {
-  const [displayed, setDisplayed] = useState(isStreaming ? '' : text)
+  const [displayed, setDisplayed] = useState(() => (isStreaming ? '' : text))
 
   useEffect(() => {
     if (!isStreaming) {
       setDisplayed(text)
       return
     }
-    setDisplayed('')
     let i = 0
     const chunkSize = 4
     const interval = setInterval(() => {
+      if (i === 0) setDisplayed('')
       i += chunkSize
       setDisplayed(text.slice(0, i))
       if (i >= text.length) clearInterval(interval)
@@ -153,7 +159,7 @@ export const DEMO_SOURCES: SourceCardData[] = [
     title: 'ITER — the way to new energy',
     domain: 'iter.org',
     snippet:
-      'ITER is the world\'s largest tokamak, designed to prove the feasibility of fusion as a large-scale and carbon-free source of energy.',
+      "ITER is the world's largest tokamak, designed to prove the feasibility of fusion as a large-scale and carbon-free source of energy.",
     relevanceScore: 0.92
   },
   {
@@ -191,7 +197,8 @@ export const DEMO_FOLLOW_UPS: FollowUp[] = [
   },
   {
     id: 'fu-2',
-    query: 'What specific materials challenges remain for the first wall of a fusion reactor?',
+    query:
+      'What specific materials challenges remain for the first wall of a fusion reactor?',
     kind: 'dive-deeper'
   },
   {

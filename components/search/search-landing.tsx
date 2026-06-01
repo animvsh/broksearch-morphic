@@ -1,13 +1,12 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-
 import { useRouter } from 'next/navigation'
 
-import { Hero } from '@/components/search/hero'
 import { generateId } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
 
+import { Hero } from '@/components/search/hero'
 import { recordRecentSearch } from '@/components/search/recent-searches'
 
 interface SearchLandingProps {

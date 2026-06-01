@@ -42,21 +42,6 @@ export function useStreamingPhases(isActive: boolean) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    if (isActive) {
-      setState({
-        phase: 'reading',
-        sourceCount: 0,
-        sources: [],
-        elapsedMs: 0,
-        startedAt: Date.now(),
-        error: null
-      })
-    } else if (state.phase !== 'idle' && state.phase !== 'complete') {
-      // Stream ended without explicit complete — leave state as is, parent will reset
-    }
-  }, [isActive])
-
-  useEffect(() => {
     if (!isActive) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
@@ -64,8 +49,20 @@ export function useStreamingPhases(isActive: boolean) {
       }
       return
     }
+    let firstTick = true
     intervalRef.current = setInterval(() => {
       setState(prev => {
+        if (firstTick) {
+          firstTick = false
+          return {
+            phase: 'reading',
+            sourceCount: 0,
+            sources: [],
+            elapsedMs: 0,
+            startedAt: Date.now(),
+            error: null
+          }
+        }
         if (!prev.startedAt) return prev
         return { ...prev, elapsedMs: Date.now() - prev.startedAt }
       })
@@ -102,9 +99,7 @@ export function useStreamingPhases(isActive: boolean) {
 
   const startSynthesizing = () => {
     setState(prev =>
-      prev.phase === 'synthesizing'
-        ? prev
-        : { ...prev, phase: 'synthesizing' }
+      prev.phase === 'synthesizing' ? prev : { ...prev, phase: 'synthesizing' }
     )
   }
 

@@ -6,13 +6,6 @@ import { UseChatHelpers } from '@ai-sdk/react'
 import { ChatRequestOptions } from 'ai'
 import { toast } from 'sonner'
 
-import { AnswerToolbar } from '@/components/search/answer-toolbar'
-import {
-  FollowUpSuggestions,
-  type FollowUp
-} from '@/components/search/follow-up-suggestions'
-import { SourcesPanel, type SourceCardData } from '@/components/search/source-card'
-import { StreamingProgress } from '@/components/search/streaming-progress'
 import type { SearchResultItem } from '@/lib/types'
 import type {
   UIDataTypes,
@@ -20,8 +13,20 @@ import type {
   UIMessageMetadata,
   UITools
 } from '@/lib/types/ai'
-import { useStreamingPhases } from '@/hooks/use-streaming-phases'
 import { cn } from '@/lib/utils'
+
+import { useStreamingPhases } from '@/hooks/use-streaming-phases'
+
+import { AnswerToolbar } from '@/components/search/answer-toolbar'
+import {
+  type FollowUp,
+  FollowUpSuggestions
+} from '@/components/search/follow-up-suggestions'
+import {
+  type SourceCardData,
+  SourcesPanel
+} from '@/components/search/source-card'
+import { StreamingProgress } from '@/components/search/streaming-progress'
 
 import { CollapsibleMessage } from '../collapsible-message'
 import { MarkdownMessage } from '../message'
@@ -147,8 +152,7 @@ export function SearchAnswerSection({
   }
 
   const handleShare = async () => {
-    const url =
-      typeof window !== 'undefined' ? window.location.href : ''
+    const url = typeof window !== 'undefined' ? window.location.href : ''
     try {
       if (url && navigator.clipboard) {
         await navigator.clipboard.writeText(url)
@@ -203,7 +207,10 @@ export function SearchAnswerSection({
       showBorder={false}
       showIcon={false}
     >
-      <div className={cn('flex flex-col gap-4', className)} data-testid="search-answer-section">
+      <div
+        className={cn('flex flex-col gap-4', className)}
+        data-testid="search-answer-section"
+      >
         {isStreaming && sources.length === 0 && (
           <StreamingProgress
             state={{

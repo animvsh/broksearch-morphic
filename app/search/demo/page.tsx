@@ -6,8 +6,8 @@ import {
   DEMO_ANSWER,
   DEMO_FOLLOW_UPS,
   DEMO_SOURCES,
-  SearchAnswer,
-  type FollowUp
+  type FollowUp,
+  SearchAnswer
 } from '@/components/search'
 
 const QUERIES: Array<{
@@ -72,7 +72,8 @@ export default function SearchDemoPage() {
           >
             {QUERIES.map((q, i) => (
               <option key={q.q} value={i}>
-                {q.q.slice(0, 60)}{q.q.length > 60 ? '…' : ''}
+                {q.q.slice(0, 60)}
+                {q.q.length > 60 ? '…' : ''}
               </option>
             ))}
           </select>

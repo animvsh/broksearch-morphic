@@ -2,11 +2,19 @@
 
 import { useState } from 'react'
 
-import { Check, Copy, Languages, RotateCcw, Share2, Volume2 } from 'lucide-react'
+import {
+  Check,
+  Copy,
+  Languages,
+  RotateCcw,
+  Share2,
+  Volume2
+} from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+
+import { Button } from '@/components/ui/button'
 
 interface AnswerToolbarProps {
   answerText: string
@@ -65,22 +73,14 @@ export function AnswerToolbar({
         onClick={handleCopy}
         success={copied}
       />
-      <ToolbarButton
-        icon={Share2}
-        label="Share"
-        onClick={onShare}
-      />
+      <ToolbarButton icon={Share2} label="Share" onClick={onShare} />
       <ToolbarButton
         icon={RotateCcw}
         label="Regenerate"
         onClick={onRegenerate}
         loading={isRegenerating}
       />
-      <ToolbarButton
-        icon={Volume2}
-        label="Read aloud"
-        onClick={onReadAloud}
-      />
+      <ToolbarButton icon={Volume2} label="Read aloud" onClick={onReadAloud} />
       <div className="relative">
         <ToolbarButton
           icon={Languages}

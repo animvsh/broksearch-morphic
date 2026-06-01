@@ -9,10 +9,10 @@ import type {
 } from '@/lib/types/ai'
 import type { DynamicToolPart } from '@/lib/types/dynamic-tools'
 
+import { SearchAnswerSection } from './search/search-answer-section'
 import { AnswerSection } from './answer-section'
 import { DynamicToolDisplay } from './dynamic-tool-display'
 import ResearchProcessSection from './research-process-section'
-import { SearchAnswerSection } from './search/search-answer-section'
 import { UserFileSection } from './user-file-section'
 import { UserTextSection } from './user-text-section'
 

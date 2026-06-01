@@ -5,9 +5,12 @@ import { useEffect, useState } from 'react'
 import { BookOpen, Brain, Check, Loader2, Search, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import { formatElapsed, type StreamingState } from '@/hooks/use-streaming-phases'
 
 import type { SourcePreview } from '@/hooks/use-streaming-phases'
+import {
+  formatElapsed,
+  type StreamingState
+} from '@/hooks/use-streaming-phases'
 
 interface StreamingProgressProps {
   state: StreamingState
@@ -67,9 +70,7 @@ export function StreamingProgress({
         <SourceThumbStrip sources={state.sources} />
       )}
 
-      {(isReading || isSynthesizing) && (
-        <ProgressBar phase={state.phase} />
-      )}
+      {(isReading || isSynthesizing) && <ProgressBar phase={state.phase} />}
 
       {isError && state.error && (
         <p className="mt-2 text-xs text-destructive">{state.error}</p>
@@ -132,7 +133,8 @@ function PhaseLabel({ state }: { state: StreamingState }) {
     return (
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium">
-          Found {state.sourceCount} {state.sourceCount === 1 ? 'source' : 'sources'}
+          Found {state.sourceCount}{' '}
+          {state.sourceCount === 1 ? 'source' : 'sources'}
         </div>
         <div className="text-xs text-muted-foreground">
           Gathering the most relevant references
@@ -145,7 +147,9 @@ function PhaseLabel({ state }: { state: StreamingState }) {
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium">Synthesizing answer…</div>
         <div className="text-xs text-muted-foreground">
-          Reading {state.sourceCount} {state.sourceCount === 1 ? 'source' : 'sources'} and composing a response
+          Reading {state.sourceCount}{' '}
+          {state.sourceCount === 1 ? 'source' : 'sources'} and composing a
+          response
         </div>
       </div>
     )
@@ -187,15 +191,13 @@ function SourceThumbStrip({ sources }: { sources: SourcePreview[] }) {
 }
 
 function ProgressBar({ phase }: { phase: StreamingState['phase'] }) {
-  const [progress, setProgress] = useState(0)
+  const [progress, setProgress] = useState(() => {
+    if (phase === 'reading') return 25
+    if (phase === 'synthesizing') return 70
+    return 0
+  })
   useEffect(() => {
-    if (phase === 'reading') {
-      setProgress(prev => Math.max(prev, 25))
-      const t = setTimeout(() => setProgress(p => Math.max(p, 40)), 400)
-      return () => clearTimeout(t)
-    }
     if (phase === 'synthesizing') {
-      setProgress(prev => Math.max(prev, 70))
       const t = setInterval(() => {
         setProgress(p => Math.min(p + 1, 92))
       }, 200)

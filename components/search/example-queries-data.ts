@@ -32,7 +32,7 @@ export const EXAMPLE_QUERIES: ExampleQuery[] = [
   },
   {
     id: 'ex-5',
-    query: 'What changed in the Fed\'s rate policy this quarter?',
+    query: "What changed in the Fed's rate policy this quarter?",
     category: 'news',
     mode: 'search'
   },

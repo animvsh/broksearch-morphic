@@ -11,6 +11,7 @@ Transform the search experience into something that beats Perplexity on speed, p
 ## Scope
 
 **In scope:**
+
 - Empty/landing state redesign
 - Streaming experience (phase-based progress)
 - Answer surface (inline citations, source cards, follow-ups, action toolbar)
@@ -18,6 +19,7 @@ Transform the search experience into something that beats Perplexity on speed, p
 - Mobile-responsive treatments
 
 **Out of scope (YAGNI):**
+
 - Spaces, Library, Admin redesigns
 - Auth changes
 - New search providers / embedding models
@@ -43,6 +45,7 @@ Key principle: every visible state has a designed treatment. No blank flashes, n
 ## Feature Specifications
 
 ### Empty State
+
 - Centered logo + input
 - 4 mode pills: Quick (⚡), Search (🔍), Deep Research (🧠), Code (⌘)
   - Each with brief description and estimated time
@@ -51,6 +54,7 @@ Key principle: every visible state has a designed treatment. No blank flashes, n
 - No sidebar on home — full-bleed hero
 
 ### Streaming Phases
+
 - **Phase 1 (0–500ms):** "Reading sources…" with animated progress bar
 - **Phase 2 (sources arrive):** "Found N sources" with thumbnail strip
 - **Phase 3 (synthesis):** Token-by-token streaming with smooth caret
@@ -58,6 +62,7 @@ Key principle: every visible state has a designed treatment. No blank flashes, n
 - Cancel button always visible during streaming
 
 ### Answer Surface
+
 - Inline numbered superscripts [1], [2], [3] — Perplexity style
 - Hover any citation: popover with source title, favicon, snippet
 - Click citation: smooth scroll to source card
@@ -66,12 +71,14 @@ Key principle: every visible state has a designed treatment. No blank flashes, n
 - "Was this helpful?" + thumbs up/down after answer
 
 ### Follow-ups
+
 - 3–4 smart suggestions inline below answer
 - Each labeled by type: "Dive deeper", "Different angle", "Related", "Compare"
 - Click to send as new query in same thread
 - Regenerate button always available
 
 ### Action Toolbar
+
 - Copy (formatted Markdown)
 - Share (link)
 - Regenerate
@@ -79,6 +86,7 @@ Key principle: every visible state has a designed treatment. No blank flashes, n
 - Translate (50+ languages)
 
 ### Mobile
+
 - Source cards become bottom sheet
 - Mode selector becomes full-screen modal
 - Touch targets minimum 44px
@@ -87,6 +95,7 @@ Key principle: every visible state has a designed treatment. No blank flashes, n
 ## Components
 
 **New:**
+
 - `components/search/hero.tsx` — empty state
 - `components/search/mode-selector-v2.tsx` — better mode pills
 - `components/search/streaming-progress.tsx` — phase-based progress UI
@@ -99,6 +108,7 @@ Key principle: every visible state has a designed treatment. No blank flashes, n
 - `hooks/use-streaming-phases.ts` — phase machine
 
 **Modify:**
+
 - `app/page.tsx` — render new hero
 - `components/chat.tsx` — wire up new components
 - `components/chat-messages.tsx` — citation rendering

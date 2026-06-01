@@ -24,7 +24,12 @@ interface SourceCardProps {
   className?: string
 }
 
-export function SourceCard({ source, index, onOpen, className }: SourceCardProps) {
+export function SourceCard({
+  source,
+  index,
+  onOpen,
+  className
+}: SourceCardProps) {
   const [expanded, setExpanded] = useState(false)
   const snippet = source.snippet ?? ''
   const longSnippet = snippet.length > 220
@@ -62,10 +67,7 @@ export function SourceCard({ source, index, onOpen, className }: SourceCardProps
               {source.title || source.domain}
             </a>
             <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <SourceFavicon
-                domain={source.domain}
-                favicon={source.favicon}
-              />
+              <SourceFavicon domain={source.domain} favicon={source.favicon} />
               <span className="truncate">{source.domain}</span>
               {source.publishedAt && (
                 <>
@@ -141,7 +143,11 @@ function SourceFavicon({
       </span>
     )
   }
-  const letter = domain.replace(/^www\./, '').charAt(0).toUpperCase() || '?'
+  const letter =
+    domain
+      .replace(/^www\./, '')
+      .charAt(0)
+      .toUpperCase() || '?'
   return (
     <span className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-sm bg-foreground/10 font-mono text-[8px] font-bold uppercase text-foreground/70">
       {letter}

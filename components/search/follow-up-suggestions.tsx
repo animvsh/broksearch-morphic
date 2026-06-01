@@ -11,7 +11,11 @@ import {
 
 import { cn } from '@/lib/utils'
 
-export type FollowUpKind = 'dive-deeper' | 'different-angle' | 'related' | 'compare'
+export type FollowUpKind =
+  | 'dive-deeper'
+  | 'different-angle'
+  | 'related'
+  | 'compare'
 
 export interface FollowUp {
   id: string
