@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 export type StreamingPhase =
   | 'idle'
@@ -72,11 +72,11 @@ export function useStreamingPhases(isActive: boolean) {
     }
   }, [isActive])
 
-  const setPhase = (phase: StreamingPhase) => {
+  const setPhase = useCallback((phase: StreamingPhase) => {
     setState(prev => ({ ...prev, phase }))
-  }
+  }, [])
 
-  const addSource = (source: SourcePreview) => {
+  const addSource = useCallback((source: SourcePreview) => {
     setState(prev => {
       if (prev.sources.some(s => s.url === source.url)) return prev
       return {
@@ -86,45 +86,57 @@ export function useStreamingPhases(isActive: boolean) {
         phase: prev.phase === 'reading' ? 'gathering' : prev.phase
       }
     })
-  }
+  }, [])
 
-  const setSources = (sources: SourcePreview[]) => {
+  const setSources = useCallback((sources: SourcePreview[]) => {
     setState(prev => ({
       ...prev,
       sources,
       sourceCount: sources.length,
       phase: sources.length > 0 ? 'gathering' : prev.phase
     }))
-  }
+  }, [])
 
-  const startSynthesizing = () => {
+  const startSynthesizing = useCallback(() => {
     setState(prev =>
       prev.phase === 'synthesizing' ? prev : { ...prev, phase: 'synthesizing' }
     )
-  }
+  }, [])
 
-  const complete = () => {
+  const complete = useCallback(() => {
     setState(prev => ({ ...prev, phase: 'complete' }))
-  }
+  }, [])
 
-  const fail = (error: string) => {
+  const fail = useCallback((error: string) => {
     setState(prev => ({ ...prev, phase: 'error', error }))
-  }
+  }, [])
 
-  const reset = () => {
+  const reset = useCallback(() => {
     setState(INITIAL)
-  }
+  }, [])
 
-  return {
-    state,
-    setPhase,
-    addSource,
-    setSources,
-    startSynthesizing,
-    complete,
-    fail,
-    reset
-  }
+  return useMemo(
+    () => ({
+      state,
+      setPhase,
+      addSource,
+      setSources,
+      startSynthesizing,
+      complete,
+      fail,
+      reset
+    }),
+    [
+      addSource,
+      complete,
+      fail,
+      reset,
+      setPhase,
+      setSources,
+      startSynthesizing,
+      state
+    ]
+  )
 }
 
 export function formatElapsed(ms: number): string {

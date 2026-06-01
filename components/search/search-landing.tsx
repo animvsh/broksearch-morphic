@@ -3,7 +3,6 @@
 import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
-import { generateId } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
 
 import { Hero } from '@/components/search/hero'
@@ -26,13 +25,12 @@ export function SearchLanding({
   const handleSubmit = (query: string, mode: string, _files: File[]) => {
     if (submittingRef.current) return
     submittingRef.current = true
-    const chatId = generateId()
     recordRecentSearch(query, mode)
     const params = new URLSearchParams({
       q: query,
       mode
     })
-    router.push(`/search/${chatId}?${params.toString()}`)
+    router.push(`/search?${params.toString()}`)
   }
 
   useEffect(() => {

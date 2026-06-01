@@ -122,7 +122,7 @@ function PhaseLabel({ state }: { state: StreamingState }) {
   if (state.phase === 'reading') {
     return (
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium">Reading sources…</div>
+        <div className="text-sm font-medium">Reading sources...</div>
         <div className="text-xs text-muted-foreground">
           Searching the web for relevant references
         </div>
@@ -145,7 +145,7 @@ function PhaseLabel({ state }: { state: StreamingState }) {
   if (state.phase === 'synthesizing') {
     return (
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium">Synthesizing answer…</div>
+        <div className="text-sm font-medium">Synthesizing answer...</div>
         <div className="text-xs text-muted-foreground">
           Reading {state.sourceCount}{' '}
           {state.sourceCount === 1 ? 'source' : 'sources'} and composing a

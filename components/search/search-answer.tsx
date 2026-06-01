@@ -42,25 +42,23 @@ export function SearchAnswer({
   className
 }: SearchAnswerProps) {
   const streaming = useStreamingPhases(isStreaming)
+  const { state: streamingState, setSources, complete, reset } = streaming
 
   useEffect(() => {
     if (isStreaming) {
-      streaming.setSources(sources.slice(0, 1))
+      setSources(sources.slice(0, 1))
     } else if (sources.length > 0) {
-      streaming.setSources(sources)
-      streaming.complete()
+      setSources(sources)
+      complete()
     }
-  }, [isStreaming, sources])
+  }, [complete, isStreaming, setSources, sources])
 
   return (
     <div className={cn('space-y-5', className)}>
       <QueryEcho query={query} />
 
       {isStreaming && (
-        <StreamingProgress
-          state={streaming.state}
-          onCancel={() => streaming.reset()}
-        />
+        <StreamingProgress state={streamingState} onCancel={reset} />
       )}
 
       <AnswerBody text={answer} sources={sources} isStreaming={isStreaming} />

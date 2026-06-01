@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable @next/next/no-img-element -- source favicons come from arbitrary citation domains */
+
 import { useState } from 'react'
 
 import { ExternalLink, Star } from 'lucide-react'
