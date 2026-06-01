@@ -51,6 +51,11 @@ import {
   SubagentStatus
 } from '@/lib/brokcode/data'
 import {
+  type BrokCodeDeployReadinessDeployment,
+  type BrokCodeManagedDeployReadiness,
+  summarizeBrokCodeDeployReadiness
+} from '@/lib/brokcode/deploy-readiness-client'
+import {
   type BrokCodeDiffFile,
   type BrokCodeDiffFileInput,
   type BrokCodeRunDiff,
@@ -331,6 +336,14 @@ type BrokCodeProjectFile = {
   content: string
   language?: string | null
   updatedAt?: string
+}
+
+type BrokCodeDeployReadinessState = {
+  readiness: BrokCodeManagedDeployReadiness
+  latestDeployment: BrokCodeDeployReadinessDeployment | null
+  deployments: BrokCodeDeployReadinessDeployment[]
+  previewUrl?: string | null
+  deploymentUrl?: string | null
 }
 
 type BrokCodeStreamResult = {
@@ -1317,6 +1330,12 @@ export function BrokCodeApp({
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [runtimeBootstrapped, setRuntimeBootstrapped] = useState(false)
   const [isDeploying, setIsDeploying] = useState(false)
+  const [deployReadiness, setDeployReadiness] =
+    useState<BrokCodeDeployReadinessState | null>(null)
+  const [deployReadinessLoading, setDeployReadinessLoading] = useState(false)
+  const [deployReadinessError, setDeployReadinessError] = useState<
+    string | null
+  >(null)
   const [githubStatus, setGithubStatus] =
     useState<GithubConnectionStatus>('checking')
   const [githubMessage, setGithubMessage] = useState<string | null>(null)
@@ -1929,6 +1948,65 @@ export function BrokCodeApp({
     [activeProject, apiKey, getAuthHeaders]
   )
 
+  const refreshDeployReadiness = useCallback(
+    async (project = activeProject, key = apiKey) => {
+      if (!project?.id) {
+        setDeployReadiness(null)
+        setDeployReadinessError(null)
+        return null
+      }
+      if (key && !isValidBrokApiKey(key)) {
+        setDeployReadiness(null)
+        setDeployReadinessError(null)
+        return null
+      }
+
+      setDeployReadinessLoading(true)
+      setDeployReadinessError(null)
+      try {
+        const response = await fetch(
+          `/api/brokcode/deploy?projectId=${encodeURIComponent(project.id)}&source=browser`,
+          {
+            headers: getAuthHeaders(key)
+          }
+        )
+        const body = await response.json().catch(() => null)
+        if (!response.ok || !body?.readiness) {
+          throw new Error(
+            body?.error?.message ?? 'Could not check deploy readiness.'
+          )
+        }
+
+        const nextReadiness: BrokCodeDeployReadinessState = {
+          readiness: body.readiness as BrokCodeManagedDeployReadiness,
+          latestDeployment:
+            body.latestDeployment && typeof body.latestDeployment === 'object'
+              ? (body.latestDeployment as BrokCodeDeployReadinessDeployment)
+              : null,
+          deployments: Array.isArray(body.deployments)
+            ? (body.deployments as BrokCodeDeployReadinessDeployment[])
+            : [],
+          previewUrl:
+            typeof body.previewUrl === 'string' ? body.previewUrl : null,
+          deploymentUrl:
+            typeof body.deploymentUrl === 'string' ? body.deploymentUrl : null
+        }
+        setDeployReadiness(nextReadiness)
+        return nextReadiness
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Could not check deploy readiness.'
+        setDeployReadinessError(message)
+        return null
+      } finally {
+        setDeployReadinessLoading(false)
+      }
+    },
+    [activeProject, apiKey, getAuthHeaders]
+  )
+
   const fetchProjectFilesForDiff = useCallback(
     async (project = activeProject, key = apiKey) => {
       if (!project?.id || (key && !isValidBrokApiKey(key))) return []
@@ -2057,6 +2135,10 @@ export function BrokCodeApp({
   useEffect(() => {
     void refreshProjectFiles()
   }, [refreshProjectFiles])
+
+  useEffect(() => {
+    void refreshDeployReadiness()
+  }, [refreshDeployReadiness])
 
   useEffect(() => {
     if (!activeProject?.slug) return
@@ -2703,6 +2785,7 @@ export function BrokCodeApp({
         throw new Error(body?.error ?? 'Could not save file.')
       }
       await refreshProjectFiles(activeProject)
+      await refreshDeployReadiness(activeProject)
       await refreshProjectRuntime(activeProject)
       setPreviewFrameKey(key => key + 1)
       setFileEditMode(false)
@@ -3271,6 +3354,7 @@ export function BrokCodeApp({
     }
 
     await refreshProjectFiles(activeProject)
+    await refreshDeployReadiness(activeProject)
     const runtime = await createProjectRuntimeRecord({
       project: activeProject,
       status: 'healthy',
@@ -3447,6 +3531,32 @@ export function BrokCodeApp({
         : typeof body?.message === 'string'
           ? body.message
           : 'Deployment started.'
+      if (body?.readiness) {
+        setDeployReadiness(current => ({
+          readiness: body.readiness as BrokCodeManagedDeployReadiness,
+          latestDeployment:
+            body.persistedDeployment &&
+            typeof body.persistedDeployment === 'object'
+              ? (body.persistedDeployment as BrokCodeDeployReadinessDeployment)
+              : (current?.latestDeployment ?? null),
+          deployments: body.persistedDeployment
+            ? [
+                body.persistedDeployment as BrokCodeDeployReadinessDeployment,
+                ...(current?.deployments ?? []).filter(
+                  deployment => deployment.id !== body.persistedDeployment.id
+                )
+              ].slice(0, 10)
+            : (current?.deployments ?? []),
+          previewUrl:
+            typeof body.previewUrl === 'string'
+              ? body.previewUrl
+              : (current?.previewUrl ?? null),
+          deploymentUrl:
+            typeof body.deploymentUrl === 'string'
+              ? body.deploymentUrl
+              : (current?.deploymentUrl ?? null)
+        }))
+      }
 
       setMessages(current => [
         ...current,
@@ -3468,6 +3578,7 @@ export function BrokCodeApp({
       })
       if (activeProject?.id) {
         void refreshProjects(apiKey)
+        void refreshDeployReadiness(activeProject)
       }
       toast.success(
         loadedPreviewUrl
@@ -5032,6 +5143,20 @@ export function BrokCodeApp({
                 </Button>
               </div>
 
+              <div className="mt-3">
+                <DeployReadinessPanel
+                  compact
+                  state={deployReadiness}
+                  loading={deployReadinessLoading}
+                  error={deployReadinessError}
+                  hasProject={Boolean(activeProject)}
+                  onRefresh={() => {
+                    void refreshDeployReadiness()
+                  }}
+                  onOpenPreview={url => loadPreviewUrlIfAllowed(url)}
+                />
+              </div>
+
               <div className="mt-3 space-y-2 border-t border-zinc-100 pt-3">
                 <div className="flex items-center justify-between gap-2">
                   <Label className="text-xs text-zinc-500">GitHub export</Label>
@@ -5470,6 +5595,16 @@ export function BrokCodeApp({
                 )}
               </div>
             </div>
+            <DeployReadinessPanel
+              state={deployReadiness}
+              loading={deployReadinessLoading}
+              error={deployReadinessError}
+              hasProject={Boolean(activeProject)}
+              onRefresh={() => {
+                void refreshDeployReadiness()
+              }}
+              onOpenPreview={url => loadPreviewUrlIfAllowed(url)}
+            />
             <Tabs defaultValue="brain" className="mb-2">
               <TabsList className="grid h-auto grid-cols-3 rounded-lg border border-zinc-200 bg-white p-1 text-xs shadow-sm xl:grid-cols-6">
                 <TabsTrigger value="brain" className="rounded-md text-xs">
@@ -5595,6 +5730,132 @@ export function BrokCodeApp({
           </div>
         </aside>
       </main>
+    </div>
+  )
+}
+
+function DeployReadinessPanel({
+  compact = false,
+  error,
+  hasProject,
+  loading,
+  onOpenPreview,
+  onRefresh,
+  state
+}: {
+  compact?: boolean
+  error: string | null
+  hasProject: boolean
+  loading: boolean
+  onOpenPreview: (url: string) => void
+  onRefresh: () => void
+  state: BrokCodeDeployReadinessState | null
+}) {
+  const summary = summarizeBrokCodeDeployReadiness({
+    error,
+    hasProject,
+    latestDeployment: state?.latestDeployment,
+    loading,
+    readiness: state?.readiness
+  })
+  const readiness = state?.readiness ?? null
+  const latestDeployment = state?.latestDeployment ?? null
+  const deploymentUrl =
+    latestDeployment?.url ?? state?.deploymentUrl ?? readiness?.deploymentUrl
+  const previewUrl = state?.previewUrl ?? readiness?.previewUrl
+  const blockedIssues = readiness?.quality?.issues ?? []
+  const missingFiles = readiness?.requiredFiles ?? []
+
+  return (
+    <div
+      className={cn(
+        'mb-2 rounded-lg border border-zinc-200 bg-white p-2 text-xs text-zinc-600 shadow-sm',
+        compact && 'mb-0'
+      )}
+      data-testid="brokcode-deploy-readiness"
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium text-zinc-950">Deploy readiness</p>
+            <Badge
+              variant={summary.tone === 'ready' ? 'default' : 'outline'}
+              className={cn(
+                'rounded-full',
+                summary.tone === 'blocked' &&
+                  'border-amber-200 bg-amber-50 text-amber-800',
+                summary.tone === 'checking' &&
+                  'border-blue-200 bg-blue-50 text-blue-700'
+              )}
+            >
+              {summary.label}
+            </Badge>
+            {readiness ? (
+              <span className="text-[11px] text-zinc-500">
+                {readiness.fileCount} files
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 line-clamp-2 text-zinc-500">{summary.detail}</p>
+          {(missingFiles.length > 0 || blockedIssues.length > 0) && (
+            <p className="mt-1 line-clamp-2 text-[11px] text-zinc-500">
+              {[...missingFiles, ...blockedIssues].slice(0, 3).join(' · ')}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          {previewUrl ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full px-2.5 text-xs"
+              onClick={() => onOpenPreview(previewUrl)}
+            >
+              <Eye className="size-3.5" />
+              Preview
+            </Button>
+          ) : null}
+          {deploymentUrl ? (
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full px-2.5 text-xs"
+            >
+              <a href={deploymentUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="size-3.5" />
+                Live URL
+              </a>
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 rounded-full"
+            disabled={loading || !hasProject}
+            onClick={onRefresh}
+            title="Refresh deploy readiness"
+          >
+            <RefreshCcw className={cn('size-3.5', loading && 'animate-spin')} />
+            <span className="sr-only">Refresh deploy readiness</span>
+          </Button>
+        </div>
+      </div>
+      {state?.deployments.length ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-2 text-[11px] text-zinc-500">
+          <span>{state.deployments.length} deploys</span>
+          {latestDeployment ? (
+            <span>
+              latest {latestDeployment.status}
+              {latestDeployment.updatedAt
+                ? ` · ${new Date(latestDeployment.updatedAt).toLocaleTimeString()}`
+                : ''}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
