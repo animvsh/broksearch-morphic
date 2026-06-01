@@ -155,8 +155,15 @@ function createLocalFallbackAuth(key: string): AuthResult | null {
     return null
   }
 
-  const allowedFallbackKey =
-    process.env.BROK_SMOKE_API_KEY || 'brok_sk_local_smoke'
+  const allowedFallbackKey = process.env.BROK_SMOKE_API_KEY
+  if (!allowedFallbackKey) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(
+        '[brok-auth] BROK_ENABLE_LOCAL_AUTH_FALLBACK=true but BROK_SMOKE_API_KEY is not set. Local fallback is disabled.'
+      )
+    }
+    return null
+  }
   if (key !== allowedFallbackKey) {
     return null
   }
@@ -176,16 +183,10 @@ function createLocalFallbackAuth(key: string): AuthResult | null {
       keyHash,
       environment: key.includes('_test_') ? 'test' : 'live',
       status: 'active',
-      scopes: [
-        'chat:write',
-        'search:write',
-        'code:write',
-        'agents:write',
-        'usage:read'
-      ],
+      scopes: ['chat:write', 'search:write', 'usage:read'],
       allowedModels: [],
-      rpmLimit: 120,
-      dailyRequestLimit: 10000,
+      rpmLimit: 60,
+      dailyRequestLimit: 1000,
       monthlyBudgetCents: 0,
       lastUsedAt: now,
       createdAt: now,

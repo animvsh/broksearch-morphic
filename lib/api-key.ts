@@ -1,7 +1,24 @@
-import { createHash, randomBytes } from 'crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 
-const SECRET_SALT =
-  process.env.API_KEY_SALT || 'brok-default-salt-change-in-production'
+const ENV_SALT = process.env.API_KEY_SALT
+
+if (
+  !ENV_SALT &&
+  process.env.NODE_ENV === 'production' &&
+  process.env.BROK_CLOUD_DEPLOYMENT === 'true'
+) {
+  throw new Error(
+    '[brok-auth] API_KEY_SALT is not set. Refusing to start in production with a default API key salt.'
+  )
+}
+
+const SECRET_SALT = ENV_SALT || 'brok-default-salt-change-in-production'
+
+if (!ENV_SALT && process.env.NODE_ENV !== 'test') {
+  console.warn(
+    '[brok-auth] API_KEY_SALT is not set; using a development default. Set API_KEY_SALT in any non-test environment.'
+  )
+}
 
 export function generateApiKey(environment: 'live' | 'test' = 'live'): string {
   const prefix = `brok_sk_${environment}_`
@@ -16,7 +33,10 @@ export function hashApiKey(key: string): string {
 }
 
 export function verifyApiKey(key: string, hash: string): boolean {
-  return hashApiKey(key) === hash
+  const computed = Buffer.from(hashApiKey(key), 'hex')
+  const stored = Buffer.from(hash, 'hex')
+  if (computed.length !== stored.length) return false
+  return timingSafeEqual(computed, stored)
 }
 
 export function maskApiKey(key: string): string {

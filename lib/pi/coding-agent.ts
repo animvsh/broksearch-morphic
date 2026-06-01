@@ -61,7 +61,7 @@ function getOpenAiCompatiblePiConfig() {
       process.env.PI_AGENT_MODEL ??
       process.env.BROK_PI_MODEL ??
       process.env.OPENAI_COMPATIBLE_MODEL ??
-      process.env.MINIMAX_MODEL ??
+      process.env.BROK_PROVIDER_MODEL ??
       'MiniMax-M2.7-highspeed',
     baseUrl: baseUrl.trim()
   }

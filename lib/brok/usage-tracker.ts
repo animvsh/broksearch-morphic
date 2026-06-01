@@ -27,7 +27,7 @@ export interface UsageRecord {
   providerCostUsd: number
   billedUsd: number
   latencyMs: number
-  status: 'success' | 'error'
+  status: 'success' | 'error' | 'aborted'
   errorCode?: string
   metadata?: Record<string, unknown>
 }

@@ -1,11 +1,11 @@
 import { parse } from 'node-html-parser'
 
 import {
-  MINIMAX_API_KEY,
-  MINIMAX_BASE_URL,
-  MINIMAX_CHAT_MODEL
-} from '@/lib/ai/minimax'
-import { searchWithMiniMaxWebSearch } from '@/lib/brok/minimax-web-search'
+  BROK_PROVIDER_API_KEY,
+  BROK_PROVIDER_BASE_URL,
+  BROK_PROVIDER_CHAT_MODEL
+} from '@/lib/ai/brok'
+import { searchWithBrokWebSearch } from '@/lib/brok/brok-web-search'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 export interface SearchResult {
@@ -34,6 +34,7 @@ export interface SearchRequest {
   depth: 'lite' | 'standard' | 'deep'
   recencyDays?: number
   domains?: string[]
+  maxSources?: number
 }
 
 export type QuestionType =
@@ -81,6 +82,7 @@ export async function runSearchPipeline(
   request: SearchRequest
 ): Promise<SearchResponse> {
   const config = SEARCH_CONFIG[request.depth]
+  const maxSources = clampSourceCount(request.maxSources, config.sources)
   const classification = classifyQuery(request.query)
   const searchQueryList = buildSearchQueries({
     query: request.query,
@@ -96,11 +98,11 @@ export async function runSearchPipeline(
     : extractDomainsFromQuery(request.query)
 
   try {
-    return await runMiniMaxWebSearch(
+    return await runBrokWebSearch(
       resolvedQuery,
       classification,
       searchQueryList,
-      config.sources,
+      maxSources,
       config.maxTokens,
       domainHints
     )
@@ -111,7 +113,7 @@ export async function runSearchPipeline(
         resolvedQuery,
         classification,
         searchQueryList,
-        config.sources,
+        maxSources,
         config.maxTokens,
         domainHints
       )
@@ -127,6 +129,19 @@ export async function runSearchPipeline(
       )
     }
   }
+}
+
+function clampSourceCount(
+  requested: number | undefined,
+  fallback: number
+): number {
+  if (typeof requested !== 'number' || !Number.isFinite(requested)) {
+    return fallback
+  }
+  const rounded = Math.floor(requested)
+  if (rounded < 1) return 1
+  if (rounded > 25) return 25
+  return rounded
 }
 
 function buildUnavailableSearchResponse(
@@ -154,7 +169,7 @@ function buildUnavailableSearchResponse(
   }
 }
 
-async function runMiniMaxWebSearch(
+async function runBrokWebSearch(
   resolvedQuery: string,
   classification: QueryClassification,
   searchQueryList: string[],
@@ -164,7 +179,7 @@ async function runMiniMaxWebSearch(
 ): Promise<SearchResponse> {
   const batches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
-      searchWithMiniMaxWebSearch(searchQuery, numResults)
+      searchWithBrokWebSearch(searchQuery, numResults)
     )
   )
   const rankedSourceInputs = batches
@@ -471,7 +486,7 @@ async function synthesizeAnswerFromResults(
     return 'No search results were available.'
   }
 
-  if (!MINIMAX_API_KEY) {
+  if (!BROK_PROVIDER_API_KEY) {
     return citations
       .map(citation => `${citation.title}: ${citation.snippet}`.trim())
       .join('\n')
@@ -485,15 +500,15 @@ async function synthesizeAnswerFromResults(
     .join('\n\n')
 
   try {
-    const response = await fetch(`${MINIMAX_BASE_URL}/chat/completions`, {
+    const response = await fetch(`${BROK_PROVIDER_BASE_URL}/chat/completions`, {
       method: 'POST',
       signal: AbortSignal.timeout(getAnswerSynthesisTimeoutMs()),
       headers: {
-        Authorization: `Bearer ${MINIMAX_API_KEY}`,
+        Authorization: `Bearer ${BROK_PROVIDER_API_KEY}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: MINIMAX_CHAT_MODEL,
+        model: BROK_PROVIDER_CHAT_MODEL,
         max_tokens: Math.min(maxTokens, 1200),
         messages: [
           {
