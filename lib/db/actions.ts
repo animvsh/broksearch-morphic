@@ -149,6 +149,36 @@ export async function loadChat(
   })
 }
 
+export async function loadMessage(
+  messageId: string,
+  userId?: string
+): Promise<UIMessage | null> {
+  return withOptionalRLS(userId || null, async tx => {
+    const result = await tx.query.messages.findFirst({
+      where: eq(messages.id, messageId),
+      with: {
+        chat: true,
+        parts: {
+          orderBy: [asc(parts.order)]
+        }
+      }
+    })
+
+    if (!result) {
+      return null
+    }
+
+    if (
+      result.chat.visibility === 'private' &&
+      (!userId || result.chat.userId !== userId)
+    ) {
+      return null
+    }
+
+    return buildUIMessageFromDB(result, result.parts)
+  })
+}
+
 /**
  * Load chat with messages in a single query (optimized)
  */
