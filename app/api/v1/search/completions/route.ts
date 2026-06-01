@@ -247,7 +247,18 @@ export async function POST(request: NextRequest) {
             message: 'Planning search query',
             status: 'running'
           })
+          send('status', {
+            id: requestId,
+            message: 'Understanding your question'
+          })
           send('query_resolved', {
+            id: requestId,
+            query,
+            resolved_query: resolvedQuery,
+            classification,
+            search_queries: searchQueries
+          })
+          send('query', {
             id: requestId,
             query,
             resolved_query: resolvedQuery,
@@ -260,6 +271,10 @@ export async function POST(request: NextRequest) {
               id: requestId,
               message: 'Fetching and ranking sources',
               status: 'running'
+            })
+            send('status', {
+              id: requestId,
+              message: 'Searching the web'
             })
             send('search_started', {
               id: requestId,
@@ -300,10 +315,23 @@ export async function POST(request: NextRequest) {
             })
 
             searchResult.citations.forEach((citation, index) => {
+              const citationNumber = index + 1
+
               send('source_found', {
                 id: requestId,
-                index: index + 1,
+                index: citationNumber,
                 source: citation
+              })
+              send('source', {
+                id: requestId,
+                source_id: citation.id,
+                citation_number: citationNumber,
+                title: citation.title,
+                url: citation.url,
+                domain: citation.publisher,
+                snippet: citation.snippet,
+                retrieved_at: citation.retrievedAt,
+                quality_score: citation.qualityScore
               })
               send('source_read', {
                 id: requestId,
@@ -315,17 +343,34 @@ export async function POST(request: NextRequest) {
               send('citation_added', {
                 id: requestId,
                 citation_id: citation.id,
-                marker: `[${index + 1}]`,
+                marker: `[${citationNumber}]`,
+                url: citation.url
+              })
+              send('citation', {
+                id: requestId,
+                source_id: citation.id,
+                citation_number: citationNumber,
                 url: citation.url
               })
             })
 
+            send('status', {
+              id: requestId,
+              message: 'Writing answer'
+            })
+
             send('answer_delta', {
               id: requestId,
-              delta: searchResult.answer
+              delta: searchResult.answer,
+              text: searchResult.answer
             })
             send('follow_ups_generated', {
               id: requestId,
+              follow_ups: searchResult.followUps
+            })
+            send('follow_ups', {
+              id: requestId,
+              items: searchResult.followUps,
               follow_ups: searchResult.followUps
             })
 
@@ -334,6 +379,10 @@ export async function POST(request: NextRequest) {
               message: 'Answer ready',
               status: 'done',
               citations: searchResult.citations.length
+            })
+            send('status', {
+              id: requestId,
+              message: 'Answer ready'
             })
             send(
               'search.completion',
