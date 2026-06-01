@@ -126,6 +126,40 @@ curl https://api.brok.ai/v1/search/completions \\
   }'
 \`\`\`
 
+### Streaming Events
+
+When \`stream\` is \`true\`, Brok returns Server-Sent Events. Clients should handle these canonical event names:
+
+| Event | Payload | Purpose |
+|-------|---------|---------|
+| status | \`{ "message": "Searching the web" }\` | High-level progress updates |
+| query | \`{ "resolved_query": "...", "search_queries": [...] }\` | Query rewriting and planned searches |
+| source | \`{ "source_id": "src_1", "citation_number": 1, "title": "...", "url": "..." }\` | A usable source was found |
+| citation | \`{ "source_id": "src_1", "citation_number": 1 }\` | Citation metadata for the answer |
+| answer_delta | \`{ "text": "Brok should..." }\` | Answer text as it is generated |
+| follow_ups | \`{ "items": [...] }\` | Suggested next questions |
+| done | \`{ "usage": {...} }\` | Terminal usage and completion event |
+
+\`\`\`text
+event: status
+data: {"message":"Understanding your question"}
+
+event: query
+data: {"resolved_query":"Latest AI news","search_queries":["Latest AI news"]}
+
+event: source
+data: {"source_id":"src_1","citation_number":1,"title":"...","url":"..."}
+
+event: answer_delta
+data: {"text":"Recent AI development is..."}
+
+event: follow_ups
+data: {"items":[{"label":"Which source changed most recently?","query":"Which source changed most recently?"}]}
+
+event: done
+data: {"usage":{"total_tokens":215}}
+\`\`\`
+
 ## Available Search Models
 
 | Model | Description | Input Cost | Output Cost | Search Depth |
@@ -345,6 +379,115 @@ export default function SearchCompletionsPage() {
     "query": "Latest AI news",
     "stream": true
   }'`}</code>
+        </pre>
+
+        <h3>Streaming Events</h3>
+        <p>
+          When <code>stream</code> is <code>true</code>, Brok returns
+          Server-Sent Events. Clients should handle these canonical event names:
+        </p>
+        <div className="overflow-x-auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Payload</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <code>status</code>
+                </td>
+                <td>
+                  <code>{'{ "message": "Searching the web" }'}</code>
+                </td>
+                <td>High-level progress updates</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>query</code>
+                </td>
+                <td>
+                  <code>
+                    {'{ "resolved_query": "...", "search_queries": [...] }'}
+                  </code>
+                </td>
+                <td>Query rewriting and planned searches</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>source</code>
+                </td>
+                <td>
+                  <code>
+                    {
+                      '{ "source_id": "src_1", "citation_number": 1, "title": "...", "url": "..." }'
+                    }
+                  </code>
+                </td>
+                <td>A usable source was found</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>citation</code>
+                </td>
+                <td>
+                  <code>
+                    {'{ "source_id": "src_1", "citation_number": 1 }'}
+                  </code>
+                </td>
+                <td>Citation metadata for the answer</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>answer_delta</code>
+                </td>
+                <td>
+                  <code>{'{ "text": "Brok should..." }'}</code>
+                </td>
+                <td>Answer text as it is generated</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>follow_ups</code>
+                </td>
+                <td>
+                  <code>{'{ "items": [...] }'}</code>
+                </td>
+                <td>Suggested next questions</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>done</code>
+                </td>
+                <td>
+                  <code>{'{ "usage": {...} }'}</code>
+                </td>
+                <td>Terminal usage and completion event</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <pre className="bg-muted p-4 rounded-lg">
+          <code>{`event: status
+data: {"message":"Understanding your question"}
+
+event: query
+data: {"resolved_query":"Latest AI news","search_queries":["Latest AI news"]}
+
+event: source
+data: {"source_id":"src_1","citation_number":1,"title":"...","url":"..."}
+
+event: answer_delta
+data: {"text":"Recent AI development is..."}
+
+event: follow_ups
+data: {"items":[{"label":"Which source changed most recently?","query":"Which source changed most recently?"}]}
+
+event: done
+data: {"usage":{"total_tokens":215}}`}</code>
         </pre>
 
         <h2>Available Search Models</h2>
