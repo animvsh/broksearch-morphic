@@ -9,9 +9,10 @@ describe('BrokLanding', () => {
 
     expect(
       screen
-        .getAllByRole('link', { name: /get started/i })
+        .getAllByRole('link', { name: /start for \$7\/mo/i })
         .map(link => link.getAttribute('href'))
     ).toEqual(['/auth/login', '/auth/login'])
+    expect(screen.getByText(/only \$7\/month/i)).toBeInTheDocument()
   })
 
   it('routes signed-in users without access to the pending page', () => {
@@ -19,7 +20,7 @@ describe('BrokLanding', () => {
 
     expect(
       screen
-        .getAllByRole('link', { name: /get started/i })
+        .getAllByRole('link', { name: /start for \$7\/mo/i })
         .map(link => link.getAttribute('href'))
     ).toEqual(['/auth/access-pending', '/auth/access-pending'])
     expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute(

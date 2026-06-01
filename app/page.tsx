@@ -5,7 +5,7 @@ import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { getModelSelectorData } from '@/lib/model-selector/get-model-selector-data'
 
 import { BrokLanding } from '@/components/brok/brok-landing'
-import { Chat } from '@/components/chat'
+import { SearchLanding } from '@/components/search/search-landing'
 
 export default async function Page() {
   const user = await getCurrentUser()
@@ -28,10 +28,9 @@ export default async function Page() {
   const modelSelectorData = await getModelSelectorData()
 
   return (
-    <Chat
-      isGuest={false}
+    <SearchLanding
       isCloudDeployment={isCloudDeployment}
-      modelSelectorData={modelSelectorData}
+      hasModels={modelSelectorData?.hasAvailableModels !== false}
     />
   )
 }
