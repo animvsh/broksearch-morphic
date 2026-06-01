@@ -222,12 +222,14 @@ export function normalizeMiniMaxMessages(
   messages: Array<Record<string, unknown>>
 ) {
   const systemMessages = messages
-    .filter(message => message.role === 'system')
+    .filter(
+      message => message.role === 'system' || message.role === 'developer'
+    )
     .map(message => normalizeMessageContent(message.content).trim())
     .filter(Boolean)
 
   const nonSystemMessages = messages.filter(
-    message => message.role !== 'system'
+    message => message.role !== 'system' && message.role !== 'developer'
   )
   if (systemMessages.length === 0) return nonSystemMessages
 

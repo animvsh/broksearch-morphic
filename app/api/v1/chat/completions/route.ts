@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { validateOpenAiChatMessages } from '@/lib/brok/api-platform'
 import {
   apiKeyHasScope,
   forbiddenScopeResponse,
@@ -122,6 +123,13 @@ export async function POST(request: NextRequest) {
     return invalidRequestResponse('invalid_stream', 'stream must be a boolean.')
   }
   const shouldStream = stream === true
+  const messageValidation = validateOpenAiChatMessages(chatMessages)
+  if (!messageValidation.ok) {
+    return invalidRequestResponse(
+      messageValidation.code,
+      messageValidation.message
+    )
+  }
 
   // Validate model
   if (!isValidBrokModel(modelId)) {

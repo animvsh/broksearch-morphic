@@ -35,6 +35,10 @@ export type BrokApiModel = (typeof BROK_API_MODEL_IDS)[number]
 export type ApiKeyStatus = 'active' | 'paused' | 'revoked'
 export type ApiKeyStatusAction = 'pause' | 'resume' | 'revoke'
 
+export type ApiRequestValidationResult =
+  | { ok: true }
+  | { ok: false; code: string; message: string }
+
 export interface CreateApiKeyInput {
   name: string
   environment: ApiKeyEnvironment
@@ -48,6 +52,14 @@ export interface CreateApiKeyInput {
 const apiKeyEnvironmentSet = new Set<string>(API_KEY_ENVIRONMENTS)
 const apiKeyScopeSet = new Set<string>(API_KEY_SCOPE_IDS)
 const brokApiModelSet = new Set<string>(BROK_API_MODEL_IDS)
+const openAiChatMessageRoles = new Set([
+  'system',
+  'developer',
+  'user',
+  'assistant',
+  'tool'
+])
+const anthropicMessageRoles = new Set(['user', 'assistant'])
 
 function uniqueStringValues(values: unknown, label: string) {
   if (!Array.isArray(values)) {
@@ -182,4 +194,72 @@ export function validateApiKeyStatusTransition(
   if (status === 'revoked') {
     throw new Error('API key is already revoked.')
   }
+}
+
+export function validateOpenAiChatMessages(
+  messages: unknown[]
+): ApiRequestValidationResult {
+  if (messages.length === 0) {
+    return {
+      ok: false,
+      code: 'missing_messages',
+      message: 'messages must include at least one chat message.'
+    }
+  }
+
+  for (const [index, message] of messages.entries()) {
+    if (!message || typeof message !== 'object' || Array.isArray(message)) {
+      return {
+        ok: false,
+        code: 'invalid_message',
+        message: `messages[${index}] must be an object.`
+      }
+    }
+
+    const role = (message as { role?: unknown }).role
+    if (typeof role !== 'string' || !openAiChatMessageRoles.has(role)) {
+      return {
+        ok: false,
+        code: 'invalid_message_role',
+        message:
+          `messages[${index}].role must be one of ` +
+          'system, developer, user, assistant, or tool.'
+      }
+    }
+  }
+
+  return { ok: true }
+}
+
+export function validateAnthropicMessages(
+  messages: unknown[]
+): ApiRequestValidationResult {
+  if (messages.length === 0) {
+    return {
+      ok: false,
+      code: 'missing_messages',
+      message: 'messages must include at least one Anthropic message.'
+    }
+  }
+
+  for (const [index, message] of messages.entries()) {
+    if (!message || typeof message !== 'object' || Array.isArray(message)) {
+      return {
+        ok: false,
+        code: 'invalid_message',
+        message: `messages[${index}] must be an object.`
+      }
+    }
+
+    const role = (message as { role?: unknown }).role
+    if (typeof role !== 'string' || !anthropicMessageRoles.has(role)) {
+      return {
+        ok: false,
+        code: 'invalid_message_role',
+        message: `messages[${index}].role must be user or assistant.`
+      }
+    }
+  }
+
+  return { ok: true }
 }

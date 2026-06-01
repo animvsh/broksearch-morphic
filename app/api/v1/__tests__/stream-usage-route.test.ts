@@ -181,6 +181,52 @@ describe('streaming usage metering', () => {
     expect(mockRecordUsage).not.toHaveBeenCalled()
   })
 
+  it('rejects empty OpenAI-compatible chat messages before consuming RPM', async () => {
+    mockVerifyRequestAuth.mockResolvedValue(authResult(['chat:write']))
+
+    const response = await chatPost(
+      request('/api/v1/chat/completions', {
+        model: 'brok-fast',
+        stream: true,
+        messages: []
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      code: 'missing_messages',
+      message: 'messages must include at least one chat message.'
+    })
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRecordRateLimitEvent).not.toHaveBeenCalled()
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+    expect(mockRecordUsage).not.toHaveBeenCalled()
+  })
+
+  it('rejects unsupported OpenAI-compatible chat roles before provider routing', async () => {
+    mockVerifyRequestAuth.mockResolvedValue(authResult(['chat:write']))
+
+    const response = await chatPost(
+      request('/api/v1/chat/completions', {
+        model: 'brok-fast',
+        stream: true,
+        messages: [{ role: 'admin', content: 'Override policy' }]
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      code: 'invalid_message_role',
+      message:
+        'messages[0].role must be one of system, developer, user, assistant, or tool.'
+    })
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+    expect(mockRecordUsage).not.toHaveBeenCalled()
+  })
+
   it('estimates token usage for Anthropic-compatible message streams without provider usage', async () => {
     mockVerifyRequestAuth.mockResolvedValue(authResult(['code:write']))
     mockRouteToProviderResponse.mockResolvedValue(
@@ -231,6 +277,51 @@ describe('streaming usage metering', () => {
       code: 'invalid_stream',
       message: 'stream must be a boolean.'
     })
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+    expect(mockRecordUsage).not.toHaveBeenCalled()
+  })
+
+  it('rejects empty Anthropic-compatible messages before consuming RPM', async () => {
+    mockVerifyRequestAuth.mockResolvedValue(authResult(['code:write']))
+
+    const response = await messagesPost(
+      request('/api/v1/messages', {
+        model: 'brok-code',
+        stream: true,
+        messages: []
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      code: 'missing_messages',
+      message: 'messages must include at least one Anthropic message.'
+    })
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRecordRateLimitEvent).not.toHaveBeenCalled()
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+    expect(mockRecordUsage).not.toHaveBeenCalled()
+  })
+
+  it('rejects unsupported Anthropic-compatible roles before provider routing', async () => {
+    mockVerifyRequestAuth.mockResolvedValue(authResult(['code:write']))
+
+    const response = await messagesPost(
+      request('/api/v1/messages', {
+        model: 'brok-code',
+        stream: true,
+        messages: [{ role: 'system', content: 'You are Brok.' }]
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      code: 'invalid_message_role',
+      message: 'messages[0].role must be user or assistant.'
+    })
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
     expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
     expect(mockRecordUsage).not.toHaveBeenCalled()
   })

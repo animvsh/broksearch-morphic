@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  validateAnthropicMessages,
   validateApiKeyStatusTransition,
-  validateCreateApiKeyInput
+  validateCreateApiKeyInput,
+  validateOpenAiChatMessages
 } from '../api-platform'
 
 const validInput = {
@@ -106,5 +108,67 @@ describe('validateApiKeyStatusTransition', () => {
     expect(() => validateApiKeyStatusTransition('revoked', 'revoke')).toThrow(
       'API key is already revoked.'
     )
+  })
+})
+
+describe('validateOpenAiChatMessages', () => {
+  it('accepts supported OpenAI-compatible chat roles', () => {
+    expect(
+      validateOpenAiChatMessages([
+        { role: 'system', content: 'Be concise.' },
+        { role: 'developer', content: 'Use citations.' },
+        { role: 'user', content: 'What is Brok?' },
+        { role: 'assistant', content: 'Brok is an answer engine.' },
+        { role: 'tool', content: 'tool result' }
+      ])
+    ).toEqual({ ok: true })
+  })
+
+  it('rejects empty and malformed chat messages', () => {
+    expect(validateOpenAiChatMessages([])).toEqual({
+      ok: false,
+      code: 'missing_messages',
+      message: 'messages must include at least one chat message.'
+    })
+    expect(validateOpenAiChatMessages(['hello'])).toEqual({
+      ok: false,
+      code: 'invalid_message',
+      message: 'messages[0] must be an object.'
+    })
+    expect(validateOpenAiChatMessages([{ role: 'admin' }])).toEqual({
+      ok: false,
+      code: 'invalid_message_role',
+      message:
+        'messages[0].role must be one of system, developer, user, assistant, or tool.'
+    })
+  })
+})
+
+describe('validateAnthropicMessages', () => {
+  it('accepts supported Anthropic-compatible message roles', () => {
+    expect(
+      validateAnthropicMessages([
+        { role: 'user', content: 'Build a dashboard' },
+        { role: 'assistant', content: 'Here is a plan.' }
+      ])
+    ).toEqual({ ok: true })
+  })
+
+  it('rejects empty and malformed Anthropic messages', () => {
+    expect(validateAnthropicMessages([])).toEqual({
+      ok: false,
+      code: 'missing_messages',
+      message: 'messages must include at least one Anthropic message.'
+    })
+    expect(validateAnthropicMessages([null])).toEqual({
+      ok: false,
+      code: 'invalid_message',
+      message: 'messages[0] must be an object.'
+    })
+    expect(validateAnthropicMessages([{ role: 'system' }])).toEqual({
+      ok: false,
+      code: 'invalid_message_role',
+      message: 'messages[0].role must be user or assistant.'
+    })
   })
 })
