@@ -227,6 +227,68 @@ describe('streaming usage metering', () => {
     expect(mockRecordUsage).not.toHaveBeenCalled()
   })
 
+  it('rejects malformed OpenAI-compatible message content before consuming RPM', async () => {
+    mockVerifyRequestAuth.mockResolvedValue(authResult(['chat:write']))
+
+    const response = await chatPost(
+      request('/api/v1/chat/completions', {
+        model: 'brok-fast',
+        stream: true,
+        messages: [
+          {
+            role: 'user',
+            content: [{ type: 'text' }]
+          }
+        ]
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      code: 'invalid_message_content_part',
+      message: 'messages[0].content[0].text must be a non-empty string.'
+    })
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+    expect(mockRecordUsage).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed OpenAI-compatible assistant tool calls before consuming RPM', async () => {
+    mockVerifyRequestAuth.mockResolvedValue(authResult(['chat:write']))
+
+    const response = await chatPost(
+      request('/api/v1/chat/completions', {
+        model: 'brok-fast',
+        stream: true,
+        messages: [
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: 'call_1',
+                type: 'function',
+                function: { name: '', arguments: '{}' }
+              }
+            ]
+          }
+        ]
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      code: 'invalid_tool_calls',
+      message:
+        'messages[0].tool_calls[0].function.name must be a non-empty string.'
+    })
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+    expect(mockRecordUsage).not.toHaveBeenCalled()
+  })
+
   it('estimates token usage for Anthropic-compatible message streams without provider usage', async () => {
     mockVerifyRequestAuth.mockResolvedValue(authResult(['code:write']))
     mockRouteToProviderResponse.mockResolvedValue(
@@ -320,6 +382,51 @@ describe('streaming usage metering', () => {
     expect(body.error).toMatchObject({
       code: 'invalid_message_role',
       message: 'messages[0].role must be user or assistant.'
+    })
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+    expect(mockRecordUsage).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed Anthropic-compatible message content before consuming RPM', async () => {
+    mockVerifyRequestAuth.mockResolvedValue(authResult(['code:write']))
+
+    const response = await messagesPost(
+      request('/api/v1/messages', {
+        model: 'brok-code',
+        stream: true,
+        messages: [{ role: 'user', content: [{ type: 'text' }] }]
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      code: 'invalid_message_content_part',
+      message: 'messages[0].content[0].text must be a non-empty string.'
+    })
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+    expect(mockRecordUsage).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed Anthropic-compatible system content before consuming RPM', async () => {
+    mockVerifyRequestAuth.mockResolvedValue(authResult(['code:write']))
+
+    const response = await messagesPost(
+      request('/api/v1/messages', {
+        model: 'brok-code',
+        stream: true,
+        system: '',
+        messages: [{ role: 'user', content: 'Build a dashboard' }]
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      code: 'invalid_system',
+      message: 'system must not be empty.'
     })
     expect(mockCheckRateLimit).not.toHaveBeenCalled()
     expect(mockRouteToProviderResponse).not.toHaveBeenCalled()

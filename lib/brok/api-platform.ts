@@ -60,6 +60,13 @@ const openAiChatMessageRoles = new Set([
   'tool'
 ])
 const anthropicMessageRoles = new Set(['user', 'assistant'])
+const openAiContentPartTypes = new Set([
+  'text',
+  'input_text',
+  'image_url',
+  'input_image'
+])
+const anthropicContentBlockTypes = new Set(['text', 'tool_use', 'tool_result'])
 
 function uniqueStringValues(values: unknown, label: string) {
   if (!Array.isArray(values)) {
@@ -226,6 +233,200 @@ export function validateOpenAiChatMessages(
           'system, developer, user, assistant, or tool.'
       }
     }
+
+    const typedMessage = message as Record<string, unknown>
+    const contentValidation = validateOpenAiMessageContent({
+      content: typedMessage.content,
+      role,
+      path: `messages[${index}].content`,
+      hasToolCalls: Array.isArray(typedMessage.tool_calls)
+    })
+    if (!contentValidation.ok) return contentValidation
+
+    if (role === 'tool') {
+      const toolCallId = typedMessage.tool_call_id
+      if (typeof toolCallId !== 'string' || !toolCallId.trim()) {
+        return {
+          ok: false,
+          code: 'invalid_tool_message',
+          message: `messages[${index}].tool_call_id must be a non-empty string.`
+        }
+      }
+    }
+
+    if (typedMessage.tool_calls !== undefined) {
+      const toolCallsValidation = validateOpenAiToolCalls(
+        typedMessage.tool_calls,
+        `messages[${index}].tool_calls`
+      )
+      if (!toolCallsValidation.ok) return toolCallsValidation
+    }
+  }
+
+  return { ok: true }
+}
+
+function validateOpenAiMessageContent({
+  content,
+  role,
+  path,
+  hasToolCalls
+}: {
+  content: unknown
+  role: string
+  path: string
+  hasToolCalls: boolean
+}): ApiRequestValidationResult {
+  if ((content === undefined || content === null) && role === 'assistant') {
+    return hasToolCalls
+      ? { ok: true }
+      : {
+          ok: false,
+          code: 'invalid_message_content',
+          message: `${path} is required unless assistant tool_calls are provided.`
+        }
+  }
+
+  if (typeof content === 'string') {
+    return content.trim()
+      ? { ok: true }
+      : {
+          ok: false,
+          code: 'invalid_message_content',
+          message: `${path} must not be empty.`
+        }
+  }
+
+  if (!Array.isArray(content)) {
+    return {
+      ok: false,
+      code: 'invalid_message_content',
+      message: `${path} must be a string or an array of content parts.`
+    }
+  }
+
+  if (content.length === 0) {
+    return {
+      ok: false,
+      code: 'invalid_message_content',
+      message: `${path} must include at least one content part.`
+    }
+  }
+
+  for (const [partIndex, part] of content.entries()) {
+    const partPath = `${path}[${partIndex}]`
+    if (!part || typeof part !== 'object' || Array.isArray(part)) {
+      return {
+        ok: false,
+        code: 'invalid_message_content_part',
+        message: `${partPath} must be an object.`
+      }
+    }
+
+    const typedPart = part as Record<string, unknown>
+    const type = typedPart.type
+    if (typeof type !== 'string' || !openAiContentPartTypes.has(type)) {
+      return {
+        ok: false,
+        code: 'invalid_message_content_part',
+        message:
+          `${partPath}.type must be one of ` +
+          'text, input_text, image_url, or input_image.'
+      }
+    }
+
+    if (type === 'text' || type === 'input_text') {
+      if (typeof typedPart.text !== 'string' || !typedPart.text.trim()) {
+        return {
+          ok: false,
+          code: 'invalid_message_content_part',
+          message: `${partPath}.text must be a non-empty string.`
+        }
+      }
+    }
+
+    if (type === 'image_url' || type === 'input_image') {
+      const imageUrl = typedPart.image_url
+      const url =
+        typeof imageUrl === 'string'
+          ? imageUrl
+          : imageUrl && typeof imageUrl === 'object'
+            ? (imageUrl as { url?: unknown }).url
+            : null
+      if (typeof url !== 'string' || !url.trim()) {
+        return {
+          ok: false,
+          code: 'invalid_message_content_part',
+          message: `${partPath}.image_url must include a non-empty url.`
+        }
+      }
+    }
+  }
+
+  return { ok: true }
+}
+
+function validateOpenAiToolCalls(
+  toolCalls: unknown,
+  path: string
+): ApiRequestValidationResult {
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    return {
+      ok: false,
+      code: 'invalid_tool_calls',
+      message: `${path} must include at least one tool call.`
+    }
+  }
+
+  for (const [index, toolCall] of toolCalls.entries()) {
+    const toolCallPath = `${path}[${index}]`
+    if (!toolCall || typeof toolCall !== 'object' || Array.isArray(toolCall)) {
+      return {
+        ok: false,
+        code: 'invalid_tool_calls',
+        message: `${toolCallPath} must be an object.`
+      }
+    }
+
+    const typedToolCall = toolCall as Record<string, unknown>
+    if (typeof typedToolCall.id !== 'string' || !typedToolCall.id.trim()) {
+      return {
+        ok: false,
+        code: 'invalid_tool_calls',
+        message: `${toolCallPath}.id must be a non-empty string.`
+      }
+    }
+    if (typedToolCall.type !== 'function') {
+      return {
+        ok: false,
+        code: 'invalid_tool_calls',
+        message: `${toolCallPath}.type must be function.`
+      }
+    }
+
+    const fn = typedToolCall.function
+    if (!fn || typeof fn !== 'object' || Array.isArray(fn)) {
+      return {
+        ok: false,
+        code: 'invalid_tool_calls',
+        message: `${toolCallPath}.function must be an object.`
+      }
+    }
+    const typedFn = fn as Record<string, unknown>
+    if (typeof typedFn.name !== 'string' || !typedFn.name.trim()) {
+      return {
+        ok: false,
+        code: 'invalid_tool_calls',
+        message: `${toolCallPath}.function.name must be a non-empty string.`
+      }
+    }
+    if (typeof typedFn.arguments !== 'string') {
+      return {
+        ok: false,
+        code: 'invalid_tool_calls',
+        message: `${toolCallPath}.function.arguments must be a string.`
+      }
+    }
   }
 
   return { ok: true }
@@ -257,6 +458,146 @@ export function validateAnthropicMessages(
         ok: false,
         code: 'invalid_message_role',
         message: `messages[${index}].role must be user or assistant.`
+      }
+    }
+
+    const contentValidation = validateAnthropicContent(
+      (message as { content?: unknown }).content,
+      `messages[${index}].content`
+    )
+    if (!contentValidation.ok) return contentValidation
+  }
+
+  return { ok: true }
+}
+
+export function validateAnthropicSystem(
+  system: unknown
+): ApiRequestValidationResult {
+  if (system === undefined) return { ok: true }
+
+  const validation = validateAnthropicContent(system, 'system')
+  if (!validation.ok) {
+    return {
+      ok: false,
+      code:
+        validation.code === 'invalid_message_content_part'
+          ? validation.code
+          : 'invalid_system',
+      message: validation.message
+    }
+  }
+
+  return { ok: true }
+}
+
+function validateAnthropicContent(
+  content: unknown,
+  path: string
+): ApiRequestValidationResult {
+  if (typeof content === 'string') {
+    return content.trim()
+      ? { ok: true }
+      : {
+          ok: false,
+          code: 'invalid_message_content',
+          message: `${path} must not be empty.`
+        }
+  }
+
+  if (!Array.isArray(content)) {
+    return {
+      ok: false,
+      code: 'invalid_message_content',
+      message: `${path} must be a string or an array of content blocks.`
+    }
+  }
+
+  if (content.length === 0) {
+    return {
+      ok: false,
+      code: 'invalid_message_content',
+      message: `${path} must include at least one content block.`
+    }
+  }
+
+  for (const [index, block] of content.entries()) {
+    const blockPath = `${path}[${index}]`
+    if (!block || typeof block !== 'object' || Array.isArray(block)) {
+      return {
+        ok: false,
+        code: 'invalid_message_content_part',
+        message: `${blockPath} must be an object.`
+      }
+    }
+
+    const typedBlock = block as Record<string, unknown>
+    const type = typedBlock.type
+    if (typeof type !== 'string' || !anthropicContentBlockTypes.has(type)) {
+      return {
+        ok: false,
+        code: 'invalid_message_content_part',
+        message: `${blockPath}.type must be one of text, tool_use, or tool_result.`
+      }
+    }
+
+    if (type === 'text') {
+      if (typeof typedBlock.text !== 'string' || !typedBlock.text.trim()) {
+        return {
+          ok: false,
+          code: 'invalid_message_content_part',
+          message: `${blockPath}.text must be a non-empty string.`
+        }
+      }
+    }
+
+    if (type === 'tool_use') {
+      if (typeof typedBlock.id !== 'string' || !typedBlock.id.trim()) {
+        return {
+          ok: false,
+          code: 'invalid_message_content_part',
+          message: `${blockPath}.id must be a non-empty string.`
+        }
+      }
+      if (typeof typedBlock.name !== 'string' || !typedBlock.name.trim()) {
+        return {
+          ok: false,
+          code: 'invalid_message_content_part',
+          message: `${blockPath}.name must be a non-empty string.`
+        }
+      }
+      if (
+        !typedBlock.input ||
+        typeof typedBlock.input !== 'object' ||
+        Array.isArray(typedBlock.input)
+      ) {
+        return {
+          ok: false,
+          code: 'invalid_message_content_part',
+          message: `${blockPath}.input must be an object.`
+        }
+      }
+    }
+
+    if (type === 'tool_result') {
+      if (
+        typeof typedBlock.tool_use_id !== 'string' ||
+        !typedBlock.tool_use_id.trim()
+      ) {
+        return {
+          ok: false,
+          code: 'invalid_message_content_part',
+          message: `${blockPath}.tool_use_id must be a non-empty string.`
+        }
+      }
+
+      const resultContent = typedBlock.content
+      if (typeof resultContent !== 'string' && !Array.isArray(resultContent)) {
+        return {
+          ok: false,
+          code: 'invalid_message_content_part',
+          message: `${blockPath}.content must be a string or an array.`
+        }
       }
     }
   }
