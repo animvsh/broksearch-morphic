@@ -49,6 +49,7 @@ describe('registry provider detection', () => {
   it('disables the OpenAI-compatible provider without either key', async () => {
     vi.stubEnv('OPENAI_COMPATIBLE_API_KEY', '')
     vi.stubEnv('BROK_PROVIDER_API_KEY', '')
+    vi.stubEnv('MINIMAX_API_KEY', '')
 
     const { isProviderEnabled } = await loadRegistry()
 
