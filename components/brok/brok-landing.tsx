@@ -22,9 +22,9 @@ type BrokLandingProps = {
 const GITHUB_URL = 'https://github.com/animvsh/broksearch-morphic'
 
 const NAV_LINKS = [
-  { label: 'Features', href: '/dashboard' },
-  { label: 'BrokCode', href: '/brokcode' },
-  { label: 'BrokMail', href: '/brokmail' },
+  { label: 'Features', href: '/features' },
+  { label: 'BrokCode', href: '/features/brokcode' },
+  { label: 'BrokMail', href: '/features/brokmail' },
   { label: 'Pricing', href: '#pricing' }
 ] as const
 
@@ -33,19 +33,19 @@ const MOBILE_PRODUCTS = [
     title: 'Search',
     body: 'Fast answers with sources, citations, and deep research.',
     icon: Search,
-    href: '/dashboard'
+    href: '/features/search'
   },
   {
     title: 'BrokCode',
     body: 'A coding-agent workspace for browser, cloud, and TUI.',
     icon: Code2,
-    href: '/brokcode'
+    href: '/features/brokcode'
   },
   {
     title: 'BrokMail',
     body: 'Connected Gmail workflows for triage and drafting.',
     icon: Mail,
-    href: '/brokmail'
+    href: '/features/brokmail'
   }
 ] as const
 

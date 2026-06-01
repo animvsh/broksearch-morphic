@@ -44,4 +44,23 @@ Notes: Ask for the decision before showing risks.`)
   it('falls back to the starter deck when the source is empty', () => {
     expect(parsePresentationMarkdown('')).toHaveLength(3)
   })
+
+  it('can parse strict generated decks without falling back to the starter deck', () => {
+    expect(
+      parsePresentationMarkdown('Loose paragraph without a heading', {
+        fallbackToSample: false,
+        requireHeading: true
+      })
+    ).toEqual([])
+  })
+
+  it('strips wrapping markdown fences from LLM output', () => {
+    const slides = parsePresentationMarkdown(`\`\`\`markdown
+# Wrapped Deck
+- One point
+\`\`\``)
+
+    expect(slides).toHaveLength(1)
+    expect(slides[0]?.title).toBe('Wrapped Deck')
+  })
 })

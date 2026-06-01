@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 
 import { Presentation, Sparkles } from 'lucide-react'
 
+import { requireFeatureAccess } from '@/lib/auth/app-access'
+
 import { RevealPresentationWorkbench } from '@/components/presentations/reveal-presentation-workbench'
 
 export const metadata: Metadata = {
@@ -10,9 +12,13 @@ export const metadata: Metadata = {
     'Create and preview reveal.js-backed presentation decks inside Brok.'
 }
 
-export default function PresentationsPage() {
+export const dynamic = 'force-dynamic'
+
+export default async function PresentationsPage() {
+  await requireFeatureAccess('/presentations', 'presentations')
+
   return (
-    <div className="dashboard-shell min-h-full w-full p-3 sm:p-4">
+    <div className="dashboard-shell min-h-full w-full overflow-x-hidden p-3 sm:p-4">
       <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4">
         <section className="dashboard-panel px-4 py-4 sm:px-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

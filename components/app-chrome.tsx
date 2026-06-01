@@ -27,7 +27,11 @@ export function AppChrome({
   const pathname = usePathname()
   const isAuthRoute = pathname?.startsWith('/auth')
   const isDocsRoute = pathname?.startsWith('/docs')
-  const isPublicLanding = pathname === '/' && !user
+  const isPublicMarketingRoute =
+    !user &&
+    (pathname === '/' ||
+      pathname?.startsWith('/features') ||
+      pathname?.startsWith('/p/'))
   const isFocusWorkspace =
     pathname?.startsWith('/brokcode') || pathname?.startsWith('/brokmail')
   const usesPageScroll =
@@ -55,7 +59,7 @@ export function AppChrome({
     })
   }
 
-  if (isAuthRoute || isPublicLanding) {
+  if (isAuthRoute || isPublicMarketingRoute) {
     return (
       <main className="flex min-h-svh w-full overflow-y-auto bg-background">
         {children}

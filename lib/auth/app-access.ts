@@ -13,7 +13,8 @@ export const APP_FEATURES = [
   'brokmail',
   'brokcode',
   'tools',
-  'api_platform'
+  'api_platform',
+  'presentations'
 ] as const
 
 export type AppFeature = (typeof APP_FEATURES)[number]
