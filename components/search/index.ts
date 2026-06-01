@@ -28,3 +28,4 @@ export {
   DEMO_SOURCES,
   DEMO_FOLLOW_UPS
 } from './search-answer'
+export { SearchAnswerSection, type SearchAnswerSectionProps } from './search-answer-section'
