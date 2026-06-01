@@ -5,12 +5,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   createBrokCodeProject,
+  deleteBrokCodeProject,
   getBrokCodeProject,
   getBrokCodeProjectByHandle,
   listBrokCodeProjectDeployments,
   listBrokCodeProjectFiles,
   listBrokCodeProjects,
   recordBrokCodeProjectDeployment,
+  renameBrokCodeProject,
   updateBrokCodeProjectPreview,
   upsertBrokCodeProjectFile
 } from '../project-store'
@@ -47,6 +49,78 @@ describe('BrokCode project file store', () => {
 
     expect(first.slug).toBe('demo-app')
     expect(second.slug).toBe('demo-app-2')
+  })
+
+  it('renames projects with a unique slug in fallback storage', async () => {
+    const first = await createBrokCodeProject({
+      workspaceId,
+      userId,
+      name: 'Demo App'
+    })
+    const second = await createBrokCodeProject({
+      workspaceId,
+      userId,
+      name: 'Other App'
+    })
+
+    const renamed = await renameBrokCodeProject({
+      id: second.id,
+      workspaceId,
+      userId,
+      name: 'Demo App'
+    })
+
+    expect(renamed).toMatchObject({
+      id: second.id,
+      name: 'Demo App',
+      slug: 'demo-app-2'
+    })
+    await expect(
+      getBrokCodeProjectByHandle({ handle: 'demo-app' })
+    ).resolves.toMatchObject({ id: first.id })
+    await expect(
+      getBrokCodeProjectByHandle({ handle: 'demo-app-2' })
+    ).resolves.toMatchObject({ id: second.id })
+  })
+
+  it('deletes a project with its files and deployments in fallback storage', async () => {
+    const project = await createBrokCodeProject({
+      workspaceId,
+      userId,
+      name: 'Delete App'
+    })
+    await upsertBrokCodeProjectFile({
+      projectId: project.id,
+      workspaceId,
+      path: 'index.html',
+      content: '<h1>Delete me</h1>'
+    })
+    await recordBrokCodeProjectDeployment({
+      projectId: project.id,
+      workspaceId,
+      userId,
+      provider: 'managed_preview',
+      status: 'deployed',
+      url: 'https://preview.example'
+    })
+
+    await expect(
+      deleteBrokCodeProject({ id: project.id, workspaceId, userId })
+    ).resolves.toBe(true)
+
+    await expect(
+      getBrokCodeProject({ id: project.id, workspaceId, userId })
+    ).resolves.toBeNull()
+    await expect(
+      listBrokCodeProjectFiles({ projectId: project.id, workspaceId })
+    ).resolves.toEqual([])
+    await expect(
+      listBrokCodeProjectDeployments({
+        projectId: project.id,
+        workspaceId,
+        userId
+      })
+    ).resolves.toEqual([])
   })
 
   it('keeps local fallback workspace projects in file storage even when DATABASE_URL is set', async () => {

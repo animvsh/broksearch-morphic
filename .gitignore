@@ -42,3 +42,4 @@ next-env.d.ts
 .brokcode/sync/projects.json
 .brok-audits/
 .brok-smoke/
+.gstack/

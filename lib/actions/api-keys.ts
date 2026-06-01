@@ -7,7 +7,7 @@ import { asc, eq } from 'drizzle-orm'
 import {
   generateApiKey,
   getKeyPrefix,
-  hashApiKey,
+  hashNewApiKey,
   maskApiKey
 } from '@/lib/api-key'
 import { getCurrentAppAccess, hasFeatureAccess } from '@/lib/auth/app-access'
@@ -113,7 +113,7 @@ export async function createApiKey(
   }
 
   const rawKey = generateApiKey(validatedInput.environment)
-  const keyHash = hashApiKey(rawKey)
+  const { hash: keyHash, salt: keySalt } = hashNewApiKey(rawKey)
   const keyPrefix = getKeyPrefix(rawKey)
 
   const [newKey] = await db
@@ -124,6 +124,7 @@ export async function createApiKey(
       name: validatedInput.name,
       keyPrefix,
       keyHash,
+      keySalt,
       environment: validatedInput.environment,
       scopes: validatedInput.scopes,
       allowedModels: validatedInput.allowedModels,

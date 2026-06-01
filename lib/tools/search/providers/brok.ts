@@ -1,10 +1,10 @@
-import { searchWithMiniMaxWebSearch } from '@/lib/brok/minimax-web-search'
+import { searchWithBrokWebSearch } from '@/lib/brok/brok-web-search'
 import { SearchResults } from '@/lib/types'
 import { sanitizeUrl } from '@/lib/utils'
 
 import { SearchProvider } from './base'
 
-export class MiniMaxWebSearchProvider implements SearchProvider {
+export class BrokWebSearchProvider implements SearchProvider {
   async search(
     query: string,
     maxResults: number = 10,
@@ -12,7 +12,7 @@ export class MiniMaxWebSearchProvider implements SearchProvider {
     includeDomains: string[] = [],
     excludeDomains: string[] = []
   ): Promise<SearchResults> {
-    const results = await searchWithMiniMaxWebSearch(query, maxResults)
+    const results = await searchWithBrokWebSearch(query, maxResults)
     const includeSet = new Set(
       includeDomains.map(domain => domain.toLowerCase())
     )

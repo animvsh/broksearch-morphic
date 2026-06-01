@@ -82,35 +82,69 @@ npm run brokcode`}</code>
         <h2>Core Commands</h2>
         <ul>
           <li>
-            <code>/help</code> - show available commands
+            <code>/help</code> - show all available commands
           </li>
           <li>
-            <code>/usage month</code> - show current usage stats
+            <code>/doctor</code> - diagnose config, key, and connectivity
+          </li>
+          <li>
+            <code>/usage [day|week|month]</code> - show usage stats
           </li>
           <li>
             <code>/sync</code> - fetch cloud and TUI session events
           </li>
           <li>
-            <code>/session</code> - show the active shared session id and sync
-            origin
+            <code>/session [id]</code> - show the active shared session id and
+            sync origin
           </li>
           <li>
             <code>/projects</code> - list saved Brok Code projects
           </li>
           <li>
-            <code>/project new Contract Genie --username contract-genie</code> -
-            create and select a project
+            <code>/project new &lt;name&gt; [--username handle]</code> - create
+            and select a project
           </li>
           <li>
-            <code>/project select contract-genie</code> - select a project by
-            id, slug, or name
+            <code>/project select &lt;id|slug&gt;</code> - select a project
+          </li>
+          <li>
+            <code>/project show</code> - print the active project
+          </li>
+          <li>
+            <code>/project rename &lt;name&gt;</code> - rename the active
+            project
+          </li>
+          <li>
+            <code>/project delete</code> - delete the active project (with
+            confirmation)
           </li>
           <li>
             <code>/files</code> - list files in the selected project
           </li>
           <li>
-            <code>/file put app/page.tsx ./app/page.tsx</code> - save a local
+            <code>/file put &lt;path&gt; &lt;local&gt;</code> - save a local
             file into the selected project
+          </li>
+          <li>
+            <code>/file show &lt;path&gt;</code> - print a saved file
+          </li>
+          <li>
+            <code>/file rename &lt;old&gt; &lt;new&gt;</code> - rename a saved
+            file
+          </li>
+          <li>
+            <code>/file delete &lt;path&gt;</code> - remove a file from the
+            project
+          </li>
+          <li>
+            <code>/versions [limit]</code> - list recent version history
+          </li>
+          <li>
+            <code>/version &lt;id&gt;</code> - show one version&apos;s metadata
+            and files
+          </li>
+          <li>
+            <code>/resume [taskId]</code> - reconnect to a streaming task
           </li>
           <li>
             <code>/worktree feature/my-branch</code> - create an isolated Git
@@ -131,6 +165,70 @@ npm run brokcode`}</code>
           <li>
             <code>/compat</code> - print Codex/OpenAI and Anthropic-compatible
             env setup
+          </li>
+          <li>
+            <code>/key brok_sk_...</code> - save a Brok API key to{' '}
+            <code>~/.brokcode/config.json</code>
+          </li>
+          <li>
+            <code>/key clear</code> - remove the saved key
+          </li>
+        </ul>
+
+        <h3>TUI Input Shortcuts</h3>
+        <ul>
+          <li>
+            <code>Tab</code> - autocomplete slash commands and project ids
+          </li>
+          <li>
+            <code>↑</code> / <code>↓</code> - recall previous commands from{' '}
+            <code>~/.brokcode/history</code>
+          </li>
+          <li>
+            <code>Ctrl+C</code> - cancel the in-flight stream; press twice to
+            exit
+          </li>
+        </ul>
+
+        <h2>Local Terminal Harness</h2>
+        <p>
+          The TUI also operates as a terminal-native coding harness, sending
+          every operation through the Brok API. Use it to work against your
+          local repository without leaving the terminal.
+        </p>
+        <ul>
+          <li>
+            <code>/read &lt;path&gt;</code> - read a local file with line
+            numbers
+          </li>
+          <li>
+            <code>/head &lt;path&gt; &lt;n&gt;</code> - first n lines of a local
+            file
+          </li>
+          <li>
+            <code>/tail &lt;path&gt; &lt;n&gt;</code> - last n lines of a local
+            file
+          </li>
+          <li>
+            <code>/shell &lt;cmd&gt;</code> - run a shell command from cwd
+            (refuses destructive patterns like <code>rm -rf /</code>,{' '}
+            <code>sudo</code>, <code>mkfs</code>)
+          </li>
+          <li>
+            <code>/git status|diff|log|branch|show</code> - read-only git
+            introspection
+          </li>
+          <li>
+            <code>/build &lt;prompt&gt;</code> - one-shot: send a build prompt
+            to the active project and stream the result
+          </li>
+          <li>
+            <code>/ask &lt;file&gt; &lt;question&gt;</code> - load a local file
+            and ask Brok a question about it
+          </li>
+          <li>
+            <code>/edit &lt;file&gt; &lt;instruction&gt;</code> - load a local
+            file, ask Brok to rewrite, save the result back to the local file
           </li>
         </ul>
 
@@ -200,6 +298,17 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
             with optional username
           </li>
           <li>
+            <code>GET /api/brokcode/projects/[id]</code> - read a single project
+          </li>
+          <li>
+            <code>PATCH /api/brokcode/projects/[id]</code> - rename a saved
+            project
+          </li>
+          <li>
+            <code>DELETE /api/brokcode/projects/[id]</code> - delete a saved
+            project and its files
+          </li>
+          <li>
             <code>GET /api/brokcode/projects/[id]/backend</code> - read redacted
             project backend metadata
           </li>
@@ -222,6 +331,16 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
           <li>
             <code>PUT /api/brokcode/projects/[id]/files</code> - upsert a saved
             project file
+          </li>
+          <li>
+            <code>POST /api/brokcode/projects/[id]/files</code> - apply a batch
+            of file operations (delete, rename, upsert)
+          </li>
+          <li>
+            <code>GET /api/brokcode/versions</code> - list version history
+          </li>
+          <li>
+            <code>GET /api/brokcode/versions/[id]</code> - read one version
           </li>
           <li>
             <code>POST /api/brokcode/github/connect</code> - open the Composio

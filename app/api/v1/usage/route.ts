@@ -72,8 +72,15 @@ export async function GET(request: NextRequest) {
           gte(usageEvents.createdAt, dateFrom)
         )
       )
-  } catch {
-    if (auth.apiKey.id === '00000000-0000-0000-0000-000000000001') {
+  } catch (error) {
+    if (
+      process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK === 'true' &&
+      process.env.BROK_CLOUD_DEPLOYMENT !== 'true'
+    ) {
+      console.warn(
+        '[v1/usage] Returning degraded zeros (local fallback active):',
+        error
+      )
       return NextResponse.json(
         {
           period,
