@@ -28,6 +28,10 @@ coverage/
 .cache/
 .claude/
 
+# Claude runtime state (rewritten continuously)
+.claude/tasks/cfg/*.json
+.claude/logs/
+
 # Next.js
 .next/
 out/
