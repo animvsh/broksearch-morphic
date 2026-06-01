@@ -72,6 +72,10 @@ import {
   buildBrokCodeProjectBrain,
   normalizeBrokCodeProjectBrain
 } from '@/lib/brokcode/project-brain'
+import {
+  normalizeBrokCodeGeneratedFilePaths,
+  shouldRefreshBrokCodeProjectAfterServerRun
+} from '@/lib/brokcode/run-sync'
 import { openComposioPopup } from '@/lib/composio-popup'
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
@@ -4226,11 +4230,47 @@ export function BrokCodeApp({
           ? body.preview_url
           : extractPreviewUrlFromText(assistantContent)
       const serverFileChanges = normalizeBrokCodeFileChanges(body?.file_changes)
+      const serverGeneratedFilePaths = normalizeBrokCodeGeneratedFilePaths(
+        body?.generated_files
+      )
       const generatedFiles = extractGeneratedPreviewFiles(assistantContent)
 
       let managedPreviewUrl: string | null = null
       let afterRunFiles = beforeRunFiles
-      if (generatedFiles.length > 0) {
+      const serverPersistedRunOutput =
+        shouldRefreshBrokCodeProjectAfterServerRun({
+          generatedFilesCount: generatedFiles.length,
+          serverFileChangesCount: serverFileChanges.length,
+          serverGeneratedFilePathsCount: serverGeneratedFilePaths.length
+        })
+
+      if (serverPersistedRunOutput) {
+        updateExecutionStep(
+          run.id,
+          'validate',
+          'running',
+          `Loading ${serverGeneratedFilePaths.length || serverFileChanges.length} server-saved file change${
+            (serverGeneratedFilePaths.length || serverFileChanges.length) === 1
+              ? ''
+              : 's'
+          }.`
+        )
+        afterRunFiles = await refreshProjectFiles(runProject)
+        runRuntime = await createProjectRuntimeRecord({
+          project: runProject,
+          status: 'building',
+          versionId:
+            typeof body?.task_id === 'string'
+              ? body.task_id
+              : (run.taskId ?? null)
+        })
+        managedPreviewUrl = await openCloudProjectPreview(runProject.id).catch(
+          error => {
+            console.error('Could not refresh server-persisted preview:', error)
+            return externalPreviewUrl
+          }
+        )
+      } else if (generatedFiles.length > 0) {
         updateExecutionStep(
           run.id,
           'validate',
