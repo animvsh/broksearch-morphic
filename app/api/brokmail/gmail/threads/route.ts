@@ -361,16 +361,16 @@ function groupMailThreads(messages: Record<string, unknown>[]): MailThread[] {
 }
 
 export async function GET() {
+  const access = await requireFeatureAccessForApi('brokmail')
+  if (!access.ok) return access.response
+  const user = access.user
+
   if (!isComposioConfigured()) {
     return NextResponse.json(
       { error: 'Composio is not configured for Gmail.' },
       { status: 503 }
     )
   }
-
-  const access = await requireFeatureAccessForApi('brokmail')
-  if (!access.ok) return access.response
-  const user = access.user
 
   const settledAccountsByToolkit = await Promise.allSettled(
     resolveGmailToolkits().map(async toolkit => {

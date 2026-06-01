@@ -4,6 +4,7 @@ import {
   hasFeatureAccess,
   requireAnyFeatureAccessForApi
 } from '@/lib/auth/app-access'
+import { reconcileStaleBrokCodeTask } from '@/lib/brokcode/durable-job'
 import { getBackgroundTask } from '@/lib/tasks/background-tasks'
 
 export const runtime = 'nodejs'
@@ -22,12 +23,18 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  if (!hasFeatureAccess(access.access, 'search') && task.kind !== 'brokcode') {
+  const reconciledTask =
+    task.kind === 'brokcode' ? await reconcileStaleBrokCodeTask({ task }) : task
+
+  if (
+    !hasFeatureAccess(access.access, 'search') &&
+    reconciledTask.kind !== 'brokcode'
+  ) {
     return NextResponse.json(
       { error: 'Feature access denied', feature: 'search' },
       { status: 403 }
     )
   }
 
-  return NextResponse.json({ task })
+  return NextResponse.json({ task: reconciledTask })
 }

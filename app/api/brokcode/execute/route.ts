@@ -26,9 +26,14 @@ import {
 } from '@/lib/brokcode/backend-provider'
 import { buildBrokCodeProjectContextPack } from '@/lib/brokcode/context-packer'
 import {
+  createBrokCodeWorkerMetadata,
+  getBrokCodeJobRegistry
+} from '@/lib/brokcode/durable-job'
+import {
   applyBrokCodeFileOperations,
   BrokCodeFileOperation,
-  BrokCodeFileOperationError
+  BrokCodeFileOperationError,
+  summarizeBrokCodeFullFileChanges
 } from '@/lib/brokcode/file-operations'
 import {
   buildFallbackGeneratedAppFiles,
@@ -53,14 +58,23 @@ import {
   resolvePublicPreviewOrigin
 } from '@/lib/brokcode/preview'
 import {
+  buildBrokCodeProjectBrain,
+  normalizeBrokCodeProjectBrain
+} from '@/lib/brokcode/project-brain'
+import {
   deleteBrokCodeProjectFile,
   getBrokCodeProject,
   getBrokCodeProjectBackend,
   listBrokCodeProjectFiles,
   renameBrokCodeProjectFile,
+  updateBrokCodeProjectMetadata,
   updateBrokCodeProjectPreview,
   upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
+import {
+  advanceBrokCodeRunLifecycle,
+  createBrokCodeRunLifecycle
+} from '@/lib/brokcode/run-lifecycle'
 import { createBrokCodeRuntimeSpec } from '@/lib/brokcode/runtime/contract'
 import { materializeBrokCodeRuntimeWorkspace } from '@/lib/brokcode/runtime/workspace'
 import {
@@ -88,6 +102,9 @@ type OpenAiMessage = {
 type SuccessfulAuth = BrokCodeAuthResult
 
 const DEFAULT_BROKCODE_MODEL = 'brok-code'
+const BROKCODE_GENERATION_MAX_TOKENS = Number(
+  process.env.BROKCODE_GENERATION_MAX_TOKENS ?? 8192
+)
 
 function resolveBrokCodeModel(value: unknown) {
   if (typeof value === 'string' && value.trim()) {
@@ -401,6 +418,17 @@ async function persistGeneratedProjectOutput({
       origin,
       projectId: project.id
     })
+    const productBrain = buildBrokCodeProjectBrain({
+      projectName: project.name,
+      command,
+      files: applied.files,
+      backend: publicBrokCodeBackendMetadata(
+        getBrokCodeProjectBackend(project)
+      ),
+      previousBrain: normalizeBrokCodeProjectBrain(
+        project.metadata?.productBrain
+      )
+    })
     await updateBrokCodeProjectPreview({
       projectId: project.id,
       workspaceId: auth.workspace.id,
@@ -409,10 +437,17 @@ async function persistGeneratedProjectOutput({
       metadata: {
         mode: 'managed_static',
         fileOperations: applied.changes,
+        fileChanges: applied.changes,
         runtimeWorkspace: runtimeWorkspace.manifest,
         generatedAt: new Date().toISOString(),
         source: 'runtime_operations'
       }
+    })
+    await updateBrokCodeProjectMetadata({
+      projectId: project.id,
+      workspaceId: auth.workspace.id,
+      userId: auth.apiKey.userId,
+      metadata: { productBrain }
     })
     send?.('preview', {
       project_id: project.id,
@@ -423,6 +458,7 @@ async function persistGeneratedProjectOutput({
 
     return {
       files: applied.files,
+      fileChanges: applied.changes,
       previewUrl,
       usedFallback: false
     }
@@ -445,6 +481,10 @@ async function persistGeneratedProjectOutput({
   })
   if (files.length === 0) return null
   const quality = inspectGeneratedBrokCodeAppQuality(files)
+  const fileChanges = summarizeBrokCodeFullFileChanges({
+    beforeFiles: currentFiles,
+    afterFiles: files
+  })
 
   if (taskId) {
     await appendBackgroundTaskEvent({
@@ -494,6 +534,7 @@ async function persistGeneratedProjectOutput({
       path: file.path,
       language: file.language
     })),
+    changes: fileChanges,
     runtime_workspace: runtimeWorkspace.manifest,
     quality
   })
@@ -501,6 +542,13 @@ async function persistGeneratedProjectOutput({
   const previewUrl = makeManagedPreviewUrl({
     origin,
     projectId: project.id
+  })
+  const productBrain = buildBrokCodeProjectBrain({
+    projectName: project.name,
+    command,
+    files,
+    backend: publicBrokCodeBackendMetadata(getBrokCodeProjectBackend(project)),
+    previousBrain: normalizeBrokCodeProjectBrain(project.metadata?.productBrain)
   })
   await updateBrokCodeProjectPreview({
     projectId: project.id,
@@ -510,11 +558,19 @@ async function persistGeneratedProjectOutput({
     metadata: {
       mode: 'managed_static',
       fileCount: files.length,
+      fileChanges,
+      beforeFileCount: currentFiles.length,
       quality,
       runtimeWorkspace: runtimeWorkspace.manifest,
       generatedAt: new Date().toISOString(),
       source: 'runtime_output'
     }
+  })
+  await updateBrokCodeProjectMetadata({
+    projectId: project.id,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId,
+    metadata: { productBrain }
   })
 
   if (taskId) {
@@ -538,6 +594,7 @@ async function persistGeneratedProjectOutput({
 
   return {
     files,
+    fileChanges,
     previewUrl,
     usedFallback
   }
@@ -709,7 +766,7 @@ async function runDirectBrokRuntime({
     model,
     messages,
     stream,
-    maxTokens: 4096
+    maxTokens: BROKCODE_GENERATION_MAX_TOKENS
   })
 
   if (stream) {
@@ -717,10 +774,38 @@ async function runDirectBrokRuntime({
       throw new Error('Brok runtime did not include a stream body.')
     }
 
-    return forwardOpenAiCompatibleStream({
-      providerBody: providerResponse.body,
-      send: send ?? (() => {})
-    })
+    try {
+      return await forwardOpenAiCompatibleStream({
+        providerBody: providerResponse.body,
+        send: send ?? (() => {})
+      })
+    } catch (error) {
+      send?.('status', {
+        message:
+          'Provider stream ended early. Retrying once with buffered output.'
+      })
+      console.error('Brok runtime stream failed; retrying buffered:', error)
+      const retryResponse = await routeToProviderResponse(
+        model as BrokModelId,
+        {
+          model,
+          messages,
+          stream: false,
+          maxTokens: BROKCODE_GENERATION_MAX_TOKENS
+        }
+      )
+      const retryPayload = await retryResponse.json().catch(() => null)
+      const retryContent = stripThinkingBlocks(
+        extractAssistantText(retryPayload)
+      ).trim()
+      if (retryContent) {
+        send?.('delta', { content: retryContent })
+      }
+      return {
+        content: retryContent,
+        usage: retryPayload?.usage ?? null
+      }
+    }
   }
 
   const payload = await providerResponse.json().catch(() => null)
@@ -861,6 +946,7 @@ function createExecutionStream({
   requirePi,
   allowBrokFallback,
   taskId,
+  workerLeaseId,
   usageContext,
   requestOrigin
 }: {
@@ -879,6 +965,7 @@ function createExecutionStream({
   requirePi: boolean
   allowBrokFallback: boolean
   taskId?: string
+  workerLeaseId?: string
   requestOrigin: string
   usageContext: {
     source?: string
@@ -936,6 +1023,10 @@ function createExecutionStream({
                 command,
                 projectId: usageContext.projectId,
                 sessionId: usageContext.sessionId,
+                ...createBrokCodeWorkerMetadata({
+                  taskId,
+                  leaseId: workerLeaseId ?? taskId
+                }),
                 progress: 12
               }
             }).catch(error => {
@@ -995,6 +1086,7 @@ function createExecutionStream({
                 status_url: taskId ? `/api/tasks/${taskId}` : null,
                 events_url: taskId ? `/api/tasks/${taskId}/events` : null,
                 generated_files: persisted?.files.map(file => file.path) ?? [],
+                file_changes: persisted?.fileChanges ?? [],
                 note: 'Built with BrokCode Cloud.'
               })
               await recordCodeExecutionUsage({
@@ -1154,6 +1246,7 @@ function createExecutionStream({
                 usage,
                 preview_url: previewUrl,
                 generated_files: persisted?.files.map(file => file.path) ?? [],
+                file_changes: persisted?.fileChanges ?? [],
                 note: 'Executed through OpenCode runtime.'
               })
               await recordCodeExecutionUsage({
@@ -1335,6 +1428,7 @@ function createExecutionStream({
             status_url: taskId ? `/api/tasks/${taskId}` : null,
             events_url: taskId ? `/api/tasks/${taskId}/events` : null,
             generated_files: persisted?.files.map(file => file.path) ?? [],
+            file_changes: persisted?.fileChanges ?? [],
             note:
               piFailure || opencodeFailure
                 ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} Routed through Brok runtime.`
@@ -1418,16 +1512,6 @@ const BROKCODE_JOB_TIMEOUT_MS = Number(
 )
 const TERMINAL_TASK_STATUSES = new Set(['succeeded', 'failed', 'cancelled'])
 
-function getBrokCodeJobRegistry() {
-  const globalState = globalThis as typeof globalThis & {
-    __brokCodeJobWorkers?: Set<string>
-  }
-  if (!globalState.__brokCodeJobWorkers) {
-    globalState.__brokCodeJobWorkers = new Set()
-  }
-  return globalState.__brokCodeJobWorkers
-}
-
 function phaseForBrokCodeEvent(event: string, payload: unknown) {
   if (event === 'delta') return 'generating'
   if (event === 'files') return 'writing_files'
@@ -1454,6 +1538,46 @@ function progressForBrokCodeEvent(event: string) {
   if (event === 'preview') return 88
   if (event === 'result') return 100
   return undefined
+}
+
+async function appendBrokCodeExecutionStreamEvent({
+  taskId,
+  userId,
+  event,
+  payload,
+  fallbackPhase,
+  fallbackProgress
+}: {
+  taskId: string
+  userId: string
+  event: string
+  payload: unknown
+  fallbackPhase?: string
+  fallbackProgress?: number
+}) {
+  const current = await getBackgroundTask({ userId, id: taskId }).catch(
+    () => null
+  )
+  const lifecycle = advanceBrokCodeRunLifecycle({
+    current: current?.metadata?.lifecycle,
+    event,
+    payload
+  })
+
+  return appendBackgroundTaskStreamEvent({
+    id: taskId,
+    userId,
+    event,
+    payload,
+    phase: lifecycle.phase ?? fallbackPhase,
+    progress:
+      typeof lifecycle.progress === 'number'
+        ? lifecycle.progress
+        : fallbackProgress,
+    metadata: {
+      lifecycle: lifecycle.steps
+    }
+  })
 }
 
 function parseSseBlocks(buffer: string) {
@@ -1495,19 +1619,20 @@ async function startDetachedBrokCodeExecutionJob(
 
   registry.add(taskId)
   const userId = execution.auth.apiKey.userId
+  const leaseId = `${taskId}:${Date.now().toString(36)}`
   let finished = false
 
   const timeout = setTimeout(() => {
     if (finished) return
-    void appendBackgroundTaskStreamEvent({
-      id: taskId,
+    void appendBrokCodeExecutionStreamEvent({
+      taskId,
       userId,
       event: 'error',
       payload: {
         message: 'BrokCode job timed out.'
       },
-      phase: 'timed_out',
-      progress: 100
+      fallbackPhase: 'timed_out',
+      fallbackProgress: 100
     })
     void updateBackgroundTask({
       id: taskId,
@@ -1523,7 +1648,10 @@ async function startDetachedBrokCodeExecutionJob(
 
   void (async () => {
     try {
-      const response = createExecutionStream(execution)
+      const response = createExecutionStream({
+        ...execution,
+        workerLeaseId: leaseId
+      })
       const reader = response.body?.getReader()
       if (!reader) {
         throw new Error('BrokCode job did not create a worker stream.')
@@ -1549,13 +1677,13 @@ async function startDetachedBrokCodeExecutionJob(
           const parsed = parseSseBlock(block)
           if (!parsed) continue
 
-          await appendBackgroundTaskStreamEvent({
-            id: taskId,
+          await appendBrokCodeExecutionStreamEvent({
+            taskId,
             userId,
             event: parsed.event,
             payload: parsed.payload,
-            phase: phaseForBrokCodeEvent(parsed.event, parsed.payload),
-            progress: progressForBrokCodeEvent(parsed.event)
+            fallbackPhase: phaseForBrokCodeEvent(parsed.event, parsed.payload),
+            fallbackProgress: progressForBrokCodeEvent(parsed.event)
           }).catch(error => {
             console.error('Failed to append BrokCode stream event:', error)
           })
@@ -1565,26 +1693,26 @@ async function startDetachedBrokCodeExecutionJob(
       for (const block of parseSseBlocks(buffer.trim())) {
         const parsed = parseSseBlock(block)
         if (!parsed) continue
-        await appendBackgroundTaskStreamEvent({
-          id: taskId,
+        await appendBrokCodeExecutionStreamEvent({
+          taskId,
           userId,
           event: parsed.event,
           payload: parsed.payload,
-          phase: phaseForBrokCodeEvent(parsed.event, parsed.payload),
-          progress: progressForBrokCodeEvent(parsed.event)
+          fallbackPhase: phaseForBrokCodeEvent(parsed.event, parsed.payload),
+          fallbackProgress: progressForBrokCodeEvent(parsed.event)
         }).catch(error => {
           console.error('Failed to append BrokCode stream event:', error)
         })
       }
     } catch (error) {
       const message = formatBrokCodeRuntimeError(error)
-      await appendBackgroundTaskStreamEvent({
-        id: taskId,
+      await appendBrokCodeExecutionStreamEvent({
+        taskId,
         userId,
         event: 'error',
         payload: { message },
-        phase: 'failed',
-        progress: 100
+        fallbackPhase: 'failed',
+        fallbackProgress: 100
       }).catch(appendError => {
         console.error('Failed to append BrokCode job failure:', appendError)
       })
@@ -1715,6 +1843,10 @@ export async function POST(request: NextRequest) {
         ? body.backend_project_url.trim()
         : null
   }
+  const retryOfTaskId =
+    typeof body?.retry_of_task_id === 'string' && body.retry_of_task_id.trim()
+      ? body.retry_of_task_id.trim()
+      : null
 
   if (!command) {
     return NextResponse.json(
@@ -1966,8 +2098,10 @@ export async function POST(request: NextRequest) {
         source: codeUsageContext.source,
         sessionId: codeUsageContext.sessionId,
         commandType: codeUsageContext.commandType,
+        retryOfTaskId,
         phase: 'queued',
         progress: 0,
+        lifecycle: createBrokCodeRunLifecycle(),
         originalRequest: {
           command,
           model,
@@ -2007,13 +2141,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    await appendBackgroundTaskStreamEvent({
-      id: task.id,
+    await appendBrokCodeExecutionStreamEvent({
+      taskId: task.id,
       userId: authResult.apiKey.userId,
       event: 'status',
       payload: { message: 'Queued BrokCode run.' },
-      phase: 'queued',
-      progress: 0
+      fallbackPhase: 'queued',
+      fallbackProgress: 0
     }).catch(error => {
       console.error('Failed to append BrokCode queued stream event:', error)
     })
@@ -2093,6 +2227,7 @@ export async function POST(request: NextRequest) {
         usage: null,
         preview_url: previewUrl,
         generated_files: persisted?.files.map(file => file.path) ?? [],
+        file_changes: persisted?.fileChanges ?? [],
         note: 'Built with BrokCode Cloud.'
       })
     } catch (error) {
@@ -2194,6 +2329,7 @@ export async function POST(request: NextRequest) {
           usage: payload?.usage ?? null,
           preview_url: previewUrl,
           generated_files: persisted?.files.map(file => file.path) ?? [],
+          file_changes: persisted?.fileChanges ?? [],
           note: 'Executed through OpenCode runtime.'
         })
       }
@@ -2340,6 +2476,7 @@ export async function POST(request: NextRequest) {
     usage,
     preview_url: previewUrl,
     generated_files: persisted?.files.map(file => file.path) ?? [],
+    file_changes: persisted?.fileChanges ?? [],
     note:
       piFailure || opencodeFailure
         ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} Routed through Brok runtime.`

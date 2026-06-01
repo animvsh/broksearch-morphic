@@ -239,6 +239,14 @@ export async function getBrokCodeRuntimeSandboxById({ id }: { id: string }) {
   return store.runtimes.find(runtime => runtime.id === id) ?? null
 }
 
+export async function refreshBrokCodeRuntimeSandbox(
+  runtime: BrokCodeRuntimeSandbox | null | undefined
+) {
+  if (!runtime) return null
+
+  return (await getBrokCodeRuntimeSandboxById({ id: runtime.id })) ?? runtime
+}
+
 export async function updateBrokCodeRuntimeSandbox({
   id,
   workspaceId,

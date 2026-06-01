@@ -159,7 +159,8 @@ export async function appendBackgroundTaskStreamEvent({
   event,
   payload,
   phase,
-  progress
+  progress,
+  metadata
 }: {
   id: string
   userId: string
@@ -167,6 +168,7 @@ export async function appendBackgroundTaskStreamEvent({
   payload: unknown
   phase?: string
   progress?: number
+  metadata?: Record<string, any>
 }) {
   return withRLS(userId, async tx => {
     const [existing] = await tx
@@ -190,6 +192,7 @@ export async function appendBackgroundTaskStreamEvent({
     }
     const nextMetadata = {
       ...currentMetadata,
+      ...(metadata ?? {}),
       ...(phase ? { phase } : {}),
       ...(typeof progress === 'number' ? { progress } : {}),
       streamEventCursor: nextEvent.id,

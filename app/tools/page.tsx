@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
-import { ArrowRight, PenLine, Sparkles } from 'lucide-react'
+import { ArrowRight, PenLine, Presentation, Sparkles } from 'lucide-react'
 
 import { requireFeatureAccess } from '@/lib/auth/app-access'
 
@@ -45,6 +45,27 @@ export default async function ToolsPage() {
         </section>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <Card className="border-border/70 shadow-sm">
+            <CardHeader>
+              <div className="mb-2 flex size-10 items-center justify-center rounded-lg border bg-muted/40">
+                <Presentation className="size-5" />
+              </div>
+              <CardTitle>Presentations</CardTitle>
+              <CardDescription>
+                Draft a lightweight slide script and preview it with a real
+                reveal.js deck surface.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild className="w-full gap-2">
+                <Link href="/presentations">
+                  Open Presentations
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+
           <Card className="border-border/70 shadow-sm">
             <CardHeader>
               <div className="mb-2 flex size-10 items-center justify-center rounded-lg border bg-muted/40">

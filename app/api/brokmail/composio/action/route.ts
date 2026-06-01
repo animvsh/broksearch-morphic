@@ -17,6 +17,7 @@ import {
 } from '@/lib/brokmail/approval-consumption'
 import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
+  canExecuteComposioTools,
   executeComposioTool,
   isComposioConfigured,
   listConnectedAccounts
@@ -281,6 +282,10 @@ function buildActionText({
 }
 
 export async function POST(request: NextRequest) {
+  const access = await requireFeatureAccessForApi('brokmail')
+  if (!access.ok) return access.response
+  const user = access.user
+
   if (!isComposioConfigured()) {
     return NextResponse.json(
       {
@@ -291,9 +296,15 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const access = await requireFeatureAccessForApi('brokmail')
-  if (!access.ok) return access.response
-  const user = access.user
+  if (!canExecuteComposioTools()) {
+    return NextResponse.json(
+      {
+        error:
+          'BrokMail Google actions require a backend COMPOSIO_API_KEY before they can run. Composio Connect can create links, but cannot execute Gmail or Calendar writes.'
+      },
+      { status: 503 }
+    )
+  }
 
   const body = await request.json().catch(() => null)
   if (!isRecord(body)) {

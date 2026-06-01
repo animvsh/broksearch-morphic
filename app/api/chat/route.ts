@@ -44,7 +44,8 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json()
-    const { message, messages, chatId, trigger, messageId, isNewChat } = body
+    const { message, messages, chatId, trigger, messageId, isNewChat, mode } =
+      body
 
     perfLog(
       `API Route - Start: chatId=${chatId}, trigger=${trigger}, isNewChat=${isNewChat}`
@@ -128,8 +129,9 @@ export async function POST(req: Request) {
 
     // Get search mode from cookie
     const searchModeCookie = cookieStore.get('searchMode')?.value
-    const requestedSearchMode: SearchMode =
-      normalizeSearchMode(searchModeCookie)
+    const requestedSearchMode: SearchMode = normalizeSearchMode(
+      typeof mode === 'string' ? mode : searchModeCookie
+    )
     const currentUserMessage =
       message ?? getLatestUserMessage(Array.isArray(messages) ? messages : [])
     const intentDecision = classifyBrokIntent(currentUserMessage)

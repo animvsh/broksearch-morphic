@@ -1,4 +1,5 @@
 import { BrokCodeBackendMetadata } from '@/lib/brokcode/backend-provider'
+import { checksumBrokCodeFileContent } from '@/lib/brokcode/file-operations'
 
 export type BrokCodeContextFile = {
   path: string
@@ -91,6 +92,14 @@ function truncateFile(content: string) {
   return `${redacted.slice(0, MAX_FILE_CHARS)}\n/* truncated */`
 }
 
+function fileChecksum(content: string) {
+  return checksumBrokCodeFileContent(content)
+}
+
+function shortChecksum(content: string) {
+  return fileChecksum(content).slice(0, 12)
+}
+
 function selectImportantFiles(files: BrokCodeContextFile[]) {
   return files
     .filter(file => !isSecretPath(file.path))
@@ -166,9 +175,14 @@ export function buildBrokCodeProjectContextPack({
       : null,
     '',
     'File tree:',
-    ...paths.map(
-      path => `- ${path}${selectedPaths.has(path) ? ' (included)' : ''}`
-    ),
+    ...paths.map(path => {
+      const file = safeFiles.find(item => item.path === path)
+      const checksum =
+        file && !isSecretPath(file.path)
+          ? ` sha256=${shortChecksum(file.content)}`
+          : ''
+      return `- ${path}${checksum}${selectedPaths.has(path) ? ' (included)' : ''}`
+    }),
     omittedCount > 0
       ? `Selected important files only; ${omittedCount} non-secret file${omittedCount === 1 ? '' : 's'} omitted or summarized.`
       : null,
@@ -182,13 +196,17 @@ export function buildBrokCodeProjectContextPack({
     'Important current files:',
     ...selectedFiles.map(file =>
       [
-        `--- ${file.path}${file.language ? ` (${file.language})` : ''} ---`,
+        `--- ${file.path}${file.language ? ` (${file.language})` : ''} sha256=${fileChecksum(file.content)} ---`,
         truncateFile(file.content)
       ].join('\n')
     ),
     '',
     'Follow-up edit rules:',
     '- Preserve existing working behavior and user-facing flows unless the user explicitly asks to replace them.',
+    '- Prefer JSON file operations for follow-up edits: patch_file, replace_file, create_file, rename_file, or delete_file.',
+    '- Include expectedChecksum with the full sha256 from the file header for every existing file you edit, rename, or delete.',
+    '- Use patch_file with search/replace for small edits so unchanged routes, styles, and components are preserved.',
+    '- Use replace_file only when a full-file rewrite is necessary, and keep unrelated behavior intact.',
     '- Edit the current app in place using the files above; do not regenerate an unrelated app.',
     '- Keep routes, backend contracts, auth/storage config, and preview behavior compatible with the current project.',
     '- If a needed file is omitted, ask BrokCode to inspect or infer it from the file tree instead of inventing secrets.'

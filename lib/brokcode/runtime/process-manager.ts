@@ -1,13 +1,14 @@
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 
+import { getBrokCodeRuntimeStartReadiness } from '@/lib/brokcode/runtime/contract'
 import {
   BrokCodeRuntimeSandbox,
   updateBrokCodeRuntimeSandbox
 } from '@/lib/brokcode/runtime/store'
 import { BrokCodeRuntimeWorkspaceManifest } from '@/lib/brokcode/runtime/workspace'
 
-type RuntimeProcess = {
+export type RuntimeProcess = {
   runtimeId: string
   port: number
   url: string
@@ -15,6 +16,11 @@ type RuntimeProcess = {
   status: 'starting' | 'ready' | 'crashed' | 'stopped'
   logs: BrokCodeRuntimeLog[]
   startedAt: Date
+}
+
+export type BrokCodeRuntimeProcessReuseDecision = {
+  action: 'reuse' | 'install' | 'restart'
+  reason: string
 }
 
 export type BrokCodeRuntimeLog = {
@@ -175,6 +181,87 @@ function commandFor({
   return null
 }
 
+function manifestFileHash({
+  manifest,
+  filePath
+}: {
+  manifest:
+    | Pick<BrokCodeRuntimeWorkspaceManifest, 'files'>
+    | Partial<BrokCodeRuntimeWorkspaceManifest>
+    | null
+    | undefined
+  filePath: string
+}) {
+  const files = Array.isArray(manifest?.files) ? manifest.files : []
+  return files.find(file => file.path === filePath)?.sha256 ?? null
+}
+
+function workspaceManifestFromMetadata(
+  metadata: Record<string, unknown> | null | undefined
+) {
+  const workspace = metadata?.workspace
+  if (!workspace || typeof workspace !== 'object') return null
+  return workspace as Partial<BrokCodeRuntimeWorkspaceManifest>
+}
+
+export function getBrokCodeRuntimeProcessReuseDecision({
+  runtime,
+  manifest
+}: {
+  runtime: Pick<
+    BrokCodeRuntimeSandbox,
+    'appType' | 'packageManager' | 'workspacePath' | 'devCommand' | 'metadata'
+  >
+  manifest: BrokCodeRuntimeWorkspaceManifest
+}): BrokCodeRuntimeProcessReuseDecision {
+  const previousManifest = workspaceManifestFromMetadata(runtime.metadata)
+
+  if (
+    runtime.appType !== manifest.appType ||
+    runtime.packageManager !== manifest.packageManager ||
+    runtime.workspacePath !== manifest.workspacePath ||
+    runtime.devCommand !== manifest.devCommand
+  ) {
+    return {
+      action: 'restart',
+      reason: 'Runtime contract changed.'
+    }
+  }
+
+  if (!previousManifest) {
+    return {
+      action: 'reuse',
+      reason: 'Runtime process is already attached.'
+    }
+  }
+
+  const dependencyFiles = [
+    'package.json',
+    'bun.lock',
+    'bun.lockb',
+    'package-lock.json',
+    'pnpm-lock.yaml',
+    'yarn.lock'
+  ]
+  const dependencyFileChanged = dependencyFiles.some(
+    filePath =>
+      manifestFileHash({ manifest: previousManifest, filePath }) !==
+      manifestFileHash({ manifest, filePath })
+  )
+
+  if (dependencyFileChanged && manifest.packageManager !== 'none') {
+    return {
+      action: 'install',
+      reason: 'Dependency manifest changed.'
+    }
+  }
+
+  return {
+    action: 'reuse',
+    reason: 'Workspace files changed; live preview can hot reload.'
+  }
+}
+
 async function installDependencies({
   manifest,
   workspacePath,
@@ -219,6 +306,117 @@ async function installDependencies({
       else reject(new Error(stderr.trim() || `bun install exited ${code}`))
     })
   })
+}
+
+async function markRuntimeProcessUnavailable({
+  runtime,
+  entry
+}: {
+  runtime: BrokCodeRuntimeSandbox
+  entry: RuntimeProcess
+}) {
+  entry.status = 'crashed'
+  appendLog(entry, 'error', 'Runtime process stopped responding.', {
+    source: 'dev-server'
+  })
+  getRuntimeProcesses().delete(runtime.id)
+  await updateBrokCodeRuntimeSandbox({
+    id: runtime.id,
+    workspaceId: runtime.workspaceId,
+    userId: runtime.userId,
+    status: 'crashed',
+    logs: entry.logs,
+    health: {
+      ok: false,
+      checkedAt: new Date().toISOString(),
+      url: entry.url,
+      message: 'Runtime process stopped responding.'
+    },
+    metadata: {
+      ...(runtime.metadata ?? {}),
+      livePreview: {
+        status: 'crashed',
+        port: entry.port,
+        url: entry.url,
+        proxyPath: `/api/brokcode/runtime/${encodeURIComponent(runtime.id)}/`,
+        startedAt: entry.startedAt.toISOString(),
+        stoppedAt: new Date().toISOString()
+      }
+    }
+  })
+}
+
+async function stopRuntimeProcessForRestart({
+  entry,
+  reason
+}: {
+  entry: RuntimeProcess
+  reason: string
+}) {
+  appendLog(entry, 'info', `Restarting runtime: ${reason}`, {
+    source: 'system'
+  })
+  entry.status = 'stopped'
+  if (entry.process) {
+    entry.process.removeAllListeners('exit')
+    entry.process.kill()
+  }
+  getRuntimeProcesses().delete(entry.runtimeId)
+}
+
+async function refreshExistingRuntimeProcess({
+  runtime,
+  entry,
+  manifest,
+  decision
+}: {
+  runtime: BrokCodeRuntimeSandbox
+  entry: RuntimeProcess
+  manifest: BrokCodeRuntimeWorkspaceManifest
+  decision: BrokCodeRuntimeProcessReuseDecision
+}) {
+  if (decision.action === 'install') {
+    await installDependencies({
+      manifest,
+      workspacePath: manifest.workspacePath,
+      entry
+    })
+  }
+
+  appendLog(entry, 'info', `Applied hot reload update. ${decision.reason}`, {
+    source: 'system'
+  })
+  entry.status = 'ready'
+  await updateBrokCodeRuntimeSandbox({
+    id: runtime.id,
+    workspaceId: runtime.workspaceId,
+    userId: runtime.userId,
+    status: 'healthy',
+    logs: entry.logs,
+    health: {
+      ok: true,
+      checkedAt: new Date().toISOString(),
+      url: entry.url,
+      message: decision.reason
+    },
+    metadata: {
+      ...(runtime.metadata ?? {}),
+      workspace: manifest,
+      livePreview: {
+        status: 'ready',
+        port: entry.port,
+        url: entry.url,
+        proxyPath: `/api/brokcode/runtime/${encodeURIComponent(runtime.id)}/`,
+        startedAt: entry.startedAt.toISOString(),
+        refreshedAt: new Date().toISOString(),
+        materializedAt: manifest.materializedAt,
+        hotReload: true,
+        refreshReason: decision.reason
+      }
+    }
+  })
+
+  return entry
 }
 
 export function getBrokCodeRuntimeProcess(runtimeId: string) {
@@ -303,6 +501,57 @@ export async function appendBrokCodeRuntimeBrowserEvent({
   return logs
 }
 
+export async function persistBrokCodeRuntimeProcessExit({
+  runtime,
+  entry,
+  code,
+  signal
+}: {
+  runtime: BrokCodeRuntimeSandbox
+  entry: RuntimeProcess
+  code: number | null
+  signal?: NodeJS.Signals | null
+}) {
+  const status = code === 0 ? 'stopped' : 'crashed'
+  const exitSummary =
+    code === 0
+      ? 'Runtime stopped cleanly.'
+      : signal
+        ? `Runtime exited after signal ${signal}.`
+        : `Runtime exited ${code ?? 'unexpectedly'}.`
+  entry.status = status
+  appendLog(entry, status === 'stopped' ? 'info' : 'error', exitSummary, {
+    source: 'dev-server'
+  })
+
+  await updateBrokCodeRuntimeSandbox({
+    id: runtime.id,
+    workspaceId: runtime.workspaceId,
+    userId: runtime.userId,
+    status,
+    logs: entry.logs,
+    health: {
+      ok: false,
+      checkedAt: new Date().toISOString(),
+      url: entry.url || undefined,
+      message: exitSummary
+    },
+    metadata: {
+      ...(runtime.metadata ?? {}),
+      livePreview: {
+        status,
+        port: entry.port || null,
+        url: entry.url || null,
+        proxyPath: `/api/brokcode/runtime/${encodeURIComponent(runtime.id)}/`,
+        startedAt: entry.startedAt.toISOString(),
+        stoppedAt: new Date().toISOString(),
+        exitCode: code,
+        signal: signal ?? null
+      }
+    }
+  })
+}
+
 export async function startBrokCodeRuntimeProcess({
   runtime,
   manifest
@@ -310,8 +559,67 @@ export async function startBrokCodeRuntimeProcess({
   runtime: BrokCodeRuntimeSandbox
   manifest: BrokCodeRuntimeWorkspaceManifest
 }) {
+  const readiness = getBrokCodeRuntimeStartReadiness(manifest.appType)
+  if (!readiness.startable) {
+    const logs = createRuntimeLogs({
+      level: readiness.healthOk ? 'info' : 'warn',
+      source: 'system',
+      message: readiness.message
+    })
+    await updateBrokCodeRuntimeSandbox({
+      id: runtime.id,
+      workspaceId: runtime.workspaceId,
+      userId: runtime.userId,
+      status: readiness.status,
+      logs: [
+        ...((runtime.logs ?? []) as Array<Record<string, unknown>>),
+        ...logs
+      ],
+      health: {
+        ok: readiness.healthOk,
+        checkedAt: new Date().toISOString(),
+        message: readiness.message
+      },
+      metadata: {
+        ...(runtime.metadata ?? {}),
+        workspace: manifest,
+        livePreview: {
+          status: readiness.mode,
+          mode: readiness.mode,
+          supported: false,
+          message: readiness.message,
+          materializedAt: manifest.materializedAt,
+          activeEntrypoint: manifest.activeEntrypoint
+        }
+      }
+    })
+    return null
+  }
+
   const existing = getBrokCodeRuntimeProcess(runtime.id)
-  if (
+  if (existing && existing.status === 'ready') {
+    if (!(await waitForRuntime(existing.url))) {
+      await markRuntimeProcessUnavailable({ runtime, entry: existing })
+    } else {
+      const decision = getBrokCodeRuntimeProcessReuseDecision({
+        runtime,
+        manifest
+      })
+      if (decision.action === 'restart') {
+        await stopRuntimeProcessForRestart({
+          entry: existing,
+          reason: decision.reason
+        })
+      } else {
+        return refreshExistingRuntimeProcess({
+          runtime,
+          entry: existing,
+          manifest,
+          decision
+        })
+      }
+    }
+  } else if (
     existing &&
     existing.status !== 'crashed' &&
     existing.status !== 'stopped'
@@ -414,10 +722,14 @@ export async function startBrokCodeRuntimeProcess({
       command: `${resolvedCommand.command} ${resolvedCommand.args.join(' ')}`
     })
   )
-  child.on('exit', code => {
-    entry.status = code === 0 ? 'stopped' : 'crashed'
-    appendLog(entry, code === 0 ? 'info' : 'error', `Runtime exited ${code}.`, {
-      source: 'dev-server'
+  child.on('exit', (code, signal) => {
+    void persistBrokCodeRuntimeProcessExit({
+      runtime,
+      entry,
+      code,
+      signal
+    }).catch(error => {
+      console.error('BrokCode runtime exit persistence failed:', error)
     })
   })
 

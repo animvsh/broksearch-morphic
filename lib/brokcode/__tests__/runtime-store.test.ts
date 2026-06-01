@@ -8,6 +8,7 @@ import {
   createBrokCodeRuntimeSandbox,
   getLatestBrokCodeRuntimeSandbox,
   listBrokCodeRuntimeSandboxes,
+  refreshBrokCodeRuntimeSandbox,
   updateBrokCodeRuntimeSandbox
 } from '../runtime/store'
 
@@ -90,5 +91,43 @@ describe('BrokCode runtime file store', () => {
       userId
     })
     expect(runtimes).toHaveLength(1)
+  })
+
+  it('refreshes a runtime after another lifecycle step updates it', async () => {
+    const spec = createBrokCodeRuntimeSpec({
+      projectId,
+      workspaceId,
+      userId,
+      files: [{ path: 'src/App.tsx', content: 'export function App() {}' }]
+    })
+    const runtime = await createBrokCodeRuntimeSandbox({ spec })
+
+    await updateBrokCodeRuntimeSandbox({
+      id: runtime.id,
+      workspaceId,
+      userId,
+      status: 'healthy',
+      metadata: {
+        workspace: {
+          materializedAt: '2026-05-25T00:00:00.000Z'
+        },
+        livePreview: {
+          status: 'ready',
+          hotReload: true,
+          refreshReason: 'Workspace files changed; live preview can hot reload.'
+        }
+      }
+    })
+
+    const refreshed = await refreshBrokCodeRuntimeSandbox(runtime)
+
+    expect(refreshed?.status).toBe('healthy')
+    expect(refreshed?.metadata).toMatchObject({
+      livePreview: {
+        status: 'ready',
+        hotReload: true,
+        refreshReason: 'Workspace files changed; live preview can hot reload.'
+      }
+    })
   })
 })

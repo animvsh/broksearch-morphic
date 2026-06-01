@@ -9,11 +9,15 @@ import type {
 } from '@/lib/types/ai'
 import type { DynamicToolPart } from '@/lib/types/dynamic-tools'
 
+import { SearchAnswerSection } from './search/search-answer-section'
 import { AnswerSection } from './answer-section'
 import { DynamicToolDisplay } from './dynamic-tool-display'
 import ResearchProcessSection from './research-process-section'
 import { UserFileSection } from './user-file-section'
 import { UserTextSection } from './user-text-section'
+
+const USE_NEW_SEARCH_SURFACE =
+  process.env.NEXT_PUBLIC_NEW_SEARCH_SURFACE !== 'false'
 
 interface RenderMessageProps {
   message: UIMessage
@@ -143,24 +147,45 @@ export function RenderMessage({
         isLastTextPart && (isLatestMessage ? isStreamingComplete : true)
 
       elements.push(
-        <AnswerSection
-          key={`${messageId}-text-${index}`}
-          content={part.text}
-          isOpen={getIsOpen(
-            messageId,
-            part.type,
-            index < (message.parts?.length ?? 0) - 1
-          )}
-          onOpenChange={open => onOpenChange(messageId, open)}
-          chatId={chatId}
-          isGuest={isGuest}
-          showActions={shouldShowActions}
-          messageId={messageId}
-          metadata={message.metadata as UIMessageMetadata | undefined}
-          reload={reload}
-          status={status}
-          citationMaps={citationMaps}
-        />
+        USE_NEW_SEARCH_SURFACE ? (
+          <SearchAnswerSection
+            key={`${messageId}-text-${index}`}
+            content={part.text}
+            isOpen={getIsOpen(
+              messageId,
+              part.type,
+              index < (message.parts?.length ?? 0) - 1
+            )}
+            onOpenChange={open => onOpenChange(messageId, open)}
+            chatId={chatId}
+            isGuest={isGuest}
+            showActions={shouldShowActions}
+            messageId={messageId}
+            metadata={message.metadata as UIMessageMetadata | undefined}
+            reload={reload}
+            status={status}
+            citationMaps={citationMaps}
+          />
+        ) : (
+          <AnswerSection
+            key={`${messageId}-text-${index}`}
+            content={part.text}
+            isOpen={getIsOpen(
+              messageId,
+              part.type,
+              index < (message.parts?.length ?? 0) - 1
+            )}
+            onOpenChange={open => onOpenChange(messageId, open)}
+            chatId={chatId}
+            isGuest={isGuest}
+            showActions={shouldShowActions}
+            messageId={messageId}
+            metadata={message.metadata as UIMessageMetadata | undefined}
+            reload={reload}
+            status={status}
+            citationMaps={citationMaps}
+          />
+        )
       )
     } else if (part.type === 'reasoning' || part.type?.startsWith?.('tool-')) {
       buffer.push(part)

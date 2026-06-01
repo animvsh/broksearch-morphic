@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -132,6 +132,51 @@ describe('BrokCode runtime workspace materialization', () => {
       dev: 'next dev -H 0.0.0.0',
       build: 'next build'
     })
+  })
+
+  it('updates files incrementally so live runtime dependencies survive edits', async () => {
+    const firstFiles = [
+      { path: 'index.html', content: '<main>First</main>' },
+      { path: 'style.css', content: 'main { color: red; }' }
+    ]
+    const spec = createBrokCodeRuntimeSpec({
+      projectId,
+      workspaceId,
+      userId,
+      files: firstFiles
+    })
+    const first = await materializeBrokCodeRuntimeWorkspace({
+      spec,
+      files: firstFiles,
+      projectName: 'Hot Reload App'
+    })
+    await mkdir(path.join(first.workspacePath, 'node_modules', '.vite'), {
+      recursive: true
+    })
+    await writeFile(
+      path.join(first.workspacePath, 'node_modules', '.vite', 'cache.json'),
+      '{}',
+      'utf8'
+    )
+
+    const secondFiles = [{ path: 'index.html', content: '<main>Second</main>' }]
+    const second = await materializeBrokCodeRuntimeWorkspace({
+      spec,
+      files: secondFiles,
+      projectName: 'Hot Reload App'
+    })
+
+    await expect(
+      readFile(path.join(second.workspacePath, 'index.html'), 'utf8')
+    ).resolves.toBe('<main>Second</main>')
+    await expect(
+      stat(path.join(second.workspacePath, 'style.css'))
+    ).rejects.toBeTruthy()
+    await expect(
+      stat(
+        path.join(second.workspacePath, 'node_modules', '.vite', 'cache.json')
+      )
+    ).resolves.toBeTruthy()
   })
 
   it('rejects unsafe, binary, and huge files', async () => {

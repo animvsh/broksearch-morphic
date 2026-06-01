@@ -7,6 +7,7 @@ export type SearchResults = {
   videos?: SerperSearchResultItem[]
   number_of_results?: number
   query: string
+  error?: string
   toolCallId?: string // ID of the search tool call
   citationMap?: Record<number, SearchResultItem> // Maps citation number to search result
 }
@@ -41,6 +42,11 @@ export type SearchResultItem = {
   title: string
   url: string
   content: string
+  publishedDate?: string | Date
+  date?: string
+  retrievedAt?: string
+  snippet?: string
+  publisher?: string
 }
 
 export type ExaSearchResultItem = {

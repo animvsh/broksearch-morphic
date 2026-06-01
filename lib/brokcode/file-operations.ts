@@ -108,6 +108,13 @@ function validateChecksum({
   })
 }
 
+function hasConflictForPath(
+  conflicts: BrokCodeFileOperationConflict[],
+  path: string
+) {
+  return conflicts.some(conflict => conflict.path === path)
+}
+
 function applyPatchOperation({
   content,
   operation
@@ -196,11 +203,30 @@ export function applyBrokCodeFileOperations({
         conflicts,
         applyAnyway
       })
+      if (hasConflictForPath(conflicts, fromPath)) {
+        continue
+      }
       if (!existing) {
         throw new BrokCodeFileOperationError(
           `Cannot rename missing file ${fromPath}.`,
           'invalid_operation'
         )
+      }
+      if (fromPath === toPath) {
+        throw new BrokCodeFileOperationError(
+          `Cannot rename ${fromPath} to itself.`,
+          'invalid_operation'
+        )
+      }
+      const target = byPath.get(toPath)
+      if (target) {
+        conflicts.push({
+          path: toPath,
+          expectedChecksum: null,
+          actualChecksum: currentChecksum(target.content),
+          message: `Cannot rename ${fromPath} to ${toPath} because the target file already exists.`
+        })
+        continue
       }
       byPath.delete(fromPath)
       byPath.set(toPath, { ...existing, path: toPath })
@@ -225,6 +251,9 @@ export function applyBrokCodeFileOperations({
       conflicts,
       applyAnyway
     })
+    if (hasConflictForPath(conflicts, path)) {
+      continue
+    }
 
     if (operation.type === 'delete_file') {
       if (!existing) {
@@ -282,4 +311,37 @@ export function applyBrokCodeFileOperations({
     files: [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path)),
     changes
   }
+}
+
+export function summarizeBrokCodeFullFileChanges({
+  beforeFiles,
+  afterFiles
+}: {
+  beforeFiles: GeneratedBrokCodeFile[]
+  afterFiles: GeneratedBrokCodeFile[]
+}) {
+  const beforeByPath = new Map(
+    beforeFiles.map(file => [normalizePath(file.path), file])
+  )
+  const changes: BrokCodeAppliedFileChange[] = []
+
+  for (const file of afterFiles
+    .map(item => ({ ...item, path: normalizePath(item.path) }))
+    .sort((a, b) => a.path.localeCompare(b.path))) {
+    const before = beforeByPath.get(file.path)
+    const beforeChecksum = currentChecksum(before?.content)
+    const afterChecksum = checksumBrokCodeFileContent(file.content)
+
+    if (beforeChecksum === afterChecksum) continue
+
+    changes.push({
+      type: before ? 'replace_file' : 'create_file',
+      path: file.path,
+      beforeChecksum,
+      afterChecksum,
+      summary: before ? `Updated ${file.path}.` : `Created ${file.path}.`
+    })
+  }
+
+  return changes
 }

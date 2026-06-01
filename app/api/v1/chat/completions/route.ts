@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { validateOpenAiChatMessages } from '@/lib/brok/api-platform'
 import {
   apiKeyHasScope,
   forbiddenScopeResponse,
@@ -17,6 +18,7 @@ import {
   readJsonBody
 } from '@/lib/brok/http'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
+import { applyBrokMarkup } from '@/lib/brok/pricing'
 import {
   calculateCost,
   routeToProvider,
@@ -24,6 +26,10 @@ import {
 } from '@/lib/brok/provider-router'
 import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
 import { runSearchPipeline } from '@/lib/brok/search-pipeline'
+import {
+  createOpenAiStreamUsageAccumulator,
+  resolveStreamTokenUsage
+} from '@/lib/brok/streaming-usage'
 import {
   checkUsageLimits,
   generateRequestId,
@@ -114,7 +120,17 @@ export async function POST(request: NextRequest) {
     )
   }
   const chatMessages = messages as Array<Record<string, unknown>>
+  if (stream !== undefined && typeof stream !== 'boolean') {
+    return invalidRequestResponse('invalid_stream', 'stream must be a boolean.')
+  }
   const shouldStream = stream === true
+  const messageValidation = validateOpenAiChatMessages(chatMessages)
+  if (!messageValidation.ok) {
+    return invalidRequestResponse(
+      messageValidation.code,
+      messageValidation.message
+    )
+  }
 
   // Validate model
   if (!isValidBrokModel(modelId)) {
@@ -154,6 +170,20 @@ export async function POST(request: NextRequest) {
   )
 
   if (!rateLimit.allowed) {
+    if (rateLimit.reason === 'rate_limit_check_failed') {
+      return NextResponse.json(
+        {
+          error: {
+            type: 'service_unavailable',
+            code: 'rate_limit_check_failed',
+            message:
+              'Rate limit check is temporarily unavailable. Please retry shortly.'
+          }
+        },
+        { status: 503 }
+      )
+    }
+
     await recordRateLimitEvent(
       auth.apiKey.id,
       auth.workspace.id,
@@ -207,9 +237,12 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      const webSearchTopN = extractWebSearchTopN(tools, tool_choice)
+
       const searchResult = await runSearchPipeline({
         query,
-        depth: 'lite'
+        depth: 'lite',
+        maxSources: webSearchTopN
       })
       const latencyMs = Date.now() - startTime
       const inputTokens = searchResult.tokensUsed
@@ -302,26 +335,74 @@ export async function POST(request: NextRequest) {
         throw new Error('Brok stream did not include a response body')
       }
 
-      const latencyMs = Date.now() - startTime
-
-      await recordUsage({
-        requestId,
-        workspaceId: auth.workspace.id,
-        userId: auth.apiKey.userId,
-        apiKeyId: auth.apiKey.id,
-        endpoint: 'chat',
-        model: modelId,
-        provider: 'Brok',
-        inputTokens: 0,
-        outputTokens: 0,
-        providerCostUsd: 0,
-        billedUsd: 0,
-        latencyMs,
-        status: 'success'
-      })
-
       return new Response(
-        createBrokStream(providerResponse.body, requestId, modelId),
+        createBrokStream(providerResponse.body, requestId, modelId, {
+          onComplete: async ({ content, usage }) => {
+            const latencyMs = Date.now() - startTime
+            const { inputTokens, outputTokens } = resolveStreamTokenUsage({
+              usage,
+              content,
+              messages: chatMessages
+            })
+            const providerCost = await calculateCost(
+              modelId,
+              inputTokens,
+              outputTokens
+            )
+            await recordUsage({
+              requestId,
+              workspaceId: auth.workspace.id,
+              userId: auth.apiKey.userId,
+              apiKeyId: auth.apiKey.id,
+              endpoint: 'chat',
+              model: modelId,
+              provider: 'Brok',
+              inputTokens,
+              outputTokens,
+              providerCostUsd: providerCost,
+              billedUsd: applyBrokMarkup(providerCost),
+              latencyMs,
+              status: 'success',
+              metadata: {
+                stream: true,
+                usageSource: usage ? 'provider' : 'estimated'
+              }
+            })
+          },
+          onAbort: async ({ content, usage }) => {
+            const latencyMs = Date.now() - startTime
+            const { inputTokens, outputTokens } = resolveStreamTokenUsage({
+              usage,
+              content,
+              messages: chatMessages
+            })
+            const providerCost = await calculateCost(
+              modelId,
+              inputTokens,
+              outputTokens
+            )
+            await recordUsage({
+              requestId,
+              workspaceId: auth.workspace.id,
+              userId: auth.apiKey.userId,
+              apiKeyId: auth.apiKey.id,
+              endpoint: 'chat',
+              model: modelId,
+              provider: 'Brok',
+              inputTokens,
+              outputTokens,
+              providerCostUsd: providerCost,
+              billedUsd: applyBrokMarkup(providerCost),
+              latencyMs,
+              status: 'aborted',
+              metadata: {
+                stream: true,
+                usageSource: usage ? 'provider' : 'estimated',
+                aborted: true
+              }
+            })
+          }
+        }),
         {
           headers: {
             'Content-Type': 'text/event-stream; charset=utf-8',
@@ -356,8 +437,6 @@ export async function POST(request: NextRequest) {
     const inputTokens = providerResponse.usage?.prompt_tokens || 0
     const outputTokens = providerResponse.usage?.completion_tokens || 0
     const providerCost = await calculateCost(modelId, inputTokens, outputTokens)
-    const markup = 1.5 // 50% markup
-    const billedAmount = providerCost * markup
 
     // Record usage
     await recordUsage({
@@ -371,7 +450,7 @@ export async function POST(request: NextRequest) {
       inputTokens,
       outputTokens,
       providerCostUsd: providerCost,
-      billedUsd: billedAmount,
+      billedUsd: applyBrokMarkup(providerCost),
       latencyMs,
       status: 'success'
     })
@@ -438,6 +517,27 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+function extractWebSearchTopN(
+  tools: unknown,
+  toolChoice: unknown
+): number | undefined {
+  const candidates: unknown[] = []
+  if (Array.isArray(tools)) candidates.push(...tools)
+  if (toolChoice && typeof toolChoice === 'object') candidates.push(toolChoice)
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue
+    const webSearch = (candidate as { web_search?: { top_n?: unknown } })
+      .web_search
+    if (!webSearch || typeof webSearch !== 'object') continue
+    const topN = (webSearch as { top_n?: unknown }).top_n
+    if (typeof topN === 'number' && Number.isFinite(topN)) {
+      return topN
+    }
+  }
+  return undefined
 }
 
 function getLatestUserText(messages: Array<Record<string, unknown>>) {
@@ -530,13 +630,19 @@ function createSearchToolStream(
 function createBrokStream(
   providerBody: ReadableStream<Uint8Array>,
   requestId: string,
-  modelId: string
+  modelId: string,
+  options?: {
+    onComplete?: (usage: { content: string; usage: unknown }) => Promise<void>
+    onAbort?: (usage: { content: string; usage: unknown }) => Promise<void>
+  }
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder()
   const encoder = new TextEncoder()
   const reader = providerBody.getReader()
   const sanitizer = createStreamSanitizer()
+  const usageAccumulator = createOpenAiStreamUsageAccumulator()
   let buffer = ''
+  let aborted = false
 
   return new ReadableStream({
     async pull(controller) {
@@ -545,11 +651,17 @@ function createBrokStream(
 
         if (done) {
           if (buffer.trim()) {
+            usageAccumulator.trackSseLine(buffer)
             controller.enqueue(
               encoder.encode(
                 formatSseLine(buffer, requestId, modelId, sanitizer)
               )
             )
+          }
+          if (aborted) {
+            await options?.onAbort?.(usageAccumulator.snapshot())
+          } else {
+            await options?.onComplete?.(usageAccumulator.snapshot())
           }
           controller.close()
           return
@@ -560,6 +672,7 @@ function createBrokStream(
         buffer = lines.pop() ?? ''
 
         for (const line of lines) {
+          usageAccumulator.trackSseLine(line)
           controller.enqueue(
             encoder.encode(formatSseLine(line, requestId, modelId, sanitizer))
           )
@@ -570,8 +683,13 @@ function createBrokStream(
         }
       }
     },
-    cancel() {
-      return reader.cancel()
+    async cancel() {
+      aborted = true
+      try {
+        await reader.cancel()
+      } catch {
+        // upstream may already be closed; ignore
+      }
     }
   })
 }

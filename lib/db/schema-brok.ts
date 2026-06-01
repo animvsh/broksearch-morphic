@@ -34,6 +34,30 @@ export const endpointEnum = pgEnum('endpoint', [
   'code',
   'agents'
 ])
+export const exportStatusEnum = pgEnum('export_status', [
+  'pending',
+  'processing',
+  'completed',
+  'failed'
+])
+export const generationStatusEnum = pgEnum('generation_status', [
+  'started',
+  'completed',
+  'failed'
+])
+export const outlineStatusEnum = pgEnum('outline_status', [
+  'generating',
+  'ready',
+  'error'
+])
+export const presentationStatusEnum = pgEnum('presentation_status', [
+  'draft',
+  'generating',
+  'outline_generating',
+  'slides_generating',
+  'ready',
+  'error'
+])
 
 // Workspaces
 export const workspaces = pgTable('workspaces', {
@@ -78,7 +102,8 @@ export const apiKeys = pgTable(
     userId: text('user_id').notNull(),
     name: text('name').notNull(),
     keyPrefix: text('key_prefix').notNull(), // brok_sk_live_xxxx
-    keyHash: text('key_hash').notNull(), // sha256 hash
+    keyHash: text('key_hash').notNull(), // sha256(key + key_salt + global_salt)
+    keySalt: text('key_salt'), // per-key random salt; null for legacy keys
     environment: environmentEnum('environment').notNull(),
     status: keyStatusEnum('status').default('active').notNull(),
     scopes: jsonb('scopes').default([]).notNull(), // ['chat:write', 'search:write']
@@ -699,6 +724,238 @@ export const brokCodeVersionsRelations = relations(
     workspace: one(workspaces, {
       fields: [brokCodeVersions.workspaceId],
       references: [workspaces.id]
+    })
+  })
+)
+
+// ==================== Presentations ====================
+//
+// 7 tables persisted by `drizzle/0011_bitter_celestials.sql` and refined
+// across migrations 0012/0015/0016/0017/0018/0019. Source of truth for these
+// definitions is the SQL migrations on disk — keep this schema in lockstep
+// with `drizzle/00XX_*.sql`. RLS policies are managed via inline Drizzle SQL
+// migrations (see `drizzle/00XX_presentation_*.sql`); the application uses
+// `app.current_user_id` via `withRLS` for all reads/writes.
+
+export const presentations = pgTable(
+  'presentations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    workspaceId: uuid('workspace_id'),
+    title: text('title').notNull(),
+    description: text('description'),
+    status: presentationStatusEnum('status').default('draft').notNull(),
+    themeId: text('theme_id'),
+    language: text('language').default('en').notNull(),
+    style: text('style'),
+    slideCount: integer('slide_count').default(0).notNull(),
+    shareId: text('share_id'),
+    isPublic: boolean('is_public').default(false).notNull(),
+    sourceMarkdown: text('source_markdown'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    uniqueIndex('presentations_share_id_unique').on(table.shareId),
+    index('presentations_user_id_idx').on(table.userId),
+    index('presentations_user_id_created_at_idx').on(
+      table.userId,
+      table.createdAt.desc()
+    ),
+    index('presentations_workspace_id_idx').on(table.workspaceId),
+    index('presentations_share_id_idx').on(table.shareId)
+  ]
+)
+
+export const presentationSlides = pgTable(
+  'presentation_slides',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    presentationId: uuid('presentation_id')
+      .notNull()
+      .references(() => presentations.id, { onDelete: 'cascade' }),
+    slideIndex: integer('slide_index').notNull(),
+    title: text('title').notNull(),
+    layoutType: text('layout_type').notNull(),
+    contentJson: jsonb('content_json').notNull(),
+    speakerNotes: text('speaker_notes'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    uniqueIndex('presentation_slides_presentation_id_index_idx').on(
+      table.presentationId,
+      table.slideIndex
+    ),
+    index('presentation_slides_presentation_id_idx').on(table.presentationId)
+  ]
+)
+
+export const presentationOutlines = pgTable(
+  'presentation_outlines',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    presentationId: uuid('presentation_id')
+      .notNull()
+      .references(() => presentations.id, { onDelete: 'cascade' }),
+    outlineJson: jsonb('outline_json').notNull(),
+    status: outlineStatusEnum('status').default('generating').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    uniqueIndex('presentation_outlines_presentation_id_unique').on(
+      table.presentationId
+    ),
+    index('presentation_outlines_presentation_id_idx').on(table.presentationId)
+  ]
+)
+
+export const presentationThemes = pgTable(
+  'presentation_themes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id'),
+    name: text('name').notNull(),
+    themeJson: jsonb('theme_json').notNull(),
+    isBuiltin: boolean('is_builtin').default(false).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    index('presentation_themes_user_id_idx').on(table.userId),
+    index('presentation_themes_is_builtin_idx').on(table.isBuiltin)
+  ]
+)
+
+export const presentationAssets = pgTable(
+  'presentation_assets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    presentationId: uuid('presentation_id')
+      .notNull()
+      .references(() => presentations.id, { onDelete: 'cascade' }),
+    slideId: uuid('slide_id').references(() => presentationSlides.id, {
+      onDelete: 'cascade'
+    }),
+    assetType: text('asset_type').notNull(),
+    url: text('url'),
+    provider: text('provider').notNull(),
+    prompt: text('prompt'),
+    metadataJson: jsonb('metadata_json'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    index('presentation_assets_presentation_id_idx').on(table.presentationId),
+    index('presentation_assets_slide_id_idx').on(table.slideId)
+  ]
+)
+
+export const presentationGenerations = pgTable(
+  'presentation_generations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    presentationId: uuid('presentation_id')
+      .notNull()
+      .references(() => presentations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull(),
+    prompt: text('prompt').notNull(),
+    generationType: text('generation_type').notNull(),
+    model: text('model').notNull(),
+    webSearchEnabled: boolean('web_search_enabled').default(false).notNull(),
+    inputTokens: integer('input_tokens').default(0).notNull(),
+    outputTokens: integer('output_tokens').default(0).notNull(),
+    costUsd: integer('cost_usd').default(0).notNull(),
+    status: generationStatusEnum('status').default('started').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    index('presentation_generations_presentation_id_idx').on(
+      table.presentationId
+    ),
+    index('presentation_generations_user_id_idx').on(table.userId),
+    index('presentation_generations_created_at_idx').on(table.createdAt)
+  ]
+)
+
+export const presentationExports = pgTable(
+  'presentation_exports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    presentationId: uuid('presentation_id')
+      .notNull()
+      .references(() => presentations.id, { onDelete: 'cascade' }),
+    exportType: text('export_type').notNull(),
+    fileUrl: text('file_url'),
+    status: exportStatusEnum('status').default('pending').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    index('presentation_exports_presentation_id_idx').on(table.presentationId),
+    index('presentation_exports_status_idx').on(table.status)
+  ]
+)
+
+export const presentationsRelations = relations(presentations, ({ many }) => ({
+  slides: many(presentationSlides),
+  outline: many(presentationOutlines),
+  assets: many(presentationAssets),
+  generations: many(presentationGenerations),
+  exports: many(presentationExports)
+}))
+
+export const presentationSlidesRelations = relations(
+  presentationSlides,
+  ({ one, many }) => ({
+    presentation: one(presentations, {
+      fields: [presentationSlides.presentationId],
+      references: [presentations.id]
+    }),
+    assets: many(presentationAssets)
+  })
+)
+
+export const presentationOutlinesRelations = relations(
+  presentationOutlines,
+  ({ one }) => ({
+    presentation: one(presentations, {
+      fields: [presentationOutlines.presentationId],
+      references: [presentations.id]
+    })
+  })
+)
+
+export const presentationAssetsRelations = relations(
+  presentationAssets,
+  ({ one }) => ({
+    presentation: one(presentations, {
+      fields: [presentationAssets.presentationId],
+      references: [presentations.id]
+    }),
+    slide: one(presentationSlides, {
+      fields: [presentationAssets.slideId],
+      references: [presentationSlides.id]
+    })
+  })
+)
+
+export const presentationGenerationsRelations = relations(
+  presentationGenerations,
+  ({ one }) => ({
+    presentation: one(presentations, {
+      fields: [presentationGenerations.presentationId],
+      references: [presentations.id]
+    })
+  })
+)
+
+export const presentationExportsRelations = relations(
+  presentationExports,
+  ({ one }) => ({
+    presentation: one(presentations, {
+      fields: [presentationExports.presentationId],
+      references: [presentations.id]
     })
   })
 )

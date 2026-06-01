@@ -52,17 +52,17 @@ const CONNECTOR_MATCHES: Array<{
   pattern: RegExp
   toolkit: string
 }> = [
-  { pattern: /\b(gmail|email|mail)\b/i, toolkit: 'gmail' },
-  {
-    pattern: /\b(calendar|gcal|google calendar)\b/i,
-    toolkit: 'googlecalendar'
-  },
   { pattern: /\b(docs|google docs|doc)\b/i, toolkit: 'googledocs' },
   {
     pattern:
       /\b(slides|google slides|deck|decks|presentation|presentations)\b/i,
     toolkit: 'googleslides'
   },
+  {
+    pattern: /\b(calendar|gcal|google calendar)\b/i,
+    toolkit: 'googlecalendar'
+  },
+  { pattern: /\b(gmail|email|mail)\b/i, toolkit: 'gmail' },
   { pattern: /\b(meet|google meet)\b/i, toolkit: 'googlemeet' },
   {
     pattern: /\b(github|repo|repository|pull request|pr)\b/i,
@@ -80,9 +80,14 @@ function normalizeText(message?: Pick<UIMessage, 'parts' | 'role'> | null) {
     .replace(/\s+/g, ' ')
 }
 
-function resolveConnectorAction(text: string): ConnectorAction {
+function resolveConnectorAction(
+  text: string,
+  toolkit: string | undefined
+): ConnectorAction {
   if (/\b(connect|enable|authorize|auth|oauth)\b/i.test(text)) return 'connect'
-  if (/\b(send|email|message)\b/i.test(text)) return 'send'
+  if (toolkit === 'gmail' && /\b(send|email|message)\b/i.test(text)) {
+    return 'send'
+  }
   if (/\b(schedule|book|calendar|meeting)\b/i.test(text)) return 'schedule'
   if (/\b(delete|remove|archive)\b/i.test(text)) return 'delete'
   if (/\b(update|edit|change|modify)\b/i.test(text)) return 'update'
@@ -123,10 +128,10 @@ export function classifyBrokIntent(
     CONNECTOR_ACTION_PATTERN.test(normalizedQuery) &&
     CONNECTOR_NOUN_PATTERN.test(normalizedQuery)
   ) {
-    const action = resolveConnectorAction(normalizedQuery)
     const toolkit = normalizeConnectorToolkit(
       resolveConnectorToolkit(normalizedQuery)
     )
+    const action = resolveConnectorAction(normalizedQuery, toolkit)
     return {
       intent: 'connector_action',
       confidence: 0.88,

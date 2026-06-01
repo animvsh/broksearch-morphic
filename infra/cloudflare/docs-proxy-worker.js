@@ -1,4 +1,4 @@
-export default {
+const worker = {
   async fetch(request) {
     const target = new URL(request.url)
     target.hostname = 'brok-production.up.railway.app'
@@ -6,3 +6,5 @@ export default {
     return fetch(new Request(target.toString(), request))
   }
 }
+
+export default worker
