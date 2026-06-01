@@ -1,5 +1,6 @@
 import { and, desc, eq } from 'drizzle-orm'
 
+import { canUseDevDbFallback } from '@/lib/db/dev-db-fallback'
 import { backgroundTasks, generateId } from '@/lib/db/schema'
 import { withRLS } from '@/lib/db/with-rls'
 
@@ -239,19 +240,27 @@ export async function listBackgroundTasks({
   limit?: number
   chatId?: string | null
 }) {
-  return withRLS(userId, async tx => {
-    const whereClause = chatId
-      ? and(
-          eq(backgroundTasks.userId, userId),
-          eq(backgroundTasks.chatId, chatId)
-        )
-      : eq(backgroundTasks.userId, userId)
+  try {
+    return await withRLS(userId, async tx => {
+      const whereClause = chatId
+        ? and(
+            eq(backgroundTasks.userId, userId),
+            eq(backgroundTasks.chatId, chatId)
+          )
+        : eq(backgroundTasks.userId, userId)
 
-    return tx
-      .select()
-      .from(backgroundTasks)
-      .where(whereClause)
-      .orderBy(desc(backgroundTasks.createdAt))
-      .limit(limit)
-  })
+      return tx
+        .select()
+        .from(backgroundTasks)
+        .where(whereClause)
+        .orderBy(desc(backgroundTasks.createdAt))
+        .limit(limit)
+    })
+  } catch (error) {
+    if (canUseDevDbFallback(error)) {
+      return []
+    }
+
+    throw error
+  }
 }

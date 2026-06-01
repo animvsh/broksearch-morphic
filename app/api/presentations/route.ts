@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { desc, eq } from 'drizzle-orm'
 
 import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
+import { canUseDevDbFallback } from '@/lib/db/dev-db-fallback'
 import { presentations, presentationSlides } from '@/lib/db/schema-brok'
 import { withOptionalRLS } from '@/lib/db/with-rls'
 import {
@@ -62,6 +63,10 @@ export async function GET() {
     )
     return NextResponse.json({ presentations: rows })
   } catch (error) {
+    if (canUseDevDbFallback(error)) {
+      return NextResponse.json({ presentations: [] })
+    }
+
     if (
       error instanceof Error &&
       error.message.includes('role "placeholder"')

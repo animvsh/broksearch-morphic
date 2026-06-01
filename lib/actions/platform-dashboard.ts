@@ -4,6 +4,7 @@ import { ensureWorkspaceForUser } from '@/lib/actions/api-keys'
 import { canUseUsageDashboardFallback } from '@/lib/actions/usage-dashboard-fallback'
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
 import { db } from '@/lib/db'
+import { canUseDevDbFallback } from '@/lib/db/dev-db-fallback'
 import { withRLS } from '@/lib/db/with-rls'
 
 import 'server-only'
@@ -403,11 +404,49 @@ export async function getWorkspaceKnowledgeData(): Promise<WorkspaceKnowledgeDat
     }
   }
 
-  const [threadRows, sourceRows, taskRows] = await Promise.all([
-    getThreadRows(userId),
-    getSourceRows(userId),
-    getTaskRows(userId)
-  ])
+  let threadRows: ThreadRow[]
+  let sourceRows: SourceRow[]
+  let taskRows: BackgroundTaskLedgerEntry[]
+
+  try {
+    ;[threadRows, sourceRows, taskRows] = await Promise.all([
+      getThreadRows(userId),
+      getSourceRows(userId),
+      getTaskRows(userId)
+    ])
+  } catch (error) {
+    if (canUseDevDbFallback(error)) {
+      return {
+        userId,
+        threads: [],
+        publicThreads: [],
+        sourceDomains: [],
+        spaces: SPACE_RULES.map(rule => ({
+          id: rule.id,
+          name: rule.name,
+          description: rule.description,
+          threadCount: 0,
+          sourceCount: 0,
+          fileCount: 0,
+          taskCount: 0,
+          latestAt: null,
+          threads: []
+        })),
+        tasks: [],
+        activeTasks: [],
+        totals: {
+          threads: 0,
+          sources: 0,
+          files: 0,
+          publicThreads: 0,
+          tasks: 0,
+          activeTasks: 0
+        }
+      }
+    }
+
+    throw error
+  }
 
   const threads = threadRows.map(row => ({
     ...row,
