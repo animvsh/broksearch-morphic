@@ -32,6 +32,8 @@ export const API_KEY_LIMITS = {
 export type ApiKeyEnvironment = (typeof API_KEY_ENVIRONMENTS)[number]
 export type ApiKeyScope = (typeof API_KEY_SCOPE_IDS)[number]
 export type BrokApiModel = (typeof BROK_API_MODEL_IDS)[number]
+export type ApiKeyStatus = 'active' | 'paused' | 'revoked'
+export type ApiKeyStatusAction = 'pause' | 'resume' | 'revoke'
 
 export interface CreateApiKeyInput {
   name: string
@@ -150,5 +152,34 @@ export function validateCreateApiKeyInput(
       API_KEY_LIMITS.monthlyBudgetMinCents,
       API_KEY_LIMITS.monthlyBudgetMaxCents
     )
+  }
+}
+
+export function validateApiKeyStatusTransition(
+  status: ApiKeyStatus,
+  action: ApiKeyStatusAction
+) {
+  if (action === 'pause') {
+    if (status === 'paused') {
+      throw new Error('API key is already paused.')
+    }
+    if (status === 'revoked') {
+      throw new Error('Revoked API keys cannot be paused.')
+    }
+    return
+  }
+
+  if (action === 'resume') {
+    if (status === 'active') {
+      throw new Error('API key is already active.')
+    }
+    if (status === 'revoked') {
+      throw new Error('Revoked API keys cannot be resumed. Create a new key.')
+    }
+    return
+  }
+
+  if (status === 'revoked') {
+    throw new Error('API key is already revoked.')
   }
 }

@@ -14,6 +14,7 @@ import { getCurrentAppAccess, hasFeatureAccess } from '@/lib/auth/app-access'
 import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
 import {
   CreateApiKeyInput,
+  validateApiKeyStatusTransition,
   validateCreateApiKeyInput
 } from '@/lib/brok/api-platform'
 import { db } from '@/lib/db'
@@ -223,7 +224,8 @@ async function requireOwnedApiKey(keyId: string) {
 }
 
 export async function revokeApiKey(keyId: string) {
-  await requireOwnedApiKey(keyId)
+  const key = await requireOwnedApiKey(keyId)
+  validateApiKeyStatusTransition(key.status, 'revoke')
 
   await db
     .update(apiKeys)
@@ -234,7 +236,8 @@ export async function revokeApiKey(keyId: string) {
 }
 
 export async function pauseApiKey(keyId: string) {
-  await requireOwnedApiKey(keyId)
+  const key = await requireOwnedApiKey(keyId)
+  validateApiKeyStatusTransition(key.status, 'pause')
 
   await db
     .update(apiKeys)
@@ -245,11 +248,12 @@ export async function pauseApiKey(keyId: string) {
 }
 
 export async function resumeApiKey(keyId: string) {
-  await requireOwnedApiKey(keyId)
+  const key = await requireOwnedApiKey(keyId)
+  validateApiKeyStatusTransition(key.status, 'resume')
 
   await db
     .update(apiKeys)
-    .set({ status: 'active' })
+    .set({ status: 'active', revokedAt: null })
     .where(eq(apiKeys.id, keyId))
 
   revalidatePath('/api-keys')
