@@ -68,6 +68,11 @@ const routeChecks: RouteCheck[] = [
   { label: 'brokcode', url: `${baseUrl}/brokcode`, expected: 'auth-or-ok' },
   { label: 'brokmail', url: `${baseUrl}/brokmail`, expected: 'auth-or-ok' },
   {
+    label: 'presentations',
+    url: `${baseUrl}/presentations`,
+    expected: 'auth-or-ok'
+  },
+  {
     label: 'humanizer',
     url: `${baseUrl}/tools/humanizer`,
     expected: 'auth-or-ok'
@@ -85,6 +90,7 @@ const browserUrls = [
   `${baseUrl}/`,
   `${baseUrl}/brokcode`,
   `${baseUrl}/brokmail`,
+  `${baseUrl}/presentations`,
   `${baseUrl}/tools/humanizer`,
   `${baseUrl}/integrations`,
   `${docsUrl}/docs`
