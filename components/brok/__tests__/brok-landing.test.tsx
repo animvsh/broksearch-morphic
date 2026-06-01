@@ -11,7 +11,7 @@ describe('BrokLanding', () => {
       screen
         .getAllByRole('link', { name: /start for \$7\/mo/i })
         .map(link => link.getAttribute('href'))
-    ).toEqual(['/auth/login', '/auth/login'])
+    ).toEqual(['/auth/login', '/auth/login', '/auth/login'])
     expect(screen.getByText(/only \$7\/month/i)).toBeInTheDocument()
   })
 
@@ -22,7 +22,11 @@ describe('BrokLanding', () => {
       screen
         .getAllByRole('link', { name: /start for \$7\/mo/i })
         .map(link => link.getAttribute('href'))
-    ).toEqual(['/auth/access-pending', '/auth/access-pending'])
+    ).toEqual([
+      '/auth/access-pending',
+      '/auth/access-pending',
+      '/auth/access-pending'
+    ])
     expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute(
       'href',
       '/auth/access-pending'
