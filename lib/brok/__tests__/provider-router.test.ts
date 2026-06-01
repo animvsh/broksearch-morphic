@@ -25,4 +25,19 @@ describe('normalizeMiniMaxMessages', () => {
       normalizeMiniMaxMessages([{ role: 'system', content: 'No markdown.' }])
     ).toEqual([{ role: 'user', content: 'System instructions:\nNo markdown.' }])
   })
+
+  it('folds OpenAI developer instructions into the first user message', () => {
+    const messages = normalizeMiniMaxMessages([
+      { role: 'developer', content: 'Prefer terse answers.' },
+      { role: 'user', content: 'Explain Brok.' }
+    ])
+
+    expect(messages).toEqual([
+      {
+        role: 'user',
+        content:
+          'System instructions:\nPrefer terse answers.\n\nUser request:\nExplain Brok.'
+      }
+    ])
+  })
 })

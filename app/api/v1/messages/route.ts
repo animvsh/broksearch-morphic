@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { validateAnthropicMessages } from '@/lib/brok/api-platform'
 import {
   apiKeyHasScope,
   forbiddenScopeResponse,
@@ -95,6 +96,13 @@ export async function POST(request: NextRequest) {
     return invalidRequestResponse(
       'missing_messages',
       'messages must be an array of Anthropic messages.'
+    )
+  }
+  const messageValidation = validateAnthropicMessages(body.messages)
+  if (!messageValidation.ok) {
+    return invalidRequestResponse(
+      messageValidation.code,
+      messageValidation.message
     )
   }
 
