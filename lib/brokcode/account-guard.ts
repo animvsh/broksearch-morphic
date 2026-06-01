@@ -191,6 +191,13 @@ export async function getBrokCodeBrowserSessionAuth(): Promise<BrokCodeAuthResul
   const access = await getAppAccessForUser(user)
   if (!hasFeatureAccess(access, 'brokcode')) return null
 
+  if (
+    process.env.BROKCODE_PROJECT_STORAGE === 'file' &&
+    canUseLocalBrowserSessionFallback()
+  ) {
+    return createLocalBrowserSessionAuth(user)
+  }
+
   try {
     const [existingWorkspace] = await db
       .select()
