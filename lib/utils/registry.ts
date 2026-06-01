@@ -7,6 +7,7 @@ import { createProviderRegistry, LanguageModel } from 'ai'
 import { createOllama } from 'ai-sdk-ollama'
 
 import { BROK_PROVIDER_API_KEY, BROK_PROVIDER_BASE_URL } from '@/lib/ai/brok'
+import { getBrokProviderModelId } from '@/lib/brok/models'
 
 // Build providers object conditionally
 const providers: Record<string, any> = {
@@ -35,6 +36,19 @@ if (ollamaProvider) {
 
 export const registry = createProviderRegistry(providers)
 
+function resolveRegistryModelId(model: string): string {
+  const openAiCompatiblePrefix = 'openai-compatible:'
+
+  if (!model.startsWith(openAiCompatiblePrefix)) {
+    return model
+  }
+
+  const modelId = model.slice(openAiCompatiblePrefix.length)
+  const providerModel = getBrokProviderModelId(modelId)
+
+  return providerModel ? `${openAiCompatiblePrefix}${providerModel}` : model
+}
+
 export function getModel(model: string): LanguageModel {
   // For Ollama models, bypass the registry to pass model-level settings
   // that ai-sdk-ollama requires (think, supportedUrls override).
@@ -54,7 +68,9 @@ export function getModel(model: string): LanguageModel {
   }
 
   return registry.languageModel(
-    model as Parameters<typeof registry.languageModel>[0]
+    resolveRegistryModelId(model) as Parameters<
+      typeof registry.languageModel
+    >[0]
   )
 }
 

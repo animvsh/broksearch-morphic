@@ -42,9 +42,9 @@ describe('context-window', () => {
       expect(maxTokens).toBe(10650)
     })
 
-    test('uses the full MiniMax token-plan context window', () => {
+    test('uses the full Brok token-plan context window', () => {
       const tokenPlanModel: Model = {
-        id: 'MiniMax-M2.7-highspeed',
+        id: 'brok-m2-7-highspeed',
         name: 'Brok 3 Fast',
         provider: 'Brok',
         providerId: 'openai-compatible'

@@ -32,7 +32,16 @@ const MODEL_CONTEXT_WINDOWS: Record<string, ModelContextInfo> = {
   'grok-3': { contextWindow: 131072, outputTokens: 8192 },
   'grok-3-mini': { contextWindow: 131072, outputTokens: 8192 },
 
-  // Brok / MiniMax Token Plan Models
+  // Brok model aliases
+  'brok-m2-7': { contextWindow: 204800, outputTokens: 8192 },
+  'brok-m2-7-highspeed': { contextWindow: 204800, outputTokens: 8192 },
+  'brok-m2-5': { contextWindow: 204800, outputTokens: 8192 },
+  'brok-m2-5-highspeed': { contextWindow: 204800, outputTokens: 8192 },
+  'brok-m2-1': { contextWindow: 204800, outputTokens: 8192 },
+  'brok-m2-1-highspeed': { contextWindow: 204800, outputTokens: 8192 },
+  'brok-m2': { contextWindow: 204800, outputTokens: 8192 },
+
+  // Upstream provider model IDs
   'MiniMax-M2.7': { contextWindow: 204800, outputTokens: 8192 },
   'MiniMax-M2.7-highspeed': { contextWindow: 204800, outputTokens: 8192 },
   'MiniMax-M2.5': { contextWindow: 204800, outputTokens: 8192 },
@@ -70,6 +79,13 @@ const MODEL_TO_ENCODING: Record<string, TiktokenEncoding> = {
   'grok-4-0709': 'cl100k_base', // Use GPT-4 tokenizer as approximation for Grok
   'grok-3': 'cl100k_base',
   'grok-3-mini': 'cl100k_base',
+  'brok-m2-7': 'cl100k_base',
+  'brok-m2-7-highspeed': 'cl100k_base',
+  'brok-m2-5': 'cl100k_base',
+  'brok-m2-5-highspeed': 'cl100k_base',
+  'brok-m2-1': 'cl100k_base',
+  'brok-m2-1-highspeed': 'cl100k_base',
+  'brok-m2': 'cl100k_base',
   'MiniMax-M2.7': 'cl100k_base',
   'MiniMax-M2.7-highspeed': 'cl100k_base',
   'MiniMax-M2.5': 'cl100k_base',
