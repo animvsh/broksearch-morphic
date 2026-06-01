@@ -59,6 +59,8 @@ export async function updateSession(request: NextRequest) {
     pathname === '/offline.html'
   const isPublicPath =
     pathname === '/' ||
+    pathname.startsWith('/features') ||
+    pathname === '/pricing' ||
     isPwaAsset ||
     pathname.startsWith('/auth') ||
     pathname.startsWith('/api') ||

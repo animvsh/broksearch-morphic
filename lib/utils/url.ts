@@ -10,6 +10,10 @@ export async function getBaseUrlFromHeaders(): Promise<URL> {
   const url = headersList.get('x-url')
   const host = headersList.get('x-host')
   const protocol = headersList.get('x-protocol') || 'http:'
+  const defaultBaseUrl =
+    process.env.NODE_ENV === 'production'
+      ? 'https://www.brok.fyi'
+      : 'http://localhost:3000'
 
   try {
     // Try to use the pre-constructed base URL if available
@@ -23,11 +27,11 @@ export async function getBaseUrlFromHeaders(): Promise<URL> {
       }${host}`
       return new URL(constructedUrl)
     } else {
-      return new URL('http://localhost:3000')
+      return new URL(defaultBaseUrl)
     }
   } catch (urlError) {
     // Fallback to default URL if any error occurs during URL construction
-    return new URL('http://localhost:3000')
+    return new URL(defaultBaseUrl)
   }
 }
 
@@ -38,7 +42,10 @@ export async function getBaseUrlFromHeaders(): Promise<URL> {
  */
 export async function getBaseUrl(): Promise<URL> {
   // Check for environment variables first
-  const baseUrlEnv = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL
+  const baseUrlEnv =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    process.env.BASE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL
 
   if (baseUrlEnv) {
     try {

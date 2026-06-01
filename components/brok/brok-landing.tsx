@@ -38,7 +38,7 @@ const NAV_LINKS = [
   { label: 'Search', href: '/features/search' },
   { label: 'Code', href: '/features/brokcode' },
   { label: 'Presentations', href: '/features/presentations' },
-  { label: 'Pricing', href: '#pricing' }
+  { label: 'Pricing', href: '/pricing' }
 ] as const
 
 const PRODUCTS = [

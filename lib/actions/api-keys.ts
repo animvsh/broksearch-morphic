@@ -13,14 +13,12 @@ import {
 import { getCurrentAppAccess, hasFeatureAccess } from '@/lib/auth/app-access'
 import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
 import {
-  CreateApiKeyInput,
   validateApiKeyStatusTransition,
   validateCreateApiKeyInput
 } from '@/lib/brok/api-platform'
+import type { CreateApiKeyInput } from '@/lib/brok/api-platform'
 import { db } from '@/lib/db'
 import { apiKeys, workspaces } from '@/lib/db/schema'
-
-export type { CreateApiKeyInput }
 
 function canUseLocalApiPlatformFallback() {
   if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') return false

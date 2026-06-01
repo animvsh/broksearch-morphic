@@ -16,7 +16,7 @@ import {
   WalletCards
 } from 'lucide-react'
 
-import { CreateApiKeyInput } from '@/lib/actions/api-keys'
+import type { CreateApiKeyInput } from '@/lib/brok/api-platform'
 import { API_KEY_LIMITS } from '@/lib/brok/api-platform'
 
 import { Badge } from '@/components/ui/badge'

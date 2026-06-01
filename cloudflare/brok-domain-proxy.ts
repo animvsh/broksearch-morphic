@@ -1,4 +1,23 @@
-const UPSTREAM_ORIGIN = 'https://brok-production.up.railway.app'
+const DEFAULT_UPSTREAM_ORIGIN = 'https://brok-production.up.railway.app'
+const UPSTREAM_ORIGIN = normalizeOrigin(process.env.BROK_UPSTREAM_ORIGIN)
+
+function normalizeOrigin(raw: string | undefined) {
+  if (!raw) return DEFAULT_UPSTREAM_ORIGIN
+
+  const trimmed = raw.trim()
+  if (!trimmed) return DEFAULT_UPSTREAM_ORIGIN
+
+  try {
+    const parsed = new URL(trimmed)
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return DEFAULT_UPSTREAM_ORIGIN
+    }
+
+    return parsed.toString().replace(/\/$/, '')
+  } catch {
+    return DEFAULT_UPSTREAM_ORIGIN
+  }
+}
 
 function proxiedRequest(request: Request) {
   const incomingUrl = new URL(request.url)

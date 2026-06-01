@@ -87,3 +87,9 @@ See [docs](./docs/) for full documentation.
 ## License
 
 Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## Deployment
+
+Production deployment reference:
+
+- [Railway + brok.fyi deployment guide](./docs/deployment/railway-to-brok-fyi.md)

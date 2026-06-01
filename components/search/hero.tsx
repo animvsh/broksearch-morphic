@@ -3,6 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- sync defaultMode prop and cookie side-effect */
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 
 import { ArrowUp, Paperclip, Sparkles, Square } from 'lucide-react'
 
@@ -122,11 +123,38 @@ export function Hero({
           <Sparkles className="size-3 text-foreground/70" />
           AI search, better than ever
         </div>
+        <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50/90 px-3 py-1 text-[11px] font-semibold text-emerald-700">
+          One student plan starts at only
+          <span className="text-sm font-semibold">$7/month</span>
+        </div>
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
           What are we working on?
         </h1>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
           Ask a question, drop a file, or pick an example to get started.
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Explore tools, pricing, and docs in
+          <Link
+            href="/features"
+            className="mx-1 font-medium text-foreground underline decoration-dotted underline-offset-4"
+          >
+            Features
+          </Link>
+          <Link
+            href="/pricing"
+            className="mx-1 font-medium text-foreground underline decoration-dotted underline-offset-4"
+          >
+            Pricing
+          </Link>
+          and
+          <Link
+            href="/features/api"
+            className="mx-1 font-medium text-foreground underline decoration-dotted underline-offset-4"
+          >
+            API
+          </Link>
+          pages.
         </p>
       </div>
 
