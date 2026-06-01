@@ -22,3 +22,9 @@ export {
   type FollowUpKind
 } from './follow-up-suggestions'
 export { AnswerToolbar } from './answer-toolbar'
+export {
+  SearchAnswer,
+  DEMO_ANSWER,
+  DEMO_SOURCES,
+  DEMO_FOLLOW_UPS
+} from './search-answer'
