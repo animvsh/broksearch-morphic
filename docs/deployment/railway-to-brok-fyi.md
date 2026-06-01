@@ -60,6 +60,8 @@ npm run check:railway-production
 This checks:
 
 - `/` resolves and renders
+- `/features` resolves and renders
+- `/pricing` resolves and renders
 - `/api/v1/models` returns model list
 - `/api/v1/usage` properly requires auth
 - production routes like `/brokcode`, `/presentations`, `/integrations`

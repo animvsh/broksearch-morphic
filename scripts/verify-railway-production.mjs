@@ -213,6 +213,8 @@ async function main() {
   await Promise.all([
     checkHtmlRoute('Home page', `${APP_BASE_URL}/`, 'Brok'),
     checkHtmlRoute('Docs route', `${DOCS_BASE_URL}/docs`),
+    checkHtmlRoute('Features route', `${APP_BASE_URL}/features`, 'Brok tools'),
+    checkHtmlRoute('Pricing route', `${APP_BASE_URL}/pricing`, '$7'),
     checkHtmlRoute('BrokCode route (auth required)', `${APP_BASE_URL}/brokcode`, undefined, {
       expectedStatuses: [302, 307, 308],
       expectedLocationIncludes: protectedRedirectLocations.BrokCode
