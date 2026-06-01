@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { validateCreateApiKeyInput } from '../api-platform'
+import {
+  validateApiKeyStatusTransition,
+  validateCreateApiKeyInput
+} from '../api-platform'
 
 const validInput = {
   name: ' Production app ',
@@ -68,5 +71,40 @@ describe('validateCreateApiKeyInput', () => {
     expect(() =>
       validateCreateApiKeyInput({ ...validInput, monthlyBudgetCents: -1 })
     ).toThrow('Monthly budget must be an integer between 0 and 10000000.')
+  })
+})
+
+describe('validateApiKeyStatusTransition', () => {
+  it('allows supported API key lifecycle transitions', () => {
+    expect(() =>
+      validateApiKeyStatusTransition('active', 'pause')
+    ).not.toThrow()
+    expect(() =>
+      validateApiKeyStatusTransition('paused', 'resume')
+    ).not.toThrow()
+    expect(() =>
+      validateApiKeyStatusTransition('active', 'revoke')
+    ).not.toThrow()
+    expect(() =>
+      validateApiKeyStatusTransition('paused', 'revoke')
+    ).not.toThrow()
+  })
+
+  it('rejects lifecycle transitions that bypass the key state machine', () => {
+    expect(() => validateApiKeyStatusTransition('paused', 'pause')).toThrow(
+      'API key is already paused.'
+    )
+    expect(() => validateApiKeyStatusTransition('active', 'resume')).toThrow(
+      'API key is already active.'
+    )
+    expect(() => validateApiKeyStatusTransition('revoked', 'pause')).toThrow(
+      'Revoked API keys cannot be paused.'
+    )
+    expect(() => validateApiKeyStatusTransition('revoked', 'resume')).toThrow(
+      'Revoked API keys cannot be resumed. Create a new key.'
+    )
+    expect(() => validateApiKeyStatusTransition('revoked', 'revoke')).toThrow(
+      'API key is already revoked.'
+    )
   })
 })
