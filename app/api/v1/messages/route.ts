@@ -16,6 +16,7 @@ import {
   readJsonBody
 } from '@/lib/brok/http'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
+import { applyBrokMarkup } from '@/lib/brok/pricing'
 import {
   calculateCost,
   routeToProvider,
@@ -151,6 +152,20 @@ export async function POST(request: NextRequest) {
   )
 
   if (!rateLimit.allowed) {
+    if (rateLimit.reason === 'rate_limit_check_failed') {
+      return NextResponse.json(
+        {
+          type: 'error',
+          error: {
+            type: 'api_error',
+            message:
+              'Rate limit check is temporarily unavailable. Please retry shortly.'
+          }
+        },
+        { status: 503 }
+      )
+    }
+
     await recordRateLimitEvent(
       auth.apiKey.id,
       auth.workspace.id,
@@ -232,12 +247,45 @@ export async function POST(request: NextRequest) {
               inputTokens,
               outputTokens,
               providerCostUsd: providerCost,
-              billedUsd: providerCost * 1.5,
+              billedUsd: applyBrokMarkup(providerCost),
               latencyMs,
               status: 'success',
               metadata: {
                 stream: true,
                 usageSource: usage ? 'provider' : 'estimated'
+              }
+            })
+          },
+          onAbort: async ({ content, usage }) => {
+            const latencyMs = Date.now() - startTime
+            const { inputTokens, outputTokens } = resolveStreamTokenUsage({
+              usage,
+              content,
+              messages: providerMessages
+            })
+            const providerCost = await calculateCost(
+              modelId,
+              inputTokens,
+              outputTokens
+            )
+            await recordUsage({
+              requestId,
+              workspaceId: auth.workspace.id,
+              userId: auth.apiKey.userId,
+              apiKeyId: auth.apiKey.id,
+              endpoint: 'code',
+              model: modelId,
+              provider: 'Brok',
+              inputTokens,
+              outputTokens,
+              providerCostUsd: providerCost,
+              billedUsd: applyBrokMarkup(providerCost),
+              latencyMs,
+              status: 'aborted',
+              metadata: {
+                stream: true,
+                usageSource: usage ? 'provider' : 'estimated',
+                aborted: true
               }
             })
           }
@@ -283,7 +331,7 @@ export async function POST(request: NextRequest) {
       inputTokens,
       outputTokens,
       providerCostUsd: providerCost,
-      billedUsd: providerCost * 1.5,
+      billedUsd: applyBrokMarkup(providerCost),
       latencyMs,
       status: 'success'
     })
@@ -395,6 +443,7 @@ function createAnthropicStream(
   modelId: string,
   options?: {
     onComplete?: (usage: { content: string; usage: unknown }) => Promise<void>
+    onAbort?: (usage: { content: string; usage: unknown }) => Promise<void>
   }
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder()
@@ -403,7 +452,7 @@ function createAnthropicStream(
   const usageAccumulator = createOpenAiStreamUsageAccumulator()
   let buffer = ''
   let started = false
-  let index = 0
+  let aborted = false
 
   return new ReadableStream({
     async start(controller) {
@@ -442,7 +491,7 @@ function createAnthropicStream(
         if (done) {
           if (buffer.trim()) {
             usageAccumulator.trackSseLine(buffer)
-            emitProviderLine(buffer, controller, encoder, index)
+            emitProviderLine(buffer, controller, encoder)
           }
           controller.enqueue(
             encoder.encode(
@@ -466,7 +515,11 @@ function createAnthropicStream(
               toAnthropicSse('message_stop', { type: 'message_stop' })
             )
           )
-          await options?.onComplete?.(usageAccumulator.snapshot())
+          if (aborted) {
+            await options?.onAbort?.(usageAccumulator.snapshot())
+          } else {
+            await options?.onComplete?.(usageAccumulator.snapshot())
+          }
           controller.close()
           return
         }
@@ -478,9 +531,9 @@ function createAnthropicStream(
         let emittedDelta = false
         for (const line of lines) {
           usageAccumulator.trackSseLine(line)
-          const nextIndex = emitProviderLine(line, controller, encoder, index)
-          if (nextIndex > index) emittedDelta = true
-          index = nextIndex
+          if (emitProviderLine(line, controller, encoder)) {
+            emittedDelta = true
+          }
         }
 
         if (started && emittedDelta) {
@@ -488,8 +541,13 @@ function createAnthropicStream(
         }
       }
     },
-    cancel() {
-      return reader.cancel()
+    async cancel() {
+      aborted = true
+      try {
+        await reader.cancel()
+      } catch {
+        // upstream may already be closed; ignore
+      }
     }
   })
 }
@@ -497,13 +555,12 @@ function createAnthropicStream(
 function emitProviderLine(
   line: string,
   controller: ReadableStreamDefaultController<Uint8Array>,
-  encoder: TextEncoder,
-  index: number
-) {
-  if (!line.startsWith('data:')) return index
+  encoder: TextEncoder
+): boolean {
+  if (!line.startsWith('data:')) return false
 
   const data = line.slice(5).trim()
-  if (!data || data === '[DONE]') return index
+  if (!data || data === '[DONE]') return false
 
   try {
     const payload = JSON.parse(data)
@@ -511,7 +568,7 @@ function emitProviderLine(
       typeof payload.choices?.[0]?.delta?.content === 'string'
         ? stripThinkingBlocks(payload.choices[0].delta.content)
         : ''
-    if (!text) return index
+    if (!text) return false
 
     controller.enqueue(
       encoder.encode(
@@ -522,9 +579,9 @@ function emitProviderLine(
         })
       )
     )
-    return index + 1
+    return true
   } catch {
-    return index
+    return false
   }
 }
 

@@ -26,6 +26,7 @@ pnpm-lock.yaml
 .DS_Store
 coverage/
 .cache/
+.claude/
 
 # Claude runtime state (rewritten continuously)
 .claude/tasks/cfg/*.json

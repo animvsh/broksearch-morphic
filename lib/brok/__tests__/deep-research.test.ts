@@ -25,10 +25,10 @@ describe('deep research workflow', () => {
   })
 
   it('runs multiple research passes and returns a synthesized brief payload', async () => {
-    vi.doMock('@/lib/ai/minimax', () => ({
-      MINIMAX_API_KEY: '',
-      MINIMAX_BASE_URL: 'https://minimax.test/v1',
-      MINIMAX_CHAT_MODEL: 'MiniMax-M2'
+    vi.doMock('@/lib/ai/brok', () => ({
+      BROK_PROVIDER_API_KEY: '',
+      BROK_PROVIDER_BASE_URL: 'https://minimax.test/v1',
+      BROK_PROVIDER_CHAT_MODEL: 'MiniMax-M2'
     }))
 
     const runSearchPipeline = vi.fn(async ({ query }: { query: string }) => {

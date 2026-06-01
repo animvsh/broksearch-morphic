@@ -1,7 +1,29 @@
-import { createHash, randomBytes } from 'crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 
-const SECRET_SALT =
-  process.env.API_KEY_SALT || 'brok-default-salt-change-in-production'
+const ENV_SALT = process.env.API_KEY_SALT
+
+if (
+  !ENV_SALT &&
+  process.env.NODE_ENV === 'production' &&
+  process.env.BROK_CLOUD_DEPLOYMENT === 'true'
+) {
+  throw new Error(
+    '[brok-auth] API_KEY_SALT is not set. Refusing to start in production with a default API key salt.'
+  )
+}
+
+const SECRET_SALT = ENV_SALT || 'brok-default-salt-change-in-production'
+
+if (!ENV_SALT && process.env.NODE_ENV !== 'test') {
+  console.warn(
+    '[brok-auth] API_KEY_SALT is not set; using a development default. Set API_KEY_SALT in any non-test environment.'
+  )
+}
+
+export interface HashedApiKey {
+  hash: string
+  salt: string
+}
 
 export function generateApiKey(environment: 'live' | 'test' = 'live'): string {
   const prefix = `brok_sk_${environment}_`
@@ -9,14 +31,35 @@ export function generateApiKey(environment: 'live' | 'test' = 'live'): string {
   return `${prefix}${randomPart}`
 }
 
-export function hashApiKey(key: string): string {
+export function generateKeySalt(): string {
+  return randomBytes(16).toString('base64url')
+}
+
+export function hashApiKey(key: string, keySalt?: string | null): string {
+  if (keySalt) {
+    return createHash('sha256')
+      .update(key + keySalt + SECRET_SALT)
+      .digest('hex')
+  }
   return createHash('sha256')
     .update(key + SECRET_SALT)
     .digest('hex')
 }
 
-export function verifyApiKey(key: string, hash: string): boolean {
-  return hashApiKey(key) === hash
+export function hashNewApiKey(key: string): HashedApiKey {
+  const salt = generateKeySalt()
+  return { hash: hashApiKey(key, salt), salt }
+}
+
+export function verifyApiKey(
+  key: string,
+  hash: string,
+  keySalt?: string | null
+): boolean {
+  const computed = Buffer.from(hashApiKey(key, keySalt), 'hex')
+  const stored = Buffer.from(hash, 'hex')
+  if (computed.length !== stored.length) return false
+  return timingSafeEqual(computed, stored)
 }
 
 export function maskApiKey(key: string): string {
