@@ -1,12 +1,12 @@
 {
   "_versionCache": {
     "claudeCode": {
-      "remote": "2.1.136",
-      "checkedAt": "2026-05-08T21:59:41.949Z"
+      "remote": "2.1.159",
+      "checkedAt": "2026-06-01T06:55:53.804Z"
     },
     "brewcode": {
-      "remote": "3.7.17",
-      "checkedAt": "2026-05-08T21:59:42.066Z"
+      "remote": "3.9.2",
+      "checkedAt": "2026-06-01T06:55:53.805Z"
     }
   }
 }
