@@ -9,9 +9,11 @@ import {
   listBrokCodeProjectFiles
 } from '@/lib/brokcode/project-store'
 import {
+  BROKCODE_RUNTIME_APP_TYPES,
   BrokCodeRuntimeHealth,
   BrokCodeRuntimeStatus,
-  createBrokCodeRuntimeSpec
+  createBrokCodeRuntimeSpec,
+  getBrokCodeRuntimeStartReadiness
 } from '@/lib/brokcode/runtime/contract'
 import { startBrokCodeRuntimeProcess } from '@/lib/brokcode/runtime/process-manager'
 import {
@@ -66,7 +68,33 @@ async function authorizeProject(request: Request, id: string) {
   return { ok: true as const, authResult, project }
 }
 
-function runtimeFallback() {
+function runtimeFallback(spec?: { appType?: unknown } | null) {
+  if (
+    spec &&
+    typeof spec.appType === 'string' &&
+    BROKCODE_RUNTIME_APP_TYPES.includes(
+      spec.appType as (typeof BROKCODE_RUNTIME_APP_TYPES)[number]
+    )
+  ) {
+    const readiness = getBrokCodeRuntimeStartReadiness(
+      spec.appType as (typeof BROKCODE_RUNTIME_APP_TYPES)[number]
+    )
+    if (readiness.mode === 'managed_static_preview') {
+      return {
+        mode: readiness.mode,
+        enabled: true,
+        message: readiness.message
+      }
+    }
+    if (readiness.mode === 'unsupported') {
+      return {
+        mode: readiness.mode,
+        enabled: false,
+        message: readiness.message
+      }
+    }
+  }
+
   return {
     mode: 'managed_static_preview',
     enabled: true,
@@ -92,7 +120,7 @@ export async function GET(
   return NextResponse.json({
     runtime: runtimes[0] ?? null,
     runtimes,
-    fallback: runtimeFallback()
+    fallback: runtimeFallback(runtimes[0] ?? null)
   })
 }
 
@@ -200,8 +228,10 @@ export async function POST(
           port: livePreview.port,
           previewUrl: `/api/brokcode/runtime/${encodeURIComponent(livePreview.runtimeId)}/`
         })
-      : null,
-    fallback: runtimeFallback()
+      : ((refreshedRuntime?.metadata?.livePreview as
+          | Record<string, unknown>
+          | undefined) ?? null),
+    fallback: runtimeFallback(runtimeSpec)
   })
 }
 
@@ -267,6 +297,6 @@ export async function PATCH(
 
   return NextResponse.json({
     runtime,
-    fallback: runtimeFallback()
+    fallback: runtimeFallback(runtime)
   })
 }

@@ -74,6 +74,14 @@ export type BrokCodeRuntimeSpec = {
   metadata: Record<string, unknown>
 }
 
+export type BrokCodeRuntimeStartReadiness = {
+  startable: boolean
+  status: BrokCodeRuntimeStatus
+  mode: 'live_process' | 'managed_static_preview' | 'unsupported'
+  healthOk: boolean
+  message: string
+}
+
 const statusSet = new Set<string>(BROKCODE_RUNTIME_STATUSES)
 const packageManagerSet = new Set<string>(BROKCODE_PACKAGE_MANAGERS)
 
@@ -256,6 +264,40 @@ function defaultPortFor(appType: BrokCodeRuntimeAppType) {
   return 4173
 }
 
+export function getBrokCodeRuntimeStartReadiness(
+  appType: BrokCodeRuntimeAppType
+): BrokCodeRuntimeStartReadiness {
+  if (appType === 'vite_react' || appType === 'nextjs') {
+    return {
+      startable: true,
+      status: 'running',
+      mode: 'live_process',
+      healthOk: false,
+      message: 'Live runtime process can be started for this project.'
+    }
+  }
+
+  if (appType === 'static_html') {
+    return {
+      startable: false,
+      status: 'healthy',
+      mode: 'managed_static_preview',
+      healthOk: true,
+      message:
+        'Static HTML projects use the managed static preview instead of a dev-server process.'
+    }
+  }
+
+  return {
+    startable: false,
+    status: 'stopped',
+    mode: 'unsupported',
+    healthOk: false,
+    message:
+      'This project does not include a supported web app entrypoint for live preview.'
+  }
+}
+
 export function createBrokCodeRuntimeSpec({
   projectId,
   workspaceId,
@@ -279,6 +321,7 @@ export function createBrokCodeRuntimeSpec({
   const packageManager = detectBrokCodePackageManager({ files, appType })
   const port = defaultPortFor(appType)
   const cleanVersion = versionId ? safeSegment(versionId) : 'latest'
+  const readiness = getBrokCodeRuntimeStartReadiness(appType)
 
   return {
     projectId,
@@ -316,7 +359,10 @@ export function createBrokCodeRuntimeSpec({
     metadata: {
       fileCount: files.length,
       supportedAppTypes: [...BROKCODE_RUNTIME_APP_TYPES],
-      managedStaticPreviewFallback: true
+      liveRuntimeSupported: readiness.startable,
+      runtimeMode: readiness.mode,
+      runtimeReadiness: readiness,
+      managedStaticPreviewFallback: readiness.mode === 'managed_static_preview'
     }
   }
 }
