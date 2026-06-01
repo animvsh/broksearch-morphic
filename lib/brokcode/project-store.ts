@@ -310,6 +310,134 @@ async function getFallbackProject({
   )
 }
 
+async function deleteFallbackProject({
+  id,
+  workspaceId,
+  userId
+}: {
+  id: string
+  workspaceId: string
+  userId: string
+}) {
+  let removed = false
+  await queueProjectStoreWrite(store => {
+    const remainingProjects = store.projects.filter(project => {
+      const matches = project.id === id
+      if (matches) removed = true
+      return !matches
+    })
+    const remainingFiles = store.files.filter(
+      file => file.projectId !== id || file.workspaceId !== workspaceId
+    )
+    const remainingDeployments = store.deployments.filter(
+      deployment =>
+        deployment.projectId !== id || deployment.workspaceId !== workspaceId
+    )
+    return {
+      projects: remainingProjects,
+      files: remainingFiles,
+      deployments: remainingDeployments
+    }
+  })
+  return removed
+}
+
+export async function deleteBrokCodeProject({
+  id,
+  workspaceId,
+  userId
+}: {
+  id: string
+  workspaceId: string
+  userId: string
+}): Promise<boolean> {
+  const project = await getBrokCodeProject({ id, workspaceId, userId })
+  if (!project) return false
+
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
+    try {
+      await db
+        .delete(brokCodeProjectFiles)
+        .where(
+          and(
+            eq(brokCodeProjectFiles.projectId, id),
+            eq(brokCodeProjectFiles.workspaceId, workspaceId)
+          )
+        )
+      await db
+        .delete(brokCodeDeployments)
+        .where(
+          and(
+            eq(brokCodeDeployments.projectId, id),
+            eq(brokCodeDeployments.workspaceId, workspaceId)
+          )
+        )
+      const result = await db
+        .delete(brokCodeProjects)
+        .where(
+          and(
+            eq(brokCodeProjects.id, id),
+            eq(brokCodeProjects.workspaceId, workspaceId)
+          )
+        )
+        .returning({ id: brokCodeProjects.id })
+      if (result.length > 0) {
+        return true
+      }
+    } catch (error) {
+      console.error(
+        'BrokCode project DB delete failed; using file store:',
+        error
+      )
+    }
+  }
+
+  return deleteFallbackProject({ id, workspaceId, userId })
+}
+
+export async function renameBrokCodeProject({
+  id,
+  workspaceId,
+  userId,
+  name
+}: {
+  id: string
+  workspaceId: string
+  userId: string
+  name: string
+}): Promise<BrokCodeProject | null> {
+  const trimmed = name.trim()
+  if (!trimmed) return null
+  const project = await getBrokCodeProject({ id, workspaceId, userId })
+  if (!project) return null
+  const slug = makeBrokCodeSlug(trimmed)
+
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
+    try {
+      const [updatedProject] = await db
+        .update(brokCodeProjects)
+        .set({ name: trimmed, slug, updatedAt: new Date() })
+        .where(eq(brokCodeProjects.id, id))
+        .returning()
+      if (updatedProject) {
+        return updatedProject
+      }
+    } catch (error) {
+      console.error(
+        'BrokCode project DB rename failed; using file store:',
+        error
+      )
+    }
+  }
+
+  return updateFallbackProject(id, current => ({
+    ...current,
+    name: trimmed,
+    slug,
+    updatedAt: new Date()
+  }))
+}
+
 export async function createBrokCodeProject({
   workspaceId,
   userId,

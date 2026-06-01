@@ -1,15 +1,33 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import { stdin as input, stdout as output } from 'node:process'
 import { createInterface } from 'node:readline/promises'
 
+import {
+  BROK_KEY_PREFIX,
+  buildReadlineCompleter,
+  chunkSseBlocks,
+  classifyHttpError,
+  extractCommandName,
+  formatBytes,
+  formatPhaseLabel,
+  isValidBrokKey,
+  parseSseBlock,
+  relativeTime,
+  spinnerFrame,
+  suggestCommands,
+  truncateText
+} from '../lib/brokcode/tui-helpers.mjs'
+
 const configPath =
   process.env.BROKCODE_CONFIG_PATH ||
   path.join(homedir(), '.brokcode', 'config.json')
+
+const historyPath = path.join(path.dirname(configPath), 'history')
 
 function readConfig() {
   try {
@@ -24,6 +42,22 @@ function writeConfig(next) {
   writeFileSync(configPath, JSON.stringify(next, null, 2), {
     mode: 0o600
   })
+}
+
+function loadHistory() {
+  try {
+    return readFileSync(historyPath, 'utf8').split('\n').filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+function appendHistory(line) {
+  if (!line) return
+  try {
+    mkdirSync(path.dirname(historyPath), { recursive: true })
+    appendFileSync(historyPath, `${line}\n`)
+  } catch {}
 }
 
 const storedConfig = readConfig()
@@ -47,6 +81,7 @@ let activeProjectId =
   storedConfig.activeProjectId ||
   storedConfig.projectId ||
   ''
+let activeTaskId = ''
 const legacyRuntimeName = ['open', 'code'].join('')
 const legacyRuntimeEnvKey = `BROKCODE_REQUIRE_${legacyRuntimeName.toUpperCase()}`
 const requireCloudRuntime =
@@ -61,7 +96,8 @@ const colors = {
   green: '\x1b[32m',
   yellow: '\x1b[33m',
   red: '\x1b[31m',
-  magenta: '\x1b[35m'
+  magenta: '\x1b[35m',
+  blue: '\x1b[34m'
 }
 
 const messages = [
@@ -78,6 +114,11 @@ const legacyRuntimeBrandPattern = new RegExp(
   'gi'
 )
 const requireCloudRuntimeField = `require_${legacyRuntimeName}`
+
+let activeController = null
+let spinnerTimer = null
+let spinnerFrameIndex = 0
+let activeSpinnerLine = ''
 
 function readArgValue(flag) {
   const index = process.argv.indexOf(flag)
@@ -108,7 +149,7 @@ function assertBrokKey() {
     return false
   }
 
-  if (!apiKey.startsWith('brok_sk_')) {
+  if (!isValidBrokKey(apiKey)) {
     throw new Error(
       'Brok Code only accepts Brok API keys that start with brok_sk_.'
     )
@@ -136,6 +177,36 @@ function normalizeRuntimeBrand(value) {
   return String(value).replace(legacyRuntimeBrandPattern, 'brokcode-cloud')
 }
 
+function startSpinner(label) {
+  stopSpinner()
+  spinnerFrameIndex = 0
+  activeSpinnerLine = label
+  process.stdout.write('\x1b[?25l')
+  spinnerTimer = setInterval(() => {
+    if (!activeSpinnerLine) return
+    const frame = spinnerFrame(spinnerFrameIndex++)
+    process.stdout.write(
+      `\r${colors.cyan}${frame}${colors.reset} ${colors.dim}${activeSpinnerLine}${colors.reset}`
+    )
+  }, 90)
+}
+
+function updateSpinnerLabel(label) {
+  activeSpinnerLine = label
+}
+
+function stopSpinner() {
+  if (spinnerTimer) {
+    clearInterval(spinnerTimer)
+    spinnerTimer = null
+  }
+  if (activeSpinnerLine) {
+    process.stdout.write('\r\x1b[2K')
+    activeSpinnerLine = ''
+  }
+  process.stdout.write('\x1b[?25h')
+}
+
 function printBanner() {
   output.write('\x1bc')
   output.write(
@@ -146,7 +217,8 @@ function printBanner() {
       `api ${baseUrl}`,
       `session ${sessionId}`,
       `project ${activeProjectId || 'none'}`,
-      `runtime ${requireCloudRuntime ? 'brokcode-cloud' : 'Brok fallback allowed'}`
+      `runtime ${requireCloudRuntime ? 'brokcode-cloud' : 'Brok fallback allowed'}`,
+      `${colors.dim}/help for commands · Tab completes · ↑/↓ history · Ctrl+C cancel${colors.reset}`
     ])}${colors.reset}\n\n`
   )
   output.write(
@@ -156,33 +228,45 @@ function printBanner() {
 
 function printHelp() {
   output.write(`\n${colors.bold}Brok Code commands${colors.reset}
-  /usage [day|week|month]      Show Brok API usage stats
-  /sync                        Pull the shared cloud/TUI session
-  /session [id]                Show session info or switch session
-  /projects                    List saved BrokCode projects
-  /project new <name>          Create a saved project
-  /project select <id|slug>    Select a project for file commands
-  /project show                Show the selected project
-  /preview [id|slug]           Refresh and print the managed preview URL
-  /deploy [id|slug]            Publish selected project to its managed URL
-  /backend status              Show selected project backend
-  /backend insforge <url>      Link existing InsForge backend
-  /backend provision           Create an InsForge trial backend
-  /backend check               Check selected backend health
-  /backend clear               Remove backend metadata
-  /files [id|slug]             List files in a project
-  /file put <path> <local>     Save a local file into the selected project
-  /ai-default                  Explain the default AI app layer
-  /worktree <branch>           Create an isolated git worktree
-  /securityscan [phase]        Run DeepSec security scanning for this repo
-  /direct                      Explain direct repository edit mode
-  /github                      Explain GitHub-connected mode
-  /skills                      Show Agent Skills setup
-  /compat                      Print agent-tool compatibility env vars
-  /key <brok_sk_...>           Save a Brok API key to ${configPath}
-  /model                       Show active model and endpoint
-  /clear                       Clear the screen
-  /exit                        Quit
+  /help                          Show this help
+  /usage [day|week|month]        Show Brok API usage stats
+  /sync                          Pull the shared cloud/TUI session
+  /session [id]                  Show session info or switch session
+  /projects                      List saved BrokCode projects
+  /project new <name>            Create a saved project
+  /project select <id|slug>      Select a project for file commands
+  /project show                  Show the selected project
+  /project rename <name>         Rename the selected project
+  /project delete                Delete the selected project (with confirmation)
+  /preview [id|slug]             Refresh and print the managed preview URL
+  /deploy [id|slug]              Publish selected project to its managed URL
+  /backend status                Show selected project backend
+  /backend insforge <url> [key]  Link existing InsForge backend
+  /backend provision             Create an InsForge trial backend
+  /backend check                 Check selected backend health
+  /backend clear                 Remove backend metadata
+  /files [id|slug]               List files in a project
+  /file put <path> <local>       Save a local file into the selected project
+  /file show <path>              Print a saved file from the selected project
+  /file delete <path>            Delete a file from the selected project
+  /file rename <old> <new>       Rename a file in the selected project
+  /versions [limit]              Show recent version history for this session
+  /version <id>                  Show details of a saved version
+  /resume [taskId]               Reconnect to an in-flight streaming task
+  /doctor                        Diagnose config, key, and connectivity
+  /ai-default                    Explain the default AI app layer
+  /worktree <branch>             Create an isolated git worktree
+  /securityscan [phase]          Run DeepSec security scanning for this repo
+  /direct                        Explain direct repository edit mode
+  /github                        Explain GitHub-connected mode
+  /skills                        Show Agent Skills setup
+  /compat                        Print agent-tool compatibility env vars
+  /key <brok_sk_...>             Save a Brok API key to ${configPath}
+  /key clear                     Remove the saved Brok API key
+  /model                         Show active model and endpoint
+  /clear                         Clear the screen
+  /exit                          Quit
+\n${colors.dim}Keys: Tab autocompletes commands and project ids. ↑/↓ recall history. Ctrl+C cancels the current request.${colors.reset}
 \n`)
 }
 
@@ -196,6 +280,13 @@ function getSyncEndpoint(session = sessionId) {
 
 function getProjectsEndpoint() {
   return new URL('/api/brokcode/projects', syncBaseUrl)
+}
+
+function getProjectEndpoint(projectId) {
+  return new URL(
+    `/api/brokcode/projects/${encodeURIComponent(projectId)}`,
+    syncBaseUrl
+  )
 }
 
 function getProjectFilesEndpoint(projectId) {
@@ -234,6 +325,24 @@ function getInsForgeProvisionEndpoint() {
   return new URL('/api/brokcode/projects/insforge/provision', syncBaseUrl)
 }
 
+function getVersionsEndpoint() {
+  const url = new URL('/api/brokcode/versions', syncBaseUrl)
+  url.searchParams.set('session_id', sessionId)
+  return url
+}
+
+function getTaskStatusUrl(taskId) {
+  return new URL(`/api/tasks/${taskId}`, syncBaseUrl)
+}
+
+function getTaskEventsUrl(taskId) {
+  return new URL(`/api/tasks/${taskId}/events`, syncBaseUrl)
+}
+
+function classifyError({ status, body, fallback }) {
+  return classifyHttpError({ status, body, fallback })
+}
+
 async function requestJson(url, options = {}) {
   if (!assertBrokKey()) return null
 
@@ -246,15 +355,16 @@ async function requestJson(url, options = {}) {
     }
   })
   const body = await response.json().catch(() => null)
-
   if (!response.ok) {
-    const message =
-      typeof body?.error === 'string'
-        ? body.error
-        : typeof body?.error?.message === 'string'
-          ? body.error.message
-          : `Request failed: ${response.status}`
+    const { message, hint } = classifyError({
+      status: response.status,
+      body,
+      fallback: `Request failed: ${response.status}`
+    })
     output.write(`${colors.red}${message}${colors.reset}\n`)
+    if (hint) {
+      output.write(`${colors.dim}${hint}${colors.reset}\n`)
+    }
     return null
   }
 
@@ -391,6 +501,51 @@ async function showSelectedProject() {
       `Updated: ${project.updatedAt || 'unknown'}`
     ])}${colors.reset}\n`
   )
+}
+
+async function renameSelectedProject(newName) {
+  if (!newName) {
+    output.write(`${colors.red}Usage: /project rename <name>${colors.reset}\n`)
+    return
+  }
+  const projectId = await resolveProjectId()
+  if (!projectId) return
+
+  const body = await requestJson(getProjectEndpoint(projectId), {
+    method: 'PATCH',
+    body: JSON.stringify({ name: newName })
+  })
+  if (!body?.project) return
+  output.write(
+    `${colors.green}Renamed to ${body.project.name} (${body.project.slug}).${colors.reset}\n`
+  )
+}
+
+async function deleteSelectedProject() {
+  const projectId = await resolveProjectId()
+  if (!projectId) return
+
+  output.write(
+    `${colors.yellow}Type 'yes' to confirm deleting this project and all of its files. This cannot be undone.${colors.reset}\n`
+  )
+  const confirm = (await promptLine(`${colors.bold}confirm>${colors.reset} `))
+    ?.trim()
+    .toLowerCase()
+  if (confirm !== 'yes') {
+    output.write(`${colors.dim}Cancelled.${colors.reset}\n`)
+    return
+  }
+
+  const body = await requestJson(getProjectEndpoint(projectId), {
+    method: 'DELETE'
+  })
+  if (!body) return
+
+  if (activeProjectId === projectId) {
+    activeProjectId = ''
+    saveRuntimeConfig({ activeProjectId: '' })
+  }
+  output.write(`${colors.green}Deleted project ${projectId}.${colors.reset}\n`)
 }
 
 function formatBackendSummary(backend) {
@@ -544,9 +699,38 @@ async function showProjectFiles(value) {
 
   for (const file of files) {
     output.write(
-      `${file.path} ${colors.dim}${file.language || 'text'} ${file.updatedAt || ''}${colors.reset}\n`
+      `${file.path} ${colors.dim}${file.language || 'text'} ${formatBytes(file.content?.length ?? 0)} ${relativeTime(file.updatedAt)}${colors.reset}\n`
     )
   }
+}
+
+async function showProjectFile(targetPath, projectRef) {
+  if (!targetPath) {
+    output.write(
+      `${colors.red}Usage: /file show <path> [--project id|slug]${colors.reset}\n`
+    )
+    return
+  }
+  const projectId = await resolveProjectId(projectRef)
+  if (!projectId) return
+
+  const body = await requestJson(getProjectFilesEndpoint(projectId))
+  if (!body) return
+  const file = (body.files || []).find(
+    candidate => candidate.path === targetPath
+  )
+  if (!file) {
+    output.write(
+      `${colors.yellow}File not found: ${targetPath}${colors.reset}\n`
+    )
+    return
+  }
+  output.write(
+    `${colors.cyan}──── ${file.path} (${formatBytes(file.content?.length ?? 0)}) ────${colors.reset}\n`
+  )
+  output.write(file.content || '')
+  if (!file.content?.endsWith('\n')) output.write('\n')
+  output.write(`${colors.cyan}──── end ────${colors.reset}\n`)
 }
 
 async function refreshProjectPreview(value) {
@@ -629,8 +813,245 @@ async function putProjectFile(args) {
   if (!body?.file) return
 
   output.write(
-    `${colors.green}Saved ${body.file.path} (${content.length} chars).${colors.reset}\n`
+    `${colors.green}Saved ${body.file.path} (${formatBytes(content.length)}).${colors.reset}\n`
   )
+}
+
+async function deleteProjectFile(targetPath, projectRef) {
+  if (!targetPath) {
+    output.write(
+      `${colors.red}Usage: /file delete <path> [--project id|slug]${colors.reset}\n`
+    )
+    return
+  }
+  const projectId = await resolveProjectId(projectRef)
+  if (!projectId) return
+
+  const body = await requestJson(getProjectFilesEndpoint(projectId), {
+    method: 'POST',
+    body: JSON.stringify({
+      operations: [{ type: 'delete_file', path: targetPath }]
+    })
+  })
+  if (!body) return
+
+  output.write(
+    `${colors.green}Deleted ${targetPath} (${body.changes?.length ?? 0} change(s)).${colors.reset}\n`
+  )
+}
+
+async function renameProjectFile(args) {
+  const fromPath = args[1]
+  const toPath = args[2]
+  const projectFlagIndex = args.indexOf('--project')
+  const projectRef =
+    projectFlagIndex >= 0 && args[projectFlagIndex + 1]
+      ? args[projectFlagIndex + 1]
+      : null
+
+  if (!fromPath || !toPath) {
+    output.write(
+      `${colors.red}Usage: /file rename <old-path> <new-path> [--project id|slug]${colors.reset}\n`
+    )
+    return
+  }
+  const projectId = await resolveProjectId(projectRef)
+  if (!projectId) return
+
+  const body = await requestJson(getProjectFilesEndpoint(projectId), {
+    method: 'POST',
+    body: JSON.stringify({
+      operations: [{ type: 'rename_file', path: fromPath, to_path: toPath }]
+    })
+  })
+  if (!body) return
+
+  output.write(
+    `${colors.green}Renamed ${fromPath} → ${toPath}.${colors.reset}\n`
+  )
+}
+
+async function showVersions(limitArg) {
+  if (!apiKey) {
+    output.write(
+      `${colors.red}Save a Brok API key first with /key.${colors.reset}\n`
+    )
+    return
+  }
+
+  const url = getVersionsEndpoint()
+  if (limitArg) {
+    const parsed = Number.parseInt(limitArg, 10)
+    if (Number.isFinite(parsed) && parsed > 0) {
+      url.searchParams.set('limit', String(parsed))
+    }
+  }
+
+  const body = await requestJson(url)
+  if (!body) return
+
+  const versions = Array.isArray(body.versions) ? body.versions : []
+  if (!versions.length) {
+    output.write(
+      `${colors.yellow}No saved versions for session ${sessionId}.${colors.reset}\n`
+    )
+    return
+  }
+
+  output.write(
+    `${colors.cyan}Recent versions for ${sessionId}${colors.reset}\n`
+  )
+  for (const version of versions.slice(0, 20)) {
+    const status = version.status === 'error' ? colors.red : colors.green
+    output.write(
+      `${status}●${colors.reset} ${version.id} ${colors.dim}${relativeTime(version.createdAt)}${colors.reset} ${truncateText(version.command || '', 60)} ${colors.dim}r=${version.runtime || 'unknown'}${colors.reset}\n`
+    )
+  }
+  if (versions.length > 20) {
+    output.write(
+      `${colors.dim}… and ${versions.length - 20} more. Pass a limit, e.g. /versions 50.${colors.reset}\n`
+    )
+  }
+}
+
+async function showVersion(versionId) {
+  if (!versionId) {
+    output.write(`${colors.red}Usage: /version <id>${colors.reset}\n`)
+    return
+  }
+  if (!apiKey) {
+    output.write(
+      `${colors.red}Save a Brok API key first with /key.${colors.reset}\n`
+    )
+    return
+  }
+
+  const url = new URL(
+    `/api/brokcode/versions/${encodeURIComponent(versionId)}`,
+    syncBaseUrl
+  )
+  const body = await requestJson(url)
+  if (!body) return
+  const version = body.version
+  if (!version) {
+    output.write(
+      `${colors.yellow}Version ${versionId} not found.${colors.reset}\n`
+    )
+    return
+  }
+  const lines = [
+    `Version: ${version.id}`,
+    `Created: ${version.createdAt} (${relativeTime(version.createdAt)})`,
+    `Runtime: ${version.runtime || 'unknown'}`,
+    `Status: ${version.status || 'done'}`,
+    `Project: ${version.projectId || 'none'}`,
+    `Checkpoint: ${version.checkpointName || 'none'}`,
+    `Branch: ${version.branch || 'none'}`,
+    `Commit: ${version.commitSha || 'none'}`,
+    `PR: ${version.prUrl || 'none'}`,
+    `Preview: ${version.previewUrl || 'none'}`,
+    `Deployment: ${version.deploymentUrl || 'none'}`,
+    '',
+    `Command: ${version.command || ''}`,
+    '',
+    `Summary:`
+  ]
+  for (const line of (version.summary || '').split('\n').slice(0, 20)) {
+    lines.push(`  ${line}`)
+  }
+  output.write(`${colors.cyan}${box(lines)}${colors.reset}\n`)
+  if (Array.isArray(version.files) && version.files.length > 0) {
+    output.write(
+      `${colors.dim}${version.files.length} file snapshot(s) attached. Use /version ${version.id} via API to download.${colors.reset}\n`
+    )
+  }
+}
+
+async function runDoctor() {
+  output.write(`${colors.cyan}Brok Code doctor${colors.reset}\n`)
+
+  output.write(`  config: ${configPath}\n`)
+  output.write(`  history: ${historyPath}\n`)
+
+  if (!apiKey) {
+    output.write(`  ${colors.red}✗${colors.reset} api key: missing\n`)
+  } else if (!isValidBrokKey(apiKey)) {
+    output.write(
+      `  ${colors.red}✗${colors.reset} api key: invalid (must start with ${BROK_KEY_PREFIX})\n`
+    )
+  } else {
+    output.write(
+      `  ${colors.green}✓${colors.reset} api key: ${apiKey.slice(0, 12)}…\n`
+    )
+  }
+
+  output.write(`  base url: ${baseUrl}\n`)
+  output.write(`  sync url: ${syncBaseUrl}\n`)
+  output.write(`  session: ${sessionId}\n`)
+  output.write(`  model: ${model}\n`)
+  output.write(
+    `  cloud runtime required: ${requireCloudRuntime ? 'yes' : 'no'}\n`
+  )
+  if (activeProjectId) {
+    output.write(`  active project: ${activeProjectId}\n`)
+  }
+
+  await pingUrl('base url', new URL('/api/v1/models', baseUrl).toString())
+  await pingUrl('sync url', syncBaseUrl)
+  await pingUrl(
+    'execute endpoint',
+    new URL('/api/brokcode/execute', syncBaseUrl).toString()
+  )
+
+  if (apiKey) {
+    try {
+      const body = await requestJson(getProjectsEndpoint())
+      if (body) {
+        const count = Array.isArray(body.projects) ? body.projects.length : 0
+        output.write(
+          `  ${colors.green}✓${colors.reset} projects accessible: ${count} found\n`
+        )
+      }
+    } catch (error) {
+      output.write(
+        `  ${colors.red}✗${colors.reset} projects endpoint: ${error.message}\n`
+      )
+    }
+  }
+
+  output.write(
+    `\n${colors.dim}Tip: a green ✓ means the probe succeeded, ✗ means it failed.${colors.reset}\n`
+  )
+}
+
+async function pingUrl(label, url) {
+  if (!url) {
+    output.write(`  ${colors.yellow}?${colors.reset} ${label}: no url\n`)
+    return
+  }
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 5000)
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      signal: controller.signal
+    }).catch(error => ({ ok: false, status: 0, error }))
+    clearTimeout(timeout)
+    const ok = response && response.ok
+    const status = response && response.status
+    if (ok) {
+      output.write(`  ${colors.green}✓${colors.reset} ${label}: ${status}\n`)
+    } else if (status === 0) {
+      output.write(
+        `  ${colors.red}✗${colors.reset} ${label}: ${response?.error?.message || 'unreachable'}\n`
+      )
+    } else {
+      output.write(`  ${colors.yellow}!${colors.reset} ${label}: ${status}\n`)
+    }
+  } catch (error) {
+    output.write(`  ${colors.red}✗${colors.reset} ${label}: ${error.message}\n`)
+  }
 }
 
 async function syncEvent({ role, content, type = 'message', metadata }) {
@@ -711,7 +1132,7 @@ async function showSync() {
   for (const event of session.events.slice(-8)) {
     const source = event.source === 'cloud' ? colors.magenta : colors.green
     output.write(
-      `${colors.dim}${event.createdAt}${colors.reset} ${source}${event.source}${colors.reset} ${event.role}: ${event.content.slice(0, 180)}\n`
+      `${colors.dim}${event.createdAt}${colors.reset} ${source}${event.source}${colors.reset} ${event.role}: ${truncateText(event.content, 180)}\n`
     )
   }
 }
@@ -828,104 +1249,140 @@ async function runSecurityScan(raw) {
 }
 
 async function handleCommand(raw) {
-  const [name, ...args] = raw.split(/\s+/)
+  const trimmed = raw.trim()
+  const name = extractCommandName(trimmed)
+  if (!name) {
+    output.write(
+      `${colors.red}Commands must start with /. Type /help.${colors.reset}\n`
+    )
+    return
+  }
+  const args = trimmed.split(/\s+/)
 
-  if (name === '/help') return printHelp()
-  if (name === '/clear') return printBanner()
-  if (name === '/model') {
+  if (name === 'help') return printHelp()
+  if (name === 'clear') return printBanner()
+  if (name === 'doctor') return runDoctor()
+  if (name === 'model') {
     output.write(
       `${colors.cyan}model=${model} base=${baseUrl}${colors.reset}\n`
     )
     return
   }
-  if (name === '/key') {
-    const nextKey = args[0]?.trim()
-    if (!nextKey?.startsWith('brok_sk_')) {
-      output.write(`${colors.red}Usage: /key brok_sk_...${colors.reset}\n`)
+  if (name === 'key') {
+    const next = args[1]?.trim()
+    if (next === 'clear') {
+      apiKey = ''
+      const nextConfig = { ...readConfig() }
+      delete nextConfig.apiKey
+      writeConfig({ ...nextConfig, updatedAt: new Date().toISOString() })
+      output.write(
+        `${colors.green}Removed Brok API key from ${configPath}.${colors.reset}\n`
+      )
+      return
+    }
+    if (!next || !next.startsWith(BROK_KEY_PREFIX)) {
+      output.write(
+        `${colors.red}Usage: /key brok_sk_... (or /key clear to remove)${colors.reset}\n`
+      )
       return
     }
 
-    apiKey = nextKey
-    saveRuntimeConfig({ apiKey: nextKey })
+    apiKey = next
+    saveRuntimeConfig({ apiKey: next })
     output.write(
       `${colors.green}Saved Brok API key to ${configPath}.${colors.reset}\n`
     )
     return
   }
-  if (name === '/sync') return showSync()
-  if (name === '/session') {
+  if (name === 'sync') return showSync()
+  if (name === 'session') {
     output.write(
       `${colors.cyan}session=${sessionId} sync=${syncBaseUrl}${colors.reset}\n`
     )
-    if (args[0]) {
+    if (args[1]) {
       output.write(
-        `${colors.yellow}Switch by restarting with BROKCODE_SESSION_ID=${args[0]}.${colors.reset}\n`
+        `${colors.yellow}Switch by restarting with BROKCODE_SESSION_ID=${args[1]}.${colors.reset}\n`
       )
     }
     return
   }
-  if (name === '/projects') return showProjects()
-  if (name === '/project') {
-    if (args[0] === 'new') return createProject(raw)
-    if (args[0] === 'select') return selectProject(args[1])
-    if (args[0] === 'show' || !args[0]) return showSelectedProject()
+  if (name === 'projects') return showProjects()
+  if (name === 'project') {
+    if (args[1] === 'new') return createProject(trimmed)
+    if (args[1] === 'select') return selectProject(args[2])
+    if (args[1] === 'rename')
+      return renameSelectedProject(args.slice(2).join(' '))
+    if (args[1] === 'delete') return deleteSelectedProject()
+    if (args[1] === 'show' || !args[1]) return showSelectedProject()
 
     output.write(
-      `${colors.red}Usage: /project new <name>, /project select <id|slug>, or /project show.${colors.reset}\n`
+      `${colors.red}Usage: /project new <name>, /project select <id|slug>, /project show, /project rename <name>, or /project delete.${colors.reset}\n`
     )
     return
   }
-  if (name === '/backend') {
-    if (args[0] === 'status' || !args[0]) return showBackendStatus()
-    if (args[0] === 'insforge') return linkInsForgeBackend(args)
-    if (args[0] === 'provision') return provisionInsForgeBackend()
-    if (args[0] === 'check') return checkBackendHealth()
-    if (args[0] === 'clear') return clearBackend()
+  if (name === 'backend') {
+    if (args[1] === 'status' || !args[1]) return showBackendStatus()
+    if (args[1] === 'insforge') return linkInsForgeBackend(args)
+    if (args[1] === 'provision') return provisionInsForgeBackend()
+    if (args[1] === 'check') return checkBackendHealth()
+    if (args[1] === 'clear') return clearBackend()
 
     output.write(
       `${colors.red}Usage: /backend status, /backend insforge <url> [admin-key], /backend provision, /backend check, or /backend clear.${colors.reset}\n`
     )
     return
   }
-  if (name === '/preview') return refreshProjectPreview(args[0])
-  if (name === '/deploy') return deployProject(args[0])
-  if (name === '/files') return showProjectFiles(args[0])
-  if (name === '/file') {
-    if (args[0] === 'put') return putProjectFile(args)
+  if (name === 'preview') return refreshProjectPreview(args[1])
+  if (name === 'deploy') return deployProject(args[1])
+  if (name === 'files') return showProjectFiles(args[1])
+  if (name === 'file') {
+    if (args[1] === 'put') return putProjectFile(args)
+    if (args[1] === 'show' || args[1] === 'get') {
+      return showProjectFile(args[2], extractProjectFlag(args))
+    }
+    if (args[1] === 'delete' || args[1] === 'rm') {
+      return deleteProjectFile(args[2], extractProjectFlag(args))
+    }
+    if (args[1] === 'rename' || args[1] === 'mv') {
+      return renameProjectFile(args)
+    }
 
     output.write(
-      `${colors.red}Usage: /file put <project-path> <local-file> [--project id|slug]${colors.reset}\n`
+      `${colors.red}Usage: /file put <project-path> <local-file>, /file show <path>, /file delete <path>, or /file rename <old> <new>.${colors.reset}\n`
     )
     return
   }
-  if (name === '/ai-default') {
+  if (name === 'versions') return showVersions(args[1])
+  if (name === 'version') return showVersion(args[1])
+  if (name === 'resume') return resumeTask(args[1])
+  if (name === 'ai-default') {
     output.write(
       `${colors.yellow}AI app default:${colors.reset} Brok Code uses Brok API as the default intelligence layer for chat, generation, agents, and usage tracking unless you explicitly ask for another provider.\n`
     )
     return
   }
-  if (name === '/usage') return showUsage(args[0] || 'day')
-  if (name === '/worktree') return createWorktree(args[0])
-  if (name === '/securityscan') return runSecurityScan(raw)
-  if (name === '/direct') {
+  if (name === 'usage') return showUsage(args[1] || 'day')
+  if (name === 'worktree') return createWorktree(args[1])
+  if (name === 'securityscan') return runSecurityScan(trimmed)
+  if (name === 'direct') {
     output.write(
       `${colors.yellow}Direct mode:${colors.reset} run Brok Code inside a repo. It can inspect and propose edits; you approve commits or risky writes.\n`
     )
     return
   }
-  if (name === '/github') {
+  if (name === 'github') {
     output.write(
       `${colors.yellow}GitHub mode:${colors.reset} connect GitHub through Composio in Brok Code Cloud. Brok Code can inspect repos and prepare PRs after approval.\n`
     )
     return
   }
-  if (name === '/skills') {
+  if (name === 'skills') {
     output.write(
       `${colors.yellow}Agent Skills:${colors.reset} run ${colors.bold}npx skills update${colors.reset}, then install the skills you want Brok Code to use.\n`
     )
     return
   }
-  if (name === '/compat') {
+  if (name === 'compat') {
     output.write(`\n${colors.yellow}Agent-tool compatibility${colors.reset}
 export OPENAI_API_KEY="$BROK_API_KEY"
 export OPENAI_BASE_URL="${baseUrl}"
@@ -937,8 +1394,69 @@ export ANTHROPIC_MODEL="${model}"
 \n`)
     return
   }
+  if (name === 'exit' || name === 'quit') {
+    output.write(`${colors.dim}Use Ctrl+C or /exit twice.${colors.reset}\n`)
+    return
+  }
 
-  output.write(`${colors.red}Unknown command. Type /help.${colors.reset}\n`)
+  const suggestions = suggestCommands(`/${name}`)
+  if (suggestions.length > 0) {
+    output.write(
+      `${colors.red}Unknown command /${name}.${colors.reset} Did you mean: ${suggestions.join(', ')}?\n`
+    )
+  } else {
+    output.write(`${colors.red}Unknown command. Type /help.${colors.reset}\n`)
+  }
+}
+
+function extractProjectFlag(args) {
+  const index = args.indexOf('--project')
+  if (index === -1) return null
+  return args[index + 1] || null
+}
+
+async function resumeTask(taskId) {
+  if (!taskId) {
+    if (activeTaskId) taskId = activeTaskId
+    else {
+      output.write(`${colors.red}Usage: /resume <taskId>${colors.reset}\n`)
+      return
+    }
+  }
+  if (!apiKey) {
+    output.write(
+      `${colors.red}Save a Brok API key first with /key.${colors.reset}\n`
+    )
+    return
+  }
+
+  output.write(`${colors.dim}Reconnecting to task ${taskId}…${colors.reset}\n`)
+
+  try {
+    const response = await fetch(getTaskEventsUrl(taskId), {
+      headers: { Authorization: `Bearer ${apiKey}` }
+    })
+    if (!response.ok) {
+      output.write(
+        `${colors.red}Resume failed: ${response.status}${colors.reset}\n`
+      )
+      return
+    }
+    const data = await response.json()
+    const events = Array.isArray(data?.events) ? data.events : []
+    output.write(
+      `${colors.cyan}Replayed ${events.length} event(s) for task ${taskId}.${colors.reset}\n`
+    )
+    for (const event of events.slice(-10)) {
+      output.write(
+        `${colors.dim}${event.at || ''}${colors.reset} ${event.event || 'message'}: ${truncateText(event.message || JSON.stringify(event.payload || {}), 160)}\n`
+      )
+    }
+  } catch (error) {
+    output.write(
+      `${colors.red}Resume failed: ${error.message}${colors.reset}\n`
+    )
+  }
 }
 
 async function sendChat(content) {
@@ -961,32 +1479,60 @@ async function sendChat(content) {
   })
   output.write(`${colors.magenta}Brok Code:${colors.reset} `)
 
-  const response = await fetch(new URL('/api/brokcode/execute', syncBaseUrl), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      command: content,
-      model,
-      source: 'tui',
-      session_id: sessionId,
-      project_id: activeProjectId || undefined,
-      stream: true,
-      [requireCloudRuntimeField]: requireCloudRuntime,
-      prefer_pi: !requireCloudRuntime,
-      max_tokens: 1200,
-      messages
+  activeController = new AbortController()
+  startSpinner('Connecting to Brok Code…')
+  let response
+  try {
+    response = await fetch(new URL('/api/brokcode/execute', syncBaseUrl), {
+      method: 'POST',
+      signal: activeController.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        command: content,
+        model,
+        source: 'tui',
+        session_id: sessionId,
+        project_id: activeProjectId || undefined,
+        stream: true,
+        [requireCloudRuntimeField]: requireCloudRuntime,
+        prefer_pi: !requireCloudRuntime,
+        max_tokens: 1200,
+        messages
+      })
     })
-  })
-
-  if (!response.ok || !response.body) {
-    output.write(
-      `${colors.red}request failed: ${response.status}${colors.reset}\n`
-    )
+  } catch (error) {
+    stopSpinner()
+    if (error.name === 'AbortError') {
+      output.write(`${colors.yellow}Cancelled.${colors.reset}\n`)
+    } else {
+      output.write(
+        `${colors.red}request failed: ${error.message}${colors.reset}\n`
+      )
+    }
     return
   }
+  stopSpinner()
+
+  if (!response.ok || !response.body) {
+    const { message, hint } = classifyError({
+      status: response.status,
+      body: await response.json().catch(() => null),
+      fallback: `request failed: ${response.status}`
+    })
+    output.write(`${colors.red}${message}${colors.reset}\n`)
+    if (hint) {
+      output.write(`${colors.dim}${hint}${colors.reset}\n`)
+    }
+    return
+  }
+
+  activeTaskId =
+    response.headers.get('x-brokcode-task-id') ||
+    new URL(response.url).searchParams.get('task_id') ||
+    ''
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -997,32 +1543,33 @@ async function sendChat(content) {
   let generatedFiles = []
   let currentEvent = 'message'
   let streamFailed = false
+  let lastPhase = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
+  const onAbort = () => {
+    output.write(`${colors.yellow}\nCancelled by user.${colors.reset}\n`)
+    streamFailed = true
+    activeController = null
+    try {
+      reader.cancel()
+    } catch {}
+  }
+  process.once('SIGINT', onAbort)
 
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split(/\r?\n/)
-    buffer = lines.pop() ?? ''
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
 
-    for (const line of lines) {
-      if (!line.trim()) {
-        currentEvent = 'message'
-        continue
-      }
+      buffer += decoder.decode(value, { stream: true })
+      const { blocks, remaining } = chunkSseBlocks(buffer)
+      buffer = remaining
 
-      if (line.startsWith('event:')) {
-        currentEvent = line.slice(6).trim() || 'message'
-        continue
-      }
+      for (const block of blocks) {
+        currentEvent = block.event
+        if (block.done) continue
+        const payload = block.data
+        if (!payload) continue
 
-      if (!line.startsWith('data:')) continue
-      const data = line.slice(5).trim()
-      if (!data || data === '[DONE]') continue
-
-      try {
-        const payload = JSON.parse(data)
         if (currentEvent === 'error' || payload.error) {
           streamFailed = true
           const errorMessage = normalizeRuntimeBrand(
@@ -1034,10 +1581,28 @@ async function sendChat(content) {
           continue
         }
 
-        if (payload.message && !payload.content) {
-          output.write(
-            `${colors.dim}${normalizeRuntimeBrand(payload.message)}${colors.reset}\n`
+        if (currentEvent === 'status') {
+          const phase = formatPhaseLabel(
+            payload.phase || payload.status || payload.message
           )
+          if (phase && phase !== lastPhase) {
+            lastPhase = phase
+            output.write(`${colors.dim}[${phase}]${colors.reset} `)
+          } else if (payload.message) {
+            output.write(
+              `${colors.dim}${normalizeRuntimeBrand(payload.message)}${colors.reset}\n`
+            )
+          }
+          continue
+        }
+
+        if (currentEvent === 'task' && payload.task_id) {
+          activeTaskId = payload.task_id
+          if (payload.status_url) {
+            output.write(
+              `${colors.dim}task ${payload.task_id} — ${payload.status_url}${colors.reset}\n`
+            )
+          }
           continue
         }
 
@@ -1069,8 +1634,20 @@ async function sendChat(content) {
           assistant += delta
           output.write(delta)
         }
-      } catch {}
+      }
     }
+  } catch (error) {
+    streamFailed = true
+    if (error.name === 'AbortError') {
+      output.write(`${colors.yellow}Cancelled.${colors.reset}\n`)
+    } else {
+      output.write(
+        `${colors.red}stream error: ${error.message}${colors.reset}\n`
+      )
+    }
+  } finally {
+    process.removeListener('SIGINT', onAbort)
+    activeController = null
   }
 
   if (!assistant && resultContent) {
@@ -1087,6 +1664,11 @@ async function sendChat(content) {
   if (previewUrl) {
     output.write(`${colors.green}Preview URL:${colors.reset} ${previewUrl}\n`)
   }
+  if (activeTaskId) {
+    output.write(
+      `${colors.dim}Task: ${activeTaskId} — resume with /resume${colors.reset}\n`
+    )
+  }
   if (streamFailed) return
 
   messages.push({ role: 'assistant', content: assistant })
@@ -1096,9 +1678,21 @@ async function sendChat(content) {
     type: 'response',
     metadata: {
       model,
-      cwd: process.cwd()
+      cwd: process.cwd(),
+      taskId: activeTaskId || undefined
     }
   })
+}
+
+async function promptLine(text) {
+  const rl = createInterface({ input, output })
+  try {
+    return await rl.question(text)
+  } catch {
+    return ''
+  } finally {
+    rl.close()
+  }
 }
 
 async function main() {
@@ -1127,7 +1721,32 @@ async function main() {
     return
   }
 
-  const rl = createInterface({ input, output })
+  const historyLines = loadHistory()
+  const rl = createInterface({
+    input,
+    output,
+    history: historyLines,
+    historySize: 500,
+    completer: buildReadlineCompleter()
+  })
+
+  // First Ctrl+C cancels the in-flight request; second one exits the TUI.
+  let sigintCount = 0
+  process.on('SIGINT', () => {
+    if (activeController) {
+      activeController.abort()
+      sigintCount = 0
+      return
+    }
+    sigintCount += 1
+    if (sigintCount >= 2) {
+      output.write(`\n${colors.dim}Bye.${colors.reset}\n`)
+      rl.close()
+      process.exit(0)
+    }
+    output.write(`\n${colors.dim}Press Ctrl+C again to exit.${colors.reset}\n`)
+    rl.prompt()
+  })
 
   while (true) {
     let prompt
@@ -1135,23 +1754,29 @@ async function main() {
       prompt = await rl.question(
         `${colors.bold}${colors.green}brok-code>${colors.reset} `
       )
-    } catch {
+    } catch (error) {
+      if (error && error.code === 'ABORT_ERR') {
+        continue
+      }
       break
     }
     const text = prompt.trim()
     if (!text) continue
+    sigintCount = 0
     if (text === '/exit' || text === '/quit') break
     if (text.startsWith('/')) {
       await handleCommand(text)
     } else {
       await sendChat(text)
     }
+    appendHistory(text)
   }
 
   rl.close()
 }
 
 main().catch(error => {
+  stopSpinner()
   output.write(`${colors.red}${error.message}${colors.reset}\n`)
   process.exitCode = 1
 })
