@@ -40,3 +40,6 @@ temp/
 
 # Database
 lib/db/migrations/
+
+# Conductor workspace scratch directory (cross-agent attachments, todos)
+.context/

@@ -43,3 +43,6 @@ next-env.d.ts
 .brok-audits/
 .brok-smoke/
 .gstack/
+
+# Conductor workspace scratch directory (cross-agent attachments, todos)
+.context/
