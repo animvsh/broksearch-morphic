@@ -14,6 +14,7 @@ import {
   GalleryVerticalEnd,
   ListPlus,
   Loader2,
+  Maximize2,
   MessageSquareText,
   Presentation,
   RotateCcw,
@@ -244,6 +245,7 @@ export function RevealPresentationWorkbench() {
   const [isRevealReady, setIsRevealReady] = useState(false)
   const [revealError, setRevealError] = useState<string | null>(null)
   const revealElementRef = useRef<HTMLDivElement | null>(null)
+  const deckFrameRef = useRef<HTMLDivElement | null>(null)
   const revealRef = useRef<RevealApi | null>(null)
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestSourceRef = useRef(source)
@@ -741,29 +743,80 @@ export function RevealPresentationWorkbench() {
     }
   }
 
-  const handleShareToggle = async () => {
-    if (!activeId) return
-    const nextValue = !isPublic
+  const updateShareState = async (deckId: string, nextValue: boolean) => {
     setStatus('saving')
     setStatusMessage(null)
+    const res = await fetch(`/api/presentations/${deckId}/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isPublic: nextValue })
+    })
+    if (!res.ok) {
+      throw new Error(await readApiError(res, `Share failed (${res.status})`))
+    }
+    const data = (await res.json()) as {
+      isPublic: boolean
+      shareId: string | null
+      shareUrl: string | null
+    }
+    setIsPublic(data.isPublic)
+    setShareUrl(data.shareUrl)
+    setStatus('saved')
+    setStatusMessage(data.isPublic ? 'Sharing enabled' : 'Sharing disabled')
+    return data
+  }
+
+  const handleShareToggle = async () => {
+    if (!activeId) return
     try {
-      const res = await fetch(`/api/presentations/${activeId}/share`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isPublic: nextValue })
-      })
-      if (!res.ok) {
-        throw new Error(await readApiError(res, `Share failed (${res.status})`))
-      }
-      const data = (await res.json()) as {
-        isPublic: boolean
-        shareId: string | null
-        shareUrl: string | null
-      }
-      setIsPublic(data.isPublic)
-      setShareUrl(data.shareUrl)
+      await updateShareState(activeId, !isPublic)
+    } catch (error) {
+      setStatus('error')
+      setStatusMessage(
+        error instanceof Error ? error.message : 'Share toggle failed.'
+      )
+    }
+  }
+
+  const handlePresentSlides = async () => {
+    const target = deckFrameRef.current
+    if (!target?.requestFullscreen) {
+      setStatus('error')
+      setStatusMessage('Fullscreen presenting is not available here.')
+      return
+    }
+
+    try {
+      await target.requestFullscreen()
       setStatus('saved')
-      setStatusMessage(data.isPublic ? 'Sharing enabled' : 'Sharing disabled')
+      setStatusMessage('Presenting slides')
+    } catch (error) {
+      setStatus('error')
+      setStatusMessage(
+        error instanceof Error ? error.message : 'Could not enter present mode.'
+      )
+    }
+  }
+
+  const handleShareSlides = async () => {
+    if (shareUrl) {
+      await handleCopyShare()
+      return
+    }
+
+    const deckId = activeId ?? (await createDeckFromCurrent())
+    if (!deckId) return
+
+    try {
+      const data = await updateShareState(deckId, true)
+      if (data.shareUrl) {
+        try {
+          await navigator.clipboard.writeText(data.shareUrl)
+          setStatusMessage('Share link copied to clipboard.')
+        } catch {
+          setStatusMessage('Sharing enabled')
+        }
+      }
     } catch (error) {
       setStatus('error')
       setStatusMessage(
@@ -1455,7 +1508,33 @@ export function RevealPresentationWorkbench() {
                 </p>
               ) : null}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 gap-2"
+                onClick={() => {
+                  void handlePresentSlides()
+                }}
+                data-testid="present-slides"
+              >
+                <Maximize2 className="size-4" />
+                Present
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-2"
+                onClick={() => {
+                  void handleShareSlides()
+                }}
+                disabled={status === 'saving'}
+                data-testid="share-slides"
+              >
+                <Share2 className="size-4" />
+                {shareUrl ? 'Copy share' : 'Share'}
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -1486,6 +1565,7 @@ export function RevealPresentationWorkbench() {
 
           <div className={`${styles.previewShell} p-3 sm:p-4`}>
             <div
+              ref={deckFrameRef}
               className={`${styles.deckFrame} rounded-lg border border-white/10 shadow-2xl`}
             >
               {!isRevealReady || revealError ? (

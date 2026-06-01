@@ -78,6 +78,27 @@ describe('RevealPresentationWorkbench', () => {
     })
   })
 
+  it('can present the slide canvas fullscreen', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ presentations: [] }))
+    )
+    const requestFullscreen = vi.fn(async () => undefined)
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen
+    })
+
+    render(<RevealPresentationWorkbench />)
+
+    fireEvent.click(await screen.findByTestId('present-slides'))
+
+    await waitFor(() => {
+      expect(requestFullscreen).toHaveBeenCalled()
+    })
+    expect(await screen.findByText(/presenting slides/i)).toBeInTheDocument()
+  })
+
   it('auto-creates a draft before running AI generation', async () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -369,12 +390,75 @@ describe('RevealPresentationWorkbench', () => {
         ).value
       ).toContain('# First Move')
     })
-    expect(screen.getByRole('button', { name: /share/i })).toBeEnabled()
+    expect(screen.getByTestId('share-toggle')).toBeEnabled()
+    expect(screen.getByTestId('share-slides')).toHaveTextContent(/copy share/i)
 
     fireEvent.click(screen.getByRole('button', { name: /next slide/i }))
 
     await waitFor(() => {
       expect(screen.getByText('2 / 2')).toBeInTheDocument()
     })
+  })
+
+  it('enables sharing from the slide canvas and copies the link', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.assign(navigator, {
+      clipboard: { writeText }
+    })
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url === '/api/presentations' && !init?.method) {
+          return jsonResponse({ presentations: [] })
+        }
+        if (url === '/api/presentations' && init?.method === 'POST') {
+          return jsonResponse(
+            {
+              presentation: {
+                id: 'deck-share',
+                title: 'Untitled Presentation',
+                description: null,
+                status: 'draft',
+                slideCount: 1,
+                isPublic: false,
+                shareId: null,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                sourceMarkdown: '# Draft'
+              }
+            },
+            201
+          )
+        }
+        if (
+          url === '/api/presentations/deck-share' &&
+          init?.method === 'PATCH'
+        ) {
+          return jsonResponse({ ok: true })
+        }
+        if (
+          url === '/api/presentations/deck-share/share' &&
+          init?.method === 'POST'
+        ) {
+          return jsonResponse({
+            isPublic: true,
+            shareId: 'share-1',
+            shareUrl: 'http://localhost:3000/p/share-1'
+          })
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      }
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<RevealPresentationWorkbench />)
+
+    fireEvent.click(await screen.findByTestId('share-slides'))
+
+    expect(
+      await screen.findByText(/share link copied to clipboard/i)
+    ).toBeInTheDocument()
+    expect(writeText).toHaveBeenCalledWith('http://localhost:3000/p/share-1')
+    expect(screen.getByTestId('share-slides')).toHaveTextContent(/copy share/i)
   })
 })
