@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   validateAnthropicMessages,
+  validateAnthropicSystem,
   validateApiKeyStatusTransition,
   validateCreateApiKeyInput,
   validateOpenAiChatMessages
@@ -117,9 +118,26 @@ describe('validateOpenAiChatMessages', () => {
       validateOpenAiChatMessages([
         { role: 'system', content: 'Be concise.' },
         { role: 'developer', content: 'Use citations.' },
-        { role: 'user', content: 'What is Brok?' },
-        { role: 'assistant', content: 'Brok is an answer engine.' },
-        { role: 'tool', content: 'tool result' }
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'What is Brok?' }]
+        },
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            {
+              id: 'call_1',
+              type: 'function',
+              function: { name: 'lookup', arguments: '{}' }
+            }
+          ]
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'call_1',
+          content: 'tool result'
+        }
       ])
     ).toEqual({ ok: true })
   })
@@ -141,6 +159,40 @@ describe('validateOpenAiChatMessages', () => {
       message:
         'messages[0].role must be one of system, developer, user, assistant, or tool.'
     })
+    expect(validateOpenAiChatMessages([{ role: 'user', content: '' }])).toEqual(
+      {
+        ok: false,
+        code: 'invalid_message_content',
+        message: 'messages[0].content must not be empty.'
+      }
+    )
+    expect(
+      validateOpenAiChatMessages([
+        { role: 'user', content: [{ type: 'text', text: '' }] }
+      ])
+    ).toEqual({
+      ok: false,
+      code: 'invalid_message_content_part',
+      message: 'messages[0].content[0].text must be a non-empty string.'
+    })
+    expect(
+      validateOpenAiChatMessages([
+        { role: 'tool', content: 'result without id' }
+      ])
+    ).toEqual({
+      ok: false,
+      code: 'invalid_tool_message',
+      message: 'messages[0].tool_call_id must be a non-empty string.'
+    })
+    expect(
+      validateOpenAiChatMessages([
+        { role: 'assistant', content: null, tool_calls: [{ id: 'call_1' }] }
+      ])
+    ).toEqual({
+      ok: false,
+      code: 'invalid_tool_calls',
+      message: 'messages[0].tool_calls[0].type must be function.'
+    })
   })
 })
 
@@ -148,8 +200,31 @@ describe('validateAnthropicMessages', () => {
   it('accepts supported Anthropic-compatible message roles', () => {
     expect(
       validateAnthropicMessages([
-        { role: 'user', content: 'Build a dashboard' },
-        { role: 'assistant', content: 'Here is a plan.' }
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'Build a dashboard' }]
+        },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_1',
+              name: 'create_file',
+              input: {}
+            }
+          ]
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'toolu_1',
+              content: 'done'
+            }
+          ]
+        }
       ])
     ).toEqual({ ok: true })
   })
@@ -169,6 +244,38 @@ describe('validateAnthropicMessages', () => {
       ok: false,
       code: 'invalid_message_role',
       message: 'messages[0].role must be user or assistant.'
+    })
+    expect(validateAnthropicMessages([{ role: 'user' }])).toEqual({
+      ok: false,
+      code: 'invalid_message_content',
+      message:
+        'messages[0].content must be a string or an array of content blocks.'
+    })
+    expect(
+      validateAnthropicMessages([
+        { role: 'user', content: [{ type: 'tool_result' }] }
+      ])
+    ).toEqual({
+      ok: false,
+      code: 'invalid_message_content_part',
+      message: 'messages[0].content[0].tool_use_id must be a non-empty string.'
+    })
+  })
+})
+
+describe('validateAnthropicSystem', () => {
+  it('accepts Anthropic system strings and text blocks', () => {
+    expect(validateAnthropicSystem('You are Brok.')).toEqual({ ok: true })
+    expect(
+      validateAnthropicSystem([{ type: 'text', text: 'You are Brok.' }])
+    ).toEqual({ ok: true })
+  })
+
+  it('rejects malformed Anthropic system content', () => {
+    expect(validateAnthropicSystem('')).toEqual({
+      ok: false,
+      code: 'invalid_system',
+      message: 'system must not be empty.'
     })
   })
 })

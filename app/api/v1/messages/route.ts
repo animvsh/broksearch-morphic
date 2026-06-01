@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { validateAnthropicMessages } from '@/lib/brok/api-platform'
+import {
+  validateAnthropicMessages,
+  validateAnthropicSystem
+} from '@/lib/brok/api-platform'
 import {
   apiKeyHasScope,
   forbiddenScopeResponse,
@@ -103,6 +106,13 @@ export async function POST(request: NextRequest) {
     return invalidRequestResponse(
       messageValidation.code,
       messageValidation.message
+    )
+  }
+  const systemValidation = validateAnthropicSystem(body.system)
+  if (!systemValidation.ok) {
+    return invalidRequestResponse(
+      systemValidation.code,
+      systemValidation.message
     )
   }
 
