@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { and, asc, eq } from 'drizzle-orm'
 
-import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { routeToProvider } from '@/lib/brok/provider-router'
 import {
   presentationGenerations,
@@ -10,11 +10,11 @@ import {
   presentationSlides
 } from '@/lib/db/schema-brok'
 import { withOptionalRLS } from '@/lib/db/with-rls'
-import { parsePresentationMarkdown } from '@/lib/presentations/deck'
 import {
-  clampSlideCount,
   deterministicOutline,
-  MAX_PROMPT_LENGTH
+  MAX_PROMPT_LENGTH,
+  parseGeneratedDeck,
+  resolveSlideCount
 } from '@/lib/presentations/generate'
 import { inferLayoutType } from '@/lib/presentations/layout'
 
@@ -59,7 +59,10 @@ async function generateWithLlm(
   prompt: string,
   slideCount: number
 ): Promise<string | null> {
-  if (!process.env.OPENAI_COMPATIBLE_API_KEY && !process.env.MINIMAX_API_KEY) {
+  if (
+    !process.env.OPENAI_COMPATIBLE_API_KEY &&
+    !process.env.BROK_PROVIDER_API_KEY
+  ) {
     return null
   }
   const systemPrompt = [
@@ -103,13 +106,9 @@ export async function POST(
     return badRequest('Invalid presentation id.')
   }
 
-  const userId = await getCurrentUserId()
-  if (!userId) {
-    return NextResponse.json(
-      { error: { type: 'auth', message: 'Authentication required' } },
-      { status: 401 }
-    )
-  }
+  const access = await requireFeatureAccessForApi('presentations')
+  if (!access.ok) return access.response
+  const userId = access.user.id
   if (!UUID_PATTERN.test(userId)) {
     return badRequest(
       'Anonymous user_id is not a UUID; presentations require a real account.'
@@ -128,9 +127,7 @@ export async function POST(
     return badRequest('prompt is required.')
   }
 
-  const requestedCount =
-    typeof body.slideCount === 'number' ? Math.round(body.slideCount) : 0
-  const slideCount = clampSlideCount(requestedCount, prompt)
+  const slideCount = resolveSlideCount(body.slideCount, prompt)
 
   try {
     const deck = await withOptionalRLS(userId, async tx => {
@@ -168,13 +165,14 @@ export async function POST(
     )
 
     let source = await generateWithLlm(prompt, slideCount)
-    let generator: 'llm' | 'fallback' = source ? 'llm' : 'fallback'
-    if (!source) {
+    let slides = source ? parseGeneratedDeck(source, slideCount) : null
+    let generator: 'llm' | 'fallback' = slides ? 'llm' : 'fallback'
+    if (!source || !slides) {
       source = deterministicOutline(prompt, slideCount)
+      slides = parseGeneratedDeck(source, slideCount)
     }
 
-    const slides = parsePresentationMarkdown(source)
-    if (slides.length === 0) {
+    if (!slides) {
       await withOptionalRLS(userId, tx =>
         tx
           .update(presentationGenerations)

@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   FilePlus2,
+  FolderOpen,
   Loader2,
   Presentation,
   RotateCcw,
@@ -48,11 +49,24 @@ type PresentationDetail = PresentationSummary & {
 type WorkbenchStatus = 'idle' | 'saving' | 'saved' | 'error' | 'loading'
 
 const AUTOSAVE_DELAY_MS = 1500
+const DEFAULT_TITLE = 'Untitled Presentation'
+
+async function readApiError(response: Response, fallback: string) {
+  try {
+    const data = (await response.json()) as {
+      error?: { message?: string }
+      message?: string
+    }
+    return data.error?.message ?? data.message ?? fallback
+  } catch {
+    return fallback
+  }
+}
 
 export function RevealPresentationWorkbench() {
   const [decks, setDecks] = useState<PresentationSummary[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [title, setTitle] = useState('Untitled Presentation')
+  const [title, setTitle] = useState(DEFAULT_TITLE)
   const [source, setSource] = useState(samplePresentationSource)
   const [status, setStatus] = useState<WorkbenchStatus>('idle')
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
@@ -65,6 +79,7 @@ export function RevealPresentationWorkbench() {
 
   const [selectedSlide, setSelectedSlide] = useState(0)
   const [isRevealReady, setIsRevealReady] = useState(false)
+  const [revealError, setRevealError] = useState<string | null>(null)
   const revealElementRef = useRef<HTMLDivElement | null>(null)
   const revealRef = useRef<RevealApi | null>(null)
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -72,6 +87,11 @@ export function RevealPresentationWorkbench() {
   const latestTitleRef = useRef(title)
 
   const slides = useMemo(() => parsePresentationMarkdown(source), [source])
+  const hasActiveDeck = Boolean(activeId)
+  const deckListLabel =
+    decks.length === 0
+      ? 'Open'
+      : `Open ${decks.length} deck${decks.length === 1 ? '' : 's'}`
 
   useEffect(() => {
     latestSourceRef.current = source
@@ -85,7 +105,11 @@ export function RevealPresentationWorkbench() {
     setStatusMessage(null)
     try {
       const res = await fetch('/api/presentations', { cache: 'no-store' })
-      if (!res.ok) throw new Error(`Failed to list decks (${res.status})`)
+      if (!res.ok) {
+        throw new Error(
+          await readApiError(res, `Failed to list decks (${res.status})`)
+        )
+      }
       const data = (await res.json()) as {
         presentations: PresentationSummary[]
       }
@@ -106,7 +130,11 @@ export function RevealPresentationWorkbench() {
       const res = await fetch(`/api/presentations/${id}`, {
         cache: 'no-store'
       })
-      if (!res.ok) throw new Error(`Failed to load deck (${res.status})`)
+      if (!res.ok) {
+        throw new Error(
+          await readApiError(res, `Failed to load deck (${res.status})`)
+        )
+      }
       const data = (await res.json()) as {
         presentation: PresentationDetail
       }
@@ -115,7 +143,7 @@ export function RevealPresentationWorkbench() {
       setSource(data.presentation.sourceMarkdown ?? samplePresentationSource)
       setIsPublic(data.presentation.isPublic)
       setShareUrl(
-        data.presentation.shareId
+        data.presentation.isPublic && data.presentation.shareId
           ? `${window.location.origin}/p/${data.presentation.shareId}`
           : null
       )
@@ -139,30 +167,40 @@ export function RevealPresentationWorkbench() {
     async function bootReveal() {
       if (!revealElementRef.current || revealRef.current) return
 
-      const { default: Reveal } = await import('reveal.js')
-      const deck = new Reveal(revealElementRef.current, {
-        embedded: true,
-        controls: false,
-        progress: false,
-        hash: false,
-        keyboard: false,
-        overview: false,
-        touch: false,
-        transition: 'slide',
-        width: 1280,
-        height: 720,
-        margin: 0
-      })
+      try {
+        setRevealError(null)
+        const { default: Reveal } = await import('reveal.js')
+        const deck = new Reveal(revealElementRef.current, {
+          embedded: true,
+          controls: false,
+          progress: false,
+          hash: false,
+          keyboard: false,
+          overview: false,
+          touch: false,
+          transition: 'slide',
+          width: 1280,
+          height: 720,
+          margin: 0
+        })
 
-      await deck.initialize()
+        await deck.initialize()
 
-      if (cancelled) {
-        deck.destroy()
-        return
+        if (cancelled) {
+          deck.destroy()
+          return
+        }
+
+        revealRef.current = deck
+        setIsRevealReady(true)
+      } catch (error) {
+        if (cancelled) return
+        setRevealError(
+          error instanceof Error
+            ? error.message
+            : 'Reveal preview failed to initialize.'
+        )
       }
-
-      revealRef.current = deck
-      setIsRevealReady(true)
     }
 
     void bootReveal()
@@ -182,8 +220,10 @@ export function RevealPresentationWorkbench() {
 
   useEffect(() => {
     if (!isRevealReady) return
-    revealRef.current?.sync()
-    revealRef.current?.slide(selectedSlide, 0, -1)
+    const deck = revealRef.current
+    deck?.sync()
+    deck?.layout()
+    deck?.slide(selectedSlide, 0, -1)
   }, [isRevealReady, selectedSlide, slides])
 
   const persistCurrent = useCallback(
@@ -205,7 +245,9 @@ export function RevealPresentationWorkbench() {
           body: JSON.stringify({ sourceMarkdown: nextSource, title: nextTitle })
         })
         if (!res.ok) {
-          throw new Error(`Save failed (${res.status})`)
+          throw new Error(
+            await readApiError(res, `Save failed (${res.status})`)
+          )
         }
         if (showStatus) {
           setStatus('saved')
@@ -222,7 +264,6 @@ export function RevealPresentationWorkbench() {
     [activeId, loadDecks]
   )
 
-  // Debounced autosave on source or title change
   useEffect(() => {
     if (!activeId) return
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
@@ -252,17 +293,47 @@ export function RevealPresentationWorkbench() {
   const handleNewDeck = async () => {
     setStatus('saving')
     setStatusMessage(null)
+    const nextTitle = (latestTitleRef.current || DEFAULT_TITLE)
+      .trim()
+      .slice(0, 200)
+    const nextSource = latestSourceRef.current || samplePresentationSource
     try {
       const res = await fetch('/api/presentations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Untitled Presentation' })
+        body: JSON.stringify({ title: nextTitle || DEFAULT_TITLE })
       })
-      if (!res.ok) throw new Error(`Create failed (${res.status})`)
+      if (!res.ok) {
+        throw new Error(
+          await readApiError(res, `Create failed (${res.status})`)
+        )
+      }
       const data = (await res.json()) as { presentation: PresentationDetail }
+      const createdId = data.presentation.id
+
+      const saveDraft = await fetch(`/api/presentations/${createdId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceMarkdown: nextSource,
+          title: nextTitle || DEFAULT_TITLE
+        })
+      })
+      if (!saveDraft.ok) {
+        throw new Error(
+          await readApiError(saveDraft, `Save failed (${saveDraft.status})`)
+        )
+      }
+
+      setActiveId(createdId)
+      setTitle(nextTitle || DEFAULT_TITLE)
+      setSource(nextSource)
+      setIsPublic(data.presentation.isPublic)
+      setShareUrl(null)
+      setSelectedSlide(0)
       await loadDecks()
-      await loadDeck(data.presentation.id)
-      setStatus('idle')
+      setStatus('saved')
+      setStatusMessage('Deck created')
     } catch (error) {
       setStatus('error')
       setStatusMessage(
@@ -272,6 +343,10 @@ export function RevealPresentationWorkbench() {
   }
 
   const handleSaveNow = async () => {
+    if (!activeId) {
+      await handleNewDeck()
+      return
+    }
     await persistCurrent(source, title)
   }
 
@@ -291,10 +366,14 @@ export function RevealPresentationWorkbench() {
       const res = await fetch(`/api/presentations/${activeId}`, {
         method: 'DELETE'
       })
-      if (!res.ok) throw new Error(`Delete failed (${res.status})`)
+      if (!res.ok) {
+        throw new Error(
+          await readApiError(res, `Delete failed (${res.status})`)
+        )
+      }
       setActiveId(null)
       setSource(samplePresentationSource)
-      setTitle('Untitled Presentation')
+      setTitle(DEFAULT_TITLE)
       setShareUrl(null)
       setIsPublic(false)
       await loadDecks()
@@ -328,7 +407,11 @@ export function RevealPresentationWorkbench() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt })
       })
-      if (!res.ok) throw new Error(`Generate failed (${res.status})`)
+      if (!res.ok) {
+        throw new Error(
+          await readApiError(res, `Generate failed (${res.status})`)
+        )
+      }
       const data = (await res.json()) as {
         ok: boolean
         generator: 'llm' | 'fallback'
@@ -364,7 +447,9 @@ export function RevealPresentationWorkbench() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isPublic: nextValue })
       })
-      if (!res.ok) throw new Error(`Share failed (${res.status})`)
+      if (!res.ok) {
+        throw new Error(await readApiError(res, `Share failed (${res.status})`))
+      }
       const data = (await res.json()) as {
         isPublic: boolean
         shareId: string | null
@@ -404,8 +489,8 @@ export function RevealPresentationWorkbench() {
   }
 
   return (
-    <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(320px,0.82fr)_minmax(520px,1.18fr)]">
-      <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden">
+    <div className="grid min-h-0 min-w-0 gap-4 xl:grid-cols-[minmax(320px,0.82fr)_minmax(520px,1.18fr)]">
+      <section className="dashboard-panel flex min-h-0 min-w-0 flex-col overflow-hidden">
         <div className="flex flex-col gap-3 border-b px-4 py-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -435,8 +520,10 @@ export function RevealPresentationWorkbench() {
                 size="sm"
                 className="h-8 gap-2"
                 onClick={() => setShowDeckList(value => !value)}
+                data-testid="open-deck-list"
               >
-                {decks.length} deck{decks.length === 1 ? '' : 's'}
+                <FolderOpen className="size-4" />
+                {deckListLabel}
               </Button>
             </div>
           </div>
@@ -447,26 +534,43 @@ export function RevealPresentationWorkbench() {
             className="h-9 text-sm font-medium"
             placeholder="Deck title"
           />
-          {showDeckList && decks.length > 0 ? (
-            <div className="max-h-48 overflow-y-auto rounded-md border bg-white">
-              {decks.map(deck => (
-                <button
-                  key={deck.id}
-                  type="button"
-                  className={`flex w-full items-center justify-between gap-2 border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-zinc-50 ${
-                    deck.id === activeId ? 'bg-zinc-100' : ''
-                  }`}
-                  onClick={() => {
-                    void loadDeck(deck.id)
-                    setShowDeckList(false)
-                  }}
-                >
-                  <span className="truncate">{deck.title}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {deck.slideCount} slides
-                  </span>
-                </button>
-              ))}
+          {showDeckList ? (
+            <div className="max-h-56 overflow-y-auto rounded-md border bg-white">
+              {status === 'loading' ? (
+                <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading decks
+                </div>
+              ) : decks.length > 0 ? (
+                decks.map(deck => (
+                  <button
+                    key={deck.id}
+                    type="button"
+                    className={`flex w-full items-center justify-between gap-2 border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-zinc-50 ${
+                      deck.id === activeId ? 'bg-zinc-100' : ''
+                    }`}
+                    onClick={() => {
+                      void loadDeck(deck.id)
+                      setShowDeckList(false)
+                    }}
+                  >
+                    <span className="min-w-0 truncate">{deck.title}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {deck.slideCount} slides
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <div className="px-3 py-3 text-sm text-muted-foreground">
+                  No saved decks yet. Create one from the current draft.
+                </div>
+              )}
+            </div>
+          ) : null}
+          {!hasActiveDeck ? (
+            <div className="rounded-md border border-dashed bg-zinc-50 px-3 py-3 text-sm text-muted-foreground">
+              You are editing a local draft. Create a deck to save, generate,
+              share, or export it.
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2">
@@ -475,7 +579,7 @@ export function RevealPresentationWorkbench() {
               size="sm"
               className="h-8 gap-2"
               onClick={handleSaveNow}
-              disabled={!activeId || status === 'saving'}
+              disabled={status === 'saving'}
               data-testid="save-deck"
             >
               {status === 'saving' ? (
@@ -483,7 +587,7 @@ export function RevealPresentationWorkbench() {
               ) : (
                 <Save className="size-4" />
               )}
-              Save
+              {hasActiveDeck ? 'Save' : 'Create'}
             </Button>
             <Button
               type="button"
@@ -491,7 +595,7 @@ export function RevealPresentationWorkbench() {
               size="sm"
               className="h-8 gap-2"
               onClick={() => setShowGeneratePanel(value => !value)}
-              disabled={!activeId}
+              disabled={!hasActiveDeck}
               data-testid="open-generate"
             >
               <Sparkles className="size-4" />
@@ -503,7 +607,7 @@ export function RevealPresentationWorkbench() {
               size="sm"
               className="h-8 gap-2"
               onClick={addSlide}
-              disabled={!activeId}
+              disabled={!hasActiveDeck}
             >
               <FilePlus2 className="size-4" />
               Slide
@@ -514,7 +618,7 @@ export function RevealPresentationWorkbench() {
               size="sm"
               className="h-8 gap-2"
               onClick={handleReset}
-              disabled={!activeId}
+              disabled={!hasActiveDeck}
             >
               <RotateCcw className="size-4" />
               Reset
@@ -525,7 +629,7 @@ export function RevealPresentationWorkbench() {
               size="sm"
               className="h-8 gap-2"
               onClick={handleShareToggle}
-              disabled={!activeId}
+              disabled={!hasActiveDeck}
               data-testid="share-toggle"
             >
               <Share2 className="size-4" />
@@ -537,7 +641,7 @@ export function RevealPresentationWorkbench() {
               size="sm"
               className="h-8 gap-2"
               onClick={() => handleExport('markdown')}
-              disabled={!activeId}
+              disabled={!hasActiveDeck}
             >
               <Download className="size-4" />
               MD
@@ -548,7 +652,7 @@ export function RevealPresentationWorkbench() {
               size="sm"
               className="h-8 gap-2"
               onClick={() => handleExport('html')}
-              disabled={!activeId}
+              disabled={!hasActiveDeck}
             >
               <Download className="size-4" />
               HTML
@@ -559,7 +663,7 @@ export function RevealPresentationWorkbench() {
               size="sm"
               className="h-8 gap-2 text-red-600 hover:bg-red-50 hover:text-red-700"
               onClick={handleDelete}
-              disabled={!activeId}
+              disabled={!hasActiveDeck}
             >
               <Trash2 className="size-4" />
               Delete
@@ -642,7 +746,7 @@ export function RevealPresentationWorkbench() {
         />
       </section>
 
-      <section className="flex min-h-0 flex-col gap-4">
+      <section className="flex min-h-0 min-w-0 flex-col gap-4">
         <div className="dashboard-panel overflow-hidden">
           <div className="flex flex-col gap-3 border-b px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
@@ -652,6 +756,11 @@ export function RevealPresentationWorkbench() {
               <h2 className="mt-1 truncate text-lg font-semibold tracking-normal">
                 {currentSlide?.title ?? title ?? 'Untitled deck'}
               </h2>
+              {!hasActiveDeck ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Draft preview
+                </p>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -686,6 +795,13 @@ export function RevealPresentationWorkbench() {
             <div
               className={`${styles.deckFrame} rounded-lg border border-white/10 shadow-2xl`}
             >
+              {!isRevealReady || revealError ? (
+                <div className={styles.previewStatus}>
+                  {revealError
+                    ? `Preview unavailable: ${revealError}`
+                    : 'Preparing reveal.js preview'}
+                </div>
+              ) : null}
               <div
                 ref={revealElementRef}
                 className={`${styles.revealRoot} reveal`}

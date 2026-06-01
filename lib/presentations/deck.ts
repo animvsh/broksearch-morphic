@@ -31,6 +31,11 @@ Use the generated starter deck as a base, then refine the message for sales, upd
 - Use speaker notes for delivery
 - Export hooks can land next`
 
+type ParseOptions = {
+  fallbackToSample?: boolean
+  requireHeading?: boolean
+}
+
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -40,16 +45,19 @@ function slugify(value: string) {
 
 function parseSlideBlock(
   block: string,
-  index: number
+  index: number,
+  options: ParseOptions = {}
 ): PresentationSlide | null {
   const lines = block
     .split('\n')
     .map(line => line.trim())
     .filter(Boolean)
+    .filter(line => !/^<!--.*-->$/.test(line))
 
   if (lines.length === 0) return null
 
   let title = `Slide ${index + 1}`
+  let hasHeading = false
   let kicker: string | undefined
   const body: string[] = []
   const bullets: string[] = []
@@ -63,7 +71,8 @@ function parseSlideBlock(
     const bullet = line.match(/^[-*]\s+(.+)$/)
 
     if (heading) {
-      title = heading[1]
+      title = heading[1].trim()
+      hasHeading = true
       readingNotes = false
       continue
     }
@@ -93,6 +102,8 @@ function parseSlideBlock(
     body.push(line)
   }
 
+  if (options.requireHeading && !hasHeading) return null
+
   return {
     id: `${slugify(title) || 'slide'}-${index + 1}`,
     title,
@@ -103,17 +114,34 @@ function parseSlideBlock(
   }
 }
 
-export function parsePresentationMarkdown(source: string): PresentationSlide[] {
-  const normalizedSource = source.trim()
+function stripWrappingFence(source: string): string {
+  const trimmed = source.trim()
+  const fence = trimmed.match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i)
+  return fence?.[1]?.trim() ?? trimmed
+}
+
+export function parsePresentationMarkdown(
+  source: string,
+  options: ParseOptions = {}
+): PresentationSlide[] {
+  const fallbackToSample = options.fallbackToSample !== false
+  const normalizedSource = stripWrappingFence(source)
+  if (!normalizedSource && !fallbackToSample) {
+    return []
+  }
   const blocks = normalizedSource
     ? normalizedSource.split(/^\s*---+\s*$/m)
     : samplePresentationSource.split(/^\s*---+\s*$/m)
 
   const slides = blocks
-    .map(parseSlideBlock)
+    .map((block, index) => parseSlideBlock(block, index, options))
     .filter((slide): slide is PresentationSlide => Boolean(slide))
 
-  return slides.length > 0
-    ? slides
-    : parsePresentationMarkdown(samplePresentationSource)
+  if (slides.length > 0) {
+    return slides
+  }
+
+  return fallbackToSample
+    ? parsePresentationMarkdown(samplePresentationSource)
+    : []
 }

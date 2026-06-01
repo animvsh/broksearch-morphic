@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { and, asc, eq } from 'drizzle-orm'
 
-import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { db } from '@/lib/db'
 import { presentations, presentationSlides } from '@/lib/db/schema-brok'
 import { withOptionalRLS } from '@/lib/db/with-rls'
@@ -53,11 +53,17 @@ export async function GET(
     return badRequest('Invalid presentation id.')
   }
 
-  const userId = await getCurrentUserId()
-  if (!userId) {
-    return NextResponse.json(
-      { error: { type: 'auth', message: 'Authentication required' } },
-      { status: 401 }
+  const access = await requireFeatureAccessForApi('presentations')
+  if (!access.ok) return access.response
+  const userId = access.user.id
+  if (!UUID_PATTERN.test(userId)) {
+    return badRequest(
+      'Anonymous user_id is not a UUID; presentations require a real account.'
+    )
+  }
+  if (!UUID_PATTERN.test(userId)) {
+    return badRequest(
+      'Anonymous user_id is not a UUID; presentations require a real account.'
     )
   }
 
@@ -101,11 +107,17 @@ export async function PATCH(
     return badRequest('Invalid presentation id.')
   }
 
-  const userId = await getCurrentUserId()
-  if (!userId) {
-    return NextResponse.json(
-      { error: { type: 'auth', message: 'Authentication required' } },
-      { status: 401 }
+  const access = await requireFeatureAccessForApi('presentations')
+  if (!access.ok) return access.response
+  const userId = access.user.id
+  if (!UUID_PATTERN.test(userId)) {
+    return badRequest(
+      'Anonymous user_id is not a UUID; presentations require a real account.'
+    )
+  }
+  if (!UUID_PATTERN.test(userId)) {
+    return badRequest(
+      'Anonymous user_id is not a UUID; presentations require a real account.'
     )
   }
 
@@ -210,11 +222,17 @@ export async function DELETE(
     return badRequest('Invalid presentation id.')
   }
 
-  const userId = await getCurrentUserId()
-  if (!userId) {
-    return NextResponse.json(
-      { error: { type: 'auth', message: 'Authentication required' } },
-      { status: 401 }
+  const access = await requireFeatureAccessForApi('presentations')
+  if (!access.ok) return access.response
+  const userId = access.user.id
+  if (!UUID_PATTERN.test(userId)) {
+    return badRequest(
+      'Anonymous user_id is not a UUID; presentations require a real account.'
+    )
+  }
+  if (!UUID_PATTERN.test(userId)) {
+    return badRequest(
+      'Anonymous user_id is not a UUID; presentations require a real account.'
     )
   }
 

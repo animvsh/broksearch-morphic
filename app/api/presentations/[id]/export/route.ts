@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { and, asc, eq } from 'drizzle-orm'
 
-import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { presentations, presentationSlides } from '@/lib/db/schema-brok'
 import { withOptionalRLS } from '@/lib/db/with-rls'
-import { samplePresentationSource } from '@/lib/presentations/deck'
+import {
+  parsePresentationMarkdown,
+  samplePresentationSource
+} from '@/lib/presentations/deck'
 import {
   type ExportSlide,
   slidesToMarkdown,
@@ -66,11 +69,12 @@ export async function GET(
     return badRequest('Invalid presentation id.')
   }
 
-  const userId = await getCurrentUserId()
-  if (!userId) {
-    return NextResponse.json(
-      { error: { type: 'auth', message: 'Authentication required' } },
-      { status: 401 }
+  const access = await requireFeatureAccessForApi('presentations')
+  if (!access.ok) return access.response
+  const userId = access.user.id
+  if (!UUID_PATTERN.test(userId)) {
+    return badRequest(
+      'Anonymous user_id is not a UUID; presentations require a real account.'
     )
   }
 
@@ -110,7 +114,22 @@ export async function GET(
     }
 
     if (format === 'html') {
-      const html = slidesToRevealHtml(deck.title, toExportSlides(slides))
+      const exportSlides =
+        slides.length > 0
+          ? toExportSlides(slides)
+          : parsePresentationMarkdown(
+              deck.sourceMarkdown ?? samplePresentationSource
+            ).map(slide => ({
+              title: slide.title,
+              contentJson: {
+                id: slide.id,
+                kicker: slide.kicker ?? null,
+                body: slide.body,
+                bullets: slide.bullets
+              },
+              speakerNotes: slide.notes ?? null
+            }))
+      const html = slidesToRevealHtml(deck.title, exportSlides)
       return new NextResponse(html, {
         status: 200,
         headers: {

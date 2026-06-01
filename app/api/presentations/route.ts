@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { and, desc, eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 
-import { getCurrentUserId } from '@/lib/auth/get-current-user'
-import { db } from '@/lib/db'
-import { presentations } from '@/lib/db/schema-brok'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
+import { presentations, presentationSlides } from '@/lib/db/schema-brok'
 import { withOptionalRLS } from '@/lib/db/with-rls'
-import { samplePresentationSource } from '@/lib/presentations/deck'
+import {
+  parsePresentationMarkdown,
+  samplePresentationSource
+} from '@/lib/presentations/deck'
+import { inferLayoutType } from '@/lib/presentations/layout'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -29,11 +32,12 @@ function serviceUnavailable(message: string) {
 }
 
 export async function GET() {
-  const userId = await getCurrentUserId()
-  if (!userId) {
-    return NextResponse.json(
-      { error: { type: 'auth', message: 'Authentication required' } },
-      { status: 401 }
+  const access = await requireFeatureAccessForApi('presentations')
+  if (!access.ok) return access.response
+  const userId = access.user.id
+  if (!UUID_PATTERN.test(userId)) {
+    return badRequest(
+      'Anonymous user_id is not a UUID; presentations require a real account.'
     )
   }
 
@@ -71,13 +75,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const userId = await getCurrentUserId()
-  if (!userId) {
-    return NextResponse.json(
-      { error: { type: 'auth', message: 'Authentication required' } },
-      { status: 401 }
-    )
-  }
+  const access = await requireFeatureAccessForApi('presentations')
+  if (!access.ok) return access.response
+  const userId = access.user.id
 
   if (!UUID_PATTERN.test(userId)) {
     return badRequest(
@@ -97,16 +97,18 @@ export async function POST(request: NextRequest) {
     return badRequest('Title is required.')
   }
   const description = body.description?.trim().slice(0, 1000) ?? null
+  const starterSlides = parsePresentationMarkdown(samplePresentationSource)
 
   try {
-    const [row] = await withOptionalRLS(userId, async tx => {
-      return tx
+    const row = await withOptionalRLS(userId, async tx => {
+      const [presentation] = await tx
         .insert(presentations)
         .values({
           userId,
           title,
           description,
           status: 'draft',
+          slideCount: starterSlides.length,
           sourceMarkdown: samplePresentationSource
         })
         .returning({
@@ -121,6 +123,26 @@ export async function POST(request: NextRequest) {
           updatedAt: presentations.updatedAt,
           sourceMarkdown: presentations.sourceMarkdown
         })
+
+      if (!presentation) return null
+
+      await tx.insert(presentationSlides).values(
+        starterSlides.map((slide, index) => ({
+          presentationId: presentation.id,
+          slideIndex: index,
+          title: slide.title,
+          layoutType: inferLayoutType(slide),
+          contentJson: {
+            id: slide.id,
+            kicker: slide.kicker ?? null,
+            body: slide.body,
+            bullets: slide.bullets
+          },
+          speakerNotes: slide.notes ?? null
+        }))
+      )
+
+      return presentation
     })
 
     return NextResponse.json({ presentation: row }, { status: 201 })

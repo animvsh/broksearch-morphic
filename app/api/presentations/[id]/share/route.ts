@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { randomBytes } from 'node:crypto'
 
-import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { presentations } from '@/lib/db/schema-brok'
 import { withOptionalRLS } from '@/lib/db/with-rls'
 
@@ -62,11 +62,12 @@ export async function POST(
     return badRequest('Invalid presentation id.')
   }
 
-  const userId = await getCurrentUserId()
-  if (!userId) {
-    return NextResponse.json(
-      { error: { type: 'auth', message: 'Authentication required' } },
-      { status: 401 }
+  const access = await requireFeatureAccessForApi('presentations')
+  if (!access.ok) return access.response
+  const userId = access.user.id
+  if (!UUID_PATTERN.test(userId)) {
+    return badRequest(
+      'Anonymous user_id is not a UUID; presentations require a real account.'
     )
   }
 
@@ -91,8 +92,9 @@ export async function POST(
         .limit(1)
       if (!existing) return null
 
-      const shareId =
-        existing.shareId ?? (desiredPublic ? generateShareId() : null)
+      const shareId = desiredPublic
+        ? (existing.shareId ?? generateShareId())
+        : null
 
       const [row] = await tx
         .update(presentations)
@@ -101,7 +103,7 @@ export async function POST(
           shareId,
           updatedAt: new Date()
         })
-        .where(eq(presentations.id, id))
+        .where(and(eq(presentations.id, id), eq(presentations.userId, userId)))
         .returning({
           id: presentations.id,
           isPublic: presentations.isPublic,
@@ -119,7 +121,10 @@ export async function POST(
     return NextResponse.json({
       isPublic: result.isPublic,
       shareId: result.shareId,
-      shareUrl: result.shareId ? `${origin}/p/${result.shareId}` : null
+      shareUrl:
+        result.isPublic && result.shareId
+          ? `${origin}/p/${result.shareId}`
+          : null
     })
   } catch (error) {
     return serviceUnavailable(

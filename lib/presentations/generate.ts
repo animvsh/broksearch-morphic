@@ -20,6 +20,16 @@ export function clampSlideCount(requested: number, _prompt: string): number {
   return Math.max(MIN_SLIDES, Math.min(MAX_SLIDES, rounded))
 }
 
+export function resolveSlideCount(
+  requested: number | undefined,
+  prompt: string
+): number {
+  if (typeof requested === 'number' && Number.isFinite(requested)) {
+    return clampSlideCount(requested, prompt)
+  }
+  return chooseSlideCount(prompt)
+}
+
 const SECTION_TITLES = [
   'Context',
   'Problem',
@@ -89,4 +99,17 @@ export function slideCountForPrompt(prompt: string): number {
 
 export function parseAndCount(source: string): number {
   return parsePresentationMarkdown(source).length
+}
+
+export function parseGeneratedDeck(source: string, expectedCount: number) {
+  const slides = parsePresentationMarkdown(source, {
+    fallbackToSample: false,
+    requireHeading: true
+  })
+
+  if (slides.length !== expectedCount) {
+    return null
+  }
+
+  return slides
 }

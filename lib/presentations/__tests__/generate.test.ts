@@ -8,6 +8,8 @@ import {
   MAX_SLIDES,
   MIN_SLIDES,
   parseAndCount,
+  parseGeneratedDeck,
+  resolveSlideCount,
   slideCountForPrompt
 } from '../generate'
 
@@ -63,6 +65,18 @@ describe('presentations/generate', () => {
     })
   })
 
+  describe('resolveSlideCount', () => {
+    it('uses the prompt-sized default when no count is requested', () => {
+      expect(resolveSlideCount(undefined, 'hi')).toBe(5)
+      expect(resolveSlideCount(undefined, 'a'.repeat(900))).toBe(11)
+    })
+
+    it('clamps explicit requested counts', () => {
+      expect(resolveSlideCount(100, 'x')).toBe(MAX_SLIDES)
+      expect(resolveSlideCount(1, 'x')).toBe(MIN_SLIDES)
+    })
+  })
+
   describe('deterministicOutline', () => {
     it('produces a parseable deck of the requested size', () => {
       const outline = deterministicOutline('Quarterly product review', 7)
@@ -107,6 +121,18 @@ describe('presentations/generate', () => {
         const outline = deterministicOutline('Some topic', count)
         expect(parseAndCount(outline)).toBe(count)
       }
+    })
+  })
+
+  describe('parseGeneratedDeck', () => {
+    it('returns null when generated output ignores the requested count', () => {
+      const source = deterministicOutline('Topic', 3)
+
+      expect(parseGeneratedDeck(source, 5)).toBeNull()
+    })
+
+    it('returns null for output without slide headings', () => {
+      expect(parseGeneratedDeck('Just some paragraphs', 1)).toBeNull()
     })
   })
 })

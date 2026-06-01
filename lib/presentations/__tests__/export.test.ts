@@ -65,6 +65,24 @@ describe('presentations/export', () => {
       const md = slidesToMarkdown('Deck', SAMPLE_SLIDES)
       expect(md).toContain('kicker: Today')
     })
+
+    it('escapes raw HTML in markdown exports', () => {
+      const md = slidesToMarkdown('Deck -- <script>', [
+        {
+          title: 'Unsafe <img>',
+          contentJson: {
+            body: ['<script>alert(1)</script>'],
+            bullets: ['<b>bold</b>']
+          },
+          speakerNotes: '<iframe></iframe>'
+        }
+      ])
+
+      expect(md).not.toContain('<script>')
+      expect(md).not.toContain('<img>')
+      expect(md).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
+      expect(md).toContain('&#45;&#45;')
+    })
   })
 
   describe('slidesToRevealHtml', () => {
@@ -94,13 +112,15 @@ describe('presentations/export', () => {
     it('escapes HTML in slide content', () => {
       const slides: ExportSlide[] = [
         {
-          title: 'Edge <script>',
+          title: `Edge <script> "quote" 'apostrophe'`,
           contentJson: { body: [], bullets: [] },
           speakerNotes: null
         }
       ]
       const html = slidesToRevealHtml('Safe', slides)
-      expect(html).toContain('Edge &lt;script&gt;')
+      expect(html).toContain(
+        'Edge &lt;script&gt; &quot;quote&quot; &#39;apostrophe&#39;'
+      )
       expect(html).not.toContain('Edge <script>')
     })
   })

@@ -21,12 +21,17 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function escapeMarkdownHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 export function slidesToMarkdown(title: string, slides: ExportSlide[]): string {
   const lines: string[] = []
   lines.push(
-    `<!-- Brok Presentation: ${title} (exported ${new Date().toISOString()}) -->`
+    `<!-- Brok Presentation: ${escapeMarkdownHtml(title).replace(/--/g, '&#45;&#45;')} (exported ${new Date().toISOString()}) -->`
   )
   lines.push('')
 
@@ -37,11 +42,13 @@ export function slidesToMarkdown(title: string, slides: ExportSlide[]): string {
     const bullets = Array.isArray(content.bullets) ? content.bullets : []
     const notes = slide.speakerNotes?.trim()
 
-    lines.push(`# ${slide.title || toTitle(`Slide ${index + 1}`)}`)
-    if (kicker) lines.push(`kicker: ${kicker}`)
-    for (const paragraph of body) lines.push(paragraph)
-    for (const bullet of bullets) lines.push(`- ${bullet}`)
-    if (notes) lines.push(`notes: ${notes}`)
+    lines.push(
+      `# ${escapeMarkdownHtml(slide.title || toTitle(`Slide ${index + 1}`))}`
+    )
+    if (kicker) lines.push(`kicker: ${escapeMarkdownHtml(kicker)}`)
+    for (const paragraph of body) lines.push(escapeMarkdownHtml(paragraph))
+    for (const bullet of bullets) lines.push(`- ${escapeMarkdownHtml(bullet)}`)
+    if (notes) lines.push(`notes: ${escapeMarkdownHtml(notes)}`)
 
     if (index < slides.length - 1) {
       lines.push('')

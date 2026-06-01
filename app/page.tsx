@@ -19,6 +19,7 @@ export default async function Page() {
   if (!hasFeatureAccess(access, 'search')) {
     if (hasFeatureAccess(access, 'brokcode')) redirect('/brokcode')
     if (hasFeatureAccess(access, 'brokmail')) redirect('/brokmail')
+    if (hasFeatureAccess(access, 'presentations')) redirect('/presentations')
     if (hasFeatureAccess(access, 'tools')) redirect('/tools')
     if (hasFeatureAccess(access, 'api_platform')) redirect('/playground')
 
