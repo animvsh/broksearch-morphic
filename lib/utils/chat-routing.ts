@@ -1,5 +1,7 @@
 import type { UIMessage } from 'ai'
 
+import type { SearchMode } from '@/lib/types/search'
+
 import { getVisibleTextFromParts } from './message-utils'
 
 const SIMPLE_CHAT_PATTERNS = [
@@ -64,6 +66,24 @@ export function shouldForceInitialWebSearchForMessage(
   if (hasUploadedFileContext(message)) return false
 
   return shouldForceSearchForText(getVisibleTextFromParts(message.parts))
+}
+
+export function shouldForceInitialWebSearchForTurn({
+  searchMode,
+  message
+}: {
+  searchMode?: SearchMode
+  message: Pick<UIMessage, 'parts' | 'role'> | null | undefined
+}) {
+  if (searchMode === 'search' || searchMode === 'deep') {
+    return true
+  }
+
+  if (searchMode !== 'quick') {
+    return false
+  }
+
+  return shouldForceInitialWebSearchForMessage(message)
 }
 
 export function shouldUseQuickReplyForMessage(

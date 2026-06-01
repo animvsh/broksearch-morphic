@@ -2,9 +2,12 @@
  * Returns the prompt section that instructs the LLM to output
  * related questions as a ```spec fenced block at the end of its response.
  */
-export function getRelatedQuestionsSpecPrompt(): string {
+export function getRelatedQuestionsSpecPrompt({
+  skipForTinyUtility = false
+}: { skipForTinyUtility?: boolean } = {}): string {
   return `
 RELATED QUESTIONS (MANDATORY):
+${skipForTinyUtility ? '- For tiny utility messages such as greetings, thanks, pings, or tests, skip the spec block entirely.' : ''}
 After your conclusion, you MUST generate exactly 3 follow-up questions in a \`\`\`spec fenced code block.
 Each question should explore a different aspect of the topic not yet covered.
 Questions must be concise (max 10-12 words) and in the user's language.

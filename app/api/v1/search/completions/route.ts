@@ -12,6 +12,10 @@ import {
   readJsonBody
 } from '@/lib/brok/http'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
+import {
+  applyBrokMarkup,
+  calculateSearchProviderCostUsd
+} from '@/lib/brok/pricing'
 import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
 import {
   buildSearchQueries,
@@ -122,6 +126,11 @@ export async function POST(request: NextRequest) {
     recency_days,
     domains
   } = body
+  if (typeof stream !== 'boolean') {
+    return invalidRequestResponse('invalid_stream', 'stream must be a boolean.')
+  }
+
+  const shouldStream = stream
   const depth = normalizeSearchDepth(body.depth ?? body.search_depth)
   const searchDomains = Array.isArray(domains)
     ? domains.filter((domain): domain is string => typeof domain === 'string')
@@ -146,7 +155,7 @@ export async function POST(request: NextRequest) {
           type: 'invalid_request_error',
           code: 'invalid_model',
           message:
-            'Model does not support search. Use brok-search, brok-search-pro, or a MiniMax-M2 search-capable model.'
+            'Model does not support search. Use brok-search or brok-search-pro.'
         }
       },
       { status: 400 }
@@ -175,12 +184,36 @@ export async function POST(request: NextRequest) {
   )
 
   if (!rateLimit.allowed) {
+    if (rateLimit.reason === 'rate_limit_check_failed') {
+      return NextResponse.json(
+        {
+          error: {
+            type: 'service_unavailable',
+            code: 'rate_limit_check_failed',
+            message:
+              'Rate limit check is temporarily unavailable. Please retry shortly.'
+          }
+        },
+        { status: 503 }
+      )
+    }
+
+    await recordRateLimitEvent(
+      auth.apiKey.id,
+      auth.workspace.id,
+      'rpm',
+      rateLimit.limit,
+      rateLimit.current + 1,
+      true
+    )
+
     return NextResponse.json(
       {
         error: {
           type: 'rate_limit_error',
           code: 'rate_limit_exceeded',
-          message: 'Rate limit exceeded.',
+          message: 'Rate limit exceeded for this API key.',
+          limit: `${rateLimit.limit} requests per minute`,
           retry_after_seconds: Math.ceil(
             (rateLimit.resetAt * 1000 - Date.now()) / 1000
           )
@@ -207,7 +240,7 @@ export async function POST(request: NextRequest) {
     false
   )
 
-  if (stream) {
+  if (shouldStream) {
     const encoder = new TextEncoder()
 
     return new Response(
@@ -233,7 +266,18 @@ export async function POST(request: NextRequest) {
             message: 'Planning search query',
             status: 'running'
           })
+          send('status', {
+            id: requestId,
+            message: 'Understanding your question'
+          })
           send('query_resolved', {
+            id: requestId,
+            query,
+            resolved_query: resolvedQuery,
+            classification,
+            search_queries: searchQueries
+          })
+          send('query', {
             id: requestId,
             query,
             resolved_query: resolvedQuery,
@@ -246,6 +290,10 @@ export async function POST(request: NextRequest) {
               id: requestId,
               message: 'Fetching and ranking sources',
               status: 'running'
+            })
+            send('status', {
+              id: requestId,
+              message: 'Searching the web'
             })
             send('search_started', {
               id: requestId,
@@ -263,10 +311,10 @@ export async function POST(request: NextRequest) {
             })
 
             const latencyMs = Date.now() - startTime
-            const searchCost = 0.001 * searchResult.searchQueries
-            const tokenCost = (searchResult.tokensUsed / 1_000_000) * 0.1
-            const providerCost = searchCost + tokenCost
-            const billedAmount = providerCost * 1.5
+            const providerCost = calculateSearchProviderCostUsd(
+              searchResult.searchQueries,
+              searchResult.tokensUsed
+            )
 
             await recordUsage({
               requestId,
@@ -280,16 +328,29 @@ export async function POST(request: NextRequest) {
               outputTokens: Math.round(searchResult.answer.length / 4),
               searchQueries: searchResult.searchQueries,
               providerCostUsd: providerCost,
-              billedUsd: billedAmount,
+              billedUsd: applyBrokMarkup(providerCost),
               latencyMs,
               status: 'success'
             })
 
             searchResult.citations.forEach((citation, index) => {
+              const citationNumber = index + 1
+
               send('source_found', {
                 id: requestId,
-                index: index + 1,
+                index: citationNumber,
                 source: citation
+              })
+              send('source', {
+                id: requestId,
+                source_id: citation.id,
+                citation_number: citationNumber,
+                title: citation.title,
+                url: citation.url,
+                domain: citation.publisher,
+                snippet: citation.snippet,
+                retrieved_at: citation.retrievedAt,
+                quality_score: citation.qualityScore
               })
               send('source_read', {
                 id: requestId,
@@ -301,17 +362,34 @@ export async function POST(request: NextRequest) {
               send('citation_added', {
                 id: requestId,
                 citation_id: citation.id,
-                marker: `[${index + 1}]`,
+                marker: `[${citationNumber}]`,
+                url: citation.url
+              })
+              send('citation', {
+                id: requestId,
+                source_id: citation.id,
+                citation_number: citationNumber,
                 url: citation.url
               })
             })
 
+            send('status', {
+              id: requestId,
+              message: 'Writing answer'
+            })
+
             send('answer_delta', {
               id: requestId,
-              delta: searchResult.answer
+              delta: searchResult.answer,
+              text: searchResult.answer
             })
             send('follow_ups_generated', {
               id: requestId,
+              follow_ups: searchResult.followUps
+            })
+            send('follow_ups', {
+              id: requestId,
+              items: searchResult.followUps,
               follow_ups: searchResult.followUps
             })
 
@@ -320,6 +398,10 @@ export async function POST(request: NextRequest) {
               message: 'Answer ready',
               status: 'done',
               citations: searchResult.citations.length
+            })
+            send('status', {
+              id: requestId,
+              message: 'Answer ready'
             })
             send(
               'search.completion',
@@ -392,11 +474,10 @@ export async function POST(request: NextRequest) {
 
     const latencyMs = Date.now() - startTime
 
-    // Calculate costs
-    const searchCost = 0.001 * searchResult.searchQueries // $0.001 per search
-    const tokenCost = (searchResult.tokensUsed / 1_000_000) * 0.1
-    const providerCost = searchCost + tokenCost
-    const billedAmount = providerCost * 1.5
+    const providerCost = calculateSearchProviderCostUsd(
+      searchResult.searchQueries,
+      searchResult.tokensUsed
+    )
 
     // Record usage
     await recordUsage({
@@ -411,7 +492,7 @@ export async function POST(request: NextRequest) {
       outputTokens: Math.round(searchResult.answer.length / 4),
       searchQueries: searchResult.searchQueries,
       providerCostUsd: providerCost,
-      billedUsd: billedAmount,
+      billedUsd: applyBrokMarkup(providerCost),
       latencyMs,
       status: 'success'
     })

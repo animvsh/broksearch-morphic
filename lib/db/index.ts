@@ -9,23 +9,44 @@ import * as schema from './schema'
 // Use restricted user for application if available, otherwise fall back to regular user
 const isDevelopment = process.env.NODE_ENV === 'development'
 const isTest = process.env.NODE_ENV === 'test'
+const isNextProductionBuild =
+  process.env.NEXT_PHASE === 'phase-production-build'
+const canUseBuildDatabaseFallback = isTest || isNextProductionBuild
 
-if (
-  !process.env.DATABASE_URL &&
-  !process.env.DATABASE_RESTRICTED_URL &&
-  !isTest
-) {
-  throw new Error(
-    'DATABASE_URL or DATABASE_RESTRICTED_URL environment variable is not set'
-  )
+function isPlaceholderDatabaseUrl(value: string | undefined) {
+  if (!value) return true
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return true
+  return /^\[\s*YOUR_[A-Z0-9_]+_URL\s*\]$/i.test(trimmed)
+}
+
+const hasRealDatabaseUrl =
+  !isPlaceholderDatabaseUrl(process.env.DATABASE_URL) ||
+  !isPlaceholderDatabaseUrl(process.env.DATABASE_RESTRICTED_URL)
+
+if (!hasRealDatabaseUrl && !canUseBuildDatabaseFallback) {
+  if (isDevelopment) {
+    console.warn(
+      '[DB] DATABASE_URL appears to be a placeholder; falling back to inert build URL so the dev server can boot. Set a real PostgreSQL URL in .env.local to enable data-backed features.'
+    )
+  } else {
+    throw new Error(
+      'DATABASE_URL or DATABASE_RESTRICTED_URL environment variable is not set'
+    )
+  }
 }
 
 // Connection with connection pooling for server environments
 // Prefer restricted user for application runtime
 const connectionString =
-  process.env.DATABASE_RESTRICTED_URL ?? // Prefer restricted user
-  process.env.DATABASE_URL ??
-  (isTest ? 'postgres://user:pass@localhost:5432/testdb' : undefined)
+  process.env.DATABASE_RESTRICTED_URL && // Prefer restricted user
+  !isPlaceholderDatabaseUrl(process.env.DATABASE_RESTRICTED_URL)
+    ? process.env.DATABASE_RESTRICTED_URL
+    : !isPlaceholderDatabaseUrl(process.env.DATABASE_URL)
+      ? process.env.DATABASE_URL
+      : canUseBuildDatabaseFallback || isDevelopment
+        ? 'postgres://user:pass@localhost:5432/testdb'
+        : undefined
 
 if (!connectionString) {
   throw new Error(
@@ -35,12 +56,15 @@ if (!connectionString) {
 
 // Log which connection is being used (for debugging)
 if (isDevelopment) {
-  console.log(
-    '[DB] Using connection:',
-    process.env.DATABASE_RESTRICTED_URL
+  const usingInertFallback =
+    connectionString === 'postgres://user:pass@localhost:5432/testdb'
+  const label = usingInertFallback
+    ? 'Inert Fallback (data-backed features disabled)'
+    : process.env.DATABASE_RESTRICTED_URL &&
+        !isPlaceholderDatabaseUrl(process.env.DATABASE_RESTRICTED_URL)
       ? 'Restricted User (RLS Active)'
       : 'Owner User (RLS Bypassed)'
-  )
+  console.log('[DB] Using connection:', label)
 }
 
 // Keep runtime SSL behavior aligned with migrate.ts so Railway and similar hosted
@@ -52,11 +76,34 @@ const sslConfig = sslDisabled
     ? false
     : { rejectUnauthorized: false }
 
-const client = postgres(connectionString, {
-  ssl: sslConfig,
-  prepare: false,
-  max: 20 // Max 20 connections
-})
+function readMaxConnections() {
+  const value = Number(
+    process.env.DATABASE_MAX_CONNECTIONS ?? (isDevelopment ? 5 : 20)
+  )
+
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 5
+}
+
+type PostgresClient = ReturnType<typeof postgres>
+
+const globalForDb = globalThis as typeof globalThis & {
+  __brokPostgresClient?: PostgresClient
+  __brokPostgresVerified?: boolean
+}
+
+const client =
+  globalForDb.__brokPostgresClient ??
+  postgres(connectionString, {
+    ssl: sslConfig,
+    prepare: false,
+    max: readMaxConnections(),
+    idle_timeout: 20,
+    max_lifetime: 60 * 30
+  })
+
+if (isDevelopment) {
+  globalForDb.__brokPostgresClient = client
+}
 
 export const db = drizzle(client, {
   schema: { ...schema, ...relations }
@@ -66,7 +113,12 @@ export const db = drizzle(client, {
 export type Schema = typeof schema
 
 // Verify restricted user permissions on startup
-if (process.env.DATABASE_RESTRICTED_URL && !isTest) {
+if (
+  process.env.DATABASE_RESTRICTED_URL &&
+  !isTest &&
+  !globalForDb.__brokPostgresVerified
+) {
+  globalForDb.__brokPostgresVerified = true
   // Only run verification in server environments, not during build
   if (typeof window === 'undefined' && process.env.NODE_ENV !== 'production') {
     ;(async () => {

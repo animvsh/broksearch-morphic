@@ -45,11 +45,32 @@ const localDevSteps = [
 
 const coreCommands = [
   '/help',
+  '/doctor',
   '/usage month',
   '/sync',
   '/session',
   '/projects',
+  '/project new <name>',
   '/project show',
+  '/project rename <name>',
+  '/project delete',
+  '/files',
+  '/file put <path> <local>',
+  '/file show <path>',
+  '/file rename <old> <new>',
+  '/file delete <path>',
+  '/versions',
+  '/version <id>',
+  '/resume [taskId]',
+  '/build <prompt>',
+  '/read <path>',
+  '/head <path> <n>',
+  '/tail <path> <n>',
+  '/shell <cmd>',
+  '/git status',
+  '/git diff',
+  '/ask <file> <question>',
+  '/edit <file> <instruction>',
   '/backend status',
   '/backend insforge https://your-project.insforge.app',
   '/backend provision',
@@ -61,7 +82,8 @@ const coreCommands = [
   '/github',
   '/skills',
   '/compat',
-  '/key brok_sk_...'
+  '/key brok_sk_...',
+  '/key clear'
 ]
 
 const envVars = [
@@ -95,6 +117,18 @@ const workflowCards = [
     body: '/backend status, /backend insforge, /backend provision, and /backend check manage the same encrypted project backend used by Brok Code Cloud.'
   },
   {
+    title: 'Files and projects',
+    body: '/files, /file show, /file put, /file rename, and /file delete manage project files. /project rename and /project delete manage the project itself.'
+  },
+  {
+    title: 'Version history',
+    body: '/versions lists the recent run history for the active session; /version <id> shows one version with its files, branch, and preview URL.'
+  },
+  {
+    title: 'Tab completion + history',
+    body: 'Tab completes slash commands and project ids. ↑/↓ recalls history from ~/.brokcode/history. Ctrl+C cancels the in-flight request.'
+  },
+  {
     title: 'Worktrees',
     body: '/worktree feature/name creates an isolated git worktree under .brokcode-worktrees for branch work.'
   },
@@ -103,16 +137,16 @@ const workflowCards = [
     body: '/securityscan initializes DeepSec when needed and runs the real matcher scan. Add process, revalidate, or export for deeper DeepSec phases.'
   },
   {
-    title: 'GitHub PRs',
-    body: 'Connect GitHub through Composio in Brok Code Cloud, set repository/base/head, then use Open PR after checks pass.'
+    title: 'Self-diagnosis',
+    body: '/doctor prints config, key prefix, base/sync/execute reachability, and a project access check. Use it first when something looks off.'
   },
   {
-    title: 'One-click deploy',
-    body: 'Use the Brok Code Cloud 1-Click Deploy button when BROKCODE_DEPLOY_WEBHOOK_URL or RAILWAY_API_TOKEN is configured.'
+    title: 'Resume in-flight runs',
+    body: 'When a stream is cancelled or interrupted, /resume reattaches to the most recent task and replays its last events.'
   },
   {
-    title: 'Composio prompts',
-    body: 'In Brok Code Cloud, prompts like connect GitHub, connect Railway, or connect Linear open the matching Composio flow when configured.'
+    title: 'Local terminal harness',
+    body: '/read, /head, /tail, /shell, and /git operate on the current working directory. /ask and /edit load a local file and send it through the Brok API. /build is a one-shot build against the active project.'
   }
 ]
 
@@ -204,7 +238,8 @@ export default function BrokCodeTuiPage() {
                   <code>scripts/brokcode-tui.mjs</code>. It sends chat to{' '}
                   <code>/api/brokcode/execute</code>, writes sync events to{' '}
                   <code>/api/brokcode/sessions</code>, and refuses non-Brok API
-                  keys.
+                  keys. Tab autocompletes, ↑/↓ recalls history, and Ctrl+C
+                  cancels the current stream.
                 </p>
               </CardContent>
             </Card>
@@ -378,9 +413,25 @@ export default function BrokCodeTuiPage() {
               </CardHeader>
               <CardContent className="grid gap-2 text-sm">
                 <div className="rounded-md border bg-muted/20 p-3">
+                  <div className="font-medium">Run /doctor first</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Checks config, key prefix, base/sync/execute reachability,
+                    and project access. Saves guessing.
+                  </p>
+                </div>
+                <div className="rounded-md border bg-muted/20 p-3">
                   <div className="font-medium">401 or 403</div>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    The key is missing, inactive, or not a real Brok key.
+                    The key is missing, inactive, or not a real Brok key. Run{' '}
+                    <code>/key brok_sk_...</code> or{' '}
+                    <code>BROK_API_KEY=… npm run brokcode</code>.
+                  </p>
+                </div>
+                <div className="rounded-md border bg-muted/20 p-3">
+                  <div className="font-medium">Stream cut off</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Hit Ctrl+C to cancel cleanly, then re-run with{' '}
+                    <code>/resume [taskId]</code> to replay the last events.
                   </p>
                 </div>
                 <div className="rounded-md border bg-muted/20 p-3">

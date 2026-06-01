@@ -14,6 +14,7 @@ import {
   PenLine,
   PlugZap,
   Plus,
+  Presentation,
   Search,
   TerminalSquare
 } from 'lucide-react'
@@ -169,6 +170,21 @@ export default function AppSidebar() {
                   <Mail className="size-4" />
                 </span>
                 <span className="flex-1">BrokMail</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Presentations"
+              className={navButtonClass}
+              isActive={isActive('/presentations')}
+            >
+              <Link href="/presentations" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <Presentation className="size-4" />
+                </span>
+                <span className="flex-1">Presentations</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

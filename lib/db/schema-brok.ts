@@ -34,6 +34,30 @@ export const endpointEnum = pgEnum('endpoint', [
   'code',
   'agents'
 ])
+export const exportStatusEnum = pgEnum('export_status', [
+  'pending',
+  'processing',
+  'completed',
+  'failed'
+])
+export const generationStatusEnum = pgEnum('generation_status', [
+  'started',
+  'completed',
+  'failed'
+])
+export const outlineStatusEnum = pgEnum('outline_status', [
+  'generating',
+  'ready',
+  'error'
+])
+export const presentationStatusEnum = pgEnum('presentation_status', [
+  'draft',
+  'generating',
+  'outline_generating',
+  'slides_generating',
+  'ready',
+  'error'
+])
 
 // Workspaces
 export const workspaces = pgTable('workspaces', {
@@ -78,7 +102,8 @@ export const apiKeys = pgTable(
     userId: text('user_id').notNull(),
     name: text('name').notNull(),
     keyPrefix: text('key_prefix').notNull(), // brok_sk_live_xxxx
-    keyHash: text('key_hash').notNull(), // sha256 hash
+    keyHash: text('key_hash').notNull(), // sha256(key + key_salt + global_salt)
+    keySalt: text('key_salt'), // per-key random salt; null for legacy keys
     environment: environmentEnum('environment').notNull(),
     status: keyStatusEnum('status').default('active').notNull(),
     scopes: jsonb('scopes').default([]).notNull(), // ['chat:write', 'search:write']
@@ -283,13 +308,18 @@ export const brokCodeVersions = pgTable(
       .notNull(),
     userId: text('user_id').notNull(),
     command: text('command').notNull(),
+    checkpointName: text('checkpoint_name'),
+    projectId: text('project_id'),
     summary: text('summary').notNull(),
     runtime: text('runtime').notNull(),
     status: text('status').notNull(),
     previewUrl: text('preview_url'),
+    deploymentUrl: text('deployment_url'),
     branch: text('branch'),
     commitSha: text('commit_sha'),
     prUrl: text('pr_url'),
+    diffMetadata: jsonb('diff_metadata').$type<Record<string, unknown>>(),
+    fileSnapshot: jsonb('file_snapshot').$type<Record<string, unknown>[]>(),
     createdAt: timestamp('created_at').defaultNow().notNull()
   },
   table => ({
@@ -389,6 +419,58 @@ export const brokCodeDeployments = pgTable(
   })
 )
 
+export const brokCodeRuntimeSandboxes = pgTable(
+  'brokcode_runtime_sandboxes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .references(() => brokCodeProjects.id)
+      .notNull(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    versionId: text('version_id'),
+    sessionId: text('session_id'),
+    institutionId: text('institution_id'),
+    courseId: text('course_id'),
+    sectionId: text('section_id'),
+    assignmentId: text('assignment_id'),
+    appType: text('app_type').notNull(),
+    packageManager: text('package_manager').notNull(),
+    workspacePath: text('workspace_path').notNull(),
+    installCommand: text('install_command'),
+    devCommand: text('dev_command').notNull(),
+    buildCommand: text('build_command'),
+    status: text('status').default('preparing').notNull(),
+    ports: jsonb('ports').$type<Array<Record<string, unknown>>>().default([]),
+    logs: jsonb('logs').$type<Array<Record<string, unknown>>>().default([]),
+    health: jsonb('health').$type<Record<string, unknown>>(),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    startedAt: timestamp('started_at'),
+    stoppedAt: timestamp('stopped_at'),
+    lastHealthcheckAt: timestamp('last_healthcheck_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => ({
+    projectIdx: index('brokcode_runtime_sandboxes_project_idx').on(
+      table.projectId
+    ),
+    workspaceIdx: index('brokcode_runtime_sandboxes_workspace_idx').on(
+      table.workspaceId
+    ),
+    userIdx: index('brokcode_runtime_sandboxes_user_idx').on(table.userId),
+    statusIdx: index('brokcode_runtime_sandboxes_status_idx').on(table.status),
+    versionIdx: index('brokcode_runtime_sandboxes_version_idx').on(
+      table.versionId
+    ),
+    updatedAtIdx: index('brokcode_runtime_sandboxes_updated_at_idx').on(
+      table.updatedAt.desc()
+    )
+  })
+)
+
 export const brokMailApprovalConsumptions = pgTable(
   'brokmail_approval_consumptions',
   {
@@ -410,6 +492,90 @@ export const brokMailApprovalConsumptions = pgTable(
   })
 )
 
+export const connectorActionRuns = pgTable(
+  'connector_action_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    chatId: text('chat_id'),
+    toolkit: text('toolkit').notNull(),
+    action: text('action').notNull(),
+    toolSlug: text('tool_slug'),
+    status: text('status').default('pending').notNull(),
+    requiresApproval: boolean('requires_approval').default(true).notNull(),
+    approvalId: text('approval_id'),
+    payloadHash: text('payload_hash').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    result: jsonb('result').$type<Record<string, unknown>>(),
+    error: text('error'),
+    approvedAt: timestamp('approved_at'),
+    startedAt: timestamp('started_at'),
+    completedAt: timestamp('completed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => ({
+    userStatusIdx: index('connector_action_runs_user_status_idx').on(
+      table.userId,
+      table.status
+    ),
+    toolkitIdx: index('connector_action_runs_toolkit_idx').on(table.toolkit),
+    createdAtIdx: index('connector_action_runs_created_at_idx').on(
+      table.createdAt.desc()
+    )
+  })
+)
+
+export const connectorApprovalRequests = pgTable(
+  'connector_approval_requests',
+  {
+    id: text('id').primaryKey(),
+    runId: uuid('run_id')
+      .references(() => connectorActionRuns.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    status: text('status').default('pending').notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    expiresAt: timestamp('expires_at').notNull(),
+    approvedAt: timestamp('approved_at'),
+    consumedAt: timestamp('consumed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => ({
+    runIdx: index('connector_approval_requests_run_idx').on(table.runId),
+    userStatusIdx: index('connector_approval_requests_user_status_idx').on(
+      table.userId,
+      table.status
+    ),
+    expiresAtIdx: index('connector_approval_requests_expires_at_idx').on(
+      table.expiresAt
+    )
+  })
+)
+
+export const connectorActionEvents = pgTable(
+  'connector_action_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    runId: uuid('run_id')
+      .references(() => connectorActionRuns.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    eventType: text('event_type').notNull(),
+    message: text('message'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => ({
+    runIdx: index('connector_action_events_run_idx').on(table.runId),
+    userIdx: index('connector_action_events_user_idx').on(table.userId),
+    createdAtIdx: index('connector_action_events_created_at_idx').on(
+      table.createdAt.desc()
+    )
+  })
+)
+
 // Relations
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
   apiKeys: many(apiKeys),
@@ -417,7 +583,9 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
   brokCodeRuntimeKeys: many(brokCodeRuntimeKeys),
   brokCodeSessions: many(brokCodeSessions),
   brokCodeVersions: many(brokCodeVersions),
-  brokCodeProjects: many(brokCodeProjects)
+  brokCodeProjects: many(brokCodeProjects),
+  brokCodeRuntimeSandboxes: many(brokCodeRuntimeSandboxes),
+  connectorActionRuns: many(connectorActionRuns)
 }))
 
 export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
@@ -427,6 +595,34 @@ export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
   }),
   usageEvents: many(usageEvents)
 }))
+
+export const connectorActionRunsRelations = relations(
+  connectorActionRuns,
+  ({ many }) => ({
+    approvals: many(connectorApprovalRequests),
+    events: many(connectorActionEvents)
+  })
+)
+
+export const connectorApprovalRequestsRelations = relations(
+  connectorApprovalRequests,
+  ({ one }) => ({
+    run: one(connectorActionRuns, {
+      fields: [connectorApprovalRequests.runId],
+      references: [connectorActionRuns.id]
+    })
+  })
+)
+
+export const connectorActionEventsRelations = relations(
+  connectorActionEvents,
+  ({ one }) => ({
+    run: one(connectorActionRuns, {
+      fields: [connectorActionEvents.runId],
+      references: [connectorActionRuns.id]
+    })
+  })
+)
 
 export const brokCodeRuntimeKeysRelations = relations(
   brokCodeRuntimeKeys,
@@ -461,7 +657,8 @@ export const brokCodeProjectsRelations = relations(
       references: [workspaces.id]
     }),
     files: many(brokCodeProjectFiles),
-    deployments: many(brokCodeDeployments)
+    deployments: many(brokCodeDeployments),
+    runtimeSandboxes: many(brokCodeRuntimeSandboxes)
   })
 )
 
@@ -493,6 +690,20 @@ export const brokCodeDeploymentsRelations = relations(
   })
 )
 
+export const brokCodeRuntimeSandboxesRelations = relations(
+  brokCodeRuntimeSandboxes,
+  ({ one }) => ({
+    project: one(brokCodeProjects, {
+      fields: [brokCodeRuntimeSandboxes.projectId],
+      references: [brokCodeProjects.id]
+    }),
+    workspace: one(workspaces, {
+      fields: [brokCodeRuntimeSandboxes.workspaceId],
+      references: [workspaces.id]
+    })
+  })
+)
+
 export const brokCodeSessionEventsRelations = relations(
   brokCodeSessionEvents,
   ({ one }) => ({
@@ -513,6 +724,238 @@ export const brokCodeVersionsRelations = relations(
     workspace: one(workspaces, {
       fields: [brokCodeVersions.workspaceId],
       references: [workspaces.id]
+    })
+  })
+)
+
+// ==================== Presentations ====================
+//
+// 7 tables persisted by `drizzle/0011_bitter_celestials.sql` and refined
+// across migrations 0012/0015/0016/0017/0018/0019. Source of truth for these
+// definitions is the SQL migrations on disk — keep this schema in lockstep
+// with `drizzle/00XX_*.sql`. RLS policies are managed via inline Drizzle SQL
+// migrations (see `drizzle/00XX_presentation_*.sql`); the application uses
+// `app.current_user_id` via `withRLS` for all reads/writes.
+
+export const presentations = pgTable(
+  'presentations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    workspaceId: uuid('workspace_id'),
+    title: text('title').notNull(),
+    description: text('description'),
+    status: presentationStatusEnum('status').default('draft').notNull(),
+    themeId: text('theme_id'),
+    language: text('language').default('en').notNull(),
+    style: text('style'),
+    slideCount: integer('slide_count').default(0).notNull(),
+    shareId: text('share_id'),
+    isPublic: boolean('is_public').default(false).notNull(),
+    sourceMarkdown: text('source_markdown'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    uniqueIndex('presentations_share_id_unique').on(table.shareId),
+    index('presentations_user_id_idx').on(table.userId),
+    index('presentations_user_id_created_at_idx').on(
+      table.userId,
+      table.createdAt.desc()
+    ),
+    index('presentations_workspace_id_idx').on(table.workspaceId),
+    index('presentations_share_id_idx').on(table.shareId)
+  ]
+)
+
+export const presentationSlides = pgTable(
+  'presentation_slides',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    presentationId: uuid('presentation_id')
+      .notNull()
+      .references(() => presentations.id, { onDelete: 'cascade' }),
+    slideIndex: integer('slide_index').notNull(),
+    title: text('title').notNull(),
+    layoutType: text('layout_type').notNull(),
+    contentJson: jsonb('content_json').notNull(),
+    speakerNotes: text('speaker_notes'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    uniqueIndex('presentation_slides_presentation_id_index_idx').on(
+      table.presentationId,
+      table.slideIndex
+    ),
+    index('presentation_slides_presentation_id_idx').on(table.presentationId)
+  ]
+)
+
+export const presentationOutlines = pgTable(
+  'presentation_outlines',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    presentationId: uuid('presentation_id')
+      .notNull()
+      .references(() => presentations.id, { onDelete: 'cascade' }),
+    outlineJson: jsonb('outline_json').notNull(),
+    status: outlineStatusEnum('status').default('generating').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    uniqueIndex('presentation_outlines_presentation_id_unique').on(
+      table.presentationId
+    ),
+    index('presentation_outlines_presentation_id_idx').on(table.presentationId)
+  ]
+)
+
+export const presentationThemes = pgTable(
+  'presentation_themes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id'),
+    name: text('name').notNull(),
+    themeJson: jsonb('theme_json').notNull(),
+    isBuiltin: boolean('is_builtin').default(false).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    index('presentation_themes_user_id_idx').on(table.userId),
+    index('presentation_themes_is_builtin_idx').on(table.isBuiltin)
+  ]
+)
+
+export const presentationAssets = pgTable(
+  'presentation_assets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    presentationId: uuid('presentation_id')
+      .notNull()
+      .references(() => presentations.id, { onDelete: 'cascade' }),
+    slideId: uuid('slide_id').references(() => presentationSlides.id, {
+      onDelete: 'cascade'
+    }),
+    assetType: text('asset_type').notNull(),
+    url: text('url'),
+    provider: text('provider').notNull(),
+    prompt: text('prompt'),
+    metadataJson: jsonb('metadata_json'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    index('presentation_assets_presentation_id_idx').on(table.presentationId),
+    index('presentation_assets_slide_id_idx').on(table.slideId)
+  ]
+)
+
+export const presentationGenerations = pgTable(
+  'presentation_generations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    presentationId: uuid('presentation_id')
+      .notNull()
+      .references(() => presentations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull(),
+    prompt: text('prompt').notNull(),
+    generationType: text('generation_type').notNull(),
+    model: text('model').notNull(),
+    webSearchEnabled: boolean('web_search_enabled').default(false).notNull(),
+    inputTokens: integer('input_tokens').default(0).notNull(),
+    outputTokens: integer('output_tokens').default(0).notNull(),
+    costUsd: integer('cost_usd').default(0).notNull(),
+    status: generationStatusEnum('status').default('started').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    index('presentation_generations_presentation_id_idx').on(
+      table.presentationId
+    ),
+    index('presentation_generations_user_id_idx').on(table.userId),
+    index('presentation_generations_created_at_idx').on(table.createdAt)
+  ]
+)
+
+export const presentationExports = pgTable(
+  'presentation_exports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    presentationId: uuid('presentation_id')
+      .notNull()
+      .references(() => presentations.id, { onDelete: 'cascade' }),
+    exportType: text('export_type').notNull(),
+    fileUrl: text('file_url'),
+    status: exportStatusEnum('status').default('pending').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    index('presentation_exports_presentation_id_idx').on(table.presentationId),
+    index('presentation_exports_status_idx').on(table.status)
+  ]
+)
+
+export const presentationsRelations = relations(presentations, ({ many }) => ({
+  slides: many(presentationSlides),
+  outline: many(presentationOutlines),
+  assets: many(presentationAssets),
+  generations: many(presentationGenerations),
+  exports: many(presentationExports)
+}))
+
+export const presentationSlidesRelations = relations(
+  presentationSlides,
+  ({ one, many }) => ({
+    presentation: one(presentations, {
+      fields: [presentationSlides.presentationId],
+      references: [presentations.id]
+    }),
+    assets: many(presentationAssets)
+  })
+)
+
+export const presentationOutlinesRelations = relations(
+  presentationOutlines,
+  ({ one }) => ({
+    presentation: one(presentations, {
+      fields: [presentationOutlines.presentationId],
+      references: [presentations.id]
+    })
+  })
+)
+
+export const presentationAssetsRelations = relations(
+  presentationAssets,
+  ({ one }) => ({
+    presentation: one(presentations, {
+      fields: [presentationAssets.presentationId],
+      references: [presentations.id]
+    }),
+    slide: one(presentationSlides, {
+      fields: [presentationAssets.slideId],
+      references: [presentationSlides.id]
+    })
+  })
+)
+
+export const presentationGenerationsRelations = relations(
+  presentationGenerations,
+  ({ one }) => ({
+    presentation: one(presentations, {
+      fields: [presentationGenerations.presentationId],
+      references: [presentations.id]
+    })
+  })
+)
+
+export const presentationExportsRelations = relations(
+  presentationExports,
+  ({ one }) => ({
+    presentation: one(presentations, {
+      fields: [presentationExports.presentationId],
+      references: [presentations.id]
     })
   })
 )

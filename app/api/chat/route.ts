@@ -13,6 +13,10 @@ import { normalizeSearchMode } from '@/lib/config/search-modes'
 import { checkAndEnforceAdaptiveLimit } from '@/lib/rate-limit/adaptive-limit'
 import { checkAndEnforceOverallChatLimit } from '@/lib/rate-limit/chat-limits'
 import { checkAndEnforceGuestLimit } from '@/lib/rate-limit/guest-limit'
+import {
+  classifyBrokIntent,
+  resolveSearchModeForIntent
+} from '@/lib/search/intent-router'
 import { createChatStreamResponse } from '@/lib/streaming/create-chat-stream-response'
 import { createEphemeralChatStreamResponse } from '@/lib/streaming/create-ephemeral-chat-stream-response'
 import { createSimpleChatStreamResponse } from '@/lib/streaming/create-simple-chat-stream-response'
@@ -21,8 +25,7 @@ import { SearchMode } from '@/lib/types/search'
 import {
   getLatestUserMessage,
   getSimpleUtilityReplyForMessage,
-  shouldUseQuickReplyForMessage,
-  shouldUseQuickSearchModeForMessage
+  shouldUseQuickReplyForMessage
 } from '@/lib/utils/chat-routing'
 import { selectModel } from '@/lib/utils/model-selection'
 import { perfLog, perfTime } from '@/lib/utils/perf-logging'
@@ -41,7 +44,8 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json()
-    const { message, messages, chatId, trigger, messageId, isNewChat } = body
+    const { message, messages, chatId, trigger, messageId, isNewChat, mode } =
+      body
 
     perfLog(
       `API Route - Start: chatId=${chatId}, trigger=${trigger}, isNewChat=${isNewChat}`
@@ -125,27 +129,28 @@ export async function POST(req: Request) {
 
     // Get search mode from cookie
     const searchModeCookie = cookieStore.get('searchMode')?.value
-    const requestedSearchMode: SearchMode =
-      normalizeSearchMode(searchModeCookie)
+    const requestedSearchMode: SearchMode = normalizeSearchMode(
+      typeof mode === 'string' ? mode : searchModeCookie
+    )
     const currentUserMessage =
       message ?? getLatestUserMessage(Array.isArray(messages) ? messages : [])
-    const shouldUseQuickSearchMode =
-      shouldUseQuickSearchModeForMessage(currentUserMessage)
-    const isExplicitMode =
-      requestedSearchMode === 'search' ||
-      requestedSearchMode === 'deep' ||
-      requestedSearchMode === 'code'
+    const intentDecision = classifyBrokIntent(currentUserMessage)
     const searchMode: SearchMode = shouldUseQuickReplyForMessage(
       currentUserMessage
     )
       ? 'quick'
-      : isExplicitMode
-        ? requestedSearchMode
-        : shouldUseQuickSearchMode
-          ? 'quick'
-          : requestedSearchMode
+      : resolveSearchModeForIntent({
+          intent: intentDecision.intent,
+          requestedSearchMode
+        })
     const simpleReply = getSimpleUtilityReplyForMessage(currentUserMessage)
     if (simpleReply && trigger === 'submit-message') {
+      // Enforce rate limits even for simple utility replies
+      if (!isGuest) {
+        const overallLimitResponse =
+          await checkAndEnforceOverallChatLimit(userId)
+        if (overallLimitResponse) return overallLimitResponse
+      }
       return createSimpleChatStreamResponse({
         chatId,
         isNewChat,
@@ -235,6 +240,9 @@ export async function POST(req: Request) {
           metadata: {
             trigger,
             searchMode,
+            intent: intentDecision.intent,
+            intentReason: intentDecision.reason,
+            connector: intentDecision.connector,
             modelId: selectedModel.id,
             providerId: selectedModel.providerId
           }
@@ -259,7 +267,7 @@ export async function POST(req: Request) {
           userId: userId, // userId is guaranteed to be non-null after authentication check above
           trigger,
           messageId,
-          abortSignal: searchMode === 'deep' ? undefined : req.signal,
+          abortSignal: req.signal,
           isNewChat,
           searchMode,
           taskId: task?.id

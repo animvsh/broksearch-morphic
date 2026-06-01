@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 
 import { CreateApiKeyInput } from '@/lib/actions/api-keys'
+import { API_KEY_LIMITS } from '@/lib/brok/api-platform'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -108,6 +109,7 @@ export function CreateApiKeyForm({
   const [selectedScopes, setSelectedScopes] = useState<string[]>(['chat:write'])
   const [rpmLimit, setRpmLimit] = useState(60)
   const [dailyLimit, setDailyLimit] = useState(5000)
+  const [monthlyBudgetDollars, setMonthlyBudgetDollars] = useState(0)
   const [createdKey, setCreatedKey] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -132,7 +134,7 @@ export function CreateApiKeyForm({
         allowedModels: selectedModels,
         rpmLimit,
         dailyRequestLimit: dailyLimit,
-        monthlyBudgetCents: 0
+        monthlyBudgetCents: Math.round(monthlyBudgetDollars * 100)
       })
       setCreatedKey(result)
     } catch (error) {
@@ -210,6 +212,10 @@ export function CreateApiKeyForm({
             <SummaryItem
               label="Rate limit"
               value={`${createdKey.rpmLimit} RPM`}
+            />
+            <SummaryItem
+              label="Budget"
+              value={formatBudget(createdKey.monthlyBudgetCents)}
             />
           </div>
         </div>
@@ -380,8 +386,8 @@ export function CreateApiKeyForm({
                   type="number"
                   value={rpmLimit}
                   onChange={e => setRpmLimit(Number(e.target.value))}
-                  min={1}
-                  max={1000}
+                  min={API_KEY_LIMITS.rpmMin}
+                  max={API_KEY_LIMITS.rpmMax}
                   className="mt-2 h-11"
                 />
               </div>
@@ -392,8 +398,40 @@ export function CreateApiKeyForm({
                   type="number"
                   value={dailyLimit}
                   onChange={e => setDailyLimit(Number(e.target.value))}
-                  min={1}
-                  max={100000}
+                  min={API_KEY_LIMITS.dailyMin}
+                  max={API_KEY_LIMITS.dailyMax}
+                  className="mt-2 h-11"
+                />
+              </div>
+              <div>
+                <Label htmlFor="budget">Monthly budget</Label>
+                <div className="relative mt-2">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    $
+                  </span>
+                  <Input
+                    id="budget"
+                    type="number"
+                    value={monthlyBudgetDollars}
+                    onChange={e =>
+                      setMonthlyBudgetDollars(Number(e.target.value))
+                    }
+                    min={API_KEY_LIMITS.monthlyBudgetMinCents / 100}
+                    max={API_KEY_LIMITS.monthlyBudgetMaxCents / 100}
+                    step={1}
+                    className="h-11 pl-7"
+                  />
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Set 0 for unlimited spend on this key.
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="budget-preview">Stored budget</Label>
+                <Input
+                  id="budget-preview"
+                  value={formatBudget(Math.round(monthlyBudgetDollars * 100))}
+                  readOnly
                   className="mt-2 h-11"
                 />
               </div>
@@ -434,4 +472,13 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
       <p className="mt-1 truncate font-medium">{value}</p>
     </div>
   )
+}
+
+function formatBudget(cents: number | null) {
+  if (!cents) return 'Unlimited'
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0
+  }).format(cents / 100)
 }

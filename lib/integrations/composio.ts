@@ -1,3 +1,9 @@
+import {
+  getConnectorToolkitEnvKeys,
+  getDefaultConnectorToolkitSlugs,
+  normalizeConnectorToolkit
+} from '@/lib/integrations/toolkit-registry'
+
 type ComposioRequestOptions = {
   method?: 'GET' | 'POST'
   query?: URLSearchParams
@@ -43,16 +49,7 @@ type ComposioConnectToolkitAction = 'add' | 'rename' | 'list' | 'remove'
 
 const DEFAULT_COMPOSIO_BASE_URL = 'https://backend.composio.dev'
 const DEFAULT_COMPOSIO_CONNECT_MCP_URL = 'https://connect.composio.dev/mcp'
-const DEFAULT_CONNECT_TOOLKITS = [
-  'googlesuper',
-  'linear',
-  'github',
-  'gmail',
-  'googlecalendar',
-  'googledocs',
-  'googlemeet',
-  'slack'
-]
+const DEFAULT_CONNECT_TOOLKITS = getDefaultConnectorToolkitSlugs()
 const CONNECT_KEY_PREFIX = 'ck_'
 
 const TOOLKIT_AUTH_CONFIG_ENV_KEYS: Record<string, string[]> = {
@@ -72,6 +69,10 @@ const TOOLKIT_AUTH_CONFIG_ENV_KEYS: Record<string, string[]> = {
     'COMPOSIO_GOOGLEDOCS_AUTH_CONFIG_ID',
     'COMPOSIO_GOOGLE_DOCS_AUTH_CONFIG_ID'
   ],
+  google_slides: [
+    'COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_SLIDES_AUTH_CONFIG_ID'
+  ],
   google_meet: [
     'COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID',
     'COMPOSIO_GOOGLE_MEET_AUTH_CONFIG_ID'
@@ -84,6 +85,10 @@ const TOOLKIT_AUTH_CONFIG_ENV_KEYS: Record<string, string[]> = {
   googledocs: [
     'COMPOSIO_GOOGLEDOCS_AUTH_CONFIG_ID',
     'COMPOSIO_GOOGLE_DOCS_AUTH_CONFIG_ID'
+  ],
+  googleslides: [
+    'COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_SLIDES_AUTH_CONFIG_ID'
   ],
   googlemeet: [
     'COMPOSIO_GOOGLEMEET_AUTH_CONFIG_ID',
@@ -98,6 +103,10 @@ const TOOLKIT_AUTH_CONFIG_ENV_KEYS: Record<string, string[]> = {
     'COMPOSIO_GOOGLE_SUPER_AUTH_CONFIG_ID'
   ],
   linear: ['COMPOSIO_LINEAR_AUTH_CONFIG_ID'],
+  slides: [
+    'COMPOSIO_GOOGLESLIDES_AUTH_CONFIG_ID',
+    'COMPOSIO_GOOGLE_SLIDES_AUTH_CONFIG_ID'
+  ],
   slack: ['COMPOSIO_SLACK_AUTH_CONFIG_ID'],
   supabase: ['COMPOSIO_SUPABASE_AUTH_CONFIG_ID']
 }
@@ -142,7 +151,7 @@ function resolveConnectToolkits() {
   const unique = new Set(
     raw
       .split(',')
-      .map(value => value.trim().toLowerCase())
+      .map(value => normalizeConnectorToolkit(value.trim().toLowerCase()))
       .filter(Boolean)
   )
 
@@ -391,7 +400,7 @@ function inferToolkitFromAuthConfigId(authConfigId?: string) {
 function resolveToolkitEnvKeys(toolkitSlug?: string) {
   if (!toolkitSlug) return []
 
-  const normalized = toolkitSlug.trim().toLowerCase()
+  const normalized = normalizeConnectorToolkit(toolkitSlug)
   const compact = normalized.replace(/[-_]+/g, '')
   const upper = toolkitSlug
     .trim()
@@ -402,6 +411,7 @@ function resolveToolkitEnvKeys(toolkitSlug?: string) {
 
   const keys = [
     `COMPOSIO_${upper}_AUTH_CONFIG_ID`,
+    ...getConnectorToolkitEnvKeys(normalized),
     ...(TOOLKIT_AUTH_CONFIG_ENV_KEYS[normalized] ?? []),
     ...(TOOLKIT_AUTH_CONFIG_ENV_KEYS[compact] ?? [])
   ]
@@ -416,7 +426,10 @@ function authConfigMatchesToolkit(
   if (!config.id) return false
   if (!toolkitSlug) return true
 
-  return config.toolkit_slug === toolkitSlug
+  return (
+    normalizeConnectorToolkit(config.toolkit_slug) ===
+    normalizeConnectorToolkit(toolkitSlug)
+  )
 }
 
 function resolveToolkitSlug(data: Record<string, unknown>) {
@@ -562,11 +575,11 @@ async function composioRequest(
 }
 
 export function isComposioConnectMode() {
-  if (process.env.COMPOSIO_FORCE_CONNECT_MODE === 'true') {
-    return Boolean(resolveConnectApiKey())
+  if (process.env.COMPOSIO_FORCE_BACKEND_MODE === 'true') {
+    return false
   }
 
-  return Boolean(resolveConnectApiKey() && !resolveBackendApiKey())
+  return Boolean(resolveConnectApiKey())
 }
 
 export function isComposioConfigured() {
@@ -582,8 +595,14 @@ export async function listConnectedAccounts(
   toolkitSlug?: string,
   limit: number = 20
 ): Promise<ComposioConnectedAccount[]> {
+  const normalizedToolkitSlug = toolkitSlug
+    ? normalizeConnectorToolkit(toolkitSlug)
+    : undefined
+
   if (isComposioConnectMode()) {
-    const toolkits = toolkitSlug ? [toolkitSlug] : resolveConnectToolkits()
+    const toolkits = normalizedToolkitSlug
+      ? [normalizedToolkitSlug]
+      : resolveConnectToolkits()
     const settled = await Promise.allSettled(
       toolkits.map(async slug => {
         const payload = await composioManageConnectionsConnect({
@@ -595,21 +614,11 @@ export async function listConnectedAccounts(
     )
 
     const combined: ComposioConnectedAccount[] = []
-    let firstError: Error | null = null
 
     for (const item of settled) {
       if (item.status === 'fulfilled') {
         combined.push(...item.value)
-      } else if (!firstError) {
-        firstError =
-          item.reason instanceof Error
-            ? item.reason
-            : new Error('Failed to query Composio Connect accounts')
       }
-    }
-
-    if (combined.length === 0 && firstError) {
-      throw firstError
     }
 
     return combined.slice(0, limit)
@@ -618,7 +627,9 @@ export async function listConnectedAccounts(
   const query = new URLSearchParams()
   query.set('limit', String(limit))
   if (userId) query.append('user_ids', userId)
-  if (toolkitSlug) query.append('toolkit_slugs', toolkitSlug)
+  if (normalizedToolkitSlug) {
+    query.append('toolkit_slugs', normalizedToolkitSlug)
+  }
 
   const payload = await composioRequest('/connected_accounts', { query })
   const items = extractArrayPayload(payload)
@@ -645,8 +656,14 @@ export async function listConnectedAccounts(
 export async function listAuthConfigs(
   toolkitSlug?: string
 ): Promise<ComposioAuthConfig[]> {
+  const normalizedToolkitSlug = toolkitSlug
+    ? normalizeConnectorToolkit(toolkitSlug)
+    : undefined
+
   if (isComposioConnectMode()) {
-    const toolkits = toolkitSlug ? [toolkitSlug] : resolveConnectToolkits()
+    const toolkits = normalizedToolkitSlug
+      ? [normalizedToolkitSlug]
+      : resolveConnectToolkits()
     return toolkits.map(slug => ({
       id: `connect-${slug}`,
       toolkit_slug: slug,
@@ -656,7 +673,9 @@ export async function listAuthConfigs(
   }
 
   const query = new URLSearchParams()
-  if (toolkitSlug) query.append('toolkit_slugs', toolkitSlug)
+  if (normalizedToolkitSlug) {
+    query.append('toolkit_slugs', normalizedToolkitSlug)
+  }
 
   const payload = await composioRequest('/auth_configs', { query })
   const items = extractArrayPayload(payload)
@@ -695,9 +714,13 @@ export async function createConnectedAccountLink(params: {
   toolkitSlug?: string
   redirectUrl?: string
 }) {
+  const normalizedToolkitSlug = params.toolkitSlug
+    ? normalizeConnectorToolkit(params.toolkitSlug)
+    : undefined
+
   if (isComposioConnectMode()) {
     const toolkitSlug =
-      params.toolkitSlug || inferToolkitFromAuthConfigId(params.authConfigId)
+      normalizedToolkitSlug || inferToolkitFromAuthConfigId(params.authConfigId)
 
     if (!toolkitSlug) {
       throw new Error(
@@ -705,35 +728,41 @@ export async function createConnectedAccountLink(params: {
       )
     }
 
-    const payload = await composioManageConnectionsConnect({
-      toolkits: [{ name: toolkitSlug, action: 'add' }],
-      sessionId: buildConnectSessionId(params.userId, toolkitSlug),
-      ...(params.redirectUrl ? { redirectUrl: params.redirectUrl } : {})
-    })
+    try {
+      const payload = await composioManageConnectionsConnect({
+        toolkits: [{ name: toolkitSlug, action: 'add' }],
+        sessionId: buildConnectSessionId(params.userId, toolkitSlug),
+        ...(params.redirectUrl ? { redirectUrl: params.redirectUrl } : {})
+      })
 
-    const toolkitResults = extractToolkitResultsFromConnect(payload)
-    const toolkitPayload =
-      toolkitResults[toolkitSlug] &&
-      typeof toolkitResults[toolkitSlug] === 'object'
-        ? (toolkitResults[toolkitSlug] as Record<string, unknown>)
-        : null
+      const toolkitResults = extractToolkitResultsFromConnect(payload)
+      const toolkitPayload =
+        toolkitResults[toolkitSlug] &&
+        typeof toolkitResults[toolkitSlug] === 'object'
+          ? (toolkitResults[toolkitSlug] as Record<string, unknown>)
+          : null
 
-    const url = resolveConnectionUrl(toolkitPayload || payload)
-    return {
-      raw: payload,
-      url
+      const url = resolveConnectionUrl(toolkitPayload || payload)
+      return {
+        raw: payload,
+        url
+      }
+    } catch (error) {
+      if (!resolveBackendApiKey()) {
+        throw error
+      }
     }
   }
 
   const authConfigId = await resolveBackendAuthConfigId(
     params.authConfigId,
-    params.toolkitSlug
+    normalizedToolkitSlug
   )
 
   if (!authConfigId) {
     throw new Error(
-      params.toolkitSlug
-        ? `Could not find a Composio auth config for ${params.toolkitSlug}. Set COMPOSIO_${params.toolkitSlug.toUpperCase()}_AUTH_CONFIG_ID or create an enabled auth config.`
+      normalizedToolkitSlug
+        ? `Could not find a Composio auth config for ${normalizedToolkitSlug}. Set COMPOSIO_${normalizedToolkitSlug.toUpperCase()}_AUTH_CONFIG_ID or create an enabled auth config.`
         : 'authConfigId is required for backend Composio mode.'
     )
   }
@@ -743,7 +772,7 @@ export async function createConnectedAccountLink(params: {
     body: {
       auth_config_id: authConfigId,
       user_id: params.userId,
-      ...(params.toolkitSlug ? { toolkit_slug: params.toolkitSlug } : {}),
+      ...(normalizedToolkitSlug ? { toolkit_slug: normalizedToolkitSlug } : {}),
       ...(params.redirectUrl
         ? {
             redirect_url: params.redirectUrl,

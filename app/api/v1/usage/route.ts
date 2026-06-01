@@ -22,6 +22,18 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams
   const period = searchParams.get('period') || 'month'
+  if (period !== 'day' && period !== 'week' && period !== 'month') {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'invalid_request_error',
+          code: 'invalid_period',
+          message: 'period must be one of day, week, or month.'
+        }
+      },
+      { status: 400 }
+    )
+  }
 
   let dateFrom = new Date()
   if (period === 'day') {
@@ -60,8 +72,15 @@ export async function GET(request: NextRequest) {
           gte(usageEvents.createdAt, dateFrom)
         )
       )
-  } catch {
-    if (auth.apiKey.id === '00000000-0000-0000-0000-000000000001') {
+  } catch (error) {
+    if (
+      process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK === 'true' &&
+      process.env.BROK_CLOUD_DEPLOYMENT !== 'true'
+    ) {
+      console.warn(
+        '[v1/usage] Returning degraded zeros (local fallback active):',
+        error
+      )
       return NextResponse.json(
         {
           period,

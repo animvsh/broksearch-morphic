@@ -15,6 +15,7 @@ describe('BrokCode generation prompts', () => {
     expect(prompt).toContain('empty/loading/error states')
     expect(prompt).toContain('index.html, styles.css, and app.js')
     expect(prompt).toContain('Brok API compatible')
+    expect(prompt).toContain('expectedChecksum')
   })
 
   it('keeps browser builder prompts aligned with runtime prompts', () => {
@@ -23,5 +24,6 @@ describe('BrokCode generation prompts', () => {
     expect(prompt).toContain('not a generic demo shell')
     expect(prompt).toContain('User command: Build a CRM')
     expect(prompt).toContain('hot-reload the managed cloud preview')
+    expect(prompt).toContain('patch_file search/replace')
   })
 })

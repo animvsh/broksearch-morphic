@@ -22,7 +22,8 @@ const FEATURE_LABELS: Record<AppFeature, string> = {
   brokmail: 'BrokMail',
   brokcode: 'BrokCode',
   tools: 'Tools',
-  api_platform: 'API platform'
+  api_platform: 'API platform',
+  presentations: 'Presentations'
 }
 
 function getEntryFeatures(features: string[] | null | undefined) {

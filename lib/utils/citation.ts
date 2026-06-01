@@ -71,35 +71,41 @@ export function processCitations(
   content: string,
   citationMaps: Record<string, Record<number, SearchResultItem>>
 ): string {
-  if (!citationMaps || !content || Object.keys(citationMaps).length === 0) {
-    return content || ''
-  }
+  if (!content) return ''
 
-  // Replace [number](#toolCallId) with [number](actual-url)
-  // Also handle cases with spaces: [ number ]
+  const hasCitationMaps = citationMaps && Object.keys(citationMaps).length > 0
+
   return content.replace(
     /\[\s*(\d+)\s*\]\(#([^)]+)\)/g,
-    (_match, num, toolCallId) => {
-      const citationNum = parseInt(num, 10)
+    (_match, num, rawReference) => {
+      const visibleNum = parseInt(num, 10)
+      const [toolCallId, sourceIndex] = String(rawReference).split(':')
+      const citationNum = parseInt(sourceIndex || num, 10)
 
-      // Validate citation number bounds
-      if (isNaN(citationNum) || citationNum < 1 || citationNum > 100) {
+      if (
+        isNaN(visibleNum) ||
+        isNaN(citationNum) ||
+        citationNum < 1 ||
+        citationNum > 100
+      ) {
         return `[${num}]`
       }
 
-      // Get the citation map for this toolCallId
+      if (!hasCitationMaps) {
+        return `[${visibleNum}]`
+      }
+
       const citationMap = citationMaps[toolCallId]
       if (!citationMap) {
-        return `[${citationNum}]`
+        return `[${visibleNum}]`
       }
 
       const citation = citationMap[citationNum]
       if (!citation || !isValidUrl(citation.url)) {
-        return `[${citationNum}]`
+        return `[${visibleNum}]`
       }
 
-      // Encode URI to prevent injection attacks
-      return `[${citationNum}](${encodeURI(citation.url)})`
+      return `[${visibleNum}](${encodeURI(citation.url)})`
     }
   )
 }

@@ -23,7 +23,9 @@ import {
   listConnectedAccounts
 } from '@/lib/integrations/composio'
 
+import { POST as connectCalendar } from '../gcal/connect/route'
 import { GET as getCalendarEvents } from '../gcal/events/route'
+import { GET as getCalendarStatus } from '../gcal/status/route'
 import { POST as connectGmail } from '../gmail/connect/route'
 import { GET as getGmailStatus } from '../gmail/status/route'
 import { GET as getGmailThreads } from '../gmail/threads/route'
@@ -61,6 +63,42 @@ describe('BrokMail Gmail routes', () => {
       executionReady: false
     })
     expect(body.message).toContain('COMPOSIO_API_KEY')
+  })
+
+  it('requires BrokMail access before returning Gmail configuration status', async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(null)
+    vi.mocked(isComposioConfigured).mockReturnValue(false)
+
+    const response = await getGmailStatus()
+    const body = await response.json()
+
+    expect(response.status).toBe(401)
+    expect(body).toEqual({ error: 'Authentication required' })
+    expect(isComposioConfigured).not.toHaveBeenCalled()
+  })
+
+  it('requires BrokMail access before creating Gmail connection links', async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(null)
+    vi.mocked(isComposioConfigured).mockReturnValue(false)
+
+    const request = new Request(
+      'https://brok.test/api/brokmail/gmail/connect',
+      {
+        method: 'POST',
+        headers: {
+          host: 'brok.test',
+          'x-forwarded-proto': 'https'
+        }
+      }
+    )
+
+    const response = await connectGmail(request as any)
+    const body = await response.json()
+
+    expect(response.status).toBe(401)
+    expect(body).toEqual({ error: 'Authentication required' })
+    expect(isComposioConfigured).not.toHaveBeenCalled()
+    expect(createConnectedAccountLink).not.toHaveBeenCalled()
   })
 
   it('creates Gmail links with the dedicated gmail toolkit before googlesuper', async () => {
@@ -254,6 +292,44 @@ describe('BrokMail Gmail routes', () => {
         })
       })
     )
+  })
+
+  it('requires BrokMail access before Calendar status or event sync', async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(null)
+    vi.mocked(isComposioConfigured).mockReturnValue(false)
+
+    const statusResponse = await getCalendarStatus()
+    const statusBody = await statusResponse.json()
+    const eventsResponse = await getCalendarEvents()
+    const eventsBody = await eventsResponse.json()
+
+    expect(statusResponse.status).toBe(401)
+    expect(statusBody).toEqual({ error: 'Authentication required' })
+    expect(eventsResponse.status).toBe(401)
+    expect(eventsBody).toEqual({ error: 'Authentication required' })
+    expect(isComposioConfigured).not.toHaveBeenCalled()
+    expect(executeComposioTool).not.toHaveBeenCalled()
+  })
+
+  it('requires BrokMail access before creating Calendar connection links', async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(null)
+    vi.mocked(isComposioConfigured).mockReturnValue(false)
+
+    const request = new Request('https://brok.test/api/brokmail/gcal/connect', {
+      method: 'POST',
+      headers: {
+        host: 'brok.test',
+        'x-forwarded-proto': 'https'
+      }
+    })
+
+    const response = await connectCalendar(request as any)
+    const body = await response.json()
+
+    expect(response.status).toBe(401)
+    expect(body).toEqual({ error: 'Authentication required' })
+    expect(isComposioConfigured).not.toHaveBeenCalled()
+    expect(createConnectedAccountLink).not.toHaveBeenCalled()
   })
 
   it('does not mask unavailable Calendar list tools as an empty success', async () => {

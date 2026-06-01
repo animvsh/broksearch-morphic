@@ -1,30 +1,86 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { chromium } from 'playwright'
+
+import {
+  buildBrokCodeAcceptanceSuiteEval,
+  formatBrokCodeAcceptanceAdminReview
+} from '../lib/brokcode/acceptance-eval'
+import {
+  BROKCODE_ACCEPTANCE_MATRIX,
+  type BrokCodeAcceptanceCase,
+  buildBrokCodeAcceptancePrompt,
+  getBrokCodeAcceptanceCase,
+  getBrokCodeAcceptanceCases,
+  matchesBrokCodeAcceptanceTerms
+} from '../lib/brokcode/acceptance-matrix'
 
 const execFileAsync = promisify(execFile)
 
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3000'
 const apiKey = process.env.SMOKE_BROKCODE_API_KEY || 'brok_sk_local_smoke'
 const skipTui = process.env.SMOKE_BROKCODE_SKIP_TUI === 'true'
-const prompt =
-  process.env.SMOKE_BROKCODE_PROMPT ||
-  [
-    'Create a polished single-page bakery landing page.',
-    'Return named files for index.html, styles.css, and app.js.',
-    'Include a hero, menu cards, and a working newsletter form.'
-  ].join(' ')
+const matrixMode = process.env.SMOKE_BROKCODE_MATRIX === 'true'
+const acceptanceCase =
+  getBrokCodeAcceptanceCase(process.env.SMOKE_BROKCODE_CASE) ??
+  BROKCODE_ACCEPTANCE_MATRIX[0]
+const prompt = process.env.SMOKE_BROKCODE_PROMPT || acceptanceCase.prompt
 
 type SseResult = {
   runtime?: string
   model?: string
   content?: string
   preview_url?: string | null
+  task_id?: string | null
+  status_url?: string | null
+  events_url?: string | null
   generated_files?: string[]
+  file_changes?: Array<{
+    type?: string
+    path?: string
+    beforeChecksum?: string | null
+    afterChecksum?: string | null
+    summary?: string
+  }>
   note?: string
+}
+
+type SseTaskInfo = {
+  task_id?: string
+  status_url?: string
+  events_url?: string
+}
+
+type ProjectFile = {
+  path: string
+  content: string
+  language?: string | null
+}
+
+type SmokeCaseReport = {
+  id: string
+  title: string
+  category: BrokCodeAcceptanceCase['category']
+  status: 'passed' | 'failed'
+  checks: string[]
+  startedAt: string
+  completedAt?: string
+  projectId?: string
+  previewUrl?: string
+  deploymentUrl?: string
+  error?: string
+}
+
+type SmokeReport = {
+  startedAt: string
+  completedAt: string
+  baseUrl: string
+  matrixMode: boolean
+  cases: SmokeCaseReport[]
+  tuiStatus: 'passed' | 'skipped'
 }
 
 async function expectJson(response: Response, expectedStatus: number) {
@@ -39,6 +95,89 @@ async function expectJson(response: Response, expectedStatus: number) {
   return body
 }
 
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function fetchTaskResult(taskInfo: SseTaskInfo) {
+  if (!taskInfo.status_url) return null
+
+  const statusUrl = new URL(taskInfo.status_url, baseUrl).toString()
+  const deadline = Date.now() + 90_000
+
+  while (Date.now() < deadline) {
+    const response = await fetch(statusUrl, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      }
+    })
+    const body = await expectJson(response, 200)
+    const task = body?.task
+
+    if (task?.status === 'succeeded') {
+      const projectId = task?.metadata?.projectId
+      const projectResult = task?.result ?? {}
+      let project: any = null
+      let files: ProjectFile[] = []
+
+      if (typeof projectId === 'string' && projectId.length > 0) {
+        const projectResponse = await fetch(
+          `${baseUrl}/api/brokcode/projects/${projectId}/files`,
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey}`
+            }
+          }
+        )
+        const projectBody = await expectJson(projectResponse, 200)
+        project = projectBody?.project
+        files = Array.isArray(projectBody?.files) ? projectBody.files : []
+      }
+
+      const preview = project?.metadata?.preview
+      const fileChanges = Array.isArray(preview?.fileChanges)
+        ? preview.fileChanges
+        : []
+      const generatedFiles =
+        Array.isArray(projectResult.generatedFiles) &&
+        projectResult.generatedFiles.length > 0
+          ? projectResult.generatedFiles
+          : files.map(file => file.path)
+      const previewUrl =
+        projectResult.previewUrl ?? project?.previewUrl ?? preview?.previewUrl
+
+      if (!previewUrl || generatedFiles.length === 0) {
+        throw new Error(
+          `BrokCode task succeeded without recoverable preview/files: ${JSON.stringify(task)}`
+        )
+      }
+
+      return {
+        runtime: projectResult.runtime,
+        model: projectResult.model,
+        content: 'Recovered from completed BrokCode durable task.',
+        preview_url: previewUrl,
+        generated_files: generatedFiles,
+        file_changes: fileChanges,
+        task_id: taskInfo.task_id,
+        status_url: taskInfo.status_url,
+        events_url: taskInfo.events_url,
+        note: 'Recovered from completed BrokCode durable task.'
+      } satisfies SseResult
+    }
+
+    if (task?.status === 'failed' || task?.status === 'cancelled') {
+      throw new Error(
+        `BrokCode durable task ${task.status}: ${task.error ?? 'unknown error'}`
+      )
+    }
+
+    await sleep(2000)
+  }
+
+  throw new Error('BrokCode durable task did not finish after stream closed.')
+}
+
 async function readSseResult(response: Response) {
   if (!response.body) {
     throw new Error('BrokCode execute response did not include a stream body.')
@@ -50,6 +189,7 @@ async function readSseResult(response: Response) {
   let sawStatus = false
   let sawDelta = false
   let result: SseResult | null = null
+  let taskInfo: SseTaskInfo | null = null
 
   while (true) {
     const { done, value } = await reader.read()
@@ -76,6 +216,7 @@ async function readSseResult(response: Response) {
       const payload = JSON.parse(data)
       if (event === 'status') sawStatus = true
       if (event === 'delta') sawDelta = true
+      if (event === 'task') taskInfo = payload as SseTaskInfo
       if (event === 'error') {
         throw new Error(`BrokCode stream error: ${payload?.message ?? data}`)
       }
@@ -87,12 +228,15 @@ async function readSseResult(response: Response) {
 
   if (!sawStatus) throw new Error('BrokCode stream did not emit status events.')
   if (!sawDelta) throw new Error('BrokCode stream did not emit delta events.')
+  if (!result && taskInfo) {
+    result = await fetchTaskResult(taskInfo)
+  }
   if (!result) throw new Error('BrokCode stream did not emit a result event.')
 
   return result
 }
 
-async function createProject() {
+async function createProject(testCase: BrokCodeAcceptanceCase) {
   const response = await fetch(`${baseUrl}/api/brokcode/projects`, {
     method: 'POST',
     headers: {
@@ -100,8 +244,8 @@ async function createProject() {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      name: `Smoke Bakery ${Date.now()}`,
-      description: 'Created by scripts/smoke-brokcode.ts'
+      name: `Smoke ${testCase.title} ${Date.now()}`,
+      description: `Created by scripts/smoke-brokcode.ts for ${testCase.id}`
     })
   })
   const body = await expectJson(response, 201)
@@ -117,7 +261,10 @@ async function createProject() {
   return project as { id: string; name: string; previewUrl?: string | null }
 }
 
-async function executeBuild(projectId: string) {
+async function executeBuild(
+  projectId: string,
+  testCase: BrokCodeAcceptanceCase
+) {
   const response = await fetch(`${baseUrl}/api/brokcode/execute`, {
     method: 'POST',
     headers: {
@@ -125,10 +272,13 @@ async function executeBuild(projectId: string) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      command: prompt,
+      command:
+        testCase.id === acceptanceCase.id && process.env.SMOKE_BROKCODE_PROMPT
+          ? prompt
+          : buildBrokCodeAcceptancePrompt(testCase),
       model: process.env.SMOKE_BROKCODE_MODEL || 'brok-lite',
       source: 'api-smoke',
-      session_id: `brokcode-smoke-${Date.now()}`,
+      session_id: `brokcode-smoke-${testCase.id}-${Date.now()}`,
       project_id: projectId,
       stream: true,
       prefer_pi: false,
@@ -143,10 +293,11 @@ async function executeBuild(projectId: string) {
 
   const result = await readSseResult(response)
   const generatedFiles = result.generated_files ?? []
+  const fileChanges = result.file_changes ?? []
 
-  if (generatedFiles.length < 1) {
+  if (generatedFiles.length < testCase.minimumGeneratedFiles) {
     throw new Error(
-      `expected generated files, got ${JSON.stringify(generatedFiles)}`
+      `expected at least ${testCase.minimumGeneratedFiles} generated files for ${testCase.id}, got ${JSON.stringify(generatedFiles)}`
     )
   }
 
@@ -154,8 +305,12 @@ async function executeBuild(projectId: string) {
     throw new Error('BrokCode result did not include preview_url')
   }
 
+  if (fileChanges.length < 1) {
+    throw new Error('BrokCode result did not include file_changes')
+  }
+
   console.log(
-    `brokcode ok execute runtime=${result.runtime} files=${generatedFiles.join(',')}`
+    `brokcode ok execute case=${testCase.id} runtime=${result.runtime} files=${generatedFiles.join(',')} changes=${fileChanges.length}`
   )
 
   return result as SseResult & {
@@ -164,7 +319,10 @@ async function executeBuild(projectId: string) {
   }
 }
 
-async function verifyFiles(projectId: string) {
+async function verifyFiles(
+  projectId: string,
+  testCase: BrokCodeAcceptanceCase
+) {
   const response = await fetch(
     `${baseUrl}/api/brokcode/projects/${projectId}/files`,
     {
@@ -177,7 +335,7 @@ async function verifyFiles(projectId: string) {
   const files = Array.isArray(body.files) ? body.files : []
   const filePaths = files.map((file: { path?: string }) => file.path)
 
-  for (const required of ['index.html']) {
+  for (const required of testCase.requiredFiles) {
     if (!filePaths.includes(required)) {
       throw new Error(
         `expected saved file ${required}; got ${filePaths.join(',')}`
@@ -185,18 +343,121 @@ async function verifyFiles(projectId: string) {
     }
   }
 
-  for (const expected of ['styles.css', 'app.js']) {
-    if (!filePaths.includes(expected)) {
-      throw new Error(
-        `expected smoke build to save ${expected}; got ${filePaths.join(',')}`
-      )
-    }
+  if (filePaths.length < testCase.minimumGeneratedFiles) {
+    throw new Error(
+      `expected at least ${testCase.minimumGeneratedFiles} saved files for ${testCase.id}; got ${filePaths.join(',')}`
+    )
   }
 
-  console.log(`brokcode ok saved files ${filePaths.join(',')}`)
+  console.log(
+    `brokcode ok saved files case=${testCase.id} ${filePaths.join(',')}`
+  )
 }
 
-async function verifyPreview(previewUrl: string) {
+async function fetchProjectFiles(projectId: string) {
+  const response = await fetch(
+    `${baseUrl}/api/brokcode/projects/${projectId}/files`,
+    {
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      }
+    }
+  )
+  const body = await expectJson(response, 200)
+  return (Array.isArray(body.files) ? body.files : []) as ProjectFile[]
+}
+
+function requireProjectFile(files: ProjectFile[], filePath: string) {
+  const file = files.find(item => item.path === filePath)
+  if (!file) throw new Error(`expected ${filePath} to exist`)
+  return file
+}
+
+async function upsertProjectFile(projectId: string, file: ProjectFile) {
+  const response = await fetch(
+    `${baseUrl}/api/brokcode/projects/${projectId}/files`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(file)
+    }
+  )
+
+  await expectJson(response, 200)
+}
+
+async function verifyTwoEditPreservation(
+  projectId: string,
+  testCase: BrokCodeAcceptanceCase
+) {
+  const initialFiles = await fetchProjectFiles(projectId)
+  const initialIndex = requireProjectFile(initialFiles, 'index.html')
+  const initialStyles = requireProjectFile(initialFiles, 'styles.css')
+  const initialApp = requireProjectFile(initialFiles, 'app.js')
+
+  if (!matchesBrokCodeAcceptanceTerms(initialIndex.content, testCase)) {
+    throw new Error(`initial index.html lost expected ${testCase.id} terms`)
+  }
+
+  await upsertProjectFile(projectId, {
+    ...initialApp,
+    content: `${initialApp.content}
+
+document.body.dataset.brokcodeSmokeEditOne = 'loyalty-copy-preserved';
+`
+  })
+
+  const afterFirstEdit = await fetchProjectFiles(projectId)
+  const firstIndex = requireProjectFile(afterFirstEdit, 'index.html')
+  const firstApp = requireProjectFile(afterFirstEdit, 'app.js')
+
+  if (firstIndex.content !== initialIndex.content) {
+    throw new Error('first edit unexpectedly changed index.html')
+  }
+  if (!firstApp.content.includes('loyalty-copy-preserved')) {
+    throw new Error('first edit did not persist app.js change')
+  }
+
+  await upsertProjectFile(projectId, {
+    ...initialStyles,
+    content: `${initialStyles.content}
+
+.brokcode-smoke-loyalty-pill {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+}
+`
+  })
+
+  const afterSecondEdit = await fetchProjectFiles(projectId)
+  const secondIndex = requireProjectFile(afterSecondEdit, 'index.html')
+  const secondApp = requireProjectFile(afterSecondEdit, 'app.js')
+  const secondStyles = requireProjectFile(afterSecondEdit, 'styles.css')
+
+  if (secondIndex.content !== initialIndex.content) {
+    throw new Error('second edit did not preserve original index.html')
+  }
+  if (!matchesBrokCodeAcceptanceTerms(secondIndex.content, testCase)) {
+    throw new Error(`second edit lost original ${testCase.id} features`)
+  }
+  if (!secondApp.content.includes('loyalty-copy-preserved')) {
+    throw new Error('second edit lost first edit in app.js')
+  }
+  if (!secondStyles.content.includes('brokcode-smoke-loyalty-pill')) {
+    throw new Error('second edit did not persist styles.css change')
+  }
+
+  console.log(`brokcode ok two-edit preservation case=${testCase.id}`)
+}
+
+async function verifyPreview(
+  previewUrl: string,
+  testCase: BrokCodeAcceptanceCase
+) {
   const absolutePreviewUrl = new URL(previewUrl, baseUrl).toString()
   const response = await fetch(absolutePreviewUrl, {
     headers: {
@@ -207,10 +468,6 @@ async function verifyPreview(previewUrl: string) {
 
   if (!response.ok) {
     throw new Error(`preview expected 200, got ${response.status}`)
-  }
-
-  if (!/bakery|baked|menu|newsletter/i.test(html)) {
-    throw new Error('preview HTML did not include expected app copy')
   }
 
   const browser = await chromium.launch({ headless: true })
@@ -269,8 +526,10 @@ async function verifyPreview(previewUrl: string) {
     throw new Error(`mobile preview has horizontal overflow ${mobileOverflowX}`)
   }
 
-  if (!/bakery|baked|menu|newsletter/i.test(visibleText)) {
-    throw new Error(`preview text missing expected app copy; title=${title}`)
+  if (!matchesBrokCodeAcceptanceTerms(visibleText, testCase)) {
+    throw new Error(
+      `preview text missing expected ${testCase.id} copy; title=${title}`
+    )
   }
 
   if (!quality.hasViewport) {
@@ -281,8 +540,10 @@ async function verifyPreview(previewUrl: string) {
     throw new Error('preview missing stylesheet or inline style')
   }
 
-  if (quality.interactionCount < 1) {
-    throw new Error('preview missing useful interaction')
+  if (quality.interactionCount < testCase.minimumInteractions) {
+    throw new Error(
+      `preview missing useful interactions: expected ${testCase.minimumInteractions}, got ${quality.interactionCount}`
+    )
   }
 
   if (quality.textLength < 120 || quality.hasPlaceholderCopy) {
@@ -291,10 +552,13 @@ async function verifyPreview(previewUrl: string) {
     )
   }
 
-  console.log(`brokcode ok preview ${absolutePreviewUrl}`)
+  console.log(`brokcode ok preview case=${testCase.id} ${absolutePreviewUrl}`)
 }
 
-async function verifyDeploy(projectId: string) {
+async function verifyDeploy(
+  projectId: string,
+  testCase: BrokCodeAcceptanceCase
+) {
   const response = await fetch(`${baseUrl}/api/brokcode/deploy`, {
     method: 'POST',
     headers: {
@@ -318,14 +582,15 @@ async function verifyDeploy(projectId: string) {
     )
   }
 
-  await verifyPreview(deploymentUrl)
-  console.log(`brokcode ok deploy ${deploymentUrl}`)
+  await verifyPreview(deploymentUrl, testCase)
+  console.log(`brokcode ok deploy case=${testCase.id} ${deploymentUrl}`)
+  return deploymentUrl
 }
 
 async function runTuiSmoke() {
   if (skipTui) {
     console.log('brokcode skip tui smoke')
-    return
+    return 'skipped' as const
   }
 
   const tempDir = await mkdtemp(path.join(tmpdir(), 'brokcode-smoke-'))
@@ -392,17 +657,104 @@ async function runTuiSmoke() {
   }
 
   console.log('brokcode ok tui project/file/preview/deploy sync')
+  return 'passed' as const
+}
+
+async function writeSmokeReport(report: SmokeReport) {
+  const safeTimestamp = report.startedAt.replace(/[:.]/g, '-')
+  const reportDir = path.join(process.cwd(), '.brok-smoke', 'brokcode')
+  const jsonPath = path.join(reportDir, `smoke-${safeTimestamp}.json`)
+  const markdownPath = path.join(reportDir, `smoke-${safeTimestamp}.md`)
+  const latestJsonPath = path.join(reportDir, 'latest.json')
+  const latestMarkdownPath = path.join(reportDir, 'latest.md')
+  const adminSummaryPath = path.join(reportDir, 'latest-admin-summary.md')
+  const evalRecord = buildBrokCodeAcceptanceSuiteEval(report)
+  const adminSummary = formatBrokCodeAcceptanceAdminReview(evalRecord)
+  await mkdir(reportDir, { recursive: true })
+  await writeFile(jsonPath, `${JSON.stringify(evalRecord, null, 2)}\n`, 'utf8')
+  await writeFile(
+    latestJsonPath,
+    `${JSON.stringify(evalRecord, null, 2)}\n`,
+    'utf8'
+  )
+  await writeFile(markdownPath, adminSummary, 'utf8')
+  await writeFile(latestMarkdownPath, adminSummary, 'utf8')
+  await writeFile(adminSummaryPath, adminSummary, 'utf8')
+  console.log(
+    `brokcode ok report ${markdownPath} score=${evalRecord.score} status=${evalRecord.status}`
+  )
 }
 
 async function main() {
   console.log(`brokcode smoke base ${baseUrl}`)
-  const project = await createProject()
-  const result = await executeBuild(project.id)
-  await verifyFiles(project.id)
-  await verifyPreview(result.preview_url)
-  await verifyDeploy(project.id)
-  await runTuiSmoke()
-  console.log('brokcode smoke ok')
+  const startedAt = new Date().toISOString()
+  const reports: SmokeCaseReport[] = []
+  let tuiStatus: SmokeReport['tuiStatus'] = skipTui ? 'skipped' : 'passed'
+  const cases = matrixMode
+    ? getBrokCodeAcceptanceCases(
+        process.env.SMOKE_BROKCODE_CASES?.split(',')
+          .map(value => value.trim())
+          .filter(Boolean)
+      )
+    : [acceptanceCase]
+
+  try {
+    for (const testCase of cases) {
+      const caseReport: SmokeCaseReport = {
+        id: testCase.id,
+        title: testCase.title,
+        category: testCase.category,
+        status: 'failed',
+        checks: [],
+        startedAt: new Date().toISOString()
+      }
+      reports.push(caseReport)
+
+      try {
+        const project = await createProject(testCase)
+        caseReport.projectId = project.id
+        caseReport.checks.push('project-created')
+
+        const result = await executeBuild(project.id, testCase)
+        caseReport.previewUrl = result.preview_url
+        caseReport.checks.push('stream-result', 'file-changes')
+
+        await verifyFiles(project.id, testCase)
+        caseReport.checks.push('files-saved')
+
+        await verifyPreview(result.preview_url, testCase)
+        caseReport.checks.push('preview-desktop-mobile')
+
+        await verifyTwoEditPreservation(project.id, testCase)
+        caseReport.checks.push('two-edit-preservation')
+
+        caseReport.deploymentUrl = await verifyDeploy(project.id, testCase)
+        caseReport.checks.push('managed-deploy')
+        caseReport.status = 'passed'
+      } catch (error) {
+        caseReport.error =
+          error instanceof Error ? error.message : String(error)
+        throw error
+      } finally {
+        caseReport.completedAt = new Date().toISOString()
+      }
+    }
+
+    tuiStatus = await runTuiSmoke()
+  } finally {
+    await writeSmokeReport({
+      startedAt,
+      completedAt: new Date().toISOString(),
+      baseUrl,
+      matrixMode,
+      cases: reports,
+      tuiStatus
+    })
+  }
+
+  console.log(
+    `brokcode smoke ok cases=${cases.map(testCase => testCase.id).join(',')}`
+  )
 }
 
 main().catch(error => {

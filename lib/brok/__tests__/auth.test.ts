@@ -97,11 +97,19 @@ describe('verifyRequestAuth', () => {
   })
 
   it('returns error for unknown API key', async () => {
-    // Setup mock chain: db.select().from().where().limit() returns empty array
+    // First lookup (legacy global-salt hash): empty
     mockSelect.mockReturnValueOnce({
       from: mockFrom.mockReturnValueOnce({
         where: mockWhere.mockReturnValueOnce({
-          limit: mockLimit.mockReturnValueOnce([]) // Empty array = no key found
+          limit: mockLimit.mockReturnValueOnce([])
+        })
+      })
+    })
+    // Second lookup (per-key salt candidate scan): empty
+    mockSelect.mockReturnValueOnce({
+      from: mockFrom.mockReturnValueOnce({
+        where: mockWhere.mockReturnValueOnce({
+          limit: mockLimit.mockReturnValueOnce([])
         })
       })
     })

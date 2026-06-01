@@ -6,6 +6,9 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createProviderRegistry, LanguageModel } from 'ai'
 import { createOllama } from 'ai-sdk-ollama'
 
+import { BROK_PROVIDER_API_KEY, BROK_PROVIDER_BASE_URL } from '@/lib/ai/brok'
+import { getBrokProviderModelId } from '@/lib/brok/models'
+
 // Build providers object conditionally
 const providers: Record<string, any> = {
   openai,
@@ -13,9 +16,8 @@ const providers: Record<string, any> = {
   google,
   'openai-compatible': createOpenAICompatible({
     name: 'brok',
-    apiKey: process.env.OPENAI_COMPATIBLE_API_KEY,
-    baseURL:
-      process.env.OPENAI_COMPATIBLE_API_BASE_URL || 'https://api.minimax.io/v1',
+    apiKey: BROK_PROVIDER_API_KEY,
+    baseURL: BROK_PROVIDER_BASE_URL,
     includeUsage: true
   }),
   gateway: createGateway({
@@ -33,6 +35,19 @@ if (ollamaProvider) {
 }
 
 export const registry = createProviderRegistry(providers)
+
+function resolveRegistryModelId(model: string): string {
+  const openAiCompatiblePrefix = 'openai-compatible:'
+
+  if (!model.startsWith(openAiCompatiblePrefix)) {
+    return model
+  }
+
+  const modelId = model.slice(openAiCompatiblePrefix.length)
+  const providerModel = getBrokProviderModelId(modelId)
+
+  return providerModel ? `${openAiCompatiblePrefix}${providerModel}` : model
+}
 
 export function getModel(model: string): LanguageModel {
   // For Ollama models, bypass the registry to pass model-level settings
@@ -53,7 +68,9 @@ export function getModel(model: string): LanguageModel {
   }
 
   return registry.languageModel(
-    model as Parameters<typeof registry.languageModel>[0]
+    resolveRegistryModelId(model) as Parameters<
+      typeof registry.languageModel
+    >[0]
   )
 }
 
@@ -66,10 +83,7 @@ export function isProviderEnabled(providerId: string): boolean {
     case 'google':
       return !!process.env.GOOGLE_GENERATIVE_AI_API_KEY
     case 'openai-compatible':
-      return (
-        !!process.env.OPENAI_COMPATIBLE_API_KEY &&
-        !!process.env.OPENAI_COMPATIBLE_API_BASE_URL
-      )
+      return !!BROK_PROVIDER_API_KEY
     case 'gateway':
       return !!process.env.AI_GATEWAY_API_KEY
     case 'ollama':

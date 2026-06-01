@@ -28,11 +28,13 @@ import {
   ListChecks,
   Monitor,
   MoreHorizontal,
+  Pencil,
   Play,
   PlugZap,
   Radar,
   RefreshCcw,
   Rocket,
+  Save,
   Send,
   Share2,
   TerminalSquare,
@@ -49,10 +51,31 @@ import {
   SubagentStatus
 } from '@/lib/brokcode/data'
 import {
+  type BrokCodeDeployReadinessDeployment,
+  type BrokCodeManagedDeployReadiness,
+  summarizeBrokCodeDeployReadiness
+} from '@/lib/brokcode/deploy-readiness-client'
+import {
+  type BrokCodeDiffFile,
+  type BrokCodeDiffFileInput,
+  type BrokCodeRunDiff,
+  buildBrokCodeRunDiff
+} from '@/lib/brokcode/diff-summary'
+import type { BrokCodeAppliedFileChange } from '@/lib/brokcode/file-operations'
+import {
   extractGeneratedBrokCodeFiles,
   GeneratedBrokCodeFile
 } from '@/lib/brokcode/generated-files'
 import { buildBrokCodeCommandPrompt } from '@/lib/brokcode/generation-prompt'
+import {
+  type BrokCodeProjectBrain,
+  buildBrokCodeProjectBrain,
+  normalizeBrokCodeProjectBrain
+} from '@/lib/brokcode/project-brain'
+import {
+  normalizeBrokCodeGeneratedFilePaths,
+  shouldRefreshBrokCodeProjectAfterServerRun
+} from '@/lib/brokcode/run-sync'
 import { openComposioPopup } from '@/lib/composio-popup'
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
@@ -111,6 +134,14 @@ type BrokUsage = {
 type BrokCodeRuntime = 'pi' | 'opencode' | 'brok' | 'not_connected'
 type GithubConnectionStatus = 'checking' | 'connected' | 'ready' | 'unavailable'
 type PreviewHealthStatus = 'idle' | 'checking' | 'online' | 'offline'
+type PreviewHealthReason =
+  | 'ready'
+  | 'blocked'
+  | 'not_found'
+  | 'blank'
+  | 'timeout'
+  | 'unreachable'
+  | 'http_error'
 type BrokCodeBackendProvider = 'none' | 'insforge'
 type BrokCodeMobilePane = 'chat' | 'preview' | 'ship'
 type BrokCodeBackendHealthStatus =
@@ -157,11 +188,12 @@ type BrokCodeProject = {
   deploymentUrl?: string | null
   metadata?: {
     backend?: BrokCodeBackendMetadata
+    productBrain?: BrokCodeProjectBrain
     [key: string]: unknown
   } | null
 }
 
-type ExecutionStepStatus = 'queued' | 'running' | 'done' | 'error'
+type ExecutionStepStatus = 'queued' | 'running' | 'done' | 'error' | 'skipped'
 
 type ExecutionStep = {
   id: string
@@ -221,14 +253,101 @@ type BrokCodeVersion = {
   id: string
   sessionId: string
   command: string
+  checkpointName?: string | null
+  projectId?: string | null
   summary: string
   runtime: BrokCodeRuntime
   status: 'done' | 'error'
   previewUrl?: string | null
+  deploymentUrl?: string | null
   branch?: string | null
   commitSha?: string | null
   prUrl?: string | null
+  diff?: BrokCodeRunDiff | null
+  files?: BrokCodeDiffFileInput[] | null
   createdAt: string
+}
+
+type BrokCodeRuntimeSandbox = {
+  id: string
+  projectId: string
+  workspaceId: string
+  userId: string
+  versionId?: string | null
+  sessionId?: string | null
+  institutionId?: string | null
+  courseId?: string | null
+  sectionId?: string | null
+  assignmentId?: string | null
+  appType: 'static_html' | 'vite_react' | 'nextjs' | 'unsupported'
+  packageManager: 'none' | 'bun' | 'npm' | 'pnpm' | 'yarn'
+  workspacePath: string
+  installCommand?: string | null
+  devCommand: string
+  buildCommand?: string | null
+  status:
+    | 'preparing'
+    | 'installing'
+    | 'building'
+    | 'running'
+    | 'healthy'
+    | 'crashed'
+    | 'timed_out'
+    | 'stopped'
+  ports?: Array<{
+    name?: string
+    port?: number
+    protocol?: string
+    visibility?: string
+  }>
+  health?: {
+    ok?: boolean
+    message?: string
+    checkedAt?: string
+    url?: string
+  } | null
+  metadata?: Record<string, unknown> | null
+  updatedAt?: string
+}
+
+type BrokCodeRuntimeLog = {
+  level: 'info' | 'warn' | 'error'
+  source: 'install' | 'dev-server' | 'browser' | 'system'
+  message: string
+  at: string
+  command?: string
+  file?: string
+  line?: number
+  column?: number
+  stack?: string
+}
+
+type BrokCodeRuntimeDiagnostics = {
+  runtimeId: string
+  status: string
+  logs: BrokCodeRuntimeLog[]
+  lastError?: BrokCodeRuntimeLog | null
+  process?: {
+    port?: number
+    url?: string
+    startedAt?: string
+  } | null
+}
+
+type BrokCodeProjectFile = {
+  id?: string
+  path: string
+  content: string
+  language?: string | null
+  updatedAt?: string
+}
+
+type BrokCodeDeployReadinessState = {
+  readiness: BrokCodeManagedDeployReadiness
+  latestDeployment: BrokCodeDeployReadinessDeployment | null
+  deployments: BrokCodeDeployReadinessDeployment[]
+  previewUrl?: string | null
+  deploymentUrl?: string | null
 }
 
 type BrokCodeStreamResult = {
@@ -240,7 +359,42 @@ type BrokCodeStreamResult = {
   task_id?: string | null
   status_url?: string | null
   events_url?: string | null
+  file_changes?: BrokCodeAppliedFileChange[]
   note?: string
+}
+
+type BrokCodeRetryRequest = {
+  command: string
+  model?: string
+  source?: string
+  session_id?: string
+  project_id?: string
+  backend_provider?: string
+  backend_status?: string
+  backend_project_url?: string | null
+  prefer_pi?: boolean
+  require_pi?: boolean
+  require_opencode?: boolean
+  allow_brok_fallback?: boolean
+  retry_of_task_id?: string
+}
+
+function normalizeBrokCodeFileChanges(value: unknown) {
+  if (!Array.isArray(value)) return []
+
+  return value.filter((change): change is BrokCodeAppliedFileChange => {
+    if (!change || typeof change !== 'object') return false
+    const candidate = change as Partial<BrokCodeAppliedFileChange>
+    return (
+      typeof candidate.type === 'string' &&
+      typeof candidate.path === 'string' &&
+      (candidate.beforeChecksum === null ||
+        typeof candidate.beforeChecksum === 'string') &&
+      (candidate.afterChecksum === null ||
+        typeof candidate.afterChecksum === 'string') &&
+      typeof candidate.summary === 'string'
+    )
+  })
 }
 
 type BrokCodeBackgroundTask = {
@@ -257,6 +411,173 @@ type BrokCodeBackgroundTask = {
   completedAt?: string | null
 }
 
+function getPersistedLifecycleSteps(metadata: Record<string, any>) {
+  if (!Array.isArray(metadata.lifecycle)) return null
+
+  const steps = metadata.lifecycle
+    .map((step: unknown): ExecutionStep | null => {
+      if (!step || typeof step !== 'object') return null
+      const record = step as Record<string, unknown>
+      const status =
+        record.status === 'queued' ||
+        record.status === 'running' ||
+        record.status === 'done' ||
+        record.status === 'error' ||
+        record.status === 'skipped'
+          ? record.status
+          : null
+      if (!status) return null
+
+      return {
+        id: typeof record.id === 'string' ? record.id : createId('step'),
+        label:
+          typeof record.label === 'string' ? record.label : 'BrokCode step',
+        detail:
+          typeof record.detail === 'string'
+            ? record.detail
+            : 'Recovered from the background task ledger.',
+        status
+      }
+    })
+    .filter((step): step is ExecutionStep => Boolean(step))
+
+  return steps.length > 0 ? steps : null
+}
+
+function createExecutionRunFromTask(
+  task: BrokCodeBackgroundTask
+): ExecutionRun {
+  const metadata = task.metadata ?? {}
+  const result = task.result ?? {}
+  const command =
+    typeof metadata.command === 'string' && metadata.command.trim()
+      ? metadata.command.trim()
+      : task.title
+  const progress =
+    typeof metadata.progress === 'number'
+      ? Math.max(0, Math.min(100, metadata.progress))
+      : task.status === 'succeeded'
+        ? 100
+        : task.status === 'failed' || task.status === 'cancelled'
+          ? 100
+          : 18
+  const runtime =
+    result.runtime === 'pi' ||
+    result.runtime === 'opencode' ||
+    result.runtime === 'brok'
+      ? result.runtime
+      : 'brok'
+  const previewUrl =
+    typeof result.previewUrl === 'string' ? result.previewUrl : null
+  const startedAt =
+    typeof task.startedAt === 'string'
+      ? Date.parse(task.startedAt)
+      : typeof task.createdAt === 'string'
+        ? Date.parse(task.createdAt)
+        : Date.now()
+  const finishedAt =
+    typeof task.completedAt === 'string'
+      ? Date.parse(task.completedAt)
+      : undefined
+  const running = task.status === 'queued' || task.status === 'running'
+  const failed = task.status === 'failed' || task.status === 'cancelled'
+  const persistedLifecycleSteps = getPersistedLifecycleSteps(metadata)
+  const steps =
+    persistedLifecycleSteps ??
+    executionStepTemplate.map(step => {
+      if (step.id === 'parse') {
+        return { ...step, status: 'done' as ExecutionStepStatus }
+      }
+      if (step.id === 'plan') {
+        return {
+          ...step,
+          status:
+            progress >= 18
+              ? ('done' as const)
+              : running
+                ? ('running' as const)
+                : failed
+                  ? ('error' as const)
+                  : ('queued' as const),
+          detail:
+            typeof metadata.runtimePreference === 'string'
+              ? `Runtime preference: ${metadata.runtimePreference}.`
+              : step.detail
+        }
+      }
+      if (step.id === 'execute') {
+        return {
+          ...step,
+          status:
+            task.status === 'succeeded'
+              ? ('done' as const)
+              : failed
+                ? ('error' as const)
+                : progress >= 18
+                  ? ('running' as const)
+                  : ('queued' as const),
+          detail:
+            Array.isArray(metadata.events) && metadata.events.length > 0
+              ? String(
+                  metadata.events[metadata.events.length - 1]?.message ??
+                    step.detail
+                )
+              : step.detail
+        }
+      }
+      if (step.id === 'validate') {
+        return {
+          ...step,
+          status:
+            task.status === 'succeeded'
+              ? ('done' as const)
+              : failed
+                ? ('error' as const)
+                : progress >= 72
+                  ? ('running' as const)
+                  : ('queued' as const),
+          detail: previewUrl ? 'Cloud preview URL recorded.' : step.detail
+        }
+      }
+      return {
+        ...step,
+        status:
+          task.status === 'succeeded'
+            ? ('done' as const)
+            : failed
+              ? ('error' as const)
+              : ('queued' as const),
+        detail:
+          task.status === 'succeeded'
+            ? 'Recovered from the background task ledger.'
+            : failed
+              ? task.error || 'Recovered failed task from the ledger.'
+              : step.detail
+      }
+    })
+
+  return {
+    id: `task-${task.id}`,
+    taskId: task.id,
+    statusUrl: `/api/tasks/${task.id}`,
+    eventsUrl: `/api/tasks/${task.id}/events`,
+    command,
+    runtime,
+    status: task.status === 'succeeded' ? 'done' : failed ? 'error' : 'running',
+    startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
+    finishedAt: Number.isFinite(finishedAt) ? finishedAt : undefined,
+    note:
+      task.status === 'succeeded'
+        ? 'Recovered completed run from the background task ledger.'
+        : failed
+          ? task.error ||
+            'Recovered failed run from the background task ledger.'
+          : 'Recovered active run from the background task ledger.',
+    previewUrl,
+    steps
+  }
+}
+
 type GithubRepoContext = {
   repository: string | null
   remoteUrl: string | null
@@ -265,9 +586,18 @@ type GithubRepoContext = {
   commitSha: string | null
 }
 
+type GithubRepositoryOption = {
+  fullName: string
+  defaultBranch?: string | null
+  private?: boolean
+  htmlUrl?: string | null
+  pushedAt?: string | null
+}
+
 type PreviewHealth = {
   status: PreviewHealthStatus
   message: string
+  reason?: PreviewHealthReason
   checkedAt?: string
   httpStatus?: number
 }
@@ -367,7 +697,9 @@ function createRuntimeSubagents(runs: ExecutionRun[]): BrokCodeSubagent[] {
       run.steps.find(step => step.status === 'running') ??
       [...run.steps].reverse().find(step => step.status === 'done') ??
       run.steps[0]
-    const completed = run.steps.filter(step => step.status === 'done').length
+    const completed = run.steps.filter(
+      step => step.status === 'done' || step.status === 'skipped'
+    ).length
     const progress =
       run.status === 'done'
         ? 100
@@ -888,6 +1220,7 @@ async function readBrokCodeExecutionStream(
       typeof result?.status_url === 'string' ? result.status_url : null,
     events_url:
       typeof result?.events_url === 'string' ? result.events_url : null,
+    file_changes: normalizeBrokCodeFileChanges(result?.file_changes),
     note: typeof result?.note === 'string' ? result.note : undefined
   }
 }
@@ -1001,6 +1334,12 @@ export function BrokCodeApp({
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [runtimeBootstrapped, setRuntimeBootstrapped] = useState(false)
   const [isDeploying, setIsDeploying] = useState(false)
+  const [deployReadiness, setDeployReadiness] =
+    useState<BrokCodeDeployReadinessState | null>(null)
+  const [deployReadinessLoading, setDeployReadinessLoading] = useState(false)
+  const [deployReadinessError, setDeployReadinessError] = useState<
+    string | null
+  >(null)
   const [githubStatus, setGithubStatus] =
     useState<GithubConnectionStatus>('checking')
   const [githubMessage, setGithubMessage] = useState<string | null>(null)
@@ -1013,10 +1352,34 @@ export function BrokCodeApp({
   const [githubRepository, setGithubRepository] = useState('')
   const [githubBaseBranch, setGithubBaseBranch] = useState('main')
   const [githubHeadBranch, setGithubHeadBranch] = useState('')
+  const [githubExportPath, setGithubExportPath] = useState('')
+  const [githubRepositories, setGithubRepositories] = useState<
+    GithubRepositoryOption[]
+  >([])
+  const [githubRepositoriesLoading, setGithubRepositoriesLoading] =
+    useState(false)
   const [versions, setVersions] = useState<BrokCodeVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [projects, setProjects] = useState<BrokCodeProject[]>([])
   const [activeProjectId, setActiveProjectId] = useState('')
+  const [projectFiles, setProjectFiles] = useState<BrokCodeProjectFile[]>([])
+  const [projectFilesLoading, setProjectFilesLoading] = useState(false)
+  const [projectFilesError, setProjectFilesError] = useState<string | null>(
+    null
+  )
+  const [selectedFilePath, setSelectedFilePath] = useState('')
+  const selectedFilePathRef = useRef('')
+  const [fileDraft, setFileDraft] = useState('')
+  const [fileEditMode, setFileEditMode] = useState(false)
+  const [fileSaving, setFileSaving] = useState(false)
+  const [runDiffs, setRunDiffs] = useState<BrokCodeRunDiff[]>([])
+  const [selectedRunDiffId, setSelectedRunDiffId] = useState('')
+  const [selectedDiffFilePath, setSelectedDiffFilePath] = useState('')
+  const [projectRuntime, setProjectRuntime] =
+    useState<BrokCodeRuntimeSandbox | null>(null)
+  const [runtimeDiagnostics, setRuntimeDiagnostics] =
+    useState<BrokCodeRuntimeDiagnostics | null>(null)
+  const [projectRuntimeLoading, setProjectRuntimeLoading] = useState(false)
   const [backendSaving, setBackendSaving] = useState(false)
   const [backendProvisioning, setBackendProvisioning] = useState(false)
   const [backendChecking, setBackendChecking] = useState(false)
@@ -1161,6 +1524,73 @@ export function BrokCodeApp({
       health: 'unknown',
       adminKeyConfigured: false
     } satisfies BrokCodeBackendMetadata)
+  const projectBrain = useMemo(() => {
+    const persistedBrain = normalizeBrokCodeProjectBrain(
+      activeProject?.metadata?.productBrain
+    )
+    if (persistedBrain) return persistedBrain
+
+    const latestUserMessage = [...messages]
+      .reverse()
+      .find(message => message.role === 'user')
+    const latestCommand =
+      versions[0]?.command ?? latestUserMessage?.content ?? input
+
+    return buildBrokCodeProjectBrain({
+      projectName: activeProject?.name ?? 'BrokCode App',
+      command: latestCommand,
+      files: projectFiles.map(file => ({
+        path: file.path,
+        content: file.content,
+        language: file.language ?? null
+      })),
+      backend: activeBackend
+    })
+  }, [activeBackend, activeProject, input, messages, projectFiles, versions])
+  const selectedProjectFile =
+    projectFiles.find(file => file.path === selectedFilePath) ??
+    projectFiles[0] ??
+    null
+  const hasUnsavedFileChanges =
+    Boolean(selectedProjectFile) && fileDraft !== selectedProjectFile?.content
+  const selectedRunDiff =
+    runDiffs.find(diff => diff.id === selectedRunDiffId) ?? runDiffs[0] ?? null
+  const selectedDiffFile =
+    selectedRunDiff?.files.find(file => file.path === selectedDiffFilePath) ??
+    selectedRunDiff?.files[0] ??
+    null
+
+  useEffect(() => {
+    selectedFilePathRef.current = selectedFilePath
+  }, [selectedFilePath])
+
+  useEffect(() => {
+    const versionDiffs: BrokCodeRunDiff[] = versions.flatMap(version =>
+      version.diff
+        ? [
+            {
+              ...version.diff,
+              versionId: version.diff.versionId ?? version.id
+            }
+          ]
+        : []
+    )
+
+    if (versionDiffs.length === 0) return
+
+    setRunDiffs(current => {
+      const byId = new Map(current.map(diff => [diff.id, diff]))
+      versionDiffs.forEach(diff => byId.set(diff.id, diff))
+      return Array.from(byId.values())
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 8)
+    })
+    setSelectedRunDiffId(current => current || versionDiffs[0]?.id || '')
+    setSelectedDiffFilePath(
+      current => current || versionDiffs[0]?.files[0]?.path || ''
+    )
+  }, [versions])
+
   const activeSyncSession = useMemo(
     () =>
       syncedSessions.find(session => session.id === syncSessionId) ??
@@ -1221,6 +1651,56 @@ export function BrokCodeApp({
       return false
     }
   }, [])
+
+  const refreshGithubRepositories = useCallback(
+    async (key = apiKey) => {
+      if (key && !isValidBrokApiKey(key)) {
+        setGithubRepositories([])
+        return []
+      }
+
+      setGithubRepositoriesLoading(true)
+      try {
+        const response = await fetch('/api/brokcode/github/repositories', {
+          headers: getAuthHeaders(key)
+        })
+        const body = await response.json().catch(() => null)
+        const repositories = Array.isArray(body?.repositories)
+          ? (body.repositories as GithubRepositoryOption[])
+          : []
+
+        if (!response.ok) {
+          throw new Error(
+            body?.message ??
+              body?.error?.message ??
+              'Could not load GitHub repositories.'
+          )
+        }
+
+        setGithubRepositories(repositories)
+        if (repositories.length > 0) {
+          setGithubRepository(current => current || repositories[0]!.fullName)
+          setGithubBaseBranch(current =>
+            current && current !== 'main'
+              ? current
+              : repositories[0]!.defaultBranch || 'main'
+          )
+        }
+        return repositories
+      } catch (error) {
+        setGithubRepositories([])
+        setGithubMessage(
+          error instanceof Error
+            ? error.message
+            : 'Could not load GitHub repositories.'
+        )
+        return []
+      } finally {
+        setGithubRepositoriesLoading(false)
+      }
+    },
+    [apiKey, getAuthHeaders]
+  )
 
   const refreshSyncedSessions = useCallback(
     async (key = apiKey) => {
@@ -1371,6 +1851,216 @@ export function BrokCodeApp({
     [apiKey, getAuthHeaders]
   )
 
+  const refreshProjectRuntime = useCallback(
+    async (project = activeProject, key = apiKey) => {
+      if (!project?.id) {
+        setProjectRuntime(null)
+        return null
+      }
+      if (key && !isValidBrokApiKey(key)) {
+        setProjectRuntime(null)
+        return null
+      }
+
+      setProjectRuntimeLoading(true)
+      try {
+        const response = await fetch(
+          `/api/brokcode/projects/${encodeURIComponent(project.id)}/runtime`,
+          {
+            headers: getAuthHeaders(key)
+          }
+        )
+        const body = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(body?.error ?? 'Runtime lookup failed.')
+        }
+
+        const runtime =
+          body?.runtime && typeof body.runtime === 'object'
+            ? (body.runtime as BrokCodeRuntimeSandbox)
+            : null
+        setProjectRuntime(runtime)
+        return runtime
+      } catch (error) {
+        setProjectRuntime(null)
+        setRuntimeError(
+          error instanceof Error
+            ? error.message
+            : 'Could not load project runtime.'
+        )
+        return null
+      } finally {
+        setProjectRuntimeLoading(false)
+      }
+    },
+    [activeProject, apiKey, getAuthHeaders]
+  )
+
+  const refreshProjectFiles = useCallback(
+    async (project = activeProject, key = apiKey) => {
+      if (!project?.id) {
+        setProjectFiles([])
+        setSelectedFilePath('')
+        setFileDraft('')
+        return []
+      }
+      if (key && !isValidBrokApiKey(key)) {
+        setProjectFiles([])
+        return []
+      }
+
+      setProjectFilesLoading(true)
+      setProjectFilesError(null)
+      try {
+        const response = await fetch(
+          `/api/brokcode/projects/${encodeURIComponent(project.id)}/files`,
+          {
+            headers: getAuthHeaders(key)
+          }
+        )
+        const body = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(body?.error ?? 'Could not load project files.')
+        }
+
+        const files = Array.isArray(body?.files)
+          ? (body.files as BrokCodeProjectFile[])
+          : []
+        setProjectFiles(files)
+        const currentFilePath = selectedFilePathRef.current
+        const nextSelected =
+          currentFilePath && files.some(file => file.path === currentFilePath)
+            ? currentFilePath
+            : (files[0]?.path ?? '')
+        setSelectedFilePath(nextSelected)
+        setFileDraft(
+          files.find(file => file.path === nextSelected)?.content ?? ''
+        )
+        setFileEditMode(false)
+        return files
+      } catch (error) {
+        setProjectFilesError(
+          error instanceof Error
+            ? error.message
+            : 'Could not load project files.'
+        )
+        return []
+      } finally {
+        setProjectFilesLoading(false)
+      }
+    },
+    [activeProject, apiKey, getAuthHeaders]
+  )
+
+  const refreshDeployReadiness = useCallback(
+    async (project = activeProject, key = apiKey) => {
+      if (!project?.id) {
+        setDeployReadiness(null)
+        setDeployReadinessError(null)
+        return null
+      }
+      if (key && !isValidBrokApiKey(key)) {
+        setDeployReadiness(null)
+        setDeployReadinessError(null)
+        return null
+      }
+
+      setDeployReadinessLoading(true)
+      setDeployReadinessError(null)
+      try {
+        const response = await fetch(
+          `/api/brokcode/deploy?projectId=${encodeURIComponent(project.id)}&source=browser`,
+          {
+            headers: getAuthHeaders(key)
+          }
+        )
+        const body = await response.json().catch(() => null)
+        if (!response.ok || !body?.readiness) {
+          throw new Error(
+            body?.error?.message ?? 'Could not check deploy readiness.'
+          )
+        }
+
+        const nextReadiness: BrokCodeDeployReadinessState = {
+          readiness: body.readiness as BrokCodeManagedDeployReadiness,
+          latestDeployment:
+            body.latestDeployment && typeof body.latestDeployment === 'object'
+              ? (body.latestDeployment as BrokCodeDeployReadinessDeployment)
+              : null,
+          deployments: Array.isArray(body.deployments)
+            ? (body.deployments as BrokCodeDeployReadinessDeployment[])
+            : [],
+          previewUrl:
+            typeof body.previewUrl === 'string' ? body.previewUrl : null,
+          deploymentUrl:
+            typeof body.deploymentUrl === 'string' ? body.deploymentUrl : null
+        }
+        setDeployReadiness(nextReadiness)
+        return nextReadiness
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Could not check deploy readiness.'
+        setDeployReadinessError(message)
+        return null
+      } finally {
+        setDeployReadinessLoading(false)
+      }
+    },
+    [activeProject, apiKey, getAuthHeaders]
+  )
+
+  const fetchProjectFilesForDiff = useCallback(
+    async (project = activeProject, key = apiKey) => {
+      if (!project?.id || (key && !isValidBrokApiKey(key))) return []
+
+      const response = await fetch(
+        `/api/brokcode/projects/${encodeURIComponent(project.id)}/files`,
+        {
+          headers: getAuthHeaders(key)
+        }
+      )
+      const body = await response.json().catch(() => null)
+      if (!response.ok) return []
+
+      return Array.isArray(body?.files)
+        ? (body.files as BrokCodeProjectFile[])
+        : []
+    },
+    [activeProject, apiKey, getAuthHeaders]
+  )
+
+  const refreshRuntimeDiagnostics = useCallback(
+    async (runtime = projectRuntime) => {
+      if (!runtime?.id) {
+        setRuntimeDiagnostics(null)
+        return null
+      }
+
+      try {
+        const response = await fetch(
+          `/api/brokcode/runtime/${encodeURIComponent(runtime.id)}/logs`,
+          { cache: 'no-store' }
+        )
+        const body = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(body?.error ?? 'Runtime diagnostics lookup failed.')
+        }
+
+        const diagnostics =
+          body?.diagnostics && typeof body.diagnostics === 'object'
+            ? (body.diagnostics as BrokCodeRuntimeDiagnostics)
+            : null
+        setRuntimeDiagnostics(diagnostics)
+        return diagnostics
+      } catch {
+        return null
+      }
+    },
+    [projectRuntime]
+  )
+
   const refreshRepoContext = useCallback(
     async (key = apiKey) => {
       if (key && !isValidBrokApiKey(key)) {
@@ -1414,7 +2104,10 @@ export function BrokCodeApp({
               : context.defaultBranch || 'main'
           )
         }
-        if (context.currentBranch) {
+        if (
+          context.currentBranch &&
+          context.currentBranch !== context.defaultBranch
+        ) {
           setGithubHeadBranch(current => current || context.currentBranch || '')
         }
       } catch (error) {
@@ -1429,7 +2122,77 @@ export function BrokCodeApp({
     [apiKey, getAuthHeaders]
   )
 
-  async function ensureProjectForRun(command: string) {
+  function selectGithubRepository(value: string) {
+    setGithubRepository(value)
+    const repository = githubRepositories.find(
+      candidate => candidate.fullName === value
+    )
+    if (repository?.defaultBranch) {
+      setGithubBaseBranch(repository.defaultBranch)
+    }
+  }
+
+  useEffect(() => {
+    void refreshProjectRuntime()
+  }, [refreshProjectRuntime])
+
+  useEffect(() => {
+    void refreshProjectFiles()
+  }, [refreshProjectFiles])
+
+  useEffect(() => {
+    void refreshDeployReadiness()
+  }, [refreshDeployReadiness])
+
+  useEffect(() => {
+    if (!activeProject?.slug) return
+    setGithubExportPath(current => current || activeProject.slug)
+  }, [activeProject?.slug])
+
+  useEffect(() => {
+    if (!projectRuntime?.id) {
+      setRuntimeDiagnostics(null)
+      return
+    }
+
+    void refreshRuntimeDiagnostics(projectRuntime)
+    const interval = window.setInterval(() => {
+      void refreshRuntimeDiagnostics(projectRuntime)
+    }, 2500)
+
+    return () => window.clearInterval(interval)
+  }, [projectRuntime, refreshRuntimeDiagnostics])
+
+  async function ensureProjectForRun(
+    command: string,
+    preferredProjectId?: string
+  ) {
+    if (preferredProjectId) {
+      const existingProject = projects.find(
+        project => project.id === preferredProjectId
+      )
+      if (existingProject) {
+        setActiveProjectId(existingProject.id)
+        return existingProject
+      }
+
+      const response = await fetch('/api/brokcode/projects', {
+        headers: getAuthHeaders(apiKey)
+      })
+      const body = await response.json().catch(() => null)
+      if (response.ok && Array.isArray(body?.projects)) {
+        const nextProjects = body.projects as BrokCodeProject[]
+        setProjects(nextProjects)
+        const preferredProject = nextProjects.find(
+          project => project.id === preferredProjectId
+        )
+        if (preferredProject) {
+          setActiveProjectId(preferredProject.id)
+          return preferredProject
+        }
+      }
+    }
+
     if (activeProject) return activeProject
 
     const response = await fetch('/api/brokcode/projects', {
@@ -1455,6 +2218,44 @@ export function BrokCodeApp({
     setProjects(current => [project, ...current])
     setActiveProjectId(project.id)
     return project
+  }
+
+  async function createProjectRuntimeRecord({
+    project,
+    status,
+    versionId
+  }: {
+    project: BrokCodeProject
+    status: BrokCodeRuntimeSandbox['status']
+    versionId?: string | null
+  }) {
+    const response = await fetch(
+      `/api/brokcode/projects/${encodeURIComponent(project.id)}/runtime`,
+      {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(apiKey),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sessionId: syncSessionId,
+          versionId: versionId ?? null,
+          status,
+          force: true
+        })
+      }
+    )
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(body?.error ?? 'Could not create runtime contract.')
+    }
+
+    const runtime =
+      body?.runtime && typeof body.runtime === 'object'
+        ? (body.runtime as BrokCodeRuntimeSandbox)
+        : null
+    setProjectRuntime(runtime)
+    return runtime
   }
 
   async function saveGeneratedPreviewFiles({
@@ -1514,6 +2315,11 @@ export function BrokCodeApp({
   useEffect(() => {
     void refreshGithubStatus()
   }, [refreshGithubStatus])
+
+  useEffect(() => {
+    if (githubStatus !== 'connected') return
+    void refreshGithubRepositories()
+  }, [githubStatus, refreshGithubRepositories])
 
   useEffect(() => {
     if (!hasLiveRuntime) {
@@ -1822,138 +2628,6 @@ export function BrokCodeApp({
     }
   }
 
-  function createExecutionRunFromTask(
-    task: BrokCodeBackgroundTask
-  ): ExecutionRun {
-    const metadata = task.metadata ?? {}
-    const result = task.result ?? {}
-    const command =
-      typeof metadata.command === 'string' && metadata.command.trim()
-        ? metadata.command.trim()
-        : task.title
-    const progress =
-      typeof metadata.progress === 'number'
-        ? Math.max(0, Math.min(100, metadata.progress))
-        : task.status === 'succeeded'
-          ? 100
-          : task.status === 'failed' || task.status === 'cancelled'
-            ? 100
-            : 18
-    const runtime =
-      result.runtime === 'pi' ||
-      result.runtime === 'opencode' ||
-      result.runtime === 'brok'
-        ? result.runtime
-        : 'brok'
-    const previewUrl =
-      typeof result.previewUrl === 'string' ? result.previewUrl : null
-    const startedAt =
-      typeof task.startedAt === 'string'
-        ? Date.parse(task.startedAt)
-        : typeof task.createdAt === 'string'
-          ? Date.parse(task.createdAt)
-          : Date.now()
-    const finishedAt =
-      typeof task.completedAt === 'string'
-        ? Date.parse(task.completedAt)
-        : undefined
-    const running = task.status === 'queued' || task.status === 'running'
-    const failed = task.status === 'failed' || task.status === 'cancelled'
-    const steps = executionStepTemplate.map(step => {
-      if (step.id === 'parse') {
-        return { ...step, status: 'done' as ExecutionStepStatus }
-      }
-      if (step.id === 'plan') {
-        return {
-          ...step,
-          status:
-            progress >= 18
-              ? ('done' as const)
-              : running
-                ? ('running' as const)
-                : failed
-                  ? ('error' as const)
-                  : ('queued' as const),
-          detail:
-            typeof metadata.runtimePreference === 'string'
-              ? `Runtime preference: ${metadata.runtimePreference}.`
-              : step.detail
-        }
-      }
-      if (step.id === 'execute') {
-        return {
-          ...step,
-          status:
-            task.status === 'succeeded'
-              ? ('done' as const)
-              : failed
-                ? ('error' as const)
-                : progress >= 18
-                  ? ('running' as const)
-                  : ('queued' as const),
-          detail:
-            Array.isArray(metadata.events) && metadata.events.length > 0
-              ? String(
-                  metadata.events[metadata.events.length - 1]?.message ??
-                    step.detail
-                )
-              : step.detail
-        }
-      }
-      if (step.id === 'validate') {
-        return {
-          ...step,
-          status:
-            task.status === 'succeeded'
-              ? ('done' as const)
-              : failed
-                ? ('error' as const)
-                : progress >= 72
-                  ? ('running' as const)
-                  : ('queued' as const),
-          detail: previewUrl ? 'Cloud preview URL recorded.' : step.detail
-        }
-      }
-      return {
-        ...step,
-        status:
-          task.status === 'succeeded'
-            ? ('done' as const)
-            : failed
-              ? ('error' as const)
-              : ('queued' as const),
-        detail:
-          task.status === 'succeeded'
-            ? 'Recovered from the background task ledger.'
-            : failed
-              ? task.error || 'Recovered failed task from the ledger.'
-              : step.detail
-      }
-    })
-
-    return {
-      id: `task-${task.id}`,
-      taskId: task.id,
-      statusUrl: `/api/tasks/${task.id}`,
-      eventsUrl: `/api/tasks/${task.id}/events`,
-      command,
-      runtime,
-      status:
-        task.status === 'succeeded' ? 'done' : failed ? 'error' : 'running',
-      startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
-      finishedAt: Number.isFinite(finishedAt) ? finishedAt : undefined,
-      note:
-        task.status === 'succeeded'
-          ? 'Recovered completed run from the background task ledger.'
-          : failed
-            ? task.error ||
-              'Recovered failed run from the background task ledger.'
-            : 'Recovered active run from the background task ledger.',
-      previewUrl,
-      steps
-    }
-  }
-
   function mergeExecutionRunFromTask(task: BrokCodeBackgroundTask) {
     const nextRun = createExecutionRunFromTask(task)
 
@@ -2035,6 +2709,116 @@ export function BrokCodeApp({
     } finally {
       setCancellingTaskId(null)
     }
+  }
+
+  async function retryExecutionRun(run: ExecutionRun) {
+    if (!run.taskId) {
+      await runCommand(run.command)
+      return
+    }
+
+    setRuntimeError(null)
+    try {
+      const response = await fetch(`/api/tasks/${run.taskId}/retry`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      })
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.error ?? 'Could not retry task.')
+      }
+
+      const retry =
+        body?.retry && typeof body.retry === 'object'
+          ? (body.retry as BrokCodeRetryRequest)
+          : null
+      if (!retry?.command) {
+        throw new Error('Retry endpoint did not return a command.')
+      }
+
+      if (body?.task) {
+        mergeExecutionRunFromTask(body.task as BrokCodeBackgroundTask)
+      }
+
+      await runCommand(retry.command, { retryRequest: retry })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Could not retry task.'
+      setRuntimeError(message)
+      toast.error(message)
+    }
+  }
+
+  function selectProjectFile(path: string) {
+    if (hasUnsavedFileChanges) {
+      const proceed = window.confirm(
+        'You have unsaved file edits. Discard them and switch files?'
+      )
+      if (!proceed) return
+    }
+
+    const file = projectFiles.find(candidate => candidate.path === path)
+    setSelectedFilePath(path)
+    setFileDraft(file?.content ?? '')
+    setFileEditMode(false)
+  }
+
+  async function saveProjectFile() {
+    if (!activeProject?.id || !selectedProjectFile) return
+
+    setFileSaving(true)
+    setRuntimeError(null)
+    try {
+      const response = await fetch(
+        `/api/brokcode/projects/${encodeURIComponent(activeProject.id)}/files`,
+        {
+          method: 'PUT',
+          headers: {
+            ...getAuthHeaders(apiKey),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            path: selectedProjectFile.path,
+            content: fileDraft,
+            language: selectedProjectFile.language
+          })
+        }
+      )
+      const body = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(body?.error ?? 'Could not save file.')
+      }
+      await refreshProjectFiles(activeProject)
+      await refreshDeployReadiness(activeProject)
+      await refreshProjectRuntime(activeProject)
+      setPreviewFrameKey(key => key + 1)
+      setFileEditMode(false)
+    } catch (error) {
+      setRuntimeError(
+        error instanceof Error ? error.message : 'Could not save file.'
+      )
+    } finally {
+      setFileSaving(false)
+    }
+  }
+
+  function recordRunDiff(diff: BrokCodeRunDiff) {
+    setRunDiffs(current =>
+      [diff, ...current.filter(existing => existing.id !== diff.id)].slice(0, 8)
+    )
+    setSelectedRunDiffId(diff.id)
+    setSelectedDiffFilePath(diff.files[0]?.path ?? '')
+  }
+
+  function attachVersionToRunDiff(diffId: string, versionId: string) {
+    setRunDiffs(current =>
+      current.map(diff => (diff.id === diffId ? { ...diff, versionId } : diff))
+    )
+  }
+
+  function openDiffFileInEditor(path: string) {
+    selectProjectFile(path)
+    setSelectedFilePath(path)
   }
 
   function updateExecutionStep(
@@ -2161,6 +2945,7 @@ export function BrokCodeApp({
       if (!target.trim()) {
         setPreviewHealth({
           status: 'idle',
+          reason: undefined,
           message:
             'Preview appears here after a run or when you paste an app URL.'
         })
@@ -2170,6 +2955,7 @@ export function BrokCodeApp({
       if (!normalized || isBrokCodeWorkspaceUrl(normalized)) {
         setPreviewHealth({
           status: 'offline',
+          reason: 'blocked',
           message: 'Choose a generated app URL, not Brok Code itself.'
         })
         return
@@ -2190,8 +2976,16 @@ export function BrokCodeApp({
         )
         const body = await response.json().catch(() => null)
 
+        const reason =
+          typeof body?.reason === 'string'
+            ? (body.reason as PreviewHealthReason)
+            : body?.ok
+              ? 'ready'
+              : 'unreachable'
+
         setPreviewHealth({
           status: body?.ok ? 'online' : 'offline',
+          reason,
           message:
             typeof body?.message === 'string'
               ? body.message
@@ -2207,6 +3001,7 @@ export function BrokCodeApp({
       } catch {
         setPreviewHealth({
           status: 'offline',
+          reason: 'unreachable',
           message: 'Preview health check failed.',
           checkedAt: new Date().toISOString()
         })
@@ -2219,6 +3014,7 @@ export function BrokCodeApp({
     if (!previewUrl.trim()) {
       setPreviewHealth({
         status: 'idle',
+        reason: undefined,
         message:
           'Preview appears here after a run or when you paste an app URL.'
       })
@@ -2405,18 +3201,28 @@ export function BrokCodeApp({
 
   async function persistVersionSnapshot({
     command,
+    checkpointName,
+    projectId,
     summary,
     runtime,
     status,
     previewUrl,
-    prUrl
+    deploymentUrl,
+    prUrl,
+    diff,
+    files
   }: {
     command: string
+    checkpointName?: string | null
+    projectId?: string | null
     summary: string
     runtime: BrokCodeRuntime
     status: 'done' | 'error'
     previewUrl?: string | null
+    deploymentUrl?: string | null
     prUrl?: string | null
+    diff?: BrokCodeRunDiff | null
+    files?: BrokCodeDiffFileInput[] | null
   }) {
     if (!hasLiveRuntime) return null
 
@@ -2430,14 +3236,19 @@ export function BrokCodeApp({
         body: JSON.stringify({
           session_id: syncSessionId,
           command,
+          checkpoint_name: checkpointName ?? null,
+          project_id: projectId ?? null,
           summary:
             summary.length > 1800 ? `${summary.slice(0, 1797)}...` : summary,
           runtime,
           status,
           preview_url: previewUrl ?? null,
+          deployment_url: deploymentUrl ?? null,
           branch: githubHeadBranch || repoContext?.currentBranch || null,
           commit_sha: repoContext?.commitSha || null,
-          pr_url: prUrl ?? null
+          pr_url: prUrl ?? null,
+          diff: diff ?? null,
+          files: files ?? null
         })
       })
 
@@ -2457,6 +3268,157 @@ export function BrokCodeApp({
     } catch {
       return null
     }
+  }
+
+  function getVersionSnapshotFiles(version: BrokCodeVersion) {
+    return Array.isArray(version.files) ? version.files : []
+  }
+
+  async function renameVersionCheckpoint(version: BrokCodeVersion) {
+    const name = window.prompt(
+      'Checkpoint name',
+      version.checkpointName ?? version.command
+    )
+    if (name === null) return
+
+    const response = await fetch(
+      `/api/brokcode/versions/${encodeURIComponent(version.id)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          ...getAuthHeaders(apiKey),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ checkpoint_name: name.trim() || null })
+      }
+    )
+    const body = await response.json().catch(() => null)
+    if (!response.ok || !body?.version) {
+      throw new Error(body?.error ?? 'Could not rename checkpoint.')
+    }
+
+    const updated = body.version as BrokCodeVersion
+    setVersions(current =>
+      current.map(candidate =>
+        candidate.id === updated.id ? updated : candidate
+      )
+    )
+    toast.success('Checkpoint renamed.')
+  }
+
+  async function restoreVersionSnapshot(version: BrokCodeVersion) {
+    if (!activeProject?.id) return
+    const files = getVersionSnapshotFiles(version)
+    if (files.length === 0) {
+      toast.error('This version does not include a restorable file snapshot.')
+      return
+    }
+    if (hasUnsavedFileChanges) {
+      const proceed = window.confirm(
+        'You have unsaved file edits. Restore this version and discard them?'
+      )
+      if (!proceed) return
+    }
+
+    const currentFiles = await fetchProjectFilesForDiff(activeProject)
+    const snapshotPaths = new Set(files.map(file => file.path))
+    const operations = [
+      ...files.map(file => ({
+        type: 'replace_file' as const,
+        path: file.path,
+        content: file.content,
+        summary: `Restored ${file.path} from ${version.checkpointName ?? version.command}.`
+      })),
+      ...currentFiles
+        .filter(file => !snapshotPaths.has(file.path))
+        .map(file => ({
+          type: 'delete_file' as const,
+          path: file.path,
+          summary: `Removed ${file.path} during version restore.`
+        }))
+    ]
+
+    const response = await fetch(
+      `/api/brokcode/projects/${encodeURIComponent(activeProject.id)}/files`,
+      {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(apiKey),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          operations,
+          conflictResolution: 'apply_anyway'
+        })
+      }
+    )
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(body?.error ?? 'Could not restore version.')
+    }
+
+    await refreshProjectFiles(activeProject)
+    await refreshDeployReadiness(activeProject)
+    const runtime = await createProjectRuntimeRecord({
+      project: activeProject,
+      status: 'healthy',
+      versionId: version.id
+    })
+    if (runtime) {
+      setPreviewFrameKey(key => key + 1)
+    }
+    toast.success('Version restored.')
+  }
+
+  async function duplicateVersionSnapshot(version: BrokCodeVersion) {
+    const files = getVersionSnapshotFiles(version)
+    if (files.length === 0) {
+      toast.error('This version does not include files to duplicate.')
+      return
+    }
+
+    const response = await fetch('/api/brokcode/projects', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(apiKey),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: `${version.checkpointName ?? version.command} copy`
+      })
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok || !body?.project) {
+      throw new Error(body?.error ?? 'Could not duplicate version.')
+    }
+
+    const project = body.project as BrokCodeProject
+    await Promise.all(
+      files.map(file =>
+        fetch(`/api/brokcode/projects/${project.id}/files`, {
+          method: 'PUT',
+          headers: {
+            ...getAuthHeaders(apiKey),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(file)
+        }).then(async saveResponse => {
+          if (saveResponse.ok) return
+          const saveBody = await saveResponse.json().catch(() => null)
+          throw new Error(saveBody?.error ?? `Could not copy ${file.path}`)
+        })
+      )
+    )
+
+    setProjects(current => [project, ...current])
+    setActiveProjectId(project.id)
+    await refreshProjectFiles(project)
+    await createProjectRuntimeRecord({
+      project,
+      status: 'healthy',
+      versionId: version.id
+    })
+    toast.success('Version duplicated into a new project.')
   }
 
   async function runPlatformChecks() {
@@ -2573,6 +3535,32 @@ export function BrokCodeApp({
         : typeof body?.message === 'string'
           ? body.message
           : 'Deployment started.'
+      if (body?.readiness) {
+        setDeployReadiness(current => ({
+          readiness: body.readiness as BrokCodeManagedDeployReadiness,
+          latestDeployment:
+            body.persistedDeployment &&
+            typeof body.persistedDeployment === 'object'
+              ? (body.persistedDeployment as BrokCodeDeployReadinessDeployment)
+              : (current?.latestDeployment ?? null),
+          deployments: body.persistedDeployment
+            ? [
+                body.persistedDeployment as BrokCodeDeployReadinessDeployment,
+                ...(current?.deployments ?? []).filter(
+                  deployment => deployment.id !== body.persistedDeployment.id
+                )
+              ].slice(0, 10)
+            : (current?.deployments ?? []),
+          previewUrl:
+            typeof body.previewUrl === 'string'
+              ? body.previewUrl
+              : (current?.previewUrl ?? null),
+          deploymentUrl:
+            typeof body.deploymentUrl === 'string'
+              ? body.deploymentUrl
+              : (current?.deploymentUrl ?? null)
+        }))
+      }
 
       setMessages(current => [
         ...current,
@@ -2594,6 +3582,7 @@ export function BrokCodeApp({
       })
       if (activeProject?.id) {
         void refreshProjects(apiKey)
+        void refreshDeployReadiness(activeProject)
       }
       toast.success(
         loadedPreviewUrl
@@ -2831,9 +3820,10 @@ export function BrokCodeApp({
     const repository = githubRepository.trim()
     const head = githubHeadBranch.trim()
     const base = githubBaseBranch.trim() || 'main'
+    const exportPath = githubExportPath.trim() || activeProject?.slug || ''
 
-    if (!repository || !head) {
-      setRuntimeError('Set repository and head branch before opening a PR.')
+    if (!repository) {
+      setRuntimeError('Set repository before opening a PR.')
       return
     }
 
@@ -2846,11 +3836,36 @@ export function BrokCodeApp({
       'Opened by Brok Code Cloud.',
       '',
       `Repository: ${repository}`,
-      `Head: ${head}`,
+      `Head: ${head || 'auto-generated BrokCode branch'}`,
       `Base: ${base}`,
+      `Path: ${exportPath || '/'}`,
+      activeProject?.id ? `Project: ${activeProject.id}` : null,
+      versions[0]?.id ? `Version: ${versions[0].id}` : null,
+      latestRun?.previewUrl ? `Preview: ${latestRun.previewUrl}` : null,
+      activeProject?.deploymentUrl
+        ? `Deployment: ${activeProject.deploymentUrl}`
+        : null,
       latestRun?.note ? '' : null,
       latestRun?.note || null
     ].filter((line): line is string => Boolean(line))
+
+    const approved = window.confirm(
+      [
+        'Open a GitHub PR with the current BrokCode project files?',
+        '',
+        `Repository: ${repository}`,
+        `Base branch: ${base}`,
+        `Head branch: ${head || 'Auto-generated by BrokCode'}`,
+        `Export path: ${exportPath || '/'}`,
+        activeProject?.id ? `Project: ${activeProject.id}` : null,
+        versions[0]?.id ? `Version: ${versions[0].id}` : null,
+        '',
+        'BrokCode will write project files to that branch before opening the PR.'
+      ]
+        .filter((line): line is string => Boolean(line))
+        .join('\n')
+    )
+    if (!approved) return
 
     setIsSubmittingPr(true)
     setRuntimeError(null)
@@ -2868,6 +3883,9 @@ export function BrokCodeApp({
           body: bodyLines.join('\n'),
           base,
           head,
+          project_id: activeProject?.id ?? undefined,
+          version_id: versions[0]?.id ?? undefined,
+          export_path: exportPath || undefined,
           draft: false
         })
       })
@@ -2881,8 +3899,15 @@ export function BrokCodeApp({
 
       const prUrl = payload?.pullRequest?.url
       const prNumber = payload?.pullRequest?.number
+      const filesCommitted = payload?.pullRequest?.export?.filesCommitted
       const message = prUrl
-        ? `Opened PR #${prNumber ?? 'new'}: ${prUrl}`
+        ? `Opened PR #${prNumber ?? 'new'}: ${prUrl}${
+            typeof filesCommitted === 'number'
+              ? `\n\nCommitted ${filesCommitted} project file${
+                  filesCommitted === 1 ? '' : 's'
+                } to the branch first.`
+              : ''
+          }`
         : 'Opened pull request successfully.'
 
       setMessages(current => [
@@ -2952,11 +3977,23 @@ export function BrokCodeApp({
     setInput(`Continue with ${agent.name}: ${agent.nextStep}`)
   }
 
-  async function runCommand(command: string) {
+  async function runCommand(
+    command: string,
+    options?: { retryRequest?: BrokCodeRetryRequest }
+  ) {
     const trimmed = command.trim()
     if (!trimmed || isRunning) return
+    if (hasUnsavedFileChanges) {
+      const proceed = window.confirm(
+        'You have unsaved file edits. Run BrokCode without saving them?'
+      )
+      if (!proceed) return
+    }
 
-    const integrationToolkit = detectIntegrationConnectIntent(trimmed)
+    const retryRequest = options?.retryRequest
+    const integrationToolkit = retryRequest
+      ? null
+      : detectIntegrationConnectIntent(trimmed)
     if (integrationToolkit) {
       setInput('')
       setMessages(current => [
@@ -2999,6 +4036,25 @@ export function BrokCodeApp({
       return
     }
 
+    const requestModel = retryRequest?.model ?? selectedModel
+    const requestSource = retryRequest?.source ?? 'browser'
+    const requestSessionId = retryRequest?.session_id ?? syncSessionId
+    const requestProjectId = retryRequest?.project_id
+    const requestBackendProvider =
+      retryRequest?.backend_provider ?? activeBackend.provider
+    const requestBackendStatus =
+      retryRequest?.backend_status ?? activeBackend.status
+    const requestBackendProjectUrl =
+      retryRequest && 'backend_project_url' in retryRequest
+        ? (retryRequest.backend_project_url ?? null)
+        : activeBackend.provider === 'insforge'
+          ? activeBackend.projectUrl
+          : null
+    const requestPreferPi = retryRequest?.prefer_pi ?? true
+    const requestRequirePi = retryRequest?.require_pi ?? false
+    const requestRequireOpenCode = retryRequest?.require_opencode ?? false
+    const requestAllowBrokFallback = retryRequest?.allow_brok_fallback ?? true
+
     const run = createExecutionRun(trimmed)
     const assistantMessageId = createId('assistant')
     setExecutionRuns(current => [run, ...current].slice(0, 8))
@@ -3021,14 +4077,11 @@ export function BrokCodeApp({
       content: trimmed,
       metadata: {
         runtime: 'cloud',
-        model: selectedModel,
-        projectId: activeProject?.id ?? null,
-        backendProvider: activeBackend.provider,
-        backendStatus: activeBackend.status,
-        backendUrl:
-          activeBackend.provider === 'insforge'
-            ? activeBackend.projectUrl
-            : null
+        model: requestModel,
+        projectId: requestProjectId ?? activeProject?.id ?? null,
+        backendProvider: requestBackendProvider,
+        backendStatus: requestBackendStatus,
+        backendUrl: requestBackendProjectUrl
       }
     })
 
@@ -3049,7 +4102,12 @@ export function BrokCodeApp({
     let runTimeout: number | null = null
 
     try {
-      const runProject = await ensureProjectForRun(trimmed)
+      const runProject = await ensureProjectForRun(trimmed, requestProjectId)
+      const beforeRunFiles = await fetchProjectFilesForDiff(runProject)
+      let runRuntime = await createProjectRuntimeRecord({
+        project: runProject,
+        status: 'preparing'
+      })
 
       updateExecutionStep(run.id, 'plan', 'done', 'Project is ready.')
       updateExecutionStep(
@@ -3075,23 +4133,23 @@ export function BrokCodeApp({
         },
         body: JSON.stringify({
           command: trimmed,
-          model: selectedModel,
-          source: 'browser',
-          session_id: syncSessionId,
+          model: requestModel,
+          source: requestSource,
+          session_id: requestSessionId,
           stream: true,
-          prefer_pi: true,
-          allow_brok_fallback: true,
-          project_id: runProject.id,
-          backend_provider: activeBackend.provider,
-          backend_status: activeBackend.status,
-          backend_project_url:
-            activeBackend.provider === 'insforge'
-              ? activeBackend.projectUrl
-              : null,
+          prefer_pi: requestPreferPi,
+          require_pi: requestRequirePi,
+          require_opencode: requestRequireOpenCode,
+          allow_brok_fallback: requestAllowBrokFallback,
+          retry_of_task_id: retryRequest?.retry_of_task_id,
+          project_id: requestProjectId ?? runProject.id,
+          backend_provider: requestBackendProvider,
+          backend_status: requestBackendStatus,
+          backend_project_url: requestBackendProjectUrl,
           messages: [
             {
               role: 'system',
-              content: `${buildCommandPrompt(trimmed)}\n\nProject context: ${runProject.name} (${runProject.id}).\nBackend context: ${activeBackend.provider === 'insforge' ? `InsForge ${activeBackend.status}; project URL ${activeBackend.projectUrl ?? 'not set'}; database/auth/storage/functions are available when configured. Never ask the browser for the InsForge admin key.` : 'No backend provider configured yet.'}`
+              content: `${buildCommandPrompt(trimmed)}\n\nProject context: ${runProject.name} (${requestProjectId ?? runProject.id}).\nBackend context: ${requestBackendProvider === 'insforge' ? `InsForge ${requestBackendStatus}; project URL ${requestBackendProjectUrl ?? 'not set'}; database/auth/storage/functions are available when configured. Never ask the browser for the InsForge admin key.` : 'No backend provider configured yet.'}`
             },
             { role: 'user', content: trimmed }
           ]
@@ -3171,10 +4229,48 @@ export function BrokCodeApp({
         typeof body?.preview_url === 'string'
           ? body.preview_url
           : extractPreviewUrlFromText(assistantContent)
+      const serverFileChanges = normalizeBrokCodeFileChanges(body?.file_changes)
+      const serverGeneratedFilePaths = normalizeBrokCodeGeneratedFilePaths(
+        body?.generated_files
+      )
       const generatedFiles = extractGeneratedPreviewFiles(assistantContent)
 
       let managedPreviewUrl: string | null = null
-      if (generatedFiles.length > 0) {
+      let afterRunFiles = beforeRunFiles
+      const serverPersistedRunOutput =
+        shouldRefreshBrokCodeProjectAfterServerRun({
+          generatedFilesCount: generatedFiles.length,
+          serverFileChangesCount: serverFileChanges.length,
+          serverGeneratedFilePathsCount: serverGeneratedFilePaths.length
+        })
+
+      if (serverPersistedRunOutput) {
+        updateExecutionStep(
+          run.id,
+          'validate',
+          'running',
+          `Loading ${serverGeneratedFilePaths.length || serverFileChanges.length} server-saved file change${
+            (serverGeneratedFilePaths.length || serverFileChanges.length) === 1
+              ? ''
+              : 's'
+          }.`
+        )
+        afterRunFiles = await refreshProjectFiles(runProject)
+        runRuntime = await createProjectRuntimeRecord({
+          project: runProject,
+          status: 'building',
+          versionId:
+            typeof body?.task_id === 'string'
+              ? body.task_id
+              : (run.taskId ?? null)
+        })
+        managedPreviewUrl = await openCloudProjectPreview(runProject.id).catch(
+          error => {
+            console.error('Could not refresh server-persisted preview:', error)
+            return externalPreviewUrl
+          }
+        )
+      } else if (generatedFiles.length > 0) {
         updateExecutionStep(
           run.id,
           'validate',
@@ -3187,12 +4283,67 @@ export function BrokCodeApp({
           projectId: runProject.id,
           files: generatedFiles
         })
+        afterRunFiles = await refreshProjectFiles(runProject)
+        runRuntime = await createProjectRuntimeRecord({
+          project: runProject,
+          status: 'building'
+        })
         managedPreviewUrl = await openCloudProjectPreview(runProject.id)
       } else if (!externalPreviewUrl) {
+        runRuntime = await refreshProjectRuntime(runProject)
+        afterRunFiles = await fetchProjectFilesForDiff(runProject)
         managedPreviewUrl = await openCloudProjectPreview(runProject.id)
       }
 
       const discoveredPreviewUrl = managedPreviewUrl ?? externalPreviewUrl
+      const runDiff = buildBrokCodeRunDiff({
+        id: createId('diff'),
+        command: trimmed,
+        beforeFiles: beforeRunFiles,
+        afterFiles: afterRunFiles,
+        jobId:
+          typeof body?.task_id === 'string'
+            ? body.task_id
+            : (run.taskId ?? null),
+        previewUrl: discoveredPreviewUrl ?? null,
+        runtimeChanges: [
+          `${getRuntimeLabel(runtime)} completed`,
+          ...serverFileChanges.slice(0, 6).map(change => change.summary)
+        ],
+        deployChanges: discoveredPreviewUrl
+          ? [`Preview updated: ${discoveredPreviewUrl}`]
+          : []
+      })
+      recordRunDiff(runDiff)
+      if (runRuntime?.id) {
+        const status = discoveredPreviewUrl ? 'healthy' : 'stopped'
+        const response = await fetch(
+          `/api/brokcode/projects/${encodeURIComponent(runProject.id)}/runtime`,
+          {
+            method: 'PATCH',
+            headers: {
+              ...getAuthHeaders(apiKey),
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              runtimeId: runRuntime.id,
+              status,
+              health: {
+                ok: Boolean(discoveredPreviewUrl),
+                checkedAt: new Date().toISOString(),
+                url: discoveredPreviewUrl,
+                message: discoveredPreviewUrl
+                  ? 'Preview URL is ready.'
+                  : 'Run completed without a live preview URL.'
+              }
+            })
+          }
+        )
+        const runtimeBody = await response.json().catch(() => null)
+        if (response.ok && runtimeBody?.runtime) {
+          setProjectRuntime(runtimeBody.runtime as BrokCodeRuntimeSandbox)
+        }
+      }
 
       setActiveRuntime(runtime)
       updateExecutionStep(run.id, 'execute', 'done', 'Build finished.')
@@ -3243,25 +4394,35 @@ export function BrokCodeApp({
         content: assistantContent,
         metadata: {
           runtime,
-          model: selectedModel,
+          model: requestModel,
           projectId: runProject.id,
-          backendProvider: activeBackend.provider,
-          backendStatus: activeBackend.status,
-          backendUrl:
-            activeBackend.provider === 'insforge'
-              ? activeBackend.projectUrl
-              : null
+          backendProvider: requestBackendProvider,
+          backendStatus: requestBackendStatus,
+          backendUrl: requestBackendProjectUrl
         }
       })
-      void persistVersionSnapshot({
+      const savedVersion = await persistVersionSnapshot({
         command: trimmed,
+        checkpointName: trimmed,
+        projectId: runProject.id,
         summary: assistantContent,
         runtime,
         status: 'done',
-        previewUrl: discoveredPreviewUrl ?? null
+        previewUrl: discoveredPreviewUrl ?? null,
+        deploymentUrl: runProject.deploymentUrl ?? null,
+        diff: runDiff,
+        files: afterRunFiles.map(file => ({
+          path: file.path,
+          content: file.content,
+          language: file.language
+        }))
       })
+      if (savedVersion) {
+        attachVersionToRunDiff(runDiff.id, savedVersion.id)
+      }
       if (apiKey) {
         await refreshUsage(apiKey)
+        await refreshProjects(apiKey)
       }
     } catch (error) {
       const message =
@@ -3306,14 +4467,11 @@ export function BrokCodeApp({
         content: message,
         metadata: {
           runtime: 'error',
-          model: selectedModel,
-          projectId: activeProject?.id ?? null,
-          backendProvider: activeBackend.provider,
-          backendStatus: activeBackend.status,
-          backendUrl:
-            activeBackend.provider === 'insforge'
-              ? activeBackend.projectUrl
-              : null
+          model: requestModel,
+          projectId: requestProjectId ?? activeProject?.id ?? null,
+          backendProvider: requestBackendProvider,
+          backendStatus: requestBackendStatus,
+          backendUrl: requestBackendProjectUrl
         }
       })
       void persistVersionSnapshot({
@@ -3329,6 +4487,59 @@ export function BrokCodeApp({
       }
       setIsRunning(false)
     }
+  }
+
+  function fixRuntimeFailure() {
+    const logs = runtimeDiagnostics?.logs.slice(-14) ?? []
+    const lastError = runtimeDiagnostics?.lastError
+    const errorLocation = lastError
+      ? [
+          lastError.file,
+          typeof lastError.line === 'number' ? lastError.line : null,
+          typeof lastError.column === 'number' ? lastError.column : null
+        ]
+          .filter(
+            value => value !== null && value !== undefined && value !== ''
+          )
+          .join(':')
+      : ''
+    const prompt = [
+      'Fix the current BrokCode preview/runtime failure and keep the app functional.',
+      activeProject
+        ? `Project: ${activeProject.name} (${activeProject.id}). Use the current project files as the source of truth.`
+        : 'Use the current project files as the source of truth.',
+      projectRuntime
+        ? `Runtime: ${projectRuntime.status}; app type ${projectRuntime.appType}; dev command ${projectRuntime.devCommand}; workspace ${projectRuntime.workspacePath}.`
+        : 'Runtime: unavailable.',
+      lastError
+        ? `Last error: ${lastError.message}${errorLocation ? ` at ${errorLocation}` : ''}.`
+        : 'Last error: none captured yet; inspect the recent logs.',
+      logs.length > 0
+        ? `Recent runtime logs:\n${logs
+            .map(log => {
+              const location =
+                log.file || typeof log.line === 'number'
+                  ? ` (${[
+                      log.file,
+                      typeof log.line === 'number' ? log.line : null,
+                      typeof log.column === 'number' ? log.column : null
+                    ]
+                      .filter(
+                        value =>
+                          value !== null && value !== undefined && value !== ''
+                      )
+                      .join(':')})`
+                  : ''
+              return `- [${log.source}/${log.level}]${location} ${log.message}`
+            })
+            .join('\n')}`
+        : 'Recent runtime logs: none captured yet.',
+      'After fixing, regenerate the preview and verify the error is gone.'
+    ].join('\n\n')
+
+    setInput(prompt)
+    setMobilePane('chat')
+    void runCommandRef.current?.(prompt)
   }
 
   runCommandRef.current = runCommand
@@ -3418,6 +4629,15 @@ export function BrokCodeApp({
       className="brokcode-lovable flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#f6f6f3] text-zinc-950"
       data-testid="brokcode-app"
     >
+      <datalist id="brokcode-github-repositories">
+        {githubRepositories.map(repository => (
+          <option
+            key={repository.fullName}
+            value={repository.fullName}
+            label={`${repository.fullName} (${repository.defaultBranch ?? 'main'})`}
+          />
+        ))}
+      </datalist>
       <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 px-3 py-2 backdrop-blur-md sm:px-4">
         <div className="flex h-11 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -3712,6 +4932,15 @@ export function BrokCodeApp({
                       void refreshVersions(apiKey)
                     }
                   }}
+                  onRename={version => {
+                    void renameVersionCheckpoint(version)
+                  }}
+                  onRestore={version => {
+                    void restoreVersionSnapshot(version)
+                  }}
+                  onDuplicate={version => {
+                    void duplicateVersionSnapshot(version)
+                  }}
                 />
               </div>
 
@@ -3797,7 +5026,7 @@ export function BrokCodeApp({
                     void cancelExecutionRun(run)
                   }}
                   onRetry={run => {
-                    void runCommand(run.command)
+                    void retryExecutionRun(run)
                   }}
                 />
               )}
@@ -3953,6 +5182,106 @@ export function BrokCodeApp({
                   Checks
                 </Button>
               </div>
+
+              <div className="mt-3">
+                <DeployReadinessPanel
+                  compact
+                  state={deployReadiness}
+                  loading={deployReadinessLoading}
+                  error={deployReadinessError}
+                  hasProject={Boolean(activeProject)}
+                  onRefresh={() => {
+                    void refreshDeployReadiness()
+                  }}
+                  onOpenPreview={url => loadPreviewUrlIfAllowed(url)}
+                />
+              </div>
+
+              <div className="mt-3 space-y-2 border-t border-zinc-100 pt-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-xs text-zinc-500">GitHub export</Label>
+                  <Badge variant="outline" className="rounded-full">
+                    {githubStatus === 'connected' ? 'Connected' : 'Off'}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  <Input
+                    value={githubRepository}
+                    onChange={event =>
+                      selectGithubRepository(event.target.value)
+                    }
+                    list="brokcode-github-repositories"
+                    placeholder="owner/repo"
+                    className="h-9 rounded-xl border-zinc-200 bg-zinc-50 text-xs"
+                    aria-label="GitHub repository"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      value={githubBaseBranch}
+                      onChange={event =>
+                        setGithubBaseBranch(event.target.value)
+                      }
+                      placeholder="base"
+                      className="h-9 rounded-xl border-zinc-200 bg-zinc-50 text-xs"
+                      aria-label="GitHub base branch"
+                    />
+                    <Input
+                      value={githubHeadBranch}
+                      onChange={event =>
+                        setGithubHeadBranch(event.target.value)
+                      }
+                      placeholder="auto branch"
+                      className="h-9 rounded-xl border-zinc-200 bg-zinc-50 text-xs"
+                      aria-label="GitHub head branch"
+                    />
+                  </div>
+                  <Input
+                    value={githubExportPath}
+                    onChange={event => setGithubExportPath(event.target.value)}
+                    placeholder={activeProject?.slug ?? 'export path'}
+                    className="h-9 rounded-xl border-zinc-200 bg-zinc-50 text-xs"
+                    aria-label="GitHub export path"
+                  />
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      variant="outline"
+                      className="h-9 rounded-xl"
+                      disabled={githubRepositoriesLoading}
+                      onClick={() => {
+                        void refreshGithubRepositories(apiKey)
+                      }}
+                    >
+                      {githubRepositoriesLoading ? (
+                        <RefreshCcw className="size-4 animate-spin" />
+                      ) : (
+                        <Github className="size-4" />
+                      )}
+                      Repos
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-9 rounded-xl"
+                      disabled={!hasLiveRuntime || isSubmittingPr}
+                      onClick={() => {
+                        void submitPullRequest()
+                      }}
+                    >
+                      <Rocket className="size-4" />
+                      PR
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-9 rounded-xl"
+                      onClick={() => {
+                        void refreshRepoContext(apiKey)
+                      }}
+                    >
+                      <RefreshCcw className="size-4" />
+                      Detect
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
@@ -4069,6 +5398,15 @@ export function BrokCodeApp({
                   void refreshVersions(apiKey)
                 }
               }}
+              onRename={version => {
+                void renameVersionCheckpoint(version)
+              }}
+              onRestore={version => {
+                void restoreVersionSnapshot(version)
+              }}
+              onDuplicate={version => {
+                void duplicateVersionSnapshot(version)
+              }}
             />
           </div>
         </section>
@@ -4151,6 +5489,82 @@ export function BrokCodeApp({
                   </Badge>
                 </div>
               </div>
+              <div className="mt-2 grid grid-cols-1 gap-2 border-t border-zinc-100 pt-2 xl:grid-cols-[1.4fr_0.8fr_0.9fr_1fr_auto]">
+                <Input
+                  value={githubRepository}
+                  onChange={event => selectGithubRepository(event.target.value)}
+                  list="brokcode-github-repositories"
+                  placeholder="owner/repo"
+                  className="h-8 rounded-full border-zinc-200 bg-zinc-50 px-3 text-xs"
+                  aria-label="GitHub repository"
+                />
+                <Input
+                  value={githubBaseBranch}
+                  onChange={event => setGithubBaseBranch(event.target.value)}
+                  placeholder="base"
+                  className="h-8 rounded-full border-zinc-200 bg-zinc-50 px-3 text-xs"
+                  aria-label="GitHub base branch"
+                />
+                <Input
+                  value={githubHeadBranch}
+                  onChange={event => setGithubHeadBranch(event.target.value)}
+                  placeholder="auto branch"
+                  className="h-8 rounded-full border-zinc-200 bg-zinc-50 px-3 text-xs"
+                  aria-label="GitHub head branch"
+                />
+                <Input
+                  value={githubExportPath}
+                  onChange={event => setGithubExportPath(event.target.value)}
+                  placeholder={activeProject?.slug ?? 'export path'}
+                  className="h-8 rounded-full border-zinc-200 bg-zinc-50 px-3 text-xs"
+                  aria-label="GitHub export path"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full px-3 text-xs"
+                    disabled={githubRepositoriesLoading}
+                    onClick={() => {
+                      void refreshGithubRepositories(apiKey)
+                    }}
+                  >
+                    {githubRepositoriesLoading ? (
+                      <RefreshCcw className="size-3.5 animate-spin" />
+                    ) : (
+                      <Github className="size-3.5" />
+                    )}
+                    Repos
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full px-3 text-xs"
+                    onClick={() => {
+                      void refreshRepoContext(apiKey)
+                    }}
+                  >
+                    <RefreshCcw className="size-3.5" />
+                    Detect
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full px-3 text-xs"
+                    disabled={
+                      !hasLiveRuntime ||
+                      isSubmittingPr ||
+                      githubStatus !== 'connected'
+                    }
+                    onClick={() => {
+                      void submitPullRequest()
+                    }}
+                  >
+                    <Rocket className="size-3.5" />
+                    PR
+                  </Button>
+                </div>
+              </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {activeBackend.provider === 'insforge' ? (
                   <>
@@ -4221,6 +5635,123 @@ export function BrokCodeApp({
                 )}
               </div>
             </div>
+            <DeployReadinessPanel
+              state={deployReadiness}
+              loading={deployReadinessLoading}
+              error={deployReadinessError}
+              hasProject={Boolean(activeProject)}
+              onRefresh={() => {
+                void refreshDeployReadiness()
+              }}
+              onOpenPreview={url => loadPreviewUrlIfAllowed(url)}
+            />
+            <Tabs defaultValue="brain" className="mb-2">
+              <TabsList className="grid h-auto grid-cols-3 rounded-lg border border-zinc-200 bg-white p-1 text-xs shadow-sm xl:grid-cols-6">
+                <TabsTrigger value="brain" className="rounded-md text-xs">
+                  Brain
+                </TabsTrigger>
+                <TabsTrigger value="files" className="rounded-md text-xs">
+                  Files
+                </TabsTrigger>
+                <TabsTrigger value="backend" className="rounded-md text-xs">
+                  Backend
+                </TabsTrigger>
+                <TabsTrigger value="diff" className="rounded-md text-xs">
+                  Diff
+                </TabsTrigger>
+                <TabsTrigger value="logs" className="rounded-md text-xs">
+                  Logs
+                </TabsTrigger>
+                <TabsTrigger value="versions" className="rounded-md text-xs">
+                  Versions
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="brain" className="mt-2">
+                <ProjectBrainPanel
+                  brain={projectBrain}
+                  hasProject={Boolean(activeProject)}
+                  onSuggestedAction={action => {
+                    setInput(action)
+                    setMobilePane('chat')
+                  }}
+                />
+              </TabsContent>
+              <TabsContent value="files" className="mt-2">
+                <ProjectFilesPanel
+                  files={projectFiles}
+                  loading={projectFilesLoading}
+                  error={projectFilesError}
+                  selectedFile={selectedProjectFile}
+                  draft={fileDraft}
+                  editMode={fileEditMode}
+                  saving={fileSaving}
+                  hasUnsavedChanges={hasUnsavedFileChanges}
+                  onSelectFile={selectProjectFile}
+                  onDraftChange={setFileDraft}
+                  onEditModeChange={setFileEditMode}
+                  onSave={() => {
+                    void saveProjectFile()
+                  }}
+                  onRefresh={() => {
+                    void refreshProjectFiles()
+                  }}
+                />
+              </TabsContent>
+              <TabsContent value="backend" className="mt-2">
+                <ProjectBackendPanel
+                  backend={activeBackend}
+                  backendChecking={backendChecking}
+                  backendProvisioning={backendProvisioning}
+                  hasLiveRuntime={hasLiveRuntime}
+                  onCheck={() => {
+                    void checkBackendHealth()
+                  }}
+                  onProvision={() => {
+                    void provisionInsForgeBackend()
+                  }}
+                />
+              </TabsContent>
+              <TabsContent value="diff" className="mt-2">
+                <RunDiffPanel
+                  diffs={runDiffs}
+                  selectedDiff={selectedRunDiff}
+                  selectedFile={selectedDiffFile}
+                  onSelectDiff={diff => {
+                    setSelectedRunDiffId(diff.id)
+                    setSelectedDiffFilePath(diff.files[0]?.path ?? '')
+                  }}
+                  onSelectFile={file => setSelectedDiffFilePath(file.path)}
+                  onOpenFile={openDiffFileInEditor}
+                />
+              </TabsContent>
+              <TabsContent value="logs" className="mt-2">
+                <RuntimeLogsPanel
+                  runtimeDiagnostics={runtimeDiagnostics}
+                  latestRun={executionRuns[0]}
+                  runtimeError={runtimeError}
+                  onFixRuntimeError={fixRuntimeFailure}
+                />
+              </TabsContent>
+              <TabsContent value="versions" className="mt-2">
+                <VersionHistoryPanel
+                  versions={versions}
+                  loading={versionsLoading}
+                  compact
+                  onRefresh={() => {
+                    void refreshVersions(apiKey)
+                  }}
+                  onRename={version => {
+                    void renameVersionCheckpoint(version)
+                  }}
+                  onRestore={version => {
+                    void restoreVersionSnapshot(version)
+                  }}
+                  onDuplicate={version => {
+                    void duplicateVersionSnapshot(version)
+                  }}
+                />
+              </TabsContent>
+            </Tabs>
             <BrowserPreviewPanel
               isRunning={isRunning}
               previewInput={previewInput}
@@ -4230,11 +5761,141 @@ export function BrokCodeApp({
               onDirectLoad={loadPreviewTarget}
               onReload={reloadPreview}
               runtimeError={runtimeError}
+              runtimeLoading={projectRuntimeLoading}
+              runtimeSandbox={projectRuntime}
+              runtimeDiagnostics={runtimeDiagnostics}
+              onFixRuntimeError={fixRuntimeFailure}
               latestRun={executionRuns[0]}
             />
           </div>
         </aside>
       </main>
+    </div>
+  )
+}
+
+function DeployReadinessPanel({
+  compact = false,
+  error,
+  hasProject,
+  loading,
+  onOpenPreview,
+  onRefresh,
+  state
+}: {
+  compact?: boolean
+  error: string | null
+  hasProject: boolean
+  loading: boolean
+  onOpenPreview: (url: string) => void
+  onRefresh: () => void
+  state: BrokCodeDeployReadinessState | null
+}) {
+  const summary = summarizeBrokCodeDeployReadiness({
+    error,
+    hasProject,
+    latestDeployment: state?.latestDeployment,
+    loading,
+    readiness: state?.readiness
+  })
+  const readiness = state?.readiness ?? null
+  const latestDeployment = state?.latestDeployment ?? null
+  const deploymentUrl =
+    latestDeployment?.url ?? state?.deploymentUrl ?? readiness?.deploymentUrl
+  const previewUrl = state?.previewUrl ?? readiness?.previewUrl
+  const blockedIssues = readiness?.quality?.issues ?? []
+  const missingFiles = readiness?.requiredFiles ?? []
+
+  return (
+    <div
+      className={cn(
+        'mb-2 rounded-lg border border-zinc-200 bg-white p-2 text-xs text-zinc-600 shadow-sm',
+        compact && 'mb-0'
+      )}
+      data-testid="brokcode-deploy-readiness"
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium text-zinc-950">Deploy readiness</p>
+            <Badge
+              variant={summary.tone === 'ready' ? 'default' : 'outline'}
+              className={cn(
+                'rounded-full',
+                summary.tone === 'blocked' &&
+                  'border-amber-200 bg-amber-50 text-amber-800',
+                summary.tone === 'checking' &&
+                  'border-blue-200 bg-blue-50 text-blue-700'
+              )}
+            >
+              {summary.label}
+            </Badge>
+            {readiness ? (
+              <span className="text-[11px] text-zinc-500">
+                {readiness.fileCount} files
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 line-clamp-2 text-zinc-500">{summary.detail}</p>
+          {(missingFiles.length > 0 || blockedIssues.length > 0) && (
+            <p className="mt-1 line-clamp-2 text-[11px] text-zinc-500">
+              {[...missingFiles, ...blockedIssues].slice(0, 3).join(' · ')}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          {previewUrl ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full px-2.5 text-xs"
+              onClick={() => onOpenPreview(previewUrl)}
+            >
+              <Eye className="size-3.5" />
+              Preview
+            </Button>
+          ) : null}
+          {deploymentUrl ? (
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full px-2.5 text-xs"
+            >
+              <a href={deploymentUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="size-3.5" />
+                Live URL
+              </a>
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 rounded-full"
+            disabled={loading || !hasProject}
+            onClick={onRefresh}
+            title="Refresh deploy readiness"
+          >
+            <RefreshCcw className={cn('size-3.5', loading && 'animate-spin')} />
+            <span className="sr-only">Refresh deploy readiness</span>
+          </Button>
+        </div>
+      </div>
+      {state?.deployments.length ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-2 text-[11px] text-zinc-500">
+          <span>{state.deployments.length} deploys</span>
+          {latestDeployment ? (
+            <span>
+              latest {latestDeployment.status}
+              {latestDeployment.updatedAt
+                ? ` · ${new Date(latestDeployment.updatedAt).toLocaleTimeString()}`
+                : ''}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -4320,14 +5981,27 @@ function SyncedSessionPanel({
 function VersionHistoryPanel({
   versions,
   loading,
-  onRefresh
+  compact = false,
+  onRefresh,
+  onRename,
+  onRestore,
+  onDuplicate
 }: {
   versions: BrokCodeVersion[]
   loading: boolean
+  compact?: boolean
   onRefresh: () => void
+  onRename: (version: BrokCodeVersion) => void
+  onRestore: (version: BrokCodeVersion) => void
+  onDuplicate: (version: BrokCodeVersion) => void
 }) {
   return (
-    <div className="rounded-md border bg-background p-3 shadow-[0_16px_40px_-32px_rgba(15,23,42,0.45)]">
+    <div
+      className={cn(
+        'rounded-md border bg-background p-3 shadow-[0_16px_40px_-32px_rgba(15,23,42,0.45)]',
+        compact && 'mb-2 max-h-[24vh] overflow-auto'
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-sm font-semibold">Version History</p>
@@ -4355,7 +6029,9 @@ function VersionHistoryPanel({
               className="rounded-md border bg-muted/20 p-2 text-xs"
             >
               <div className="flex items-start justify-between gap-2">
-                <p className="line-clamp-1 font-medium">{version.command}</p>
+                <p className="line-clamp-1 font-medium">
+                  {version.checkpointName ?? version.command}
+                </p>
                 <Badge
                   variant={version.status === 'done' ? 'secondary' : 'outline'}
                   className="rounded-md text-[10px]"
@@ -4363,12 +6039,21 @@ function VersionHistoryPanel({
                   {version.status}
                 </Badge>
               </div>
+              {version.checkpointName && (
+                <p className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">
+                  {version.command}
+                </p>
+              )}
               <p className="mt-1 line-clamp-2 text-muted-foreground">
                 {version.summary}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                 <span>{new Date(version.createdAt).toLocaleTimeString()}</span>
                 {version.runtime && <span>· {version.runtime}</span>}
+                {version.files?.length ? (
+                  <span>· {version.files.length} files</span>
+                ) : null}
+                {version.deploymentUrl && <span>· live provenance</span>}
                 {version.branch && <span>· {version.branch}</span>}
                 {version.commitSha && (
                   <span>· {version.commitSha.slice(0, 8)}</span>
@@ -4384,6 +6069,37 @@ function VersionHistoryPanel({
                     PR
                   </a>
                 )}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 rounded-full px-2 text-[11px]"
+                  onClick={() => onRename(version)}
+                >
+                  Name
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 rounded-full px-2 text-[11px]"
+                  disabled={!version.files?.length}
+                  onClick={() => onRestore(version)}
+                >
+                  Restore
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 rounded-full px-2 text-[11px]"
+                  disabled={!version.files?.length}
+                  onClick={() => onDuplicate(version)}
+                >
+                  Duplicate
+                </Button>
               </div>
             </div>
           ))}
@@ -4564,7 +6280,9 @@ function AgentReasoningBar({
         : 'Working'
   const detail = activeStep?.detail ?? fallbackHint
   const completed =
-    run?.steps.filter(step => step.status === 'done').length ?? 0
+    run?.steps.filter(
+      step => step.status === 'done' || step.status === 'skipped'
+    ).length ?? 0
   const total = Math.max(run?.steps.length ?? 5, 1)
   const progress =
     status === 'done'
@@ -4750,7 +6468,9 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
                   18,
                   Math.round(
                     (run.steps.reduce((total, step) => {
-                      if (step.status === 'done') return total + 1
+                      if (step.status === 'done' || step.status === 'skipped') {
+                        return total + 1
+                      }
                       if (step.status === 'running') return total + 0.55
                       return total
                     }, 0) /
@@ -4777,7 +6497,9 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
                             ? 'bg-cyan-500 animate-pulse'
                             : step.status === 'error'
                               ? 'bg-rose-500'
-                              : 'bg-muted-foreground/40'
+                              : step.status === 'skipped'
+                                ? 'bg-zinc-300'
+                                : 'bg-muted-foreground/40'
                       )}
                     />
                     <div className="min-w-0">
@@ -4797,6 +6519,911 @@ function ExecutionVisualizer({ runs }: { runs: ExecutionRun[] }) {
   )
 }
 
+function languageLabel(file: BrokCodeProjectFile | null) {
+  if (!file) return 'File'
+  if (file.language) return file.language.toUpperCase()
+  const ext = file.path.split('.').pop()
+  return ext ? ext.toUpperCase() : 'TXT'
+}
+
+function isUnsupportedViewerFile(file: BrokCodeProjectFile | null) {
+  if (!file) return false
+  return /\.(png|jpe?g|gif|webp|ico|pdf|zip|woff2?)$/i.test(file.path)
+}
+
+type HighlightTone =
+  | 'plain'
+  | 'keyword'
+  | 'string'
+  | 'number'
+  | 'comment'
+  | 'punctuation'
+  | 'property'
+  | 'tag'
+  | 'heading'
+
+type HighlightSegment = {
+  text: string
+  tone: HighlightTone
+}
+
+const javascriptKeywords = new Set([
+  'as',
+  'async',
+  'await',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'default',
+  'else',
+  'export',
+  'extends',
+  'false',
+  'for',
+  'from',
+  'function',
+  'if',
+  'import',
+  'interface',
+  'let',
+  'new',
+  'null',
+  'return',
+  'switch',
+  'throw',
+  'true',
+  'try',
+  'type',
+  'undefined',
+  'var',
+  'while'
+])
+
+function getFileLanguage(file: BrokCodeProjectFile | null) {
+  const explicit = file?.language?.toLowerCase()
+  if (explicit) return explicit
+  const extension = file?.path.split('.').pop()?.toLowerCase()
+  if (extension === 'tsx') return 'tsx'
+  if (extension === 'ts') return 'typescript'
+  if (extension === 'jsx') return 'jsx'
+  if (extension === 'js') return 'javascript'
+  if (extension === 'html') return 'html'
+  if (extension === 'css') return 'css'
+  if (extension === 'json') return 'json'
+  if (extension === 'md' || extension === 'mdx') return 'markdown'
+  return extension ?? 'text'
+}
+
+function segmentWithPattern(
+  line: string,
+  pattern: RegExp,
+  classify: (token: string) => HighlightTone
+): HighlightSegment[] {
+  const segments: HighlightSegment[] = []
+  let cursor = 0
+
+  for (const match of line.matchAll(pattern)) {
+    const token = match[0]
+    const index = match.index ?? 0
+    if (index > cursor) {
+      segments.push({ text: line.slice(cursor, index), tone: 'plain' })
+    }
+    segments.push({ text: token, tone: classify(token) })
+    cursor = index + token.length
+  }
+
+  if (cursor < line.length) {
+    segments.push({ text: line.slice(cursor), tone: 'plain' })
+  }
+
+  return segments.length > 0 ? segments : [{ text: line, tone: 'plain' }]
+}
+
+function segmentCodeLine(line: string, language: string): HighlightSegment[] {
+  if (!line) return [{ text: ' ', tone: 'plain' }] satisfies HighlightSegment[]
+
+  if (
+    ['javascript', 'typescript', 'jsx', 'tsx', 'js', 'ts'].includes(language)
+  ) {
+    const commentStart = line.indexOf('//')
+    if (commentStart >= 0) {
+      return [
+        ...segmentCodeLine(line.slice(0, commentStart), language),
+        { text: line.slice(commentStart), tone: 'comment' as const }
+      ]
+    }
+
+    return segmentWithPattern(
+      line,
+      /('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|\b[A-Za-z_$][\w$]*\b|\b\d+(?:\.\d+)?\b)/g,
+      token => {
+        if (/^['"`]/.test(token)) return 'string'
+        if (/^\d/.test(token)) return 'number'
+        if (javascriptKeywords.has(token)) return 'keyword'
+        return 'plain'
+      }
+    )
+  }
+
+  if (language === 'html') {
+    return segmentWithPattern(
+      line,
+      /(<!--.*?-->|<\/?[A-Za-z][^\s>/]*|\/?>|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/g,
+      token => {
+        if (token.startsWith('<!--')) return 'comment'
+        if (token.startsWith('<')) return 'tag'
+        if (/^['"]/.test(token)) return 'string'
+        return 'punctuation'
+      }
+    )
+  }
+
+  if (language === 'css') {
+    return segmentWithPattern(
+      line,
+      /(\/\*.*?\*\/|#[\da-fA-F]{3,8}\b|[A-Za-z-]+(?=\s*:)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b\d+(?:\.\d+)?(?:px|rem|em|%|vh|vw)?\b)/g,
+      token => {
+        if (token.startsWith('/*')) return 'comment'
+        if (/^['"]/.test(token) || token.startsWith('#')) return 'string'
+        if (/^\d/.test(token)) return 'number'
+        return 'property'
+      }
+    )
+  }
+
+  if (language === 'json') {
+    return segmentWithPattern(
+      line,
+      /("(?:\\.|[^"\\])*"(?=\s*:)|"(?:\\.|[^"\\])*"|\btrue\b|\bfalse\b|\bnull\b|-?\b\d+(?:\.\d+)?\b|[{}\[\]:,])/g,
+      token => {
+        if (
+          /^".*"$/.test(token) &&
+          /:\s*$/.test(line.slice(line.indexOf(token)))
+        ) {
+          return 'property'
+        }
+        if (/^"/.test(token)) return 'string'
+        if (/^-?\d/.test(token)) return 'number'
+        if (/^(true|false|null)$/.test(token)) return 'keyword'
+        return 'punctuation'
+      }
+    )
+  }
+
+  if (language === 'markdown') {
+    if (/^#{1,6}\s/.test(line)) return [{ text: line, tone: 'heading' }]
+    return segmentWithPattern(line, /(`[^`]+`|\*\*[^*]+\*\*)/g, token => {
+      if (token.startsWith('`')) return 'string'
+      return 'keyword'
+    })
+  }
+
+  return [{ text: line, tone: 'plain' }]
+}
+
+function highlightToneClass(tone: HighlightTone) {
+  switch (tone) {
+    case 'keyword':
+      return 'text-sky-300'
+    case 'string':
+      return 'text-emerald-300'
+    case 'number':
+      return 'text-orange-300'
+    case 'comment':
+      return 'text-zinc-500'
+    case 'punctuation':
+      return 'text-zinc-300'
+    case 'property':
+      return 'text-violet-300'
+    case 'tag':
+      return 'text-cyan-300'
+    case 'heading':
+      return 'text-amber-200'
+    default:
+      return 'text-zinc-100'
+  }
+}
+
+function HighlightedCode({ file }: { file: BrokCodeProjectFile }) {
+  const language = getFileLanguage(file)
+  const lines = file.content.split('\n')
+
+  return (
+    <pre className="min-h-44 overflow-auto p-3 font-mono text-[11px] leading-5">
+      <code>
+        {lines.map((line, index) => (
+          <span
+            key={`${file.path}-${index}`}
+            className="grid grid-cols-[2.25rem_minmax(0,1fr)]"
+          >
+            <span className="select-none pr-3 text-right text-zinc-600">
+              {index + 1}
+            </span>
+            <span className="whitespace-pre">
+              {segmentCodeLine(line, language).map((segment, segmentIndex) => (
+                <span
+                  key={`${index}-${segmentIndex}`}
+                  className={highlightToneClass(segment.tone)}
+                >
+                  {segment.text}
+                </span>
+              ))}
+            </span>
+          </span>
+        ))}
+      </code>
+    </pre>
+  )
+}
+
+function diffTone(status: BrokCodeDiffFile['status']) {
+  if (status === 'created') return 'text-emerald-700'
+  if (status === 'deleted') return 'text-rose-700'
+  return 'text-sky-700'
+}
+
+function formatDiffBytes(value: number) {
+  if (value < 1000) return `${value} B`
+  return `${Math.round(value / 100) / 10} KB`
+}
+
+function DiffCodeBlock({
+  label,
+  content,
+  empty
+}: {
+  label: string
+  content: string | null
+  empty: string
+}) {
+  return (
+    <div className="min-w-0 overflow-hidden rounded-md border border-zinc-800 bg-[#101012]">
+      <div className="border-b border-zinc-800 px-2.5 py-1.5 text-[11px] font-medium text-zinc-400">
+        {label}
+      </div>
+      <pre className="max-h-44 overflow-auto p-2.5 font-mono text-[11px] leading-5 text-zinc-100">
+        {content ?? empty}
+      </pre>
+    </div>
+  )
+}
+
+function RunDiffPanel({
+  diffs,
+  selectedDiff,
+  selectedFile,
+  onSelectDiff,
+  onSelectFile,
+  onOpenFile
+}: {
+  diffs: BrokCodeRunDiff[]
+  selectedDiff: BrokCodeRunDiff | null
+  selectedFile: BrokCodeDiffFile | null
+  onSelectDiff: (diff: BrokCodeRunDiff) => void
+  onSelectFile: (file: BrokCodeDiffFile) => void
+  onOpenFile: (path: string) => void
+}) {
+  return (
+    <div className="mb-2 grid max-h-[34vh] min-h-[190px] overflow-hidden rounded-lg border border-zinc-200 bg-white text-xs shadow-sm md:grid-cols-[190px_minmax(0,1fr)]">
+      <div className="min-h-0 border-b border-zinc-200 bg-zinc-50 md:border-b-0 md:border-r">
+        <div className="border-b border-zinc-200 px-2.5 py-2">
+          <p className="font-medium text-zinc-950">Changes</p>
+          <p className="text-[11px] text-zinc-500">
+            {selectedDiff
+              ? `${selectedDiff.totalFilesChanged} files changed`
+              : 'Run BrokCode to review diffs.'}
+          </p>
+        </div>
+        <div className="max-h-28 overflow-auto p-1 md:max-h-[calc(34vh-42px)]">
+          {diffs.length === 0 ? (
+            <p className="px-2 py-3 text-zinc-500">No run diffs yet.</p>
+          ) : (
+            diffs.map(diff => (
+              <button
+                key={diff.id}
+                type="button"
+                className={cn(
+                  'w-full rounded-md px-2 py-1.5 text-left text-zinc-600 hover:bg-white hover:text-zinc-950',
+                  selectedDiff?.id === diff.id &&
+                    'bg-white font-medium text-zinc-950 shadow-sm'
+                )}
+                onClick={() => onSelectDiff(diff)}
+              >
+                <span className="block truncate">{diff.command}</span>
+                <span className="block truncate text-[11px] text-zinc-500">
+                  {diff.summary}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-col">
+        <div className="flex items-start justify-between gap-2 border-b border-zinc-200 px-2.5 py-2">
+          <div className="min-w-0">
+            <p className="truncate font-medium text-zinc-950">
+              {selectedDiff?.summary ?? 'No diff selected'}
+            </p>
+            <p className="truncate text-[11px] text-zinc-500">
+              {selectedDiff
+                ? [
+                    selectedDiff.jobId ? `job ${selectedDiff.jobId}` : null,
+                    selectedDiff.versionId
+                      ? `version ${selectedDiff.versionId}`
+                      : null,
+                    new Date(selectedDiff.createdAt).toLocaleTimeString()
+                  ]
+                    .filter(Boolean)
+                    .join(' - ')
+                : 'Diffs are tied to run jobs and saved versions.'}
+            </p>
+          </div>
+          {selectedFile && selectedFile.status !== 'deleted' && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 rounded-full px-2.5 text-[11px]"
+              onClick={() => onOpenFile(selectedFile.path)}
+            >
+              <FileCode2 className="size-3.5" />
+              Open file
+            </Button>
+          )}
+        </div>
+
+        {!selectedDiff ? (
+          <div className="flex h-full min-h-28 items-center justify-center px-4 text-center text-zinc-500">
+            Changes from each run will appear here.
+          </div>
+        ) : selectedDiff.files.length === 0 ? (
+          <div className="grid gap-2 p-3 text-zinc-600">
+            <p>No file changes in this run.</p>
+            {[...selectedDiff.runtimeChanges, ...selectedDiff.deployChanges]
+              .filter(Boolean)
+              .map(change => (
+                <p key={change} className="rounded-md bg-zinc-50 px-2 py-1">
+                  {change}
+                </p>
+              ))}
+          </div>
+        ) : (
+          <div className="grid min-h-0 flex-1 md:grid-cols-[180px_minmax(0,1fr)]">
+            <div className="min-h-0 overflow-auto border-b border-zinc-200 p-1 md:border-b-0 md:border-r">
+              {selectedDiff.files.map(file => (
+                <button
+                  key={file.path}
+                  type="button"
+                  className={cn(
+                    'w-full rounded-md px-2 py-1.5 text-left hover:bg-zinc-50',
+                    selectedFile?.path === file.path && 'bg-zinc-50 shadow-sm'
+                  )}
+                  onClick={() => onSelectFile(file)}
+                >
+                  <span className="block truncate font-medium text-zinc-800">
+                    {file.path}
+                  </span>
+                  <span
+                    className={cn(
+                      'block text-[11px] capitalize',
+                      diffTone(file.status)
+                    )}
+                  >
+                    {file.status} +{file.additions} -{file.deletions}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="min-h-0 overflow-auto p-2">
+              {selectedFile ? (
+                <div className="grid gap-2">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+                    <Badge variant="secondary" className="rounded-full">
+                      {selectedFile.status}
+                    </Badge>
+                    <span>
+                      {formatDiffBytes(selectedFile.beforeSize)} to{' '}
+                      {formatDiffBytes(selectedFile.afterSize)}
+                    </span>
+                    {selectedFile.truncated && (
+                      <span>large diff summarized</span>
+                    )}
+                  </div>
+                  <div className="grid gap-2 xl:grid-cols-2">
+                    <DiffCodeBlock
+                      label="Before"
+                      content={selectedFile.before}
+                      empty="File did not exist."
+                    />
+                    <DiffCodeBlock
+                      label="After"
+                      content={selectedFile.after}
+                      empty="File was deleted."
+                    />
+                  </div>
+                  {selectedDiff.runtimeChanges.length > 0 ||
+                  selectedDiff.deployChanges.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 text-[11px] text-zinc-500">
+                      {[
+                        ...selectedDiff.runtimeChanges,
+                        ...selectedDiff.deployChanges
+                      ].map(change => (
+                        <span
+                          key={change}
+                          className="rounded-full border border-zinc-200 px-2 py-1"
+                        >
+                          {change}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="p-3 text-zinc-500">Select a changed file.</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function formatProjectBrainUpdatedAt(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'just now'
+
+  return date.toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}
+
+function ProjectBrainPanel({
+  brain,
+  hasProject,
+  onSuggestedAction
+}: {
+  brain: BrokCodeProjectBrain
+  hasProject: boolean
+  onSuggestedAction: (action: string) => void
+}) {
+  return (
+    <div className="grid max-h-[34vh] min-h-[250px] gap-3 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Bot className="size-4 text-zinc-700" />
+            <p className="font-semibold text-zinc-950">Project Brain</p>
+          </div>
+          <p className="mt-1 text-zinc-500">
+            {hasProject
+              ? `Updated ${formatProjectBrainUpdatedAt(brain.updatedAt)}`
+              : 'Start a project to persist the product memory.'}
+          </p>
+        </div>
+        <Badge variant="outline" className="shrink-0 rounded-full">
+          {brain.currentPages.length} pages
+        </Badge>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+          <p className="text-[11px] uppercase text-zinc-400">Product</p>
+          <p className="mt-1 font-medium text-zinc-950">{brain.product}</p>
+        </div>
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+          <p className="text-[11px] uppercase text-zinc-400">Audience</p>
+          <p className="mt-1 text-zinc-700">{brain.audience}</p>
+        </div>
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+          <p className="text-[11px] uppercase text-zinc-400">Experience</p>
+          <p className="mt-1 line-clamp-3 text-zinc-700">
+            {brain.coreExperience}
+          </p>
+        </div>
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+          <p className="text-[11px] uppercase text-zinc-400">Design</p>
+          <p className="mt-1 text-zinc-700">{brain.designDirection}</p>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[11px] uppercase text-zinc-400">
+          Current app map
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {(brain.currentPages.length > 0
+            ? brain.currentPages
+            : ['First screen pending']
+          ).map(page => (
+            <Badge key={page} variant="secondary" className="rounded-full">
+              {page}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div>
+          <p className="mb-1.5 text-[11px] uppercase text-zinc-400">
+            AI features
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {(brain.aiFeatures.length > 0
+              ? brain.aiFeatures
+              : ['Not detected yet']
+            ).map(feature => (
+              <Badge key={feature} variant="outline" className="rounded-full">
+                {feature}
+              </Badge>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="mb-1.5 text-[11px] uppercase text-zinc-400">Backend</p>
+          <p className="rounded-lg border border-zinc-200 bg-zinc-50 p-2 text-zinc-700">
+            {brain.backendSummary}
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[11px] uppercase text-zinc-400">
+          Suggested next actions
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {brain.suggestedNextActions.map(action => (
+            <Button
+              key={action}
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 rounded-full px-2.5 text-[11px]"
+              onClick={() => onSuggestedAction(action)}
+            >
+              <Wand2 className="size-3.5" />
+              {action}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ProjectBackendPanel({
+  backend,
+  backendChecking,
+  backendProvisioning,
+  hasLiveRuntime,
+  onCheck,
+  onProvision
+}: {
+  backend: BrokCodeBackendMetadata
+  backendChecking: boolean
+  backendProvisioning: boolean
+  hasLiveRuntime: boolean
+  onCheck: () => void
+  onProvision: () => void
+}) {
+  const capabilities = Object.entries(backend.capabilities ?? {})
+    .filter(([, enabled]) => enabled)
+    .map(([name]) => name)
+
+  return (
+    <div className="grid max-h-[34vh] min-h-[220px] gap-3 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <PlugZap className="size-4 text-zinc-700" />
+            <p className="font-semibold text-zinc-950">Backend</p>
+          </div>
+          <p className="mt-1 truncate text-zinc-500">
+            {backend.provider === 'insforge'
+              ? backend.projectUrl || backend.status
+              : 'No cloud backend connected.'}
+          </p>
+        </div>
+        <Badge variant="outline" className="shrink-0 rounded-full">
+          {backend.provider === 'insforge'
+            ? backend.health === 'online'
+              ? 'Online'
+              : backend.status
+            : 'None'}
+        </Badge>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+          <p className="text-[11px] uppercase text-zinc-400">Provider</p>
+          <p className="mt-1 font-medium text-zinc-950">{backend.provider}</p>
+        </div>
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+          <p className="text-[11px] uppercase text-zinc-400">Admin key</p>
+          <p className="mt-1 text-zinc-700">
+            {backend.adminKeyConfigured ? 'Configured' : 'Not configured'}
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-[11px] uppercase text-zinc-400">
+          Capabilities
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {(capabilities.length > 0 ? capabilities : ['pending']).map(item => (
+            <Badge key={item} variant="secondary" className="rounded-full">
+              {item}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      {backend.error ? (
+        <p className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-700">
+          {backend.error}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        {backend.provider === 'insforge' ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-full px-3 text-xs"
+            disabled={backendChecking}
+            onClick={onCheck}
+          >
+            {backendChecking ? (
+              <RefreshCcw className="size-3.5 animate-spin" />
+            ) : (
+              <Radar className="size-3.5" />
+            )}
+            Check backend
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-full px-3 text-xs"
+            disabled={backendProvisioning || !hasLiveRuntime}
+            onClick={onProvision}
+          >
+            {backendProvisioning ? (
+              <RefreshCcw className="size-3.5 animate-spin" />
+            ) : (
+              <PlugZap className="size-3.5" />
+            )}
+            Add backend
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function RuntimeLogsPanel({
+  runtimeDiagnostics,
+  latestRun,
+  runtimeError,
+  onFixRuntimeError
+}: {
+  runtimeDiagnostics: BrokCodeRuntimeDiagnostics | null
+  latestRun?: ExecutionRun
+  runtimeError: string | null
+  onFixRuntimeError: () => void
+}) {
+  const recentLogs = runtimeDiagnostics?.logs.slice(-12) ?? []
+
+  return (
+    <div className="grid max-h-[34vh] min-h-[220px] gap-3 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <TerminalSquare className="size-4 text-zinc-700" />
+            <p className="font-semibold text-zinc-950">Logs</p>
+          </div>
+          <p className="mt-1 text-zinc-500">
+            {runtimeDiagnostics
+              ? `Runtime ${runtimeDiagnostics.status}`
+              : latestRun?.note || 'No runtime logs yet.'}
+          </p>
+        </div>
+        {runtimeError ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 rounded-full px-3 text-xs"
+            onClick={onFixRuntimeError}
+          >
+            <Wand2 className="size-3.5" />
+            Fix
+          </Button>
+        ) : null}
+      </div>
+
+      {runtimeError ? (
+        <p className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-700">
+          {runtimeError}
+        </p>
+      ) : null}
+
+      {recentLogs.length > 0 ? (
+        <div className="space-y-1.5">
+          {recentLogs.map((log, index) => (
+            <div
+              key={`${log.at}-${index}`}
+              className="rounded-lg border border-zinc-200 bg-zinc-950 p-2 font-mono text-[11px] leading-5 text-zinc-100"
+            >
+              <p className="text-zinc-400">
+                {log.level} / {log.source}
+              </p>
+              <p>{log.message}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 p-3 text-zinc-500">
+          Run the app to see install, dev-server, browser, and system logs here.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ProjectFilesPanel({
+  files,
+  loading,
+  error,
+  selectedFile,
+  draft,
+  editMode,
+  saving,
+  hasUnsavedChanges,
+  onSelectFile,
+  onDraftChange,
+  onEditModeChange,
+  onSave,
+  onRefresh
+}: {
+  files: BrokCodeProjectFile[]
+  loading: boolean
+  error: string | null
+  selectedFile: BrokCodeProjectFile | null
+  draft: string
+  editMode: boolean
+  saving: boolean
+  hasUnsavedChanges: boolean
+  onSelectFile: (path: string) => void
+  onDraftChange: (value: string) => void
+  onEditModeChange: (value: boolean) => void
+  onSave: () => void
+  onRefresh: () => void
+}) {
+  const unsupported = isUnsupportedViewerFile(selectedFile)
+
+  return (
+    <div className="mb-2 grid max-h-[34vh] min-h-[190px] overflow-hidden rounded-lg border border-zinc-200 bg-white text-xs shadow-sm md:grid-cols-[170px_minmax(0,1fr)]">
+      <div className="min-h-0 border-b border-zinc-200 bg-zinc-50 md:border-b-0 md:border-r">
+        <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-2.5 py-2">
+          <div className="min-w-0">
+            <p className="font-medium text-zinc-950">Files</p>
+            <p className="text-[11px] text-zinc-500">{files.length} saved</p>
+          </div>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-7 rounded-full"
+            onClick={onRefresh}
+            disabled={loading}
+            title="Refresh files"
+          >
+            <RefreshCcw className={cn('size-3.5', loading && 'animate-spin')} />
+            <span className="sr-only">Refresh files</span>
+          </Button>
+        </div>
+        <div className="max-h-28 overflow-auto p-1 md:max-h-[calc(34vh-42px)]">
+          {loading && files.length === 0 ? (
+            <p className="px-2 py-3 text-zinc-500">Loading files...</p>
+          ) : error ? (
+            <p className="px-2 py-3 text-rose-600">{error}</p>
+          ) : files.length === 0 ? (
+            <p className="px-2 py-3 text-zinc-500">No generated files yet.</p>
+          ) : (
+            files.map(file => (
+              <button
+                key={file.path}
+                type="button"
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-zinc-600 hover:bg-white hover:text-zinc-950',
+                  selectedFile?.path === file.path &&
+                    'bg-white font-medium text-zinc-950 shadow-sm'
+                )}
+                onClick={() => onSelectFile(file.path)}
+              >
+                <FileCode2 className="size-3.5 shrink-0" />
+                <span className="truncate">{file.path}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-col">
+        <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-2.5 py-2">
+          <div className="min-w-0">
+            <p className="truncate font-medium text-zinc-950">
+              {selectedFile?.path ?? 'No file selected'}
+            </p>
+            <p className="text-[11px] text-zinc-500">
+              {selectedFile
+                ? `${languageLabel(selectedFile)}${hasUnsavedChanges ? ' - unsaved' : ''}`
+                : 'Open a generated file to inspect it.'}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={editMode ? 'secondary' : 'outline'}
+              className="h-7 rounded-full px-2.5 text-[11px]"
+              disabled={!selectedFile || unsupported}
+              onClick={() => onEditModeChange(!editMode)}
+            >
+              <Pencil className="size-3.5" />
+              {editMode ? 'Viewing' : 'Edit'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 rounded-full px-2.5 text-[11px]"
+              disabled={!selectedFile || !hasUnsavedChanges || saving}
+              onClick={onSave}
+            >
+              {saving ? (
+                <RefreshCcw className="size-3.5 animate-spin" />
+              ) : (
+                <Save className="size-3.5" />
+              )}
+              Save
+            </Button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto bg-[#101012] text-zinc-100">
+          {!selectedFile ? (
+            <div className="flex h-full min-h-28 items-center justify-center px-4 text-center text-zinc-400">
+              Select a file to inspect its source.
+            </div>
+          ) : unsupported ? (
+            <div className="flex h-full min-h-28 items-center justify-center px-4 text-center text-zinc-400">
+              This file type can be saved and previewed, but inline viewing is
+              not supported here.
+            </div>
+          ) : editMode ? (
+            <Textarea
+              value={draft}
+              onChange={event => onDraftChange(event.target.value)}
+              className="min-h-44 rounded-none border-0 bg-[#101012] font-mono text-[11px] leading-5 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+              spellCheck={false}
+            />
+          ) : (
+            <HighlightedCode file={selectedFile} />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BrowserPreviewPanel({
   isRunning,
   previewInput,
@@ -4806,7 +7433,11 @@ function BrowserPreviewPanel({
   latestRun,
   onDirectLoad,
   onReload,
-  runtimeError
+  runtimeLoading,
+  runtimeSandbox,
+  runtimeError,
+  runtimeDiagnostics,
+  onFixRuntimeError
 }: {
   isRunning: boolean
   previewInput: string
@@ -4816,15 +7447,99 @@ function BrowserPreviewPanel({
   latestRun?: ExecutionRun
   onDirectLoad: (value: string) => void
   onReload: () => void
+  runtimeLoading: boolean
+  runtimeSandbox: BrokCodeRuntimeSandbox | null
   runtimeError: string | null
+  runtimeDiagnostics: BrokCodeRuntimeDiagnostics | null
+  onFixRuntimeError: () => void
 }) {
   const hasPreviewUrl = Boolean(previewUrl.trim())
   const isBlockedPreview = isBrokCodeWorkspaceUrl(previewUrl)
+  const recentRuntimeLogs = runtimeDiagnostics?.logs.slice(-8) ?? []
+  const lastRuntimeError = runtimeDiagnostics?.lastError ?? null
+  const runtimeFailure =
+    runtimeSandbox?.status === 'crashed' ||
+    runtimeSandbox?.status === 'timed_out'
+      ? {
+          label:
+            runtimeSandbox.status === 'timed_out'
+              ? 'Runtime timeout'
+              : 'Runtime crash',
+          title:
+            runtimeSandbox.status === 'timed_out'
+              ? 'Runtime timed out'
+              : 'Runtime crashed',
+          detail:
+            runtimeSandbox.health?.message ??
+            lastRuntimeError?.message ??
+            'The live app runtime stopped before the preview could recover.'
+        }
+      : null
+  const healthFailure =
+    !isRunning && previewHealth.status === 'offline'
+      ? (() => {
+          if (previewHealth.reason === 'not_found') {
+            return {
+              label: '404',
+              title: 'Preview route missing',
+              detail:
+                previewHealth.message ||
+                'The preview URL returned 404. The app may be missing its active entrypoint.'
+            }
+          }
+          if (previewHealth.reason === 'blank') {
+            return {
+              label: 'Blank',
+              title: 'Preview is blank',
+              detail:
+                previewHealth.message ||
+                'The preview loaded, but no visible page content was detected.'
+            }
+          }
+          if (previewHealth.reason === 'timeout') {
+            return {
+              label: 'Timeout',
+              title: 'Preview timed out',
+              detail:
+                previewHealth.message ||
+                'The preview server did not respond before the health check timed out.'
+            }
+          }
+          if (previewHealth.reason === 'http_error') {
+            return {
+              label: previewHealth.httpStatus
+                ? `HTTP ${previewHealth.httpStatus}`
+                : 'HTTP error',
+              title: 'Preview returned an error',
+              detail:
+                previewHealth.message ||
+                'The preview server responded with an error status.'
+            }
+          }
+          if (previewHealth.reason === 'blocked') {
+            return {
+              label: 'Blocked',
+              title: 'Preview URL blocked',
+              detail: previewHealth.message
+            }
+          }
+          return {
+            label: 'Offline',
+            title: 'Preview is offline',
+            detail:
+              previewHealth.message ||
+              'The preview server is not reachable yet.'
+          }
+        })()
+      : null
+  const previewFailure = runtimeFailure ?? healthFailure
   const previewStatus = isRunning
     ? 'updating'
-    : previewHealth.status === 'offline' && hasPreviewUrl
-      ? 'loaded'
-      : previewHealth.status
+    : previewFailure
+      ? 'error'
+      : previewHealth.status === 'offline' && hasPreviewUrl
+        ? 'loaded'
+        : previewHealth.status
   const healthTone =
     previewStatus === 'online'
       ? 'default'
@@ -4838,9 +7553,15 @@ function BrowserPreviewPanel({
       ? hasPreviewUrl
         ? 'Building your changes. The preview below is the last saved version until the new run finishes.'
         : 'Building your first preview. It will open here automatically.'
-      : previewStatus === 'loaded'
-        ? 'Preview loaded. Health check may be blocked by the preview origin.'
-        : previewHealth.message
+      : previewFailure
+        ? previewFailure.detail
+        : previewStatus === 'loaded'
+          ? 'Preview loaded. Health check may be blocked by the preview origin.'
+          : previewHealth.message
+  const runtimePorts = runtimeSandbox?.ports
+    ?.map(port => port.port)
+    .filter((port): port is number => typeof port === 'number')
+    .join(', ')
 
   return (
     <div
@@ -4859,18 +7580,26 @@ function BrowserPreviewPanel({
           </p>
         </div>
         <div className="mobile-chip-row flex items-center justify-end gap-1.5 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0">
-          <Badge variant={healthTone} className="shrink-0 rounded-full">
+          <Badge
+            variant={healthTone}
+            className={cn(
+              'shrink-0 rounded-full',
+              previewStatus === 'error' && 'border-rose-200 text-rose-700'
+            )}
+          >
             {previewStatus === 'online'
               ? 'Live'
               : previewStatus === 'checking'
                 ? 'Checking'
                 : previewStatus === 'updating'
                   ? 'Updating'
-                  : previewStatus === 'loaded'
-                    ? 'Loaded'
-                    : previewStatus === 'offline'
-                      ? 'Offline'
-                      : 'Ready'}
+                  : previewStatus === 'error'
+                    ? (previewFailure?.label ?? 'Error')
+                    : previewStatus === 'loaded'
+                      ? 'Loaded'
+                      : previewStatus === 'offline'
+                        ? 'Offline'
+                        : 'Ready'}
           </Badge>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -4968,6 +7697,109 @@ function BrowserPreviewPanel({
         </p>
       )}
 
+      {previewFailure && (
+        <div
+          className="mx-2 mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-950"
+          data-testid="brokcode-preview-failure-state"
+        >
+          <p className="font-medium">{previewFailure.title}</p>
+          <p className="mt-1 leading-5">{previewFailure.detail}</p>
+        </div>
+      )}
+
+      {(runtimeSandbox || runtimeLoading) && (
+        <div className="mx-2 mt-2 grid gap-2 rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div className="min-w-0">
+              <p className="font-medium text-zinc-950">
+                {runtimeLoading
+                  ? 'Loading runtime contract...'
+                  : `Runtime ${runtimeSandbox?.status ?? 'preparing'}`}
+              </p>
+              <p className="mt-0.5 truncate">
+                {runtimeSandbox
+                  ? `${runtimeSandbox.appType.replace('_', ' ')} · ${runtimeSandbox.packageManager} · ${runtimeSandbox.workspacePath}`
+                  : 'BrokCode is checking the latest project sandbox.'}
+              </p>
+            </div>
+            {runtimeSandbox && (
+              <div className="flex flex-wrap gap-1.5 sm:justify-end">
+                <Badge variant="secondary" className="rounded-full">
+                  {runtimeSandbox.devCommand}
+                </Badge>
+                {runtimePorts ? (
+                  <Badge variant="outline" className="rounded-full">
+                    ports {runtimePorts}
+                  </Badge>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          {(lastRuntimeError || recentRuntimeLogs.length > 0) && (
+            <div className="rounded-md border border-zinc-200 bg-white">
+              <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-2.5 py-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-zinc-950">Runtime logs</p>
+                  <p className="truncate text-[11px] text-zinc-500">
+                    {lastRuntimeError
+                      ? `${lastRuntimeError.source} error captured`
+                      : `${recentRuntimeLogs.length} recent event${recentRuntimeLogs.length === 1 ? '' : 's'}`}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 shrink-0 rounded-full px-3 text-xs"
+                  disabled={!lastRuntimeError && recentRuntimeLogs.length === 0}
+                  onClick={onFixRuntimeError}
+                >
+                  <Wand2 className="size-3.5" />
+                  Fix this
+                </Button>
+              </div>
+              <div className="max-h-36 overflow-auto px-2.5 py-2 font-mono text-[11px] leading-5 text-zinc-600">
+                {recentRuntimeLogs.map((log, index) => {
+                  const location =
+                    log.file || typeof log.line === 'number'
+                      ? [
+                          log.file,
+                          typeof log.line === 'number' ? log.line : null,
+                          typeof log.column === 'number' ? log.column : null
+                        ]
+                          .filter(
+                            value =>
+                              value !== null &&
+                              value !== undefined &&
+                              value !== ''
+                          )
+                          .join(':')
+                      : ''
+                  return (
+                    <div
+                      key={`${log.at}-${index}`}
+                      className={cn(
+                        'grid gap-1 border-b border-zinc-100 py-1 last:border-b-0 sm:grid-cols-[96px_1fr]',
+                        log.level === 'error' && 'text-rose-700'
+                      )}
+                    >
+                      <span className="uppercase text-zinc-400">
+                        {log.source}
+                      </span>
+                      <span className="min-w-0 break-words">
+                        {location ? `${location} ` : ''}
+                        {log.message}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {latestRun?.previewUrl && (
         <div className="mx-2 mt-2 flex items-center gap-2 rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 xl:hidden">
           <Globe className="size-3.5" />
@@ -5014,7 +7846,7 @@ function BrowserPreviewPanel({
                 isRunning && 'opacity-70'
               )}
               referrerPolicy="no-referrer"
-              sandbox="allow-forms allow-modals allow-popups allow-scripts"
+              sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts"
             />
             {isRunning && (
               <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-zinc-200 bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm backdrop-blur">

@@ -218,6 +218,62 @@
       "when": 1778910000000,
       "tag": "0030_app_access_feature_gates",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1778913600000,
+      "tag": "0031_connector_action_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1778917200000,
+      "tag": "0032_brokcode_runtime_sandboxes",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1778920800000,
+      "tag": "0033_brokcode_runtime_app_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1778924400000,
+      "tag": "0034_brokcode_version_diff_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1778928000000,
+      "tag": "0035_brokcode_version_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1778930400000,
+      "tag": "0036_api_key_per_key_salt",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1778931600000,
+      "tag": "0037_presentation_source_markdown",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1778935200000,
+      "tag": "0038_presentation_rls",
+      "breakpoints": true
     }
   ]
 }

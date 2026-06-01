@@ -1,6 +1,7 @@
 import { tool } from 'ai'
 import * as z from 'zod'
 
+import { createConnectorActionRun } from '@/lib/connectors/action-runs'
 import {
   createConnectedAccountLink,
   executeComposioTool,
@@ -26,7 +27,7 @@ const composioIntegrationInputSchema = z.object({
     .string()
     .optional()
     .describe(
-      'Toolkit slug such as gmail, github, linear or slack for filtering.'
+      'Toolkit slug such as gmail, googleslides, googledocs, github, linear or slack for filtering.'
     ),
   authConfigId: z
     .string()
@@ -127,6 +128,7 @@ export function createComposioIntegrationTool(userId?: string) {
             success: true,
             configured: true,
             action,
+            toolkitSlug: toolkitSlug || null,
             connectedAccounts: accounts,
             connectedCount: accounts.length,
             message:
@@ -149,6 +151,7 @@ export function createComposioIntegrationTool(userId?: string) {
             success: true,
             configured: true,
             action,
+            toolkitSlug: toolkitSlug || null,
             connectedAccounts: accounts,
             connectedCount: accounts.length
           }
@@ -162,6 +165,7 @@ export function createComposioIntegrationTool(userId?: string) {
             success: true,
             configured: true,
             action,
+            toolkitSlug: toolkitSlug || null,
             authConfigs,
             authConfigCount: authConfigs.length
           }
@@ -172,15 +176,37 @@ export function createComposioIntegrationTool(userId?: string) {
 
         if (action === 'execute_tool') {
           if (!canExecuteComposioAgentTools()) {
+            const preparedAction =
+              userId && toolkitSlug && toolSlug
+                ? await createConnectorActionRun({
+                    userId,
+                    toolkit: toolkitSlug,
+                    action: 'create',
+                    toolSlug,
+                    text,
+                    arguments: toolArguments,
+                    connectedAccountId
+                  }).catch(() => null)
+                : null
+
             yield {
               state: 'complete' as const,
               success: false,
               configured: true,
               action,
               toolSlug: toolSlug || null,
+              toolkitSlug: toolkitSlug || null,
               approvalRequired: true,
+              actionRun: preparedAction
+                ? {
+                    id: preparedAction.run.id,
+                    status: preparedAction.run.status,
+                    approvalId: preparedAction.approval?.id || null,
+                    expiresAt: preparedAction.approval?.expiresAt || null
+                  }
+                : null,
               message:
-                'Connected-app actions require an approval-safe product surface before Brok can execute them from chat. I can still inspect connection status or help prepare the action.'
+                'Connected-app actions require approval before execution. I prepared the action for review instead of running it directly.'
             }
             return
           }
@@ -236,6 +262,7 @@ export function createComposioIntegrationTool(userId?: string) {
             success: true,
             configured: true,
             action,
+            toolkitSlug: toolkitSlug || null,
             toolSlug,
             connectedAccountId: resolvedConnectedAccountId || null,
             message: `Executed Composio tool ${toolSlug}.`,
@@ -269,6 +296,7 @@ export function createComposioIntegrationTool(userId?: string) {
             success: true,
             configured: true,
             action,
+            toolkitSlug: toolkitSlug || null,
             authConfigId: authConfigId || null,
             connectionUrl: link.url || null,
             message: link.url
@@ -323,6 +351,7 @@ export function createComposioIntegrationTool(userId?: string) {
           success: true,
           configured: true,
           action,
+          toolkitSlug: toolkitSlug || null,
           authConfigId: resolvedAuthConfigId,
           connectionUrl: link.url || null,
           message: link.url
