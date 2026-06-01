@@ -1,11 +1,15 @@
 import { registerOTel } from '@vercel/otel'
 import { LangfuseExporter } from 'langfuse-vercel'
 
+import { isTracingEnabled } from '@/lib/utils/telemetry'
+
 export async function register() {
-  registerOTel({
-    serviceName: 'morphic-ai-search',
-    traceExporter: new LangfuseExporter()
-  })
+  if (isTracingEnabled()) {
+    registerOTel({
+      serviceName: 'morphic-ai-search',
+      traceExporter: new LangfuseExporter()
+    })
+  }
 
   // Initialize Ollama validation on server startup (only when configured)
   if (process.env.OLLAMA_BASE_URL) {

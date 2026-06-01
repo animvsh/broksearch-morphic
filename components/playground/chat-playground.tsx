@@ -44,15 +44,8 @@ const MODELS = Object.entries(BROK_MODELS).map(([id, config]) => ({
 const BROK_KEY_STORAGE = 'brok_code_api_key'
 const PLAYGROUND_KEY_STORAGE = 'brok_playground_key'
 const MODEL_SPEED_NOTES: Record<string, string> = {
-  'MiniMax-M2.7': 'About 60 tokens/sec',
-  'MiniMax-M2.7-highspeed': 'About 100 tokens/sec',
-  'MiniMax-M2.5': 'About 60 tokens/sec',
-  'MiniMax-M2.5-highspeed': 'About 100 tokens/sec',
-  'MiniMax-M2.1': 'About 60 tokens/sec',
-  'MiniMax-M2.1-highspeed': 'About 100 tokens/sec',
-  'MiniMax-M2': 'Reasoning and agentic path',
   'brok-fast': 'Default fast Brok route',
-  'brok-lite': 'Highspeed MiniMax route',
+  'brok-lite': 'Highspeed Brok route',
   'brok-code': 'Brok default coding-agent route',
   'brok-search': 'Search-enabled route',
   'brok-search-pro': 'Deep search route',
@@ -349,7 +342,7 @@ export function ChatPlayground() {
                 <p className="mt-2 text-xs text-muted-foreground">
                   Use <code>brok-code</code> as the default AI layer for Codex,
                   Claude Code, and OpenAI-compatible coding tools. Pick a direct
-                  MiniMax ID only when you want that exact upstream model.
+                  Brok M2 ID only when you want that exact upstream model.
                 </p>
               </div>
 

@@ -26,6 +26,11 @@ pnpm-lock.yaml
 .DS_Store
 coverage/
 .cache/
+.claude/
+
+# Claude runtime state (rewritten continuously)
+.claude/tasks/cfg/*.json
+.claude/logs/
 
 # Next.js
 .next/
@@ -40,3 +45,6 @@ temp/
 
 # Database
 lib/db/migrations/
+
+# Conductor workspace scratch directory (cross-agent attachments, todos)
+.context/

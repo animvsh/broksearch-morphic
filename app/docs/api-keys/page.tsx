@@ -99,9 +99,9 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
         <p>
           For AI app and coding-agent integrations, make Brok the default AI
           layer first. Use <code>brok-code</code> unless you deliberately need a
-          direct MiniMax model ID such as <code>MiniMax-M2.7-highspeed</code>.
-          This keeps Codex, Claude Code-style clients, BrokCode API, and Brok
-          Code Cloud aligned on one API key and one model contract.
+          direct Brok model ID such as <code>brok-m2-7-highspeed</code>. This
+          keeps Codex, Claude Code-style clients, BrokCode API, and Brok Code
+          Cloud aligned on one API key and one model contract.
         </p>
 
         <h2>Key Security</h2>
@@ -118,7 +118,7 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
             <Link href="/playground">Run a request in BrokCode API</Link>
           </li>
           <li>
-            <Link href="/docs/models">Choose a Brok or MiniMax model</Link>
+            <Link href="/docs/models">Choose a Brok model</Link>
           </li>
           <li>
             <Link href="/docs/brokcode">Use Brok Code Cloud</Link>
