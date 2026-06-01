@@ -77,13 +77,6 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
       <section className="relative mx-auto w-full max-w-6xl px-5 pt-16 pb-28 sm:px-8 sm:pt-24">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
-        >
-          <div className="absolute left-1/2 top-0 size-[40rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_center,rgba(47,126,231,0.18),transparent_60%)] blur-3xl" />
-        </div>
-
-        <div
-          aria-hidden="true"
           className="pointer-events-none absolute inset-0 hidden lg:block"
         >
           <FloatingCard
@@ -118,11 +111,11 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
             <span className="font-medium">Brok</span>
           </div>
 
-          <div className="rounded-2xl border border-zinc-200 bg-white/90 px-4 py-3 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.22)] backdrop-blur-md">
+          <div className="rounded-lg border border-zinc-200 bg-white/90 px-4 py-3 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.22)] backdrop-blur-md">
             <div className="flex w-72 items-center gap-2.5 sm:w-80">
               <Search className="size-4 text-zinc-400" />
               <span className="flex-1 text-left text-sm text-zinc-500">
-                Ask Brok anything…
+                Ask Brok anything...
               </span>
               <span className="inline-flex size-6 items-center justify-center rounded-md bg-zinc-900 text-white">
                 <ArrowRight className="size-3" />
@@ -190,7 +183,7 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
 
       <footer className="border-t border-zinc-200/80">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 px-5 py-6 text-sm text-zinc-500 sm:flex-row sm:px-8">
-          <span>© 2026 Brok</span>
+          <span>&copy; 2026 Brok</span>
           <nav className="flex items-center gap-5">
             <Link href="/docs" className="hover:text-zinc-900 hover:underline">
               Docs
@@ -222,7 +215,7 @@ function FloatingCard({
   return (
     <div
       className={
-        'rounded-2xl border border-zinc-200/80 bg-white/95 p-4 shadow-[0_24px_50px_-30px_rgba(15,23,42,0.28)] backdrop-blur-sm transition-transform duration-300 ' +
+        'rounded-lg border border-zinc-200/80 bg-white/95 p-4 shadow-[0_24px_50px_-30px_rgba(15,23,42,0.28)] backdrop-blur-sm transition-transform duration-300 ' +
         (className ?? '')
       }
       style={{ animationDelay: `${delay}ms` }}
@@ -258,7 +251,7 @@ function FloatingReminders() {
           <div className="truncate text-sm font-medium text-zinc-900">
             Today&apos;s meeting
           </div>
-          <div className="text-xs text-zinc-500">9:00 — 10:00</div>
+          <div className="text-xs text-zinc-500">9:00 - 10:00</div>
         </div>
       </div>
     </div>
