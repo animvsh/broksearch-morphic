@@ -27,6 +27,10 @@ pnpm-lock.yaml
 coverage/
 .cache/
 
+# Claude runtime state (rewritten continuously)
+.claude/tasks/cfg/*.json
+.claude/logs/
+
 # Next.js
 .next/
 out/
