@@ -7,6 +7,7 @@ import {
   createBrokCodeProject,
   getBrokCodeProject,
   getBrokCodeProjectByHandle,
+  listBrokCodeProjectDeployments,
   listBrokCodeProjectFiles,
   listBrokCodeProjects,
   recordBrokCodeProjectDeployment,
@@ -133,6 +134,45 @@ describe('BrokCode project file store', () => {
     })
     expect(deployedProject?.status).toBe('deployed')
     expect(deployedProject?.previewUrl).toBe('https://demo.brok.fyi')
+  })
+
+  it('lists deployment history newest first with a bounded result set', async () => {
+    const project = await createBrokCodeProject({
+      workspaceId,
+      userId,
+      name: 'History App'
+    })
+
+    await recordBrokCodeProjectDeployment({
+      projectId: project.id,
+      workspaceId,
+      userId,
+      provider: 'managed_preview',
+      status: 'triggered',
+      url: 'https://preview-one.brok.fyi'
+    })
+    await recordBrokCodeProjectDeployment({
+      projectId: project.id,
+      workspaceId,
+      userId,
+      provider: 'managed_preview',
+      status: 'deployed',
+      url: 'https://preview-two.brok.fyi'
+    })
+
+    const deployments = await listBrokCodeProjectDeployments({
+      projectId: project.id,
+      workspaceId,
+      userId,
+      maxResults: 1
+    })
+
+    expect(deployments).toHaveLength(1)
+    expect(deployments[0]).toMatchObject({
+      provider: 'managed_preview',
+      status: 'deployed',
+      url: 'https://preview-two.brok.fyi'
+    })
   })
 
   it('rejects unsafe project file paths', async () => {

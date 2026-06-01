@@ -12,15 +12,10 @@ import {
   getBrokCodeBrowserSessionAuth,
   verifyBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
-import { inspectGeneratedBrokCodeAppQuality } from '@/lib/brokcode/generated-files'
-import {
-  hasRenderableManagedPreview,
-  makeManagedDeploymentUrl,
-  makeManagedPreviewUrl,
-  resolvePublicPreviewOrigin
-} from '@/lib/brokcode/preview'
+import { getBrokCodeManagedDeployReadiness } from '@/lib/brokcode/deploy-readiness'
 import {
   getBrokCodeProject,
+  listBrokCodeProjectDeployments,
   listBrokCodeProjectFiles,
   recordBrokCodeProjectDeployment,
   updateBrokCodeProjectPreview
@@ -171,39 +166,28 @@ async function triggerManagedPreviewDeployment({
     projectId: project.id,
     workspaceId: auth.workspace.id
   })
-  if (!hasRenderableManagedPreview(files)) {
-    throw new ManagedDeployValidationError(
-      'BrokCode cannot publish this project yet because it does not have a renderable index.html. Ask BrokCode to build a static app first.'
-    )
+  const readiness = getBrokCodeManagedDeployReadiness({
+    files,
+    project,
+    request
+  })
+  if (!readiness.ready) {
+    throw new ManagedDeployValidationError(readiness.message)
   }
 
-  const quality = inspectGeneratedBrokCodeAppQuality(files)
-  if (quality.issues.length > 0) {
-    throw new ManagedDeployValidationError(
-      `BrokCode cannot publish this project until the generated app quality gate passes: ${quality.issues.join(', ')}.`
-    )
-  }
-
-  const previewUrl = makeManagedPreviewUrl({
-    origin: resolvePublicPreviewOrigin(request),
-    projectId: project.id
-  })
-  const deploymentUrl = makeManagedDeploymentUrl({
-    origin: resolvePublicPreviewOrigin(request),
-    project
-  })
   const generatedAt = new Date().toISOString()
   const updatedProject = await updateBrokCodeProjectPreview({
     projectId: project.id,
     workspaceId: auth.workspace.id,
     userId: auth.apiKey.userId,
-    previewUrl,
-    deploymentUrl,
+    previewUrl: readiness.previewUrl,
+    deploymentUrl: readiness.deploymentUrl,
     status: 'deployed',
     metadata: {
-      mode: 'managed_live_preview',
-      fileCount: files.length,
-      quality,
+      mode: readiness.strategy,
+      fileCount: readiness.fileCount,
+      quality: readiness.quality,
+      deployReadiness: readiness,
       generatedAt,
       hotReload: true
     }
@@ -214,28 +198,30 @@ async function triggerManagedPreviewDeployment({
     userId: auth.apiKey.userId,
     provider: 'managed_preview',
     status: 'deployed',
-    url: deploymentUrl,
+    url: readiness.deploymentUrl,
     subdomain: project.username ?? project.slug,
     metadata: {
-      strategy: 'managed_live_preview',
-      previewUrl,
-      fileCount: files.length,
-      quality,
+      strategy: readiness.strategy,
+      previewUrl: readiness.previewUrl,
+      fileCount: readiness.fileCount,
+      quality: readiness.quality,
+      deployReadiness: readiness,
       generatedAt
     }
   })
 
   return {
     status: 'deployed',
-    strategy: 'managed_live_preview',
+    strategy: readiness.strategy,
     message: 'BrokCode app is live on its managed URL.',
     deploymentId: persistedDeployment?.id ?? null,
     persistedDeployment,
     project: updatedProject ?? project,
-    previewUrl,
-    deploymentPreviewUrl: deploymentUrl,
-    deploymentUrl,
-    fileCount: files.length
+    readiness,
+    previewUrl: readiness.previewUrl,
+    deploymentPreviewUrl: readiness.deploymentUrl,
+    deploymentUrl: readiness.deploymentUrl,
+    fileCount: readiness.fileCount
   }
 }
 
@@ -727,4 +713,94 @@ export async function POST(request: NextRequest) {
       { status: 502 }
     )
   }
+}
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const projectId =
+    searchParams.get('projectId')?.trim() ??
+    searchParams.get('project_id')?.trim() ??
+    null
+  if (!projectId) {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'invalid_request_error',
+          message: 'projectId is required.'
+        }
+      },
+      { status: 400 }
+    )
+  }
+
+  const hasExplicitCredential = Boolean(
+    request.headers.get('authorization') || request.headers.get('x-api-key')
+  )
+  const browserSessionRequested =
+    searchParams.get('source') === 'browser' ||
+    searchParams.get('browser_session') === 'true'
+  const authResult =
+    !hasExplicitCredential && browserSessionRequested
+      ? ((await getBrokCodeBrowserSessionAuth()) ??
+        (await verifyBrokCodeRequestAuth(request)).authResult)
+      : (await verifyBrokCodeRequestAuth(request)).authResult
+
+  if (!authResult.success) {
+    return unauthorizedResponse(authResult)
+  }
+  const successfulAuth = authResult as BrokCodeAuthResult
+  const accountMismatch = await enforceBrokCodeAccountOwnership(successfulAuth)
+  if (accountMismatch) return accountMismatch
+  if (
+    !successfulAuth.isBrowserSession &&
+    !apiKeyHasScope(successfulAuth.apiKey, 'code:write')
+  ) {
+    return forbiddenScopeResponse('code:write')
+  }
+
+  const project = await getBrokCodeProject({
+    id: projectId,
+    workspaceId: successfulAuth.workspace.id,
+    userId: successfulAuth.apiKey.userId
+  })
+  if (!project) {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'not_found_error',
+          message: 'Selected BrokCode project was not found.'
+        }
+      },
+      { status: 404 }
+    )
+  }
+
+  const files = await listBrokCodeProjectFiles({
+    projectId: project.id,
+    workspaceId: successfulAuth.workspace.id
+  })
+  const deployments = await listBrokCodeProjectDeployments({
+    projectId: project.id,
+    workspaceId: successfulAuth.workspace.id,
+    userId: successfulAuth.apiKey.userId,
+    maxResults: 10
+  })
+  const readiness = getBrokCodeManagedDeployReadiness({
+    files,
+    project,
+    request
+  })
+
+  return NextResponse.json({
+    project,
+    readiness,
+    latestDeployment: deployments[0] ?? null,
+    deployments,
+    previewUrl: project.previewUrl ?? readiness.previewUrl,
+    deploymentUrl: project.deploymentUrl ?? readiness.deploymentUrl,
+    fallback: {
+      mode: 'managed_live_preview',
+      enabled: true
+    }
+  })
 }
