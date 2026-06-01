@@ -1,16 +1,6 @@
 import Link from 'next/link'
 
-import { BROK_MODELS } from '@/lib/brok/models'
-
-const BROK_MODEL_IDS = [
-  'brok-fast',
-  'brok-code',
-  'brok-search',
-  'brok-search-pro',
-  'brok-agent',
-  'brok-lite',
-  'brok-reasoning'
-] as const
+import { BROK_MODELS, BROK_PUBLIC_MODEL_IDS } from '@/lib/brok/models'
 
 function formatTokens(value?: number) {
   return value?.toLocaleString('en-US') ?? '204,800'
@@ -31,7 +21,10 @@ function capabilityBadges(model: {
 }
 
 export default function ModelsPage() {
-  const brokModels = BROK_MODEL_IDS.map(id => ({ id, ...BROK_MODELS[id] }))
+  const brokModels = BROK_PUBLIC_MODEL_IDS.map(id => ({
+    id,
+    ...BROK_MODELS[id]
+  }))
 
   return (
     <div className="container max-w-5xl py-8">

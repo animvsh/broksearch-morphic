@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import Link from 'next/link'
 
-import { BROK_MODELS } from '@/lib/brok/models'
+import { BROK_MODELS, BROK_PUBLIC_MODEL_IDS } from '@/lib/brok/models'
 
 import { CopyButton } from '@/components/copy-button'
 
@@ -117,7 +117,7 @@ data: [DONE]
 
 | Model | Description | Input Cost | Output Cost | Max Tokens |
 |-------|-------------|------------|-------------|------------|
-${Object.entries(BROK_MODELS)
+${BROK_PUBLIC_MODEL_IDS.map(id => [id, BROK_MODELS[id]] as const)
   .map(
     ([id, config]) =>
       `| \`${id}\` | ${config.description} | $${config.inputCostPerMillion}/1M | $${config.outputCostPerMillion}/1M | ${config.maxTokens} |`
@@ -143,8 +143,7 @@ ${Object.entries(BROK_MODELS)
 
 export default function ChatCompletionsPage() {
   const models = useMemo(
-    () =>
-      Object.entries(BROK_MODELS).map(([id, config]) => ({ id, ...config })),
+    () => BROK_PUBLIC_MODEL_IDS.map(id => ({ id, ...BROK_MODELS[id] })),
     []
   )
 

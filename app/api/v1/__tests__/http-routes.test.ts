@@ -118,7 +118,19 @@ describe('/v1/models auth gate', () => {
     const body = await response.json()
     expect(body.object).toBe('list')
     expect(Array.isArray(body.data)).toBe(true)
+    expect(body.data.map((model: { id: string }) => model.id)).toEqual([
+      'brok-fast',
+      'brok-code',
+      'brok-search',
+      'brok-search-pro',
+      'brok-agent',
+      'brok-lite',
+      'brok-reasoning'
+    ])
     for (const model of body.data) {
+      expect(model.id).not.toContain('MiniMax')
+      expect(model.name).not.toContain('MiniMax')
+      expect(model.provider).toBe('brok')
       expect(model).not.toHaveProperty('input_cost_per_million')
       expect(model).not.toHaveProperty('output_cost_per_million')
     }

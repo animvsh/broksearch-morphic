@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import Link from 'next/link'
 
-import { BROK_MODELS } from '@/lib/brok/models'
+import { BROK_MODELS, BROK_PUBLIC_MODEL_IDS } from '@/lib/brok/models'
 
 import { CopyButton } from '@/components/copy-button'
 
@@ -164,8 +164,8 @@ data: {"usage":{"total_tokens":215}}
 
 | Model | Description | Input Cost | Output Cost | Search Depth |
 |-------|-------------|------------|-------------|---------------|
-${Object.entries(BROK_MODELS)
-  .filter(([_, m]) => m.supportsSearch)
+${BROK_PUBLIC_MODEL_IDS.map(id => [id, BROK_MODELS[id]] as const)
+  .filter(([, m]) => m.supportsSearch)
   .map(
     ([id, config]) =>
       `| \`${id}\` | ${config.description} | $${config.inputCostPerMillion}/1M | $${config.outputCostPerMillion}/1M | Basic: 3-5 sources${id === 'brok-search-pro' ? ', Deep: 10-20 sources' : ''} |`
@@ -208,7 +208,13 @@ export default function SearchCompletionsPage() {
   const searchModels = useMemo(
     () =>
       Object.entries(BROK_MODELS)
-        .filter(([_, config]) => config.supportsSearch)
+        .filter(([id, config]) => {
+          return (
+            BROK_PUBLIC_MODEL_IDS.includes(
+              id as (typeof BROK_PUBLIC_MODEL_IDS)[number]
+            ) && config.supportsSearch
+          )
+        })
         .map(([id, config]) => ({ id, ...config })),
     []
   )
