@@ -1,13 +1,13 @@
-import { MINIMAX_API_KEY, MINIMAX_BASE_URL } from '@/lib/ai/minimax'
+import { BROK_PROVIDER_API_KEY, BROK_PROVIDER_BASE_URL } from '@/lib/ai/brok'
 
-export interface MiniMaxWebSearchResult {
+export interface BrokWebSearchResult {
   title?: string
   link?: string
   snippet?: string
   date?: string
 }
 
-interface MiniMaxWebSearchResponse {
+interface BrokWebSearchResponse {
   organic?: unknown
   base_resp?: {
     status_code?: number
@@ -15,17 +15,17 @@ interface MiniMaxWebSearchResponse {
   }
 }
 
-function getMiniMaxSearchApiKey(): string {
+function getBrokSearchApiKey(): string {
   return (
     process.env.MINIMAX_CODING_PLAN_API_KEY ||
-    process.env.MINIMAX_API_KEY ||
+    process.env.BROK_PROVIDER_API_KEY ||
     process.env.OPENAI_COMPATIBLE_API_KEY ||
-    MINIMAX_API_KEY
+    BROK_PROVIDER_API_KEY
   )
 }
 
-function getMiniMaxSearchUrl(): string {
-  const host = (process.env.MINIMAX_API_HOST || MINIMAX_BASE_URL).replace(
+function getBrokSearchUrl(): string {
+  const host = (process.env.MINIMAX_API_HOST || BROK_PROVIDER_BASE_URL).replace(
     /\/v1\/?$/,
     ''
   )
@@ -40,7 +40,7 @@ function getSearchTimeoutMs() {
   return Number.isFinite(configured) && configured > 0 ? configured : 8000
 }
 
-function normalizeOrganicResults(organic: unknown): MiniMaxWebSearchResult[] {
+function normalizeOrganicResults(organic: unknown): BrokWebSearchResult[] {
   if (!Array.isArray(organic)) {
     return []
   }
@@ -56,16 +56,16 @@ function normalizeOrganicResults(organic: unknown): MiniMaxWebSearchResult[] {
     }))
 }
 
-export async function searchWithMiniMaxWebSearch(
+export async function searchWithBrokWebSearch(
   query: string,
   count = 10
-): Promise<MiniMaxWebSearchResult[]> {
-  const apiKey = getMiniMaxSearchApiKey()
+): Promise<BrokWebSearchResult[]> {
+  const apiKey = getBrokSearchApiKey()
   if (!apiKey) {
     throw new Error('Brok provider API key not configured')
   }
 
-  const response = await fetch(getMiniMaxSearchUrl(), {
+  const response = await fetch(getBrokSearchUrl(), {
     method: 'POST',
     signal: AbortSignal.timeout(getSearchTimeoutMs()),
     headers: {
@@ -79,9 +79,9 @@ export async function searchWithMiniMaxWebSearch(
   })
 
   const text = await response.text()
-  let data: MiniMaxWebSearchResponse
+  let data: BrokWebSearchResponse
   try {
-    data = JSON.parse(text) as MiniMaxWebSearchResponse
+    data = JSON.parse(text) as BrokWebSearchResponse
   } catch {
     throw new Error(`MiniMax web search returned non-JSON response`)
   }

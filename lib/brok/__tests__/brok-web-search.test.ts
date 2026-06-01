@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-describe('searchWithMiniMaxWebSearch', () => {
+describe('searchWithBrokWebSearch', () => {
   const originalEnv = { ...process.env }
 
   beforeEach(() => {
     vi.resetModules()
     process.env = { ...originalEnv }
     delete process.env.MINIMAX_CODING_PLAN_API_KEY
-    delete process.env.MINIMAX_API_KEY
+    delete process.env.BROK_PROVIDER_API_KEY
     delete process.env.OPENAI_COMPATIBLE_API_KEY
   })
 
@@ -18,13 +18,13 @@ describe('searchWithMiniMaxWebSearch', () => {
   })
 
   async function loadSearchWithMiniMaxWebSearch() {
-    const mod = await import('@/lib/brok/minimax-web-search')
-    return mod.searchWithMiniMaxWebSearch
+    const mod = await import('@/lib/brok/brok-web-search')
+    return mod.searchWithBrokWebSearch
   }
 
   it('calls the direct MiniMax coding plan search endpoint with q', async () => {
     process.env.OPENAI_COMPATIBLE_API_KEY = 'test-key'
-    const searchWithMiniMaxWebSearch = await loadSearchWithMiniMaxWebSearch()
+    const searchWithBrokWebSearch = await loadSearchWithMiniMaxWebSearch()
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -45,10 +45,7 @@ describe('searchWithMiniMaxWebSearch', () => {
       })
     )
 
-    const results = await searchWithMiniMaxWebSearch(
-      'Animesh Alang biography',
-      3
-    )
+    const results = await searchWithBrokWebSearch('Animesh Alang biography', 3)
 
     expect(fetch).toHaveBeenCalledWith(
       'https://api.minimax.io/v1/coding_plan/search',
@@ -76,7 +73,7 @@ describe('searchWithMiniMaxWebSearch', () => {
 
   it('surfaces MiniMax search errors without mentioning MCP process failures', async () => {
     process.env.OPENAI_COMPATIBLE_API_KEY = 'test-key'
-    const searchWithMiniMaxWebSearch = await loadSearchWithMiniMaxWebSearch()
+    const searchWithBrokWebSearch = await loadSearchWithMiniMaxWebSearch()
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -89,7 +86,7 @@ describe('searchWithMiniMaxWebSearch', () => {
       })
     )
 
-    await expect(searchWithMiniMaxWebSearch('bad query')).rejects.toThrow(
+    await expect(searchWithBrokWebSearch('bad query')).rejects.toThrow(
       'invalid params'
     )
   })
