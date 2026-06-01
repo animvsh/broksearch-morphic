@@ -9,6 +9,7 @@ import {
   resolveBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 import {
+  addGithubExportSupportFiles,
   type BrokCodeGithubExportFile,
   buildGithubExportBranchName,
   buildGithubExportCommitMessage,
@@ -153,12 +154,25 @@ async function loadProjectExportFiles({
     projectId,
     workspaceId
   })
-  const exportFiles = normalizeGithubExportFiles({
+  const exportFiles = addGithubExportSupportFiles({
     exportPath,
-    files: files.map(file => ({
-      path: file.path,
-      content: file.content
-    }))
+    projectName: project.name,
+    projectId: project.id,
+    previewUrl: project.previewUrl,
+    deploymentUrl: project.deploymentUrl,
+    backend:
+      project.metadata &&
+      typeof project.metadata === 'object' &&
+      'backend' in project.metadata
+        ? project.metadata.backend
+        : null,
+    files: normalizeGithubExportFiles({
+      exportPath,
+      files: files.map(file => ({
+        path: file.path,
+        content: file.content
+      }))
+    })
   })
 
   if (exportFiles.length === 0) {
