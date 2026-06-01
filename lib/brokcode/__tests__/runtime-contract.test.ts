@@ -4,6 +4,7 @@ import {
   createBrokCodeRuntimeSpec,
   detectBrokCodePackageManager,
   detectBrokCodeRuntimeAppType,
+  getBrokCodeRuntimeStartReadiness,
   normalizeBrokCodeRuntimeStatus
 } from '../runtime/contract'
 
@@ -29,6 +30,8 @@ describe('BrokCode runtime contract', () => {
     expect(spec.buildCommand).toBeNull()
     expect(spec.ports[0]).toMatchObject({ port: 4173, protocol: 'http' })
     expect(spec.metadata.managedStaticPreviewFallback).toBe(true)
+    expect(spec.metadata.liveRuntimeSupported).toBe(false)
+    expect(spec.metadata.runtimeMode).toBe('managed_static_preview')
   })
 
   it('detects Vite React projects and package-manager commands', () => {
@@ -92,6 +95,7 @@ describe('BrokCode runtime contract', () => {
     expect(detectBrokCodeRuntimeAppType(nextFiles)).toBe('nextjs')
     expect(nextSpec.packageManager).toBe('bun')
     expect(nextSpec.ports[0]).toMatchObject({ port: 3000 })
+    expect(nextSpec.metadata.liveRuntimeSupported).toBe(true)
 
     const unsupportedSpec = createBrokCodeRuntimeSpec({
       projectId: 'project-unsupported',
@@ -102,10 +106,31 @@ describe('BrokCode runtime contract', () => {
     expect(unsupportedSpec.appType).toBe('unsupported')
     expect(unsupportedSpec.packageManager).toBe('none')
     expect(unsupportedSpec.devCommand).toBe('unsupported-runtime')
+    expect(unsupportedSpec.metadata.runtimeMode).toBe('unsupported')
   })
 
   it('normalizes unknown runtime statuses to preparing', () => {
     expect(normalizeBrokCodeRuntimeStatus('healthy')).toBe('healthy')
     expect(normalizeBrokCodeRuntimeStatus('booting')).toBe('preparing')
+  })
+
+  it('describes whether a project can start a live process', () => {
+    expect(getBrokCodeRuntimeStartReadiness('vite_react')).toMatchObject({
+      startable: true,
+      mode: 'live_process',
+      status: 'running'
+    })
+    expect(getBrokCodeRuntimeStartReadiness('static_html')).toMatchObject({
+      startable: false,
+      mode: 'managed_static_preview',
+      status: 'healthy',
+      healthOk: true
+    })
+    expect(getBrokCodeRuntimeStartReadiness('unsupported')).toMatchObject({
+      startable: false,
+      mode: 'unsupported',
+      status: 'stopped',
+      healthOk: false
+    })
   })
 })
