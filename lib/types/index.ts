@@ -42,6 +42,11 @@ export type SearchResultItem = {
   title: string
   url: string
   content: string
+  publishedDate?: string | Date
+  date?: string
+  retrievedAt?: string
+  snippet?: string
+  publisher?: string
 }
 
 export type ExaSearchResultItem = {
