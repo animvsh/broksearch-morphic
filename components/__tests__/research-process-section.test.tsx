@@ -444,4 +444,100 @@ describe('ResearchProcessSection', () => {
       expect(screen.getByTestId('tool-section')).toBeInTheDocument()
     })
   })
+
+  describe('Research Progress Timeline', () => {
+    test('shows active search progress without exposing reasoning text', () => {
+      const parts: any[] = [
+        { type: 'reasoning', text: 'private planning details' },
+        {
+          type: 'tool-search',
+          toolCallId: 'tool-search-1',
+          input: { query: 'university tutoring platforms' },
+          output: {
+            state: 'searching',
+            query: 'university tutoring platforms'
+          },
+          state: 'output-available'
+        } as unknown as ToolPart<'search'>
+      ]
+
+      const message: UIMessage = {
+        id: 'test-message',
+        role: 'assistant',
+        parts
+      }
+
+      render(
+        <ResearchProcessSection
+          message={message}
+          messageId="test-progress-1"
+          getIsOpen={mockGetIsOpen}
+          onOpenChange={mockOnOpenChange}
+          status="streaming"
+        />
+      )
+
+      expect(screen.getByTestId('research-progress')).toBeInTheDocument()
+      expect(screen.getByText('Understanding question')).toBeInTheDocument()
+      expect(screen.getByText('Searching web')).toBeInTheDocument()
+      expect(screen.getByText('Reading sources')).toBeInTheDocument()
+      expect(
+        screen.queryByText('private planning details')
+      ).not.toBeInTheDocument()
+    })
+
+    test('summarizes completed source and follow-up progress', () => {
+      const parts: any[] = [
+        {
+          type: 'tool-search',
+          toolCallId: 'tool-search-1',
+          input: { query: 'student research tools' },
+          output: {
+            state: 'complete',
+            query: 'student research tools',
+            results: [
+              {
+                title: 'Source 1',
+                url: 'https://example.com/1',
+                content: 'One'
+              },
+              {
+                title: 'Source 2',
+                url: 'https://example.com/2',
+                content: 'Two'
+              }
+            ],
+            images: [],
+            videos: []
+          },
+          state: 'output-available'
+        } as unknown as ToolPart<'search'>,
+        {
+          type: 'text',
+          text: 'Answer with citation [1](#tool-search-1).\n\n```spec\n{"op":"add","path":"/root","value":{"type":"Container","props":{},"children":[]}}\n```'
+        }
+      ]
+
+      const message: UIMessage = {
+        id: 'test-message',
+        role: 'assistant',
+        parts
+      }
+
+      render(
+        <ResearchProcessSection
+          message={message}
+          messageId="test-progress-2"
+          getIsOpen={mockGetIsOpen}
+          onOpenChange={mockOnOpenChange}
+          status="ready"
+        />
+      )
+
+      expect(screen.getByText('Found 2 sources')).toBeInTheDocument()
+      expect(screen.getByText('Checking source quality')).toBeInTheDocument()
+      expect(screen.getByText('Adding citations')).toBeInTheDocument()
+      expect(screen.getByText('Generating follow-ups')).toBeInTheDocument()
+    })
+  })
 })
