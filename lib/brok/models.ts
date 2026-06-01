@@ -13,7 +13,27 @@ export interface BrokModelConfig {
   supportsCode?: boolean
 }
 
-const MINIMAX_CONTEXT_WINDOW = 204_800
+const BROK_CONTEXT_WINDOW = 204_800
+
+export const BROK_PUBLIC_MODEL_IDS = [
+  'brok-fast',
+  'brok-code',
+  'brok-search',
+  'brok-search-pro',
+  'brok-agent',
+  'brok-lite',
+  'brok-reasoning'
+] as const
+
+const BROK_PROVIDER_MODEL_ALIASES: Record<string, string> = {
+  'brok-m2-7-highspeed': 'MiniMax-M2.7-highspeed',
+  'brok-m2-7': 'MiniMax-M2.7',
+  'brok-m2-5-highspeed': 'MiniMax-M2.5-highspeed',
+  'brok-m2-5': 'MiniMax-M2.5',
+  'brok-m2-1-highspeed': 'MiniMax-M2.1-highspeed',
+  'brok-m2-1': 'MiniMax-M2.1',
+  'brok-m2': 'MiniMax-M2'
+}
 
 export const BROK_MODELS: Record<string, BrokModelConfig> = {
   'brok-fast': {
@@ -23,8 +43,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2.7-highspeed',
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: true,
     supportsTools: true,
@@ -37,8 +57,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2.7-highspeed',
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: true,
     supportsTools: true
@@ -50,8 +70,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2.7',
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: true,
     supportsTools: true
@@ -63,8 +83,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2.7',
     inputCostPerMillion: 0.15,
     outputCostPerMillion: 0.6,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: true,
     supportsTools: true
@@ -77,8 +97,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2.7-highspeed',
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: false,
     supportsTools: true,
@@ -91,8 +111,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2.7',
     inputCostPerMillion: 0.15,
     outputCostPerMillion: 0.6,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: true,
     supportsTools: true
@@ -104,8 +124,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2',
     inputCostPerMillion: 0.2,
     outputCostPerMillion: 0.8,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: false,
     supportsTools: false
@@ -118,8 +138,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2.7',
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: true,
     supportsTools: true,
@@ -133,8 +153,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2.7-highspeed',
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: true,
     supportsTools: true,
@@ -148,8 +168,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2.5',
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: true,
     supportsTools: true,
@@ -163,8 +183,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2.5-highspeed',
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: true,
     supportsTools: true,
@@ -178,8 +198,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2.1',
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: true,
     supportsTools: true,
@@ -192,8 +212,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2.1-highspeed',
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: true,
     supportsTools: true,
@@ -206,8 +226,8 @@ export const BROK_MODELS: Record<string, BrokModelConfig> = {
     providerModel: 'MiniMax-M2',
     inputCostPerMillion: 0.1,
     outputCostPerMillion: 0.4,
-    maxTokens: MINIMAX_CONTEXT_WINDOW,
-    contextWindow: MINIMAX_CONTEXT_WINDOW,
+    maxTokens: BROK_CONTEXT_WINDOW,
+    contextWindow: BROK_CONTEXT_WINDOW,
     supportsStreaming: true,
     supportsSearch: true,
     supportsTools: true,
@@ -223,4 +243,10 @@ export function isValidBrokModel(modelId: string): boolean {
 
 export function getBrokModel(modelId: string): BrokModelConfig | undefined {
   return BROK_MODELS[modelId]
+}
+
+export function getBrokProviderModelId(modelId: string): string | undefined {
+  return (
+    BROK_MODELS[modelId]?.providerModel ?? BROK_PROVIDER_MODEL_ALIASES[modelId]
+  )
 }

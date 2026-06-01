@@ -83,13 +83,13 @@ export async function searchWithBrokWebSearch(
   try {
     data = JSON.parse(text) as BrokWebSearchResponse
   } catch {
-    throw new Error(`MiniMax web search returned non-JSON response`)
+    throw new Error(`Brok web search returned non-JSON response`)
   }
 
   if (!response.ok || data.base_resp?.status_code) {
     const message =
       data.base_resp?.status_msg ||
-      `MiniMax web search failed with status ${response.status}`
+      `Brok web search failed with status ${response.status}`
     throw new Error(message)
   }
 
