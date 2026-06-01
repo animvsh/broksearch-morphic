@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  addGithubExportSupportFiles,
   buildGithubExportBranchName,
   buildGithubExportCommitMessage,
   buildGithubExportPullRequestBody,
@@ -64,5 +65,64 @@ describe('BrokCode GitHub export helpers', () => {
         files: [{ path: 'student/app/index.html', content: '<main />' }]
       })
     ).toContain('- Files committed: 1')
+  })
+
+  it('adds handoff files required for a deployable export package', () => {
+    const files = addGithubExportSupportFiles({
+      exportPath: 'student/app',
+      projectName: 'AI Study Coach',
+      projectId: 'project_123',
+      previewUrl: 'https://brok.test/api/brokcode/previews/project_123',
+      deploymentUrl: 'https://brok.test/brokcode/apps/study-coach',
+      backend: {
+        provider: 'insforge',
+        status: 'ready',
+        projectUrl: 'https://insforge.test/project',
+        appkey: 'public-app-key',
+        encryptedAdminKey: 'secret-ciphertext',
+        adminKeyConfigured: true
+      },
+      files: normalizeGithubExportFiles({
+        exportPath: 'student/app',
+        files: [{ path: 'index.html', content: '<main />' }]
+      })
+    })
+
+    expect(files.map(file => file.path)).toEqual([
+      'student/app/.env.example',
+      'student/app/DEPLOYMENT.md',
+      'student/app/index.html',
+      'student/app/insforge/config.json',
+      'student/app/README.md'
+    ])
+    expect(
+      files.find(file => file.path.endsWith('README.md'))?.content
+    ).toContain('AI Study Coach')
+    expect(
+      files.find(file => file.path.endsWith('DEPLOYMENT.md'))?.content
+    ).toContain('Smoke-test the deployed URL')
+    expect(
+      files.find(file => file.path.endsWith('insforge/config.json'))?.content
+    ).not.toContain('secret-ciphertext')
+    expect(
+      files.find(file => file.path.endsWith('insforge/config.json'))?.content
+    ).toContain('[redacted]')
+  })
+
+  it('does not overwrite existing export handoff files', () => {
+    const files = addGithubExportSupportFiles({
+      files: [
+        { path: 'README.md', content: 'Custom readme' },
+        { path: '.env.example', content: 'CUSTOM=value' },
+        { path: 'DEPLOYMENT.md', content: 'Custom deploy' },
+        { path: 'insforge/config.json', content: '{"custom":true}' },
+        { path: 'index.html', content: '<main />' }
+      ]
+    })
+
+    expect(files).toHaveLength(5)
+    expect(files.find(file => file.path === 'README.md')?.content).toBe(
+      'Custom readme'
+    )
   })
 })
