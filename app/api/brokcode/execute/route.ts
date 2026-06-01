@@ -1511,7 +1511,6 @@ const BROKCODE_JOB_TIMEOUT_MS = Number(
   process.env.BROKCODE_JOB_TIMEOUT_MS ?? 10 * 60 * 1000
 )
 const TERMINAL_TASK_STATUSES = new Set(['succeeded', 'failed', 'cancelled'])
-
 function phaseForBrokCodeEvent(event: string, payload: unknown) {
   if (event === 'delta') return 'generating'
   if (event === 'files') return 'writing_files'
@@ -1539,7 +1538,6 @@ function progressForBrokCodeEvent(event: string) {
   if (event === 'result') return 100
   return undefined
 }
-
 async function appendBrokCodeExecutionStreamEvent({
   taskId,
   userId,
@@ -1579,7 +1577,6 @@ async function appendBrokCodeExecutionStreamEvent({
     }
   })
 }
-
 function parseSseBlocks(buffer: string) {
   return buffer.split(/\n\n/).filter(Boolean)
 }
