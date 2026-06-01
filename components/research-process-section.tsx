@@ -4,7 +4,13 @@ import { useCallback, useState } from 'react'
 
 import type { ReasoningPart } from '@ai-sdk/provider-utils'
 import { UseChatHelpers } from '@ai-sdk/react'
-import { ChevronDown, Waypoints } from 'lucide-react'
+import {
+  AlertCircle,
+  Check,
+  ChevronDown,
+  Loader2,
+  Waypoints
+} from 'lucide-react'
 
 import type { ToolPart, UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
 import type { DynamicToolPart } from '@/lib/types/dynamic-tools'
@@ -25,6 +31,15 @@ type TextPart = {
 }
 
 type MessagePart = ReasoningPart | ToolPart | TextPart | DynamicToolPart
+
+type ResearchProgressStatus = 'pending' | 'active' | 'done' | 'error'
+
+type ResearchProgressStep = {
+  id: string
+  label: string
+  detail?: string
+  status: ResearchProgressStatus
+}
 
 // Type guards
 function isReasoningPart(part: MessagePart): part is ReasoningPart {
@@ -50,6 +65,174 @@ function isRenderablePart(part: MessagePart): boolean {
     return part.text.trim().length > 0
   }
   return true
+}
+
+function isSearchPart(part: MessagePart): part is ToolPart<'search'> {
+  return isToolPart(part) && part.type === 'tool-search'
+}
+
+function isFetchPart(part: MessagePart): part is ToolPart<'fetch'> {
+  return isToolPart(part) && part.type === 'tool-fetch'
+}
+
+function isPartRunning(part: ToolPart) {
+  return (
+    part.state === 'input-streaming' ||
+    part.state === 'input-available' ||
+    (part.type === 'tool-search' && (part.output as any)?.state === 'searching')
+  )
+}
+
+function countSearchSources(parts: MessagePart[]) {
+  return parts.reduce((count, part) => {
+    if (!isSearchPart(part) || part.state !== 'output-available') return count
+
+    const output = part.output as any
+    if (output?.state !== 'complete') return count
+
+    return (
+      count +
+      (output.results?.length ?? 0) +
+      (output.videos?.length ?? 0) +
+      (output.images?.length ?? 0)
+    )
+  }, 0)
+}
+
+function hasCitationText(parts: MessagePart[]) {
+  return parts.some(
+    part =>
+      isTextPart(part) &&
+      (/\[\d+\]\(#/.test(part.text) || /\[\d+\]\(https?:\/\//.test(part.text))
+  )
+}
+
+function hasSpecBlock(parts: MessagePart[]) {
+  return parts.some(part => isTextPart(part) && /```spec/.test(part.text))
+}
+
+export function getResearchProgressSteps({
+  allParts,
+  visibleParts,
+  status,
+  hasSubsequentText
+}: {
+  allParts: MessagePart[]
+  visibleParts: MessagePart[]
+  status?: UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>['status']
+  hasSubsequentText: boolean
+}): ResearchProgressStep[] {
+  const researchParts = allParts.filter(
+    part => isSearchPart(part) || isFetchPart(part)
+  )
+  const visibleResearchParts = visibleParts.filter(
+    part => isSearchPart(part) || isFetchPart(part)
+  )
+
+  if (researchParts.length === 0 && visibleResearchParts.length === 0) {
+    return []
+  }
+
+  const sourceCount = countSearchSources(allParts)
+  const hasSearch = researchParts.some(isSearchPart)
+  const hasFetch = researchParts.some(isFetchPart)
+  const hasError = researchParts.some(
+    part =>
+      isToolPart(part) &&
+      (part.state === 'output-error' || Boolean((part.output as any)?.error))
+  )
+  const hasRunningSearch = researchParts.some(
+    part => isSearchPart(part) && isPartRunning(part)
+  )
+  const hasRunningFetch = researchParts.some(
+    part => isFetchPart(part) && isPartRunning(part)
+  )
+  const hasCompleteSearch = researchParts.some(
+    part =>
+      isSearchPart(part) &&
+      part.state === 'output-available' &&
+      (part.output as any)?.state === 'complete'
+  )
+  const hasCompleteFetch = researchParts.some(
+    part => isFetchPart(part) && part.state === 'output-available'
+  )
+  const isStreaming = status === 'submitted' || status === 'streaming'
+  const answerStarted = hasSubsequentText || allParts.some(isNonEmptyTextPart)
+  const citationsAdded = sourceCount > 0 && hasCitationText(allParts)
+  const followUpsReady = hasSpecBlock(allParts)
+
+  const searchStatus: ResearchProgressStatus = hasError
+    ? 'error'
+    : hasRunningSearch
+      ? 'active'
+      : hasCompleteSearch || !hasSearch
+        ? 'done'
+        : 'pending'
+  const readingStatus: ResearchProgressStatus =
+    hasRunningFetch || (hasRunningSearch && sourceCount === 0)
+      ? 'active'
+      : hasCompleteFetch || sourceCount > 0
+        ? 'done'
+        : hasSearch
+          ? 'pending'
+          : 'done'
+  const qualityStatus: ResearchProgressStatus =
+    hasError && sourceCount === 0
+      ? 'error'
+      : sourceCount > 0 || hasCompleteSearch
+        ? 'done'
+        : hasRunningSearch
+          ? 'pending'
+          : 'done'
+  const writingStatus: ResearchProgressStatus = answerStarted
+    ? isStreaming
+      ? 'active'
+      : 'done'
+    : researchParts.some(part => isPartRunning(part as ToolPart))
+      ? 'pending'
+      : 'active'
+  const citationStatus: ResearchProgressStatus = citationsAdded
+    ? 'done'
+    : sourceCount > 0 && answerStarted
+      ? 'active'
+      : sourceCount > 0
+        ? 'pending'
+        : hasError
+          ? 'error'
+          : 'pending'
+  const followUpsStatus: ResearchProgressStatus = followUpsReady
+    ? 'done'
+    : answerStarted && isStreaming
+      ? 'active'
+      : answerStarted
+        ? 'pending'
+        : 'pending'
+
+  return [
+    { id: 'understand', label: 'Understanding question', status: 'done' },
+    {
+      id: 'search',
+      label: 'Searching web',
+      detail:
+        sourceCount > 0
+          ? `Found ${sourceCount} source${sourceCount === 1 ? '' : 's'}`
+          : undefined,
+      status: searchStatus
+    },
+    {
+      id: 'read',
+      label: hasFetch ? 'Reading pages' : 'Reading sources',
+      status: readingStatus
+    },
+    {
+      id: 'quality',
+      label: 'Checking source quality',
+      status: qualityStatus
+    },
+    { id: 'write', label: 'Writing answer', status: writingStatus },
+    { id: 'citations', label: 'Adding citations', status: citationStatus },
+    { id: 'followups', label: 'Generating follow-ups', status: followUpsStatus }
+  ]
 }
 
 type Props = {
@@ -239,6 +422,65 @@ function RenderPart({
   return null
 }
 
+function ResearchProgressTimeline({
+  steps
+}: {
+  steps: ResearchProgressStep[]
+}) {
+  if (steps.length === 0) return null
+
+  return (
+    <div
+      className="rounded-lg border bg-card/70 px-3 py-2.5"
+      data-testid="research-progress"
+      aria-label="Research progress"
+    >
+      <div className="space-y-1.5">
+        {steps.map(step => {
+          const Icon =
+            step.status === 'done'
+              ? Check
+              : step.status === 'error'
+                ? AlertCircle
+                : Loader2
+          const isActive = step.status === 'active'
+          const isPending = step.status === 'pending'
+
+          return (
+            <div
+              key={step.id}
+              className={cn(
+                'flex min-h-6 items-center gap-2 text-sm transition-colors',
+                isPending ? 'text-muted-foreground/60' : 'text-foreground'
+              )}
+            >
+              <span
+                className={cn(
+                  'flex size-4 shrink-0 items-center justify-center rounded-full',
+                  step.status === 'done' &&
+                    'bg-emerald-500/10 text-emerald-600',
+                  step.status === 'error' &&
+                    'bg-destructive/10 text-destructive',
+                  isActive && 'bg-primary/10 text-primary',
+                  isPending && 'bg-muted text-muted-foreground'
+                )}
+              >
+                <Icon className={cn('size-3', isActive && 'animate-spin')} />
+              </span>
+              <span className="min-w-0 flex-1 truncate">{step.label}</span>
+              {step.detail && (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {step.detail}
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 /**
  * Determines if there's content after a given segment
  * @param segmentIndex - The index of the current segment
@@ -292,6 +534,12 @@ export function ResearchProcessSection({
   const filteredMessageParts = ((message.parts || []) as MessagePart[]).filter(
     isRenderablePart
   )
+  const progressSteps = getResearchProgressSteps({
+    allParts: filteredMessageParts,
+    visibleParts: filteredParts,
+    status,
+    hasSubsequentText
+  })
 
   const segments = partsOverride ? [filteredParts] : splitByText(filteredParts)
 
@@ -316,6 +564,7 @@ export function ResearchProcessSection({
 
   return (
     <div className="space-y-2" data-testid="research-process">
+      <ResearchProgressTimeline steps={progressSteps} />
       {segments.map((seg, sidx) => {
         const groups = groupConsecutiveParts(seg)
         const isSingle = groups.length === 1 && groups[0].length === 1
