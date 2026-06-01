@@ -5,17 +5,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
+  ClipboardCopy,
   Copy,
   Download,
   FilePlus2,
   FolderOpen,
+  GalleryVerticalEnd,
+  ListPlus,
   Loader2,
+  MessageSquareText,
   Presentation,
   RotateCcw,
   Save,
   Share2,
   Sparkles,
-  Trash2
+  Trash2,
+  WandSparkles
 } from 'lucide-react'
 import type { RevealApi } from 'reveal.js'
 
@@ -23,6 +28,7 @@ import {
   parsePresentationMarkdown,
   samplePresentationSource
 } from '@/lib/presentations/deck'
+import { deterministicOutline } from '@/lib/presentations/generate'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -51,6 +57,32 @@ type WorkbenchStatus = 'idle' | 'saving' | 'saved' | 'error' | 'loading'
 const AUTOSAVE_DELAY_MS = 1500
 const DEFAULT_TITLE = 'Untitled Presentation'
 
+const GENERATION_TONES = ['Academic', 'Pitch', 'Executive', 'Visual'] as const
+const GENERATION_AUDIENCES = [
+  'Classmates',
+  'Professor',
+  'Research group',
+  'Hackathon judges'
+] as const
+
+const PROMPT_TEMPLATES = [
+  {
+    label: 'Class report',
+    prompt:
+      'Create a clear class presentation with an opening thesis, evidence slides, limitations, and a strong conclusion.'
+  },
+  {
+    label: 'Research brief',
+    prompt:
+      'Turn these research notes into a source-aware presentation with claims, implications, and discussion questions.'
+  },
+  {
+    label: 'Demo pitch',
+    prompt:
+      'Make a concise demo-day pitch deck with problem, solution, product flow, traction, and next steps.'
+  }
+] as const
+
 async function readApiError(response: Response, fallback: string) {
   try {
     const data = (await response.json()) as {
@@ -61,6 +93,28 @@ async function readApiError(response: Response, fallback: string) {
   } catch {
     return fallback
   }
+}
+
+function splitSourceIntoBlocks(source: string) {
+  return source
+    .trim()
+    .split(/^\s*---+\s*$/m)
+    .map(block => block.trim())
+    .filter(Boolean)
+}
+
+function joinBlocks(blocks: string[]) {
+  return blocks.map(block => block.trim()).join('\n\n---\n\n')
+}
+
+function appendLineIfMissing(block: string, line: string) {
+  return block.toLowerCase().includes(line.toLowerCase())
+    ? block
+    : `${block.trimEnd()}\n${line}`
+}
+
+function selectedBlockIndex(selectedSlide: number, blockCount: number) {
+  return Math.min(Math.max(selectedSlide, 0), Math.max(blockCount - 1, 0))
 }
 
 export function RevealPresentationWorkbench() {
@@ -74,6 +128,12 @@ export function RevealPresentationWorkbench() {
   const [isPublic, setIsPublic] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generatePrompt, setGeneratePrompt] = useState('')
+  const [generateTone, setGenerateTone] =
+    useState<(typeof GENERATION_TONES)[number]>('Academic')
+  const [generateAudience, setGenerateAudience] =
+    useState<(typeof GENERATION_AUDIENCES)[number]>('Classmates')
+  const [generateSlideCount, setGenerateSlideCount] = useState(8)
+  const [generateWebSearch, setGenerateWebSearch] = useState(false)
   const [showGeneratePanel, setShowGeneratePanel] = useState(false)
   const [showDeckList, setShowDeckList] = useState(false)
 
@@ -290,7 +350,7 @@ export function RevealPresentationWorkbench() {
     setSelectedSlide(nextIndex)
   }
 
-  const handleNewDeck = async () => {
+  const createDeckFromCurrent = async () => {
     setStatus('saving')
     setStatusMessage(null)
     const nextTitle = (latestTitleRef.current || DEFAULT_TITLE)
@@ -334,17 +394,23 @@ export function RevealPresentationWorkbench() {
       await loadDecks()
       setStatus('saved')
       setStatusMessage('Deck created')
+      return createdId
     } catch (error) {
       setStatus('error')
       setStatusMessage(
         error instanceof Error ? error.message : 'Failed to create deck.'
       )
+      return null
     }
+  }
+
+  const handleNewDeck = async () => {
+    await createDeckFromCurrent()
   }
 
   const handleSaveNow = async () => {
     if (!activeId) {
-      await handleNewDeck()
+      await createDeckFromCurrent()
       return
     }
     await persistCurrent(source, title)
@@ -387,25 +453,46 @@ export function RevealPresentationWorkbench() {
   }
 
   const handleGenerate = async () => {
-    if (!activeId) {
-      setStatus('error')
-      setStatusMessage('Create or open a deck before generating.')
-      return
-    }
     const prompt = generatePrompt.trim()
     if (!prompt) {
       setStatus('error')
       setStatusMessage('Enter a generation prompt.')
       return
     }
+
+    const deckId = activeId ?? (await createDeckFromCurrent())
     setGenerating(true)
     setStatus('saving')
     setStatusMessage('Generating deck…')
+
+    if (!deckId) {
+      const sourceMarkdown = deterministicOutline(prompt, generateSlideCount)
+      setSource(sourceMarkdown)
+      setSelectedSlide(0)
+      setStatus('saved')
+      setStatusMessage(
+        `Generated ${generateSlideCount} slides via local fallback. Save once presentation storage is available.`
+      )
+      setShowGeneratePanel(false)
+      setGeneratePrompt('')
+      setGenerating(false)
+      return
+    }
+
     try {
-      const res = await fetch(`/api/presentations/${activeId}/generate`, {
+      const res = await fetch(`/api/presentations/${deckId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
+        body: JSON.stringify({
+          prompt: [
+            prompt,
+            `Audience: ${generateAudience}.`,
+            `Tone: ${generateTone}.`,
+            `Target slide count: ${generateSlideCount}.`
+          ].join('\n'),
+          slideCount: generateSlideCount,
+          webSearch: generateWebSearch
+        })
       })
       if (!res.ok) {
         throw new Error(
@@ -419,13 +506,13 @@ export function RevealPresentationWorkbench() {
         sourceMarkdown: string
       }
       setSource(data.sourceMarkdown)
+      await loadDecks()
       setStatus('saved')
       setStatusMessage(
         `Generated ${data.slideCount} slides via ${data.generator === 'llm' ? 'Brok' : 'fallback'} generator.`
       )
       setShowGeneratePanel(false)
       setGeneratePrompt('')
-      await loadDecks()
     } catch (error) {
       setStatus('error')
       setStatusMessage(
@@ -474,6 +561,120 @@ export function RevealPresentationWorkbench() {
       '_blank',
       'noopener'
     )
+  }
+
+  const updateSourceWithBlocks = (
+    blocks: string[],
+    nextSlide = selectedSlide
+  ) => {
+    setSource(joinBlocks(blocks))
+    setSelectedSlide(Math.min(Math.max(nextSlide, 0), blocks.length - 1))
+  }
+
+  const addAgendaSlide = () => {
+    const titles = slides
+      .slice(0, 6)
+      .map(slide => `- ${slide.title}`)
+      .join('\n')
+    const agenda = `# Agenda\nkicker: Roadmap\n${titles || '- Opening context\n- Main argument\n- Next steps'}\nnotes: Preview the story before moving into the details.`
+    updateSourceWithBlocks([agenda, ...splitSourceIntoBlocks(source)], 0)
+    setStatus('saved')
+    setStatusMessage('Agenda slide added')
+  }
+
+  const addRecapSlide = () => {
+    const recap = `# Recap\nkicker: Takeaways\n- The central claim is clear\n- The strongest proof points are visible\n- The next step is easy to act on\nnotes: Close with the single sentence the audience should remember.`
+    const blocks = splitSourceIntoBlocks(source)
+    updateSourceWithBlocks([...blocks, recap], blocks.length)
+    setStatus('saved')
+    setStatusMessage('Recap slide added')
+  }
+
+  const addSpeakerNotes = () => {
+    const blocks = splitSourceIntoBlocks(source).map((block, index) =>
+      /(^|\n)notes:/i.test(block)
+        ? block
+        : `${block.trimEnd()}\nnotes: Introduce slide ${index + 1} with the punchline, then connect it to the deck narrative.`
+    )
+    updateSourceWithBlocks(blocks)
+    setStatus('saved')
+    setStatusMessage('Speaker notes added')
+  }
+
+  const polishDeck = () => {
+    const blocks = splitSourceIntoBlocks(source).map(block => {
+      let next = block
+      next = appendLineIfMissing(next, 'kicker: Key point')
+      if (!/[-*]\s+/.test(next)) {
+        next = `${next.trimEnd()}\n- Lead with the most important takeaway\n- Add one proof point\n- Close with the audience action`
+      }
+      return next
+    })
+    updateSourceWithBlocks(blocks)
+    setStatus('saved')
+    setStatusMessage('Deck structure polished')
+  }
+
+  const duplicateSlide = () => {
+    const blocks = splitSourceIntoBlocks(source)
+    const index = selectedBlockIndex(selectedSlide, blocks.length)
+    if (!blocks[index]) return
+    const duplicate = blocks[index].replace(/^#\s+(.+)$/m, '# $1 Copy')
+    blocks.splice(index + 1, 0, duplicate)
+    updateSourceWithBlocks(blocks, index + 1)
+    setStatus('saved')
+    setStatusMessage('Slide duplicated')
+  }
+
+  const moveSlide = (direction: -1 | 1) => {
+    const blocks = splitSourceIntoBlocks(source)
+    const index = selectedBlockIndex(selectedSlide, blocks.length)
+    const nextIndex = index + direction
+    if (nextIndex < 0 || nextIndex >= blocks.length) return
+    const [block] = blocks.splice(index, 1)
+    blocks.splice(nextIndex, 0, block)
+    updateSourceWithBlocks(blocks, nextIndex)
+    setStatus('saved')
+    setStatusMessage('Slide moved')
+  }
+
+  const deleteCurrentSlide = () => {
+    const blocks = splitSourceIntoBlocks(source)
+    if (blocks.length <= 1) {
+      setStatus('error')
+      setStatusMessage('A deck needs at least one slide.')
+      return
+    }
+    const index = selectedBlockIndex(selectedSlide, blocks.length)
+    blocks.splice(index, 1)
+    updateSourceWithBlocks(blocks, Math.max(index - 1, 0))
+    setStatus('saved')
+    setStatusMessage('Slide removed')
+  }
+
+  const copyMarkdown = async () => {
+    try {
+      await navigator.clipboard.writeText(source)
+      setStatus('saved')
+      setStatusMessage('Markdown copied')
+    } catch {
+      setStatus('error')
+      setStatusMessage('Could not copy markdown.')
+    }
+  }
+
+  const copyNotes = async () => {
+    const notes = slides
+      .map((slide, index) => `Slide ${index + 1}: ${slide.notes ?? 'No notes'}`)
+      .join('\n')
+    try {
+      await navigator.clipboard.writeText(notes)
+      setStatus('saved')
+      setStatusMessage('Speaker notes copied')
+    } catch {
+      setStatus('error')
+      setStatusMessage('Could not copy speaker notes.')
+    }
   }
 
   const handleCopyShare = async () => {
@@ -595,7 +796,6 @@ export function RevealPresentationWorkbench() {
               size="sm"
               className="h-8 gap-2"
               onClick={() => setShowGeneratePanel(value => !value)}
-              disabled={!hasActiveDeck}
               data-testid="open-generate"
             >
               <Sparkles className="size-4" />
@@ -669,6 +869,70 @@ export function RevealPresentationWorkbench() {
               Delete
             </Button>
           </div>
+          <div className="grid gap-3 rounded-md border bg-white p-3">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
+                  <WandSparkles className="size-3.5" />
+                  AI presentation tools
+                </div>
+                <div className="mt-1 text-sm font-medium text-zinc-900">
+                  Build, polish, reorder, and package the deck.
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {slides.length} slide{slides.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <ToolButton
+                icon={ListPlus}
+                label="Agenda"
+                onClick={addAgendaSlide}
+              />
+              <ToolButton
+                icon={GalleryVerticalEnd}
+                label="Recap"
+                onClick={addRecapSlide}
+              />
+              <ToolButton
+                icon={MessageSquareText}
+                label="Speaker notes"
+                onClick={addSpeakerNotes}
+              />
+              <ToolButton icon={Sparkles} label="Polish" onClick={polishDeck} />
+              <ToolButton
+                icon={Copy}
+                label="Duplicate slide"
+                onClick={duplicateSlide}
+              />
+              <ToolButton
+                icon={Trash2}
+                label="Remove slide"
+                onClick={deleteCurrentSlide}
+              />
+              <ToolButton
+                icon={ArrowLeft}
+                label="Move left"
+                onClick={() => moveSlide(-1)}
+              />
+              <ToolButton
+                icon={ArrowRight}
+                label="Move right"
+                onClick={() => moveSlide(1)}
+              />
+              <ToolButton
+                icon={ClipboardCopy}
+                label="Copy markdown"
+                onClick={copyMarkdown}
+              />
+              <ToolButton
+                icon={MessageSquareText}
+                label="Copy notes"
+                onClick={copyNotes}
+              />
+            </div>
+          </div>
           {showGeneratePanel ? (
             <div className="rounded-md border bg-white p-3">
               <label
@@ -684,7 +948,87 @@ export function RevealPresentationWorkbench() {
                 placeholder="Describe the deck you want — topic, audience, tone, length…"
                 className="mt-2 min-h-24"
               />
-              <div className="mt-2 flex justify-end gap-2">
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                  Audience
+                  <select
+                    value={generateAudience}
+                    onChange={event =>
+                      setGenerateAudience(
+                        event.target
+                          .value as (typeof GENERATION_AUDIENCES)[number]
+                      )
+                    }
+                    className="h-9 rounded-md border bg-white px-2 text-sm text-zinc-900"
+                  >
+                    {GENERATION_AUDIENCES.map(audience => (
+                      <option key={audience} value={audience}>
+                        {audience}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                  Tone
+                  <select
+                    value={generateTone}
+                    onChange={event =>
+                      setGenerateTone(
+                        event.target.value as (typeof GENERATION_TONES)[number]
+                      )
+                    }
+                    className="h-9 rounded-md border bg-white px-2 text-sm text-zinc-900"
+                  >
+                    {GENERATION_TONES.map(tone => (
+                      <option key={tone} value={tone}>
+                        {tone}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                  Slides
+                  <input
+                    type="number"
+                    min={3}
+                    max={24}
+                    value={generateSlideCount}
+                    onChange={event =>
+                      setGenerateSlideCount(
+                        Math.min(
+                          24,
+                          Math.max(3, Number(event.target.value) || 3)
+                        )
+                      )
+                    }
+                    className="h-9 rounded-md border bg-white px-2 text-sm text-zinc-900"
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {PROMPT_TEMPLATES.map(template => (
+                  <Button
+                    key={template.label}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setGeneratePrompt(template.prompt)}
+                  >
+                    {template.label}
+                  </Button>
+                ))}
+              </div>
+              <label className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={generateWebSearch}
+                  onChange={event => setGenerateWebSearch(event.target.checked)}
+                  className="size-4 rounded border"
+                />
+                Use web search when available
+              </label>
+              <div className="mt-3 flex justify-end gap-2">
                 <Button
                   type="button"
                   variant="ghost"
@@ -871,5 +1215,28 @@ export function RevealPresentationWorkbench() {
         </div>
       </section>
     </div>
+  )
+}
+
+function ToolButton({
+  icon: Icon,
+  label,
+  onClick
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-8 justify-start gap-2"
+      onClick={onClick}
+    >
+      <Icon className="size-4" />
+      {label}
+    </Button>
   )
 }

@@ -55,7 +55,7 @@ export function deterministicOutline(prompt: string, count: number): string {
   const openingLines = [
     `# ${topic}`,
     'kicker: A Brok-generated outline',
-    'This is a deterministic fallback outline. Configure OPENAI_COMPATIBLE_API_KEY to enable live LLM generation.'
+    'Use this starter narrative to shape the class story, then replace each placeholder with your own evidence.'
   ]
   slides.push(openingLines.join('\n'))
 
