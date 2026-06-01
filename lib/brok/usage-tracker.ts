@@ -39,7 +39,9 @@ export type UsageLimitResult =
       code:
         | 'daily_request_limit_exceeded'
         | 'api_key_monthly_budget_exceeded'
+        | 'api_key_monthly_budget_required'
         | 'workspace_monthly_budget_exceeded'
+        | 'workspace_monthly_budget_required'
         | 'usage_storage_unavailable'
       message: string
       status: number
@@ -74,6 +76,12 @@ export function generateRequestId(): string {
 
 /**
  * Record usage for an API request.
+ *
+ * Schema drift is no longer silently absorbed: if a column is missing the
+ * insert fails loudly so operators can run the missing migration. The
+ * historical "fall back to legacy insert" path was removed because it
+ * silently dropped surface/runtime/source/sessionId/metadata in
+ * production whenever the new columns weren't present.
  */
 export async function recordUsage(record: UsageRecord): Promise<void> {
   try {
@@ -104,71 +112,21 @@ export async function recordUsage(record: UsageRecord): Promise<void> {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-
-    if (
-      message.includes('column "surface"') ||
-      message.includes('column "runtime"') ||
-      message.includes('column "source"') ||
-      message.includes('column "session_id"') ||
-      message.includes('column "metadata"') ||
-      message.includes('column "feature"') ||
-      message.includes('relation "usage_events" violates not-null constraint')
-    ) {
-      try {
-        await db.execute(sql`
-          insert into usage_events (
-            request_id,
-            workspace_id,
-            user_id,
-            api_key_id,
-            endpoint,
-            feature,
-            model,
-            provider,
-            input_tokens,
-            output_tokens,
-            cached_tokens,
-            search_queries,
-            pages_fetched,
-            tool_calls,
-            provider_cost_usd,
-            billed_usd,
-            latency_ms,
-            status,
-            error_code
-          ) values (
-            ${record.requestId},
-            ${record.workspaceId},
-            ${record.userId},
-            ${record.apiKeyId},
-            ${record.endpoint},
-            ${record.endpoint},
-            ${record.model},
-            ${record.provider},
-            ${record.inputTokens},
-            ${record.outputTokens},
-            ${record.cachedTokens ?? 0},
-            ${record.searchQueries ?? 0},
-            ${record.pagesFetched ?? 0},
-            ${record.toolCalls ?? 0},
-            ${record.providerCostUsd.toString()},
-            ${record.billedUsd.toString()},
-            ${record.latencyMs},
-            ${record.status},
-            ${record.errorCode ?? null}
-          )
-        `)
-        return
-      } catch (legacyError) {
-        console.error(
-          'Failed to record usage with legacy usage_events schema:',
-          legacyError
-        )
-      }
+    const looksLikeMissingColumn =
+      message.includes('column') &&
+      (message.includes('does not exist') ||
+        message.includes('not-null constraint') ||
+        message.includes('not_null'))
+    if (looksLikeMissingColumn) {
+      console.error(
+        '[usage-tracker] usage_events schema drift detected. Run pending migrations. Original error:',
+        error
+      )
+    } else {
+      console.error('[usage-tracker] Failed to record usage:', error)
     }
-
-    console.error('Failed to record usage:', error)
-    // Don't throw - usage tracking should not break the request
+    // Do not throw — usage tracking must not break the user request, but
+    // we surface the failure in the logs for operator action.
   }
 }
 
@@ -265,6 +223,19 @@ export async function checkUsageLimits({
       }
     }
 
+    if (
+      process.env.BROK_CLOUD_DEPLOYMENT === 'true' &&
+      apiKeyBudgetCents === 0
+    ) {
+      return {
+        allowed: false,
+        code: 'api_key_monthly_budget_required',
+        message:
+          'A positive monthly budget is required for API keys in cloud deployments.',
+        status: 402
+      }
+    }
+
     const workspaceBudgetCents = workspace.monthlyBudgetCents ?? 0
     if (workspaceBudgetCents > 0) {
       const [monthlyForWorkspace] = await db
@@ -287,6 +258,19 @@ export async function checkUsageLimits({
           message: 'Monthly budget exceeded for this workspace.',
           status: 402
         }
+      }
+    }
+
+    if (
+      process.env.BROK_CLOUD_DEPLOYMENT === 'true' &&
+      workspaceBudgetCents === 0
+    ) {
+      return {
+        allowed: false,
+        code: 'workspace_monthly_budget_required',
+        message:
+          'A positive monthly budget is required for workspaces in cloud deployments.',
+        status: 402
       }
     }
 

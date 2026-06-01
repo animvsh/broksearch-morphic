@@ -135,7 +135,7 @@ export function createSearchTool(fullModel: string) {
           // Fallback to primary provider (optimized search provider)
           searchAPI =
             (process.env.SEARCH_API as SearchProviderType) || DEFAULT_PROVIDER
-          console.log(
+          if (process.env.NODE_ENV !== "production") console.log(
             `[Search] type="general" requested but no dedicated provider available, using optimized search provider: ${searchAPI}`
           )
         }
@@ -151,7 +151,7 @@ export function createSearchTool(fullModel: string) {
           ? 'advanced'
           : effectiveSearchDepth || 'basic'
 
-      console.log(
+      if (process.env.NODE_ENV !== "production") console.log(
         `Using search API: ${searchAPI}, Type: ${type}, Search Depth: ${effectiveSearchDepthForAPI}`
       )
 
@@ -225,7 +225,7 @@ export function createSearchTool(fullModel: string) {
         searchResult.toolCallId = context.toolCallId
       }
 
-      console.log('completed search')
+      if (process.env.NODE_ENV !== "production") console.log('completed search')
 
       // Yield final results with complete state
       yield {

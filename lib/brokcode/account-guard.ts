@@ -60,6 +60,7 @@ function createBrowserSessionAuth({
       name: 'BrokCode Browser Session',
       keyPrefix: 'browser_session',
       keyHash: 'browser_session',
+      keySalt: null,
       environment: 'live',
       status: 'active',
       scopes: ['code:write', 'agents:write', 'usage:read'],

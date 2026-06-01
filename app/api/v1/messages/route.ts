@@ -152,6 +152,20 @@ export async function POST(request: NextRequest) {
   )
 
   if (!rateLimit.allowed) {
+    if (rateLimit.reason === 'rate_limit_check_failed') {
+      return NextResponse.json(
+        {
+          type: 'error',
+          error: {
+            type: 'api_error',
+            message:
+              'Rate limit check is temporarily unavailable. Please retry shortly.'
+          }
+        },
+        { status: 503 }
+      )
+    }
+
     await recordRateLimitEvent(
       auth.apiKey.id,
       auth.workspace.id,

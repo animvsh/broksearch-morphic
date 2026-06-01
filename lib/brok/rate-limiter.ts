@@ -8,12 +8,17 @@ export interface RateLimitResult {
   current: number
   limit: number
   resetAt: number // Unix timestamp
+  reason?: 'over_limit' | 'rate_limit_check_failed'
 }
 
 export interface RateLimitConfig {
   rpm: number
   rph?: number // requests per hour
   rpd?: number // requests per day
+}
+
+function isCloudDeployment() {
+  return process.env.BROK_CLOUD_DEPLOYMENT === 'true'
 }
 
 /**
@@ -28,6 +33,7 @@ export async function checkRateLimit(
   const now = Date.now()
   const windowMs = 60 * 1000 // 1 minute window
   const windowStart = new Date(now - windowMs)
+  const resetAt = Math.floor((now + windowMs) / 1000) // Unix timestamp
 
   try {
     // Count accepted requests in the current window. Blocked attempts are still
@@ -45,7 +51,6 @@ export async function checkRateLimit(
 
     const currentCount = result.length
     const allowed = currentCount < rpmLimit
-    const resetAt = Math.floor((now + windowMs) / 1000) // Unix timestamp
 
     return {
       allowed,
@@ -55,12 +60,24 @@ export async function checkRateLimit(
     }
   } catch (error) {
     console.error('Rate limit check error:', error)
-    // Fail open - allow the request if we can't check
+    if (isCloudDeployment()) {
+      // Fail closed in cloud: a database error must not allow unlimited traffic.
+      return {
+        allowed: false,
+        current: 0,
+        limit: rpmLimit,
+        resetAt,
+        reason: 'rate_limit_check_failed'
+      }
+    }
+    // Self-hosted: fail open to keep the platform usable when the DB is
+    // temporarily unavailable. Self-hosters are expected to enforce
+    // network-level limits independently.
     return {
       allowed: true,
       current: 0,
       limit: rpmLimit,
-      resetAt: Math.floor((now + 60000) / 1000)
+      resetAt
     }
   }
 }
@@ -89,3 +106,4 @@ export async function recordRateLimitEvent(
     console.error('Failed to record rate limit event:', error)
   }
 }
+

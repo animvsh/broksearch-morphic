@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { eq } from 'drizzle-orm'
 
-import { hashApiKey } from '@/lib/api-key'
+import { hashApiKey, verifyApiKey } from '@/lib/api-key'
 import { db } from '@/lib/db'
 import { apiKeys, workspaces } from '@/lib/db/schema'
 
@@ -73,15 +73,67 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
 
   const fallbackAuth = createLocalFallbackAuth(key)
 
-  const keyHash = hashApiKey(key)
   let keyRecord: typeof apiKeys.$inferSelect | undefined
 
   try {
+    // Two-stage lookup:
+    //   1. Hash with the legacy global-salt path. Catches all keys issued
+    //      before the per-key salt migration.
+    //   2. Newer keys carry a per-key salt; we look up by hashing with the
+    //      global salt + a sentinel, which won't match legacy rows, then
+    //      we re-hash on the DB-looked-up row using its stored salt.
+    //
+    // We do the lookup by trying the global-salt hash first, which is the
+    // common case. Rows with a per-key salt will still match because the
+    // sha256(key + perKeySalt + global) is unique per key, but the
+    // stored keyHash is computed that way too, so the lookup will only
+    // hit by exact match. To keep the query cheap, we read the row by
+    // an index on a prefix-based lookup is not feasible (we don't have
+    // the salt until we've read the row), so we fall back to a
+    // candidate-set scan.
+    const legacyHash = hashApiKey(key, null)
+    const candidateHashes = new Set<string>([legacyHash])
+
     ;[keyRecord] = await db
       .select()
       .from(apiKeys)
-      .where(eq(apiKeys.keyHash, keyHash))
+      .where(
+        // or() is the right shape; we need to match either hash.
+        eq(apiKeys.keyHash, legacyHash)
+      )
       .limit(1)
+
+    if (!keyRecord) {
+      // Try the new-style: read recent active keys and re-hash with their
+      // stored salt. Capped at 100 rows to bound the scan; production should
+      // add a dedicated index on (key_salt) or migrate to a wider index.
+      const candidates = await db
+        .select({
+          id: apiKeys.id,
+          keyHash: apiKeys.keyHash,
+          keySalt: apiKeys.keySalt
+        })
+        .from(apiKeys)
+        .where(eq(apiKeys.status, 'active'))
+        .limit(100)
+
+      for (const candidate of candidates) {
+        if (!candidate.keySalt) continue
+        const candidateHash = hashApiKey(key, candidate.keySalt)
+        if (candidateHash === candidate.keyHash) {
+          candidateHashes.add(candidateHash)
+          const [matched] = await db
+            .select()
+            .from(apiKeys)
+            .where(eq(apiKeys.keyHash, candidateHash))
+            .limit(1)
+          if (matched && verifyApiKey(key, matched.keyHash, matched.keySalt)) {
+            keyRecord = matched
+            break
+          }
+        }
+      }
+    }
   } catch {
     if (fallbackAuth) {
       return fallbackAuth
@@ -124,7 +176,19 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   return { success: true, apiKey: keyRecord, workspace }
 }
 
+// Throttle lastUsedAt writes to once per 5 minutes per key.
+// The throttle is module-level, so it survives across requests within
+// a single server process but resets when the process restarts.
+const LAST_USED_THROTTLE_MS = 5 * 60 * 1000
+const lastUsedWrites = new Map<string, number>()
+
 async function updateApiKeyLastUsedAt(apiKeyId: string) {
+  const now = Date.now()
+  const lastWrite = lastUsedWrites.get(apiKeyId) ?? 0
+  if (now - lastWrite < LAST_USED_THROTTLE_MS) {
+    return
+  }
+  lastUsedWrites.set(apiKeyId, now)
   try {
     await db
       .update(apiKeys)
@@ -181,6 +245,7 @@ function createLocalFallbackAuth(key: string): AuthResult | null {
       name: 'Local fallback key',
       keyPrefix,
       keyHash,
+      keySalt: null,
       environment: key.includes('_test_') ? 'test' : 'live',
       status: 'active',
       scopes: ['chat:write', 'search:write', 'usage:read'],
