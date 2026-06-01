@@ -1,8 +1,8 @@
 import {
-  MINIMAX_API_KEY,
-  MINIMAX_BASE_URL,
-  MINIMAX_CHAT_MODEL
-} from '@/lib/ai/minimax'
+  BROK_PROVIDER_API_KEY,
+  BROK_PROVIDER_BASE_URL,
+  BROK_PROVIDER_CHAT_MODEL
+} from '@/lib/ai/brok'
 import {
   buildSearchQueries,
   classifyQuery,
@@ -669,7 +669,7 @@ async function synthesizeDeepResearchAnswer({
     return 'I could not find reliable sources for this deep research task.'
   }
 
-  if (!MINIMAX_API_KEY) {
+  if (!BROK_PROVIDER_API_KEY) {
     return fallbackDeepResearchAnswer({
       query,
       findings,
@@ -708,14 +708,14 @@ async function synthesizeDeepResearchAnswer({
     )
     .join('\n\n')
 
-  const response = await fetch(`${MINIMAX_BASE_URL}/chat/completions`, {
+  const response = await fetch(`${BROK_PROVIDER_BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${MINIMAX_API_KEY}`,
+      Authorization: `Bearer ${BROK_PROVIDER_API_KEY}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: MINIMAX_CHAT_MODEL,
+      model: BROK_PROVIDER_CHAT_MODEL,
       max_tokens: 2200,
       messages: [
         {

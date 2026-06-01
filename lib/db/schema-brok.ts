@@ -78,7 +78,8 @@ export const apiKeys = pgTable(
     userId: text('user_id').notNull(),
     name: text('name').notNull(),
     keyPrefix: text('key_prefix').notNull(), // brok_sk_live_xxxx
-    keyHash: text('key_hash').notNull(), // sha256 hash
+    keyHash: text('key_hash').notNull(), // sha256(key + key_salt + global_salt)
+    keySalt: text('key_salt'), // per-key random salt; null for legacy keys
     environment: environmentEnum('environment').notNull(),
     status: keyStatusEnum('status').default('active').notNull(),
     scopes: jsonb('scopes').default([]).notNull(), // ['chat:write', 'search:write']

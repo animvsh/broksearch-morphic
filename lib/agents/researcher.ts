@@ -147,9 +147,10 @@ export function createResearcher({
     // Configure based on search mode
     switch (searchMode) {
       case 'quick':
-        console.log(
-          `[Researcher] quick mode: maxSteps=6, tools=[search, composioIntegrations, documentArtifacts]`
-        )
+        if (process.env.NODE_ENV !== 'production')
+          console.log(
+            `[Researcher] quick mode: maxSteps=6, tools=[search, composioIntegrations, documentArtifacts]`
+          )
         systemPrompt = FAST_CHAT_PROMPT
         activeToolsList = [
           'search',
@@ -161,9 +162,10 @@ export function createResearcher({
         break
 
       case 'search':
-        console.log(
-          `[Researcher] search mode: maxSteps=12, tools=[search, fetch, composioIntegrations, documentArtifacts]`
-        )
+        if (process.env.NODE_ENV !== 'production')
+          console.log(
+            `[Researcher] search mode: maxSteps=12, tools=[search, fetch, composioIntegrations, documentArtifacts]`
+          )
         systemPrompt = QUICK_MODE_PROMPT
         activeToolsList = [
           'search',
@@ -176,9 +178,10 @@ export function createResearcher({
         break
 
       case 'code':
-        console.log(
-          `[Researcher] code mode: maxSteps=10, tools=[composioIntegrations, documentArtifacts]`
-        )
+        if (process.env.NODE_ENV !== 'production')
+          console.log(
+            `[Researcher] code mode: maxSteps=10, tools=[composioIntegrations, documentArtifacts]`
+          )
         systemPrompt = QUICK_MODE_PROMPT
         activeToolsList = ['composioIntegrations', 'documentArtifacts']
         maxSteps = 10
@@ -195,9 +198,10 @@ export function createResearcher({
           'composioIntegrations',
           'documentArtifacts'
         ]
-        console.log(
-          `[Researcher] Deep mode: maxSteps=35, tools=[${activeToolsList.join(', ')}]`
-        )
+        if (process.env.NODE_ENV !== 'production')
+          console.log(
+            `[Researcher] Deep mode: maxSteps=35, tools=[${activeToolsList.join(', ')}]`
+          )
         maxSteps = 35
         searchTool = wrapSearchToolForDeepMode(originalSearchTool)
         break

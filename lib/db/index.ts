@@ -13,24 +13,40 @@ const isNextProductionBuild =
   process.env.NEXT_PHASE === 'phase-production-build'
 const canUseBuildDatabaseFallback = isTest || isNextProductionBuild
 
-if (
-  !process.env.DATABASE_URL &&
-  !process.env.DATABASE_RESTRICTED_URL &&
-  !canUseBuildDatabaseFallback
-) {
-  throw new Error(
-    'DATABASE_URL or DATABASE_RESTRICTED_URL environment variable is not set'
-  )
+function isPlaceholderDatabaseUrl(value: string | undefined) {
+  if (!value) return true
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return true
+  return /^\[\s*YOUR_[A-Z0-9_]+_URL\s*\]$/i.test(trimmed)
+}
+
+const hasRealDatabaseUrl =
+  !isPlaceholderDatabaseUrl(process.env.DATABASE_URL) ||
+  !isPlaceholderDatabaseUrl(process.env.DATABASE_RESTRICTED_URL)
+
+if (!hasRealDatabaseUrl && !canUseBuildDatabaseFallback) {
+  if (isDevelopment) {
+    console.warn(
+      '[DB] DATABASE_URL appears to be a placeholder; falling back to inert build URL so the dev server can boot. Set a real PostgreSQL URL in .env.local to enable data-backed features.'
+    )
+  } else {
+    throw new Error(
+      'DATABASE_URL or DATABASE_RESTRICTED_URL environment variable is not set'
+    )
+  }
 }
 
 // Connection with connection pooling for server environments
 // Prefer restricted user for application runtime
 const connectionString =
-  process.env.DATABASE_RESTRICTED_URL ?? // Prefer restricted user
-  process.env.DATABASE_URL ??
-  (canUseBuildDatabaseFallback
-    ? 'postgres://user:pass@localhost:5432/testdb'
-    : undefined)
+  process.env.DATABASE_RESTRICTED_URL && // Prefer restricted user
+  !isPlaceholderDatabaseUrl(process.env.DATABASE_RESTRICTED_URL)
+    ? process.env.DATABASE_RESTRICTED_URL
+    : !isPlaceholderDatabaseUrl(process.env.DATABASE_URL)
+      ? process.env.DATABASE_URL
+      : canUseBuildDatabaseFallback || isDevelopment
+        ? 'postgres://user:pass@localhost:5432/testdb'
+        : undefined
 
 if (!connectionString) {
   throw new Error(
@@ -40,12 +56,15 @@ if (!connectionString) {
 
 // Log which connection is being used (for debugging)
 if (isDevelopment) {
-  console.log(
-    '[DB] Using connection:',
-    process.env.DATABASE_RESTRICTED_URL
+  const usingInertFallback =
+    connectionString === 'postgres://user:pass@localhost:5432/testdb'
+  const label = usingInertFallback
+    ? 'Inert Fallback (data-backed features disabled)'
+    : process.env.DATABASE_RESTRICTED_URL &&
+        !isPlaceholderDatabaseUrl(process.env.DATABASE_RESTRICTED_URL)
       ? 'Restricted User (RLS Active)'
       : 'Owner User (RLS Bypassed)'
-  )
+  console.log('[DB] Using connection:', label)
 }
 
 // Keep runtime SSL behavior aligned with migrate.ts so Railway and similar hosted

@@ -2,7 +2,7 @@
   "version": 2,
   "models": {
     "quick": {
-      "id": "MiniMax-M2.7-highspeed",
+      "id": "brok-m2-7-highspeed",
       "alias": "brok-fast",
       "name": "Brok Fast",
       "provider": "Brok",
@@ -12,7 +12,7 @@
       "speedLabel": "about 100 tps"
     },
     "search": {
-      "id": "MiniMax-M2.7",
+      "id": "brok-m2-7",
       "alias": "brok-search",
       "name": "Brok 3 Search",
       "provider": "Brok",
@@ -22,7 +22,7 @@
       "speedLabel": "about 60 tps"
     },
     "deep": {
-      "id": "MiniMax-M2.7",
+      "id": "brok-m2-7",
       "alias": "brok-deep",
       "name": "Brok 3 Deep",
       "provider": "Brok",
@@ -32,7 +32,7 @@
       "speedLabel": "about 60 tps"
     },
     "code": {
-      "id": "MiniMax-M2.7-highspeed",
+      "id": "brok-m2-7-highspeed",
       "alias": "brok-code",
       "name": "Brok Code",
       "provider": "Brok",

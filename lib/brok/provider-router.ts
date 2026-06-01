@@ -171,7 +171,7 @@ export async function routeToProviderResponse(
 
   // Call appropriate provider
   const providerApiKey =
-    process.env.OPENAI_COMPATIBLE_API_KEY || process.env.MINIMAX_API_KEY
+    process.env.OPENAI_COMPATIBLE_API_KEY || process.env.BROK_PROVIDER_API_KEY
 
   if (!providerApiKey) {
     throw new Error('Provider API key not configured')
@@ -218,7 +218,7 @@ function normalizeMessageContent(content: unknown) {
   return ''
 }
 
-export function normalizeMiniMaxMessages(
+export function normalizeBrokMessages(
   messages: Array<Record<string, unknown>>
 ) {
   const systemMessages = messages
@@ -273,7 +273,7 @@ export function transformToProviderRequest(
 
   const providerRequest: Record<string, unknown> = {
     model: providerModel,
-    messages: normalizeMiniMaxMessages(
+    messages: normalizeBrokMessages(
       hasSystemMessage
         ? request.messages
         : [
