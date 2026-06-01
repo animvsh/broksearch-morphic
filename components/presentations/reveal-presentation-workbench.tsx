@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
+  Bot,
   ClipboardCopy,
   Copy,
   Download,
@@ -20,6 +21,7 @@ import {
   Share2,
   Sparkles,
   Trash2,
+  Upload,
   WandSparkles
 } from 'lucide-react'
 import type { RevealApi } from 'reveal.js'
@@ -117,6 +119,91 @@ function selectedBlockIndex(selectedSlide: number, blockCount: number) {
   return Math.min(Math.max(selectedSlide, 0), Math.max(blockCount - 1, 0))
 }
 
+function firstMeaningfulLine(value: string) {
+  return (
+    value
+      .split('\n')
+      .map(line => line.trim())
+      .find(Boolean) ?? 'Untitled presentation'
+  )
+}
+
+function createOutlineFromMaterial(material: string, slideCount: number) {
+  const cleaned = material.trim()
+  const topic = firstMeaningfulLine(cleaned)
+    .replace(/^#+\s*/, '')
+    .replace(/[:.]\s*$/, '')
+    .slice(0, 90)
+  const supportingLines = cleaned
+    .split(/\n+/)
+    .map(line => line.replace(/^[-*#\d.]+\s*/, '').trim())
+    .filter(line => line.length > 18)
+    .slice(0, Math.max(slideCount - 2, 1))
+
+  const beats = [
+    `1. Hook: ${topic}`,
+    `2. Problem: why this matters for the audience`,
+    ...supportingLines.map((line, index) => `${index + 3}. Proof: ${line}`),
+    `${Math.max(slideCount - 1, 3)}. Takeaway: what the audience should remember`,
+    `${slideCount}. Next step: what to do after the talk`
+  ]
+
+  return beats
+    .slice(0, slideCount)
+    .map((beat, index) => {
+      const normalized = beat.replace(/^\d+\.\s*/, '')
+      return `${index + 1}. ${normalized}`
+    })
+    .join('\n')
+}
+
+function outlineToSlideMarkdown(outline: string, material: string) {
+  const sourceMaterial = material.trim()
+  const beats = outline
+    .split('\n')
+    .map(line => line.replace(/^[-*#\d.]+\s*/, '').trim())
+    .filter(Boolean)
+
+  const fallbackBeats = createOutlineFromMaterial(
+    sourceMaterial || samplePresentationSource,
+    6
+  )
+    .split('\n')
+    .map(line => line.replace(/^[-*#\d.]+\s*/, '').trim())
+
+  return (beats.length > 0 ? beats : fallbackBeats)
+    .map((beat, index) => {
+      const [rawTitle, ...rest] = beat.split(':')
+      const title = (rawTitle || `Slide ${index + 1}`).trim()
+      const detail = rest.join(':').trim()
+      const context =
+        detail ||
+        sourceMaterial.split(/\n+/).find(line => line.trim().length > 24) ||
+        'Add the strongest evidence, example, or classroom insight here.'
+
+      return [
+        `# ${title}`,
+        index === 0 ? 'kicker: Opening move' : `kicker: Beat ${index + 1}`,
+        context,
+        '- Lead with the clearest claim',
+        '- Add one concrete proof point',
+        '- Connect it back to the audience',
+        `notes: Explain why this beat matters before moving to slide ${index + 2}.`
+      ].join('\n')
+    })
+    .join('\n\n---\n\n')
+}
+
+function outlineFromSlides(source: string) {
+  return parsePresentationMarkdown(source)
+    .map((slide, index) => {
+      const detail =
+        slide.kicker ?? slide.body[0] ?? slide.bullets[0] ?? 'Main point'
+      return `${index + 1}. ${slide.title}: ${detail}`
+    })
+    .join('\n')
+}
+
 export function RevealPresentationWorkbench() {
   const [decks, setDecks] = useState<PresentationSummary[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -136,6 +223,22 @@ export function RevealPresentationWorkbench() {
   const [generateWebSearch, setGenerateWebSearch] = useState(false)
   const [showGeneratePanel, setShowGeneratePanel] = useState(false)
   const [showDeckList, setShowDeckList] = useState(false)
+  const [material, setMaterial] = useState(
+    'Paste a lecture transcript, research notes, assignment prompt, or rough idea here.'
+  )
+  const [outline, setOutline] = useState(() =>
+    outlineFromSlides(samplePresentationSource)
+  )
+  const [chatInput, setChatInput] = useState('')
+  const [chatMessages, setChatMessages] = useState<
+    Array<{ role: 'assistant' | 'user'; content: string }>
+  >([
+    {
+      role: 'assistant',
+      content:
+        'Send me a direction like "make this more visual" or "add speaker notes" and I will edit the outline or deck.'
+    }
+  ])
 
   const [selectedSlide, setSelectedSlide] = useState(0)
   const [isRevealReady, setIsRevealReady] = useState(false)
@@ -201,6 +304,12 @@ export function RevealPresentationWorkbench() {
       setActiveId(data.presentation.id)
       setTitle(data.presentation.title)
       setSource(data.presentation.sourceMarkdown ?? samplePresentationSource)
+      setOutline(
+        outlineFromSlides(
+          data.presentation.sourceMarkdown ?? samplePresentationSource
+        )
+      )
+      setMaterial(data.presentation.sourceMarkdown ?? samplePresentationSource)
       setIsPublic(data.presentation.isPublic)
       setShareUrl(
         data.presentation.isPublic && data.presentation.shareId
@@ -342,12 +451,112 @@ export function RevealPresentationWorkbench() {
   const addSlide = () => {
     const nextSlide = `\n\n---\n\n# New Slide\nkicker: Draft\nWrite the main point here.\n- Add a proof point\n- Add the user takeaway`
     setSource(value => `${value.trimEnd()}${nextSlide}`)
+    setOutline(
+      value => `${value.trimEnd()}\n${slides.length + 1}. New Slide: Draft`
+    )
     setSelectedSlide(slides.length)
   }
 
   const goToSlide = (index: number) => {
     const nextIndex = Math.min(Math.max(index, 0), slides.length - 1)
     setSelectedSlide(nextIndex)
+  }
+
+  const handleMaterialUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      setMaterial(text)
+      setStatus('saved')
+      setStatusMessage(`${file.name} added to source material`)
+    } catch {
+      setStatus('error')
+      setStatusMessage('Could not read that file.')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  const handleCreateOutline = () => {
+    const nextOutline = createOutlineFromMaterial(material, generateSlideCount)
+    setOutline(nextOutline)
+    setStatus('saved')
+    setStatusMessage('Outline created')
+  }
+
+  const handleCreateSlidesFromOutline = () => {
+    const nextSource = outlineToSlideMarkdown(outline, material)
+    setSource(nextSource)
+    setSelectedSlide(0)
+    setShowGeneratePanel(false)
+    setStatus('saved')
+    setStatusMessage('Slides created from outline')
+  }
+
+  const appendAssistantMessage = (content: string) => {
+    setChatMessages(messages => [...messages, { role: 'assistant', content }])
+  }
+
+  const runChatCommand = (command: string) => {
+    const normalized = command.toLowerCase()
+    setChatMessages(messages => [
+      ...messages,
+      { role: 'user', content: command }
+    ])
+
+    if (normalized.includes('note')) {
+      addSpeakerNotes()
+      appendAssistantMessage('Added speaker notes across the deck.')
+      return
+    }
+
+    if (normalized.includes('agenda') || normalized.includes('outline')) {
+      const nextOutline = createOutlineFromMaterial(
+        `${material}\n${outline}`,
+        generateSlideCount
+      )
+      setOutline(nextOutline)
+      appendAssistantMessage('Reworked the outline into a cleaner sequence.')
+      setStatus('saved')
+      setStatusMessage('Outline updated from chat')
+      return
+    }
+
+    if (
+      normalized.includes('visual') ||
+      normalized.includes('polish') ||
+      normalized.includes('better')
+    ) {
+      polishDeck()
+      appendAssistantMessage(
+        'Polished the slide structure for a more visual pass.'
+      )
+      return
+    }
+
+    if (normalized.includes('slide') || normalized.includes('create')) {
+      handleCreateSlidesFromOutline()
+      appendAssistantMessage('Created a slide draft from the current outline.')
+      return
+    }
+
+    setOutline(
+      value =>
+        `${value.trimEnd()}\n${value.trim() ? value.split('\n').length + 1 : 1}. ${command}`
+    )
+    appendAssistantMessage('Added that as a new outline beat.')
+    setStatus('saved')
+    setStatusMessage('Chat added to outline')
+  }
+
+  const handleChatSubmit = () => {
+    const command = chatInput.trim()
+    if (!command) return
+    setChatInput('')
+    runChatCommand(command)
   }
 
   const createDeckFromCurrent = async () => {
@@ -388,6 +597,7 @@ export function RevealPresentationWorkbench() {
       setActiveId(createdId)
       setTitle(nextTitle || DEFAULT_TITLE)
       setSource(nextSource)
+      setOutline(outlineFromSlides(nextSource))
       setIsPublic(data.presentation.isPublic)
       setShareUrl(null)
       setSelectedSlide(0)
@@ -418,6 +628,8 @@ export function RevealPresentationWorkbench() {
 
   const handleReset = () => {
     setSource(samplePresentationSource)
+    setOutline(outlineFromSlides(samplePresentationSource))
+    setMaterial(samplePresentationSource)
     setSelectedSlide(0)
   }
 
@@ -439,6 +651,8 @@ export function RevealPresentationWorkbench() {
       }
       setActiveId(null)
       setSource(samplePresentationSource)
+      setOutline(outlineFromSlides(samplePresentationSource))
+      setMaterial(samplePresentationSource)
       setTitle(DEFAULT_TITLE)
       setShareUrl(null)
       setIsPublic(false)
@@ -468,6 +682,8 @@ export function RevealPresentationWorkbench() {
     if (!deckId) {
       const sourceMarkdown = deterministicOutline(prompt, generateSlideCount)
       setSource(sourceMarkdown)
+      setOutline(outlineFromSlides(sourceMarkdown))
+      setMaterial(prompt)
       setSelectedSlide(0)
       setStatus('saved')
       setStatusMessage(
@@ -506,6 +722,8 @@ export function RevealPresentationWorkbench() {
         sourceMarkdown: string
       }
       setSource(data.sourceMarkdown)
+      setOutline(outlineFromSlides(data.sourceMarkdown))
+      setMaterial(prompt)
       await loadDecks()
       setStatus('saved')
       setStatusMessage(
@@ -565,9 +783,14 @@ export function RevealPresentationWorkbench() {
 
   const updateSourceWithBlocks = (
     blocks: string[],
-    nextSlide = selectedSlide
+    nextSlide = selectedSlide,
+    options: { syncOutline?: boolean } = {}
   ) => {
-    setSource(joinBlocks(blocks))
+    const nextSource = joinBlocks(blocks)
+    setSource(nextSource)
+    if (options.syncOutline !== false) {
+      setOutline(outlineFromSlides(nextSource))
+    }
     setSelectedSlide(Math.min(Math.max(nextSlide, 0), blocks.length - 1))
   }
 
@@ -596,7 +819,7 @@ export function RevealPresentationWorkbench() {
         ? block
         : `${block.trimEnd()}\nnotes: Introduce slide ${index + 1} with the punchline, then connect it to the deck narrative.`
     )
-    updateSourceWithBlocks(blocks)
+    updateSourceWithBlocks(blocks, selectedSlide, { syncOutline: false })
     setStatus('saved')
     setStatusMessage('Speaker notes added')
   }
@@ -691,16 +914,16 @@ export function RevealPresentationWorkbench() {
 
   return (
     <div className="grid min-h-0 min-w-0 gap-4 xl:grid-cols-[minmax(320px,0.82fr)_minmax(520px,1.18fr)]">
-      <section className="dashboard-panel flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <section className="dashboard-panel flex min-h-0 min-w-0 flex-col overflow-y-auto">
         <div className="flex flex-col gap-3 border-b px-4 py-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
                 <Presentation className="size-3.5" />
-                Source
+                Cursor for slides
               </div>
               <h2 className="mt-1 text-lg font-semibold tracking-normal">
-                Editable deck script
+                Notes to outline to deck
               </h2>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -770,10 +993,77 @@ export function RevealPresentationWorkbench() {
           ) : null}
           {!hasActiveDeck ? (
             <div className="rounded-md border border-dashed bg-zinc-50 px-3 py-3 text-sm text-muted-foreground">
-              You are editing a local draft. Create a deck to save, generate,
-              share, or export it.
+              You are editing a local draft. Create a deck to save, share, or
+              export it.
             </div>
           ) : null}
+          <div className="grid gap-3 rounded-md border bg-white p-3">
+            <div className="flex items-center justify-between gap-2">
+              <label
+                htmlFor="presentation-material"
+                className="text-xs font-medium uppercase text-muted-foreground"
+              >
+                Upload or paste info
+              </label>
+              <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-zinc-50">
+                <Upload className="size-4" />
+                Upload
+                <input
+                  type="file"
+                  accept=".txt,.md,.markdown,text/plain,text/markdown"
+                  className="sr-only"
+                  onChange={event => {
+                    void handleMaterialUpload(event)
+                  }}
+                />
+              </label>
+            </div>
+            <Textarea
+              id="presentation-material"
+              aria-label="Presentation source material"
+              value={material}
+              onChange={event => setMaterial(event.target.value)}
+              className="min-h-28 text-sm leading-6"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 gap-2"
+                onClick={handleCreateOutline}
+                data-testid="create-outline"
+              >
+                <ListPlus className="size-4" />
+                Create outline
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-2"
+                onClick={handleCreateSlidesFromOutline}
+                data-testid="create-slides"
+              >
+                <Presentation className="size-4" />
+                Create slides
+              </Button>
+            </div>
+          </div>
+          <div className="grid gap-3 rounded-md border bg-white p-3">
+            <label
+              htmlFor="presentation-outline"
+              className="text-xs font-medium uppercase text-muted-foreground"
+            >
+              Editable outline
+            </label>
+            <Textarea
+              id="presentation-outline"
+              aria-label="Editable presentation outline"
+              value={outline}
+              onChange={event => setOutline(event.target.value)}
+              className="min-h-36 font-mono text-sm leading-6"
+            />
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -1080,10 +1370,69 @@ export function RevealPresentationWorkbench() {
               {statusMessage}
             </p>
           ) : null}
+          <div className="grid gap-3 rounded-md border bg-white p-3">
+            <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
+              <Bot className="size-3.5" />
+              Slide chat
+            </div>
+            <div className="max-h-52 space-y-2 overflow-y-auto rounded-md bg-zinc-50 p-2">
+              {chatMessages.map((message, index) => (
+                <div
+                  key={`${message.role}-${index}`}
+                  className={`rounded-md px-3 py-2 text-sm leading-6 ${
+                    message.role === 'user'
+                      ? 'ml-8 bg-zinc-950 text-white'
+                      : 'mr-8 border bg-white text-zinc-700'
+                  }`}
+                >
+                  {message.content}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                aria-label="Chat with slide builder"
+                value={chatInput}
+                onChange={event => setChatInput(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    handleChatSubmit()
+                  }
+                }}
+                placeholder="Ask for a tighter outline, notes, visuals..."
+                className="h-9 text-sm"
+              />
+              <Button
+                type="button"
+                size="sm"
+                className="h-9"
+                onClick={handleChatSubmit}
+              >
+                Send
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {['Make it visual', 'Add speaker notes', 'Create slides'].map(
+                command => (
+                  <Button
+                    key={command}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => runChatCommand(command)}
+                  >
+                    {command}
+                  </Button>
+                )
+              )}
+            </div>
+          </div>
         </div>
         <textarea
           aria-label="Presentation markdown source"
-          className={`${styles.editorTextarea} w-full flex-1 resize-none border-0 bg-white px-4 py-4 font-mono text-sm leading-6 text-zinc-900 outline-none placeholder:text-muted-foreground`}
+          className={`${styles.editorTextarea} min-h-48 w-full resize-y border-0 bg-white px-4 py-4 font-mono text-sm leading-6 text-zinc-900 outline-none placeholder:text-muted-foreground`}
           spellCheck={false}
           value={source}
           onChange={event => setSource(event.target.value)}

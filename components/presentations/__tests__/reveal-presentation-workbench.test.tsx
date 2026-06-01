@@ -38,8 +38,8 @@ describe('RevealPresentationWorkbench', () => {
     expect(
       await screen.findByText(/you are editing a local draft/i)
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /create/i })).toBeEnabled()
-    expect(screen.getByRole('button', { name: /generate/i })).toBeEnabled()
+    expect(screen.getByTestId('save-deck')).toBeEnabled()
+    expect(screen.getByTestId('open-generate')).toBeEnabled()
     expect(screen.getByTestId('reveal-deck')).toHaveTextContent(
       'Brok Presentations'
     )
@@ -68,7 +68,7 @@ describe('RevealPresentationWorkbench', () => {
     fireEvent.click(screen.getByRole('button', { name: /agenda/i }))
     expect(editor.value).toContain('# Agenda')
 
-    fireEvent.click(screen.getByRole('button', { name: /speaker notes/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^speaker notes$/i }))
     expect(editor.value).toContain('notes:')
 
     fireEvent.click(screen.getByRole('button', { name: /copy markdown/i }))
@@ -192,6 +192,53 @@ describe('RevealPresentationWorkbench', () => {
     ).toContain('# AI study group briefing')
   })
 
+  it('turns pasted material into an editable outline and then slides', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ presentations: [] }))
+    )
+
+    render(<RevealPresentationWorkbench />)
+
+    fireEvent.change(
+      await screen.findByLabelText(/presentation source material/i),
+      {
+        target: {
+          value:
+            'Campus recycling project\nStudents need a simpler way to sort waste.\nPilot data shows cleaner bins after visual signage.'
+        }
+      }
+    )
+    fireEvent.click(screen.getByTestId('create-outline'))
+
+    expect(
+      (
+        screen.getByLabelText(
+          /editable presentation outline/i
+        ) as HTMLTextAreaElement
+      ).value
+    ).toContain('Campus recycling project')
+
+    fireEvent.change(screen.getByLabelText(/editable presentation outline/i), {
+      target: {
+        value:
+          '1. Opening: Campus recycling project\n2. Problem: Waste sorting is confusing\n3. Proof: Pilot data improved bin quality'
+      }
+    })
+    fireEvent.click(screen.getByTestId('create-slides'))
+
+    expect(screen.getByTestId('reveal-deck')).toHaveTextContent(
+      'Campus recycling project'
+    )
+    expect(
+      (
+        screen.getByLabelText(
+          /presentation markdown source/i
+        ) as HTMLTextAreaElement
+      ).value
+    ).toContain('# Opening')
+  })
+
   it('creates a saved deck from the current draft', async () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -237,7 +284,7 @@ describe('RevealPresentationWorkbench', () => {
           '# Quarterly Plan\nKicker: Board update\nA tighter operating story.'
       }
     })
-    fireEvent.click(screen.getByRole('button', { name: /create/i }))
+    fireEvent.click(screen.getByTestId('save-deck'))
 
     expect(await screen.findByText(/deck created/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
@@ -313,7 +360,15 @@ describe('RevealPresentationWorkbench', () => {
       await screen.findByRole('button', { name: /launch story/i })
     )
 
-    expect(await screen.findByDisplayValue(/# First Move/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(
+        (
+          screen.getByLabelText(
+            /presentation markdown source/i
+          ) as HTMLTextAreaElement
+        ).value
+      ).toContain('# First Move')
+    })
     expect(screen.getByRole('button', { name: /share/i })).toBeEnabled()
 
     fireEvent.click(screen.getByRole('button', { name: /next slide/i }))
