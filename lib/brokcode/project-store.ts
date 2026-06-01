@@ -721,6 +721,59 @@ export async function recordBrokCodeProjectDeployment({
   return deployment
 }
 
+export async function listBrokCodeProjectDeployments({
+  projectId,
+  workspaceId,
+  userId,
+  maxResults = 20
+}: {
+  projectId: string
+  workspaceId: string
+  userId: string
+  maxResults?: number
+}) {
+  const boundedMaxResults = Math.min(Math.max(Math.floor(maxResults), 1), 100)
+
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
+    try {
+      return await db
+        .select()
+        .from(brokCodeDeployments)
+        .where(
+          and(
+            eq(brokCodeDeployments.projectId, projectId),
+            eq(brokCodeDeployments.workspaceId, workspaceId),
+            eq(brokCodeDeployments.userId, userId)
+          )
+        )
+        .orderBy(desc(brokCodeDeployments.updatedAt))
+        .limit(boundedMaxResults)
+    } catch (error) {
+      console.error(
+        'BrokCode project deployment list failed; using file store:',
+        error
+      )
+    }
+  }
+
+  const store = await readProjectStore()
+  return store.deployments
+    .map((deployment, index) => ({ deployment, index }))
+    .filter(
+      ({ deployment }) =>
+        deployment.projectId === projectId &&
+        deployment.workspaceId === workspaceId &&
+        deployment.userId === userId
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.deployment.updatedAt).getTime() -
+          new Date(a.deployment.updatedAt).getTime() || b.index - a.index
+    )
+    .map(({ deployment }) => deployment)
+    .slice(0, boundedMaxResults)
+}
+
 export async function listBrokCodeProjectFiles({
   projectId,
   workspaceId

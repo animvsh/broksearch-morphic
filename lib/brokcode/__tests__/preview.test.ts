@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { getBrokCodeManagedDeployReadiness } from '../deploy-readiness'
 import {
   getManagedPreviewAsset,
   getManagedPreviewAssetOrPlaceholder,
@@ -139,6 +140,48 @@ describe('BrokCode managed preview', () => {
     ).toBe(
       'https://www.brok.fyi/brokcode/apps/coffee-shop--project_123/index.html'
     )
+  })
+
+  it('summarizes managed deploy readiness for the right panel', () => {
+    const request = {
+      url: 'https://www.brok.fyi/api/brokcode/deploy',
+      headers: new Headers()
+    }
+
+    expect(
+      getBrokCodeManagedDeployReadiness({
+        project,
+        request,
+        files: []
+      })
+    ).toMatchObject({
+      ready: false,
+      status: 'missing_entrypoint',
+      requiredFiles: ['index.html'],
+      previewUrl:
+        'https://www.brok.fyi/api/brokcode/previews/project_123/index.html',
+      deploymentUrl:
+        'https://www.brok.fyi/brokcode/apps/coffee-shop--project_123/index.html'
+    })
+
+    expect(
+      getBrokCodeManagedDeployReadiness({
+        project,
+        request,
+        files: [
+          {
+            path: 'index.html',
+            content:
+              '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Coffee Shop</title><style>body{font-family:system-ui}.hero{padding:48px}.card{border:1px solid #ddd}</style></head><body><main class="hero"><h1>Coffee Shop</h1><p>Order fresh espresso, pastries, and campus-friendly study snacks from a polished student coffee shop app. Browse featured drinks, save favorites, and start a pickup order before class.</p><button>Order now</button></main></body></html>'
+          }
+        ]
+      })
+    ).toMatchObject({
+      ready: true,
+      status: 'ready',
+      strategy: 'managed_live_preview',
+      requiredFiles: []
+    })
   })
 
   it('serves the hot reload manifest for managed previews', () => {
