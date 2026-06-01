@@ -233,7 +233,6 @@ export function validateOpenAiChatMessages(
           'system, developer, user, assistant, or tool.'
       }
     }
-
     const typedMessage = message as Record<string, unknown>
     const contentValidation = validateOpenAiMessageContent({
       content: typedMessage.content,
@@ -396,13 +395,13 @@ function validateOpenAiToolCalls(
         message: `${toolCallPath}.id must be a non-empty string.`
       }
     }
-    if (typedToolCall.type !== 'function') {
-      return {
-        ok: false,
-        code: 'invalid_tool_calls',
-        message: `${toolCallPath}.type must be function.`
+      if (typedToolCall.type !== 'function') {
+        return {
+          ok: false,
+          code: 'invalid_tool_calls',
+          message: `${toolCallPath}.type must be function.`
+        }
       }
-    }
 
     const fn = typedToolCall.function
     if (!fn || typeof fn !== 'object' || Array.isArray(fn)) {

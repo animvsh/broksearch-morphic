@@ -248,7 +248,6 @@ export async function POST(request: NextRequest) {
               outputTokens,
               providerCostUsd: providerCost,
               billedUsd: applyBrokMarkup(providerCost),
-              billedUsd: applyBrokMarkup(providerCost),
               latencyMs,
               status: 'success',
               metadata: {
