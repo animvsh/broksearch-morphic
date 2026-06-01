@@ -7,6 +7,7 @@ describe('BrokCode task retry payloads', () => {
     const result = buildBrokCodeTaskRetryRequest({
       id: 'task_123',
       kind: 'brokcode',
+      status: 'failed',
       metadata: {
         originalRequest: {
           command: 'Build a student project portal',
@@ -74,6 +75,54 @@ describe('BrokCode task retry payloads', () => {
     ).toMatchObject({
       ok: false,
       status: 409
+    })
+  })
+
+  it('rejects active and already successful tasks', () => {
+    const task = {
+      id: 'task_123',
+      kind: 'brokcode',
+      metadata: {
+        originalRequest: {
+          command: 'Build a student project portal'
+        }
+      }
+    }
+
+    expect(
+      buildBrokCodeTaskRetryRequest({
+        ...task,
+        status: 'queued'
+      })
+    ).toMatchObject({
+      ok: false,
+      status: 409,
+      error:
+        'This BrokCode task is still running. Wait for it to finish or cancel it before retrying.'
+    })
+
+    expect(
+      buildBrokCodeTaskRetryRequest({
+        ...task,
+        status: 'running'
+      })
+    ).toMatchObject({
+      ok: false,
+      status: 409,
+      error:
+        'This BrokCode task is still running. Wait for it to finish or cancel it before retrying.'
+    })
+
+    expect(
+      buildBrokCodeTaskRetryRequest({
+        ...task,
+        status: 'succeeded'
+      })
+    ).toMatchObject({
+      ok: false,
+      status: 409,
+      error:
+        'This BrokCode task already succeeded. Start a new edit instead of retrying it.'
     })
   })
 })
