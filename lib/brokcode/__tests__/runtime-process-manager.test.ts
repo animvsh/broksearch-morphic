@@ -8,7 +8,8 @@ import {
   createRuntimeLogs,
   getBrokCodeRuntimeProcessReuseDecision,
   persistBrokCodeRuntimeProcessExit,
-  redactBrokCodeRuntimeLog
+  redactBrokCodeRuntimeLog,
+  startBrokCodeRuntimeProcess
 } from '../runtime/process-manager'
 import {
   createBrokCodeRuntimeSandbox,
@@ -155,6 +156,59 @@ describe('BrokCode runtime process diagnostics', () => {
         startedAt: startedAt.toISOString(),
         exitCode: 1,
         signal: null
+      }
+    })
+  })
+
+  it('records managed-preview readiness instead of spawning static projects', async () => {
+    const spec = createBrokCodeRuntimeSpec({
+      projectId,
+      workspaceId,
+      userId,
+      files: [{ path: 'index.html', content: '<main>Static app</main>' }]
+    })
+    const runtime = await createBrokCodeRuntimeSandbox({ spec })
+    const started = await startBrokCodeRuntimeProcess({
+      runtime,
+      manifest: createManifest({
+        appType: 'static_html',
+        activeEntrypoint: 'index.html',
+        packageManager: 'none',
+        installCommand: null,
+        devCommand: 'static-preview --host 0.0.0.0',
+        buildCommand: null,
+        files: [
+          {
+            path: 'index.html',
+            language: 'html',
+            sizeBytes: 24,
+            sha256: 'index-a'
+          }
+        ],
+        generatedFiles: [],
+        totalBytes: 24
+      })
+    })
+
+    const latest = await getLatestBrokCodeRuntimeSandbox({
+      projectId,
+      workspaceId,
+      userId
+    })
+
+    expect(started).toBeNull()
+    expect(latest?.status).toBe('healthy')
+    expect(latest?.health).toMatchObject({
+      ok: true,
+      message:
+        'Static HTML projects use the managed static preview instead of a dev-server process.'
+    })
+    expect(latest?.metadata).toMatchObject({
+      livePreview: {
+        status: 'managed_static_preview',
+        mode: 'managed_static_preview',
+        supported: false,
+        activeEntrypoint: 'index.html'
       }
     })
   })

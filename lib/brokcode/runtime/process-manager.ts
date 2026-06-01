@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 
+import { getBrokCodeRuntimeStartReadiness } from '@/lib/brokcode/runtime/contract'
 import {
   BrokCodeRuntimeSandbox,
   updateBrokCodeRuntimeSandbox
@@ -558,6 +559,43 @@ export async function startBrokCodeRuntimeProcess({
   runtime: BrokCodeRuntimeSandbox
   manifest: BrokCodeRuntimeWorkspaceManifest
 }) {
+  const readiness = getBrokCodeRuntimeStartReadiness(manifest.appType)
+  if (!readiness.startable) {
+    const logs = createRuntimeLogs({
+      level: readiness.healthOk ? 'info' : 'warn',
+      source: 'system',
+      message: readiness.message
+    })
+    await updateBrokCodeRuntimeSandbox({
+      id: runtime.id,
+      workspaceId: runtime.workspaceId,
+      userId: runtime.userId,
+      status: readiness.status,
+      logs: [
+        ...((runtime.logs ?? []) as Array<Record<string, unknown>>),
+        ...logs
+      ],
+      health: {
+        ok: readiness.healthOk,
+        checkedAt: new Date().toISOString(),
+        message: readiness.message
+      },
+      metadata: {
+        ...(runtime.metadata ?? {}),
+        workspace: manifest,
+        livePreview: {
+          status: readiness.mode,
+          mode: readiness.mode,
+          supported: false,
+          message: readiness.message,
+          materializedAt: manifest.materializedAt,
+          activeEntrypoint: manifest.activeEntrypoint
+        }
+      }
+    })
+    return null
+  }
+
   const existing = getBrokCodeRuntimeProcess(runtime.id)
   if (existing && existing.status === 'ready') {
     if (!(await waitForRuntime(existing.url))) {
