@@ -12,6 +12,10 @@ import {
   readJsonBody
 } from '@/lib/brok/http'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
+import {
+  applyBrokMarkup,
+  calculateSearchProviderCostUsd
+} from '@/lib/brok/pricing'
 import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
 import {
   buildSearchQueries,
@@ -151,7 +155,7 @@ export async function POST(request: NextRequest) {
           type: 'invalid_request_error',
           code: 'invalid_model',
           message:
-            'Model does not support search. Use brok-search, brok-search-pro, or a MiniMax-M2 search-capable model.'
+            'Model does not support search. Use brok-search or brok-search-pro.'
         }
       },
       { status: 400 }
@@ -180,6 +184,20 @@ export async function POST(request: NextRequest) {
   )
 
   if (!rateLimit.allowed) {
+    if (rateLimit.reason === 'rate_limit_check_failed') {
+      return NextResponse.json(
+        {
+          error: {
+            type: 'service_unavailable',
+            code: 'rate_limit_check_failed',
+            message:
+              'Rate limit check is temporarily unavailable. Please retry shortly.'
+          }
+        },
+        { status: 503 }
+      )
+    }
+
     await recordRateLimitEvent(
       auth.apiKey.id,
       auth.workspace.id,
@@ -194,7 +212,8 @@ export async function POST(request: NextRequest) {
         error: {
           type: 'rate_limit_error',
           code: 'rate_limit_exceeded',
-          message: 'Rate limit exceeded.',
+          message: 'Rate limit exceeded for this API key.',
+          limit: `${rateLimit.limit} requests per minute`,
           retry_after_seconds: Math.ceil(
             (rateLimit.resetAt * 1000 - Date.now()) / 1000
           )
@@ -292,10 +311,10 @@ export async function POST(request: NextRequest) {
             })
 
             const latencyMs = Date.now() - startTime
-            const searchCost = 0.001 * searchResult.searchQueries
-            const tokenCost = (searchResult.tokensUsed / 1_000_000) * 0.1
-            const providerCost = searchCost + tokenCost
-            const billedAmount = providerCost * 1.5
+            const providerCost = calculateSearchProviderCostUsd(
+              searchResult.searchQueries,
+              searchResult.tokensUsed
+            )
 
             await recordUsage({
               requestId,
@@ -309,7 +328,7 @@ export async function POST(request: NextRequest) {
               outputTokens: Math.round(searchResult.answer.length / 4),
               searchQueries: searchResult.searchQueries,
               providerCostUsd: providerCost,
-              billedUsd: billedAmount,
+              billedUsd: applyBrokMarkup(providerCost),
               latencyMs,
               status: 'success'
             })
@@ -455,11 +474,10 @@ export async function POST(request: NextRequest) {
 
     const latencyMs = Date.now() - startTime
 
-    // Calculate costs
-    const searchCost = 0.001 * searchResult.searchQueries // $0.001 per search
-    const tokenCost = (searchResult.tokensUsed / 1_000_000) * 0.1
-    const providerCost = searchCost + tokenCost
-    const billedAmount = providerCost * 1.5
+    const providerCost = calculateSearchProviderCostUsd(
+      searchResult.searchQueries,
+      searchResult.tokensUsed
+    )
 
     // Record usage
     await recordUsage({
@@ -474,7 +492,7 @@ export async function POST(request: NextRequest) {
       outputTokens: Math.round(searchResult.answer.length / 4),
       searchQueries: searchResult.searchQueries,
       providerCostUsd: providerCost,
-      billedUsd: billedAmount,
+      billedUsd: applyBrokMarkup(providerCost),
       latencyMs,
       status: 'success'
     })
