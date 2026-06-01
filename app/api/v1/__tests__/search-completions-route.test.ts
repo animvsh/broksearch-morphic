@@ -176,6 +176,55 @@ describe('POST /api/v1/search/completions', () => {
     )
   })
 
+  it('streams canonical PRD search events alongside compatibility events', async () => {
+    mockRunSearchPipeline.mockResolvedValueOnce({
+      ...searchResult(),
+      answer: 'Brok cites sources as it writes.',
+      citations: [
+        {
+          id: 'src_1',
+          title: 'Brok Docs',
+          url: 'https://docs.example.com/brok',
+          publisher: 'docs.example.com',
+          snippet: 'Brok documentation',
+          retrievedAt: '2026-06-01T00:00:00.000Z',
+          qualityScore: 91
+        }
+      ],
+      followUps: [
+        {
+          label: 'How does Brok cite sources?',
+          query: 'How does Brok cite sources?'
+        }
+      ]
+    })
+
+    const response = await POST(
+      searchRequest({
+        query: 'What is Brok?',
+        model: 'brok-lite',
+        stream: true
+      })
+    )
+    const stream = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toContain('text/event-stream')
+    expect(stream).toContain('event: status')
+    expect(stream).toContain('event: query')
+    expect(stream).toContain('event: source')
+    expect(stream).toContain('event: answer_delta')
+    expect(stream).toContain('"text":"Brok cites sources as it writes."')
+    expect(stream).toContain('event: citation')
+    expect(stream).toContain('"citation_number":1')
+    expect(stream).toContain('event: follow_ups')
+    expect(stream).toContain('"items":[{"label":"How does Brok cite sources?"')
+    expect(stream).toContain('event: done')
+    expect(stream).toContain('event: search.step')
+    expect(stream).toContain('event: follow_ups_generated')
+    expect(stream).toContain('data: [DONE]')
+  })
+
   it('records blocked rate-limit attempts before returning 429', async () => {
     mockCheckRateLimit.mockResolvedValueOnce({
       allowed: false,
