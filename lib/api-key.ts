@@ -2,7 +2,11 @@ import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 
 const ENV_SALT = process.env.API_KEY_SALT
 
-if (!ENV_SALT && process.env.NODE_ENV === 'production' && process.env.BROK_CLOUD_DEPLOYMENT === 'true') {
+if (
+  !ENV_SALT &&
+  process.env.NODE_ENV === 'production' &&
+  process.env.BROK_CLOUD_DEPLOYMENT === 'true'
+) {
   throw new Error(
     '[brok-auth] API_KEY_SALT is not set. Refusing to start in production with a default API key salt.'
   )
