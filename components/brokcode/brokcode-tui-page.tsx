@@ -62,6 +62,15 @@ const coreCommands = [
   '/versions',
   '/version <id>',
   '/resume [taskId]',
+  '/build <prompt>',
+  '/read <path>',
+  '/head <path> <n>',
+  '/tail <path> <n>',
+  '/shell <cmd>',
+  '/git status',
+  '/git diff',
+  '/ask <file> <question>',
+  '/edit <file> <instruction>',
   '/backend status',
   '/backend insforge https://your-project.insforge.app',
   '/backend provision',
@@ -134,6 +143,10 @@ const workflowCards = [
   {
     title: 'Resume in-flight runs',
     body: 'When a stream is cancelled or interrupted, /resume reattaches to the most recent task and replays its last events.'
+  },
+  {
+    title: 'Local terminal harness',
+    body: '/read, /head, /tail, /shell, and /git operate on the current working directory. /ask and /edit load a local file and send it through the Brok API. /build is a one-shot build against the active project.'
   }
 ]
 

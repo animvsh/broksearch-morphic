@@ -190,6 +190,48 @@ npm run brokcode`}</code>
           </li>
         </ul>
 
+        <h2>Local Terminal Harness</h2>
+        <p>
+          The TUI also operates as a terminal-native coding harness, sending
+          every operation through the Brok API. Use it to work against your
+          local repository without leaving the terminal.
+        </p>
+        <ul>
+          <li>
+            <code>/read &lt;path&gt;</code> - read a local file with line
+            numbers
+          </li>
+          <li>
+            <code>/head &lt;path&gt; &lt;n&gt;</code> - first n lines of a local
+            file
+          </li>
+          <li>
+            <code>/tail &lt;path&gt; &lt;n&gt;</code> - last n lines of a local
+            file
+          </li>
+          <li>
+            <code>/shell &lt;cmd&gt;</code> - run a shell command from cwd
+            (refuses destructive patterns like <code>rm -rf /</code>,{' '}
+            <code>sudo</code>, <code>mkfs</code>)
+          </li>
+          <li>
+            <code>/git status|diff|log|branch|show</code> - read-only git
+            introspection
+          </li>
+          <li>
+            <code>/build &lt;prompt&gt;</code> - one-shot: send a build prompt
+            to the active project and stream the result
+          </li>
+          <li>
+            <code>/ask &lt;file&gt; &lt;question&gt;</code> - load a local file
+            and ask Brok a question about it
+          </li>
+          <li>
+            <code>/edit &lt;file&gt; &lt;instruction&gt;</code> - load a local
+            file, ask Brok to rewrite, save the result back to the local file
+          </li>
+        </ul>
+
         <h2>GitHub PRs And Worktrees</h2>
         <p>
           In Brok Code Cloud, use Connect GitHub to open the Composio

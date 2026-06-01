@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process'
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import { stdin as input, stdout as output } from 'node:process'
@@ -13,8 +20,10 @@ import {
   chunkSseBlocks,
   classifyHttpError,
   extractCommandName,
+  extractFencedCodeBlock,
   formatBytes,
   formatPhaseLabel,
+  isDangerousShellCommand,
   isValidBrokKey,
   parseSseBlock,
   relativeTime,
@@ -266,6 +275,15 @@ function printHelp() {
   /model                         Show active model and endpoint
   /clear                         Clear the screen
   /exit                          Quit
+\n${colors.bold}Local terminal harness${colors.reset}  (everything is sent through the Brok API)
+  /read <path>                   Read a local file with line numbers
+  /head <path> <n>               Show the first n lines of a local file
+  /tail <path> <n>               Show the last n lines of a local file
+  /shell <cmd>                   Run a shell command from cwd (refuses destructive ones)
+  /git status|diff|log|branch    Inspect the local git repo
+  /build <prompt>                One-shot: send a build prompt to the active project
+  /ask <file> <question>         Load a local file and ask Brok about it
+  /edit <file> <instruction>     Load a local file, ask Brok to rewrite, save locally
 \n${colors.dim}Keys: Tab autocompletes commands and project ids. ↑/↓ recall history. Ctrl+C cancels the current request.${colors.reset}
 \n`)
 }
@@ -1248,6 +1266,304 @@ async function runSecurityScan(raw) {
   })
 }
 
+const DANGEROUS_SHELL_PATTERNS = []
+
+function resolveLocalPath(target) {
+  if (typeof target !== 'string' || !target) return null
+  if (target === '~') return homedir()
+  if (target.startsWith('~/')) return path.join(homedir(), target.slice(2))
+  if (path.isAbsolute(target)) return target
+  return path.resolve(process.cwd(), target)
+}
+
+function readLocalTextFile(targetPath) {
+  const resolved = resolveLocalPath(targetPath)
+  if (!resolved) {
+    return { error: 'No file path provided.' }
+  }
+  if (!existsSync(resolved)) {
+    return { error: `File not found: ${resolved}` }
+  }
+  const stat = statSync(resolved)
+  if (stat.isDirectory()) {
+    return { error: `Path is a directory: ${resolved}` }
+  }
+  if (stat.size > 512_000) {
+    return {
+      error: `File is too large to read (${formatBytes(stat.size)}; cap is 512 KB). Use /head or /tail with a number.`
+    }
+  }
+  return { path: resolved, content: readFileSync(resolved, 'utf8') }
+}
+
+function readLocalFileSlice(targetPath, mode, linesArg) {
+  const lines = Number.parseInt(linesArg, 10)
+  if (!Number.isFinite(lines) || lines <= 0) {
+    return { error: 'Lines must be a positive number.' }
+  }
+  const resolved = resolveLocalPath(targetPath)
+  if (!resolved || !existsSync(resolved)) {
+    return { error: `File not found: ${resolved ?? targetPath}` }
+  }
+  const content = readFileSync(resolved, 'utf8').split(/\r?\n/)
+  let slice
+  if (mode === 'head') {
+    slice = content.slice(0, lines)
+  } else if (mode === 'tail') {
+    slice = content.slice(-lines)
+  } else {
+    return { error: `Unknown mode: ${mode}` }
+  }
+  return { path: resolved, content: slice.join('\n') }
+}
+
+function showLocalFile(targetPath) {
+  if (!targetPath) {
+    output.write(`${colors.red}Usage: /read <path>${colors.reset}\n`)
+    return
+  }
+  const result = readLocalTextFile(targetPath)
+  if (result.error) {
+    output.write(`${colors.red}${result.error}${colors.reset}\n`)
+    return
+  }
+  const lines = result.content.split(/\r?\n/)
+  const width = String(lines.length).length
+  output.write(
+    `${colors.cyan}──── ${result.path} (${lines.length} lines, ${formatBytes(result.content.length)}) ────${colors.reset}\n`
+  )
+  lines.forEach((line, index) => {
+    const padded = String(index + 1).padStart(width, ' ')
+    output.write(`${colors.dim}${padded}${colors.reset} │ ${line}\n`)
+  })
+  output.write(`${colors.cyan}──── end ────${colors.reset}\n`)
+}
+
+function showLocalFileHead(targetPath, linesArg) {
+  const result = readLocalFileSlice(targetPath, 'head', linesArg)
+  if (result.error) {
+    output.write(`${colors.red}${result.error}${colors.reset}\n`)
+    return
+  }
+  output.write(
+    `${colors.cyan}──── ${result.path} (first ${linesArg} lines) ────${colors.reset}\n${result.content}\n${colors.cyan}──── end ────${colors.reset}\n`
+  )
+}
+
+function showLocalFileTail(targetPath, linesArg) {
+  const result = readLocalFileSlice(targetPath, 'tail', linesArg)
+  if (result.error) {
+    output.write(`${colors.red}${result.error}${colors.reset}\n`)
+    return
+  }
+  output.write(
+    `${colors.cyan}──── ${result.path} (last ${linesArg} lines) ────${colors.reset}\n${result.content}\n${colors.cyan}──── end ────${colors.reset}\n`
+  )
+}
+
+function writeLocalFile(targetPath, content) {
+  const resolved = resolveLocalPath(targetPath)
+  if (!resolved) {
+    return { error: 'No file path provided.' }
+  }
+  try {
+    mkdirSync(path.dirname(resolved), { recursive: true })
+    writeFileSync(resolved, content, 'utf8')
+    return { path: resolved, bytes: content.length }
+  } catch (error) {
+    return { error: `Could not write ${resolved}: ${error.message}` }
+  }
+}
+
+async function runShellCommand(rawArgs) {
+  const cmd = rawArgs.join(' ').trim()
+  if (!cmd) {
+    output.write(`${colors.red}Usage: /shell <command>${colors.reset}\n`)
+    return
+  }
+  if (isDangerousShellCommand(cmd)) {
+    output.write(
+      `${colors.yellow}That command looks destructive:${colors.reset} ${cmd}\n`
+    )
+    output.write(
+      `${colors.yellow}Run it directly in your shell if you really mean it.${colors.reset}\n`
+    )
+    return
+  }
+
+  const startedAt = Date.now()
+  const result = spawnSync(cmd, {
+    cwd: process.cwd(),
+    shell: true,
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024
+  })
+  const elapsedMs = Date.now() - startedAt
+
+  if (result.stdout) output.write(result.stdout)
+  if (result.stderr) {
+    output.write(`${colors.yellow}${result.stderr}${colors.reset}\n`)
+  }
+  const status = result.status ?? 0
+  const exitLabel =
+    status === 0
+      ? `${colors.green}exit 0${colors.reset}`
+      : `${colors.red}exit ${status}${colors.reset}`
+  output.write(`${colors.dim}${exitLabel} in ${elapsedMs}ms${colors.reset}\n`)
+}
+
+function runGitCommand(subArgs) {
+  const subcommand = (subArgs[0] || 'status').toLowerCase()
+  const allowed = new Set(['status', 'diff', 'log', 'branch', 'show'])
+  if (!allowed.has(subcommand)) {
+    output.write(
+      `${colors.red}Usage: /git status|diff|log [n]|branch|show <ref>${colors.reset}\n`
+    )
+    return
+  }
+  const args = ['git', subcommand, ...subArgs.slice(1)]
+  const result = spawnSync(args[0], args.slice(1), {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024
+  })
+  if (result.stdout) output.write(result.stdout)
+  if (result.stderr && result.status !== 0) {
+    output.write(`${colors.yellow}${result.stderr}${colors.reset}\n`)
+  }
+  if (result.status !== 0) {
+    output.write(
+      `${colors.dim}git ${subcommand} exited ${result.status}${colors.reset}\n`
+    )
+  }
+}
+
+async function runBuildCommand(rawArgs) {
+  const prompt = rawArgs.join(' ').trim()
+  if (!prompt) {
+    output.write(`${colors.red}Usage: /build <prompt>${colors.reset}\n`)
+    return
+  }
+  if (!activeProjectId) {
+    output.write(
+      `${colors.red}Select or create a project first. /project new <name>, then /build <prompt>.${colors.reset}\n`
+    )
+    return
+  }
+  await sendChat(prompt)
+}
+
+async function askAboutLocalFile(args) {
+  const filePath = args[0]
+  const question = args.slice(1).join(' ').trim()
+  if (!filePath || !question) {
+    output.write(`${colors.red}Usage: /ask <file> <question>${colors.reset}\n`)
+    return
+  }
+  const result = readLocalTextFile(filePath)
+  if (result.error) {
+    output.write(`${colors.red}${result.error}${colors.reset}\n`)
+    return
+  }
+  const composed = `File: ${result.path}\n\n\`\`\`\n${result.content}\n\`\`\`\n\nQuestion: ${question}`
+  await sendChat(composed)
+}
+
+async function editLocalFile(args) {
+  const filePath = args[0]
+  const instruction = args.slice(1).join(' ').trim()
+  if (!filePath || !instruction) {
+    output.write(
+      `${colors.red}Usage: /edit <file> <instruction>${colors.reset}\n`
+    )
+    return
+  }
+  const result = readLocalTextFile(filePath)
+  if (result.error) {
+    output.write(`${colors.red}${result.error}${colors.reset}\n`)
+    return
+  }
+  output.write(
+    `${colors.cyan}Asking Brok to edit ${result.path}…${colors.reset}\n`
+  )
+
+  const response = await fetch(new URL('/api/brokcode/execute', syncBaseUrl), {
+    method: 'POST',
+    signal: activeController?.signal,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      command: `Rewrite the file at ${result.path} according to the instruction. Return the complete new file content inside a single fenced code block with the original language tag, no extra commentary.`,
+      model,
+      source: 'tui',
+      session_id: sessionId,
+      project_id: activeProjectId || undefined,
+      stream: true,
+      [requireCloudRuntimeField]: requireCloudRuntime,
+      prefer_pi: !requireCloudRuntime,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are Brok Code, a careful coding agent. When asked to rewrite a file, return only the complete new file content in a single fenced code block with the matching language tag, no commentary.'
+        },
+        {
+          role: 'user',
+          content: `File: ${result.path}\n\nOriginal content:\n\`\`\`\n${result.content}\n\`\`\`\n\nInstruction: ${instruction}\n\nReturn the rewritten file in a single fenced code block.`
+        }
+      ]
+    })
+  })
+
+  if (!response.ok || !response.body) {
+    const { message } = classifyError({
+      status: response.status,
+      body: await response.json().catch(() => null),
+      fallback: `request failed: ${response.status}`
+    })
+    output.write(`${colors.red}${message}${colors.reset}\n`)
+    return
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let assistant = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const { blocks, remaining } = chunkSseBlocks(buffer)
+    buffer = remaining
+    for (const block of blocks) {
+      if (block.done || !block.data) continue
+      if (block.event === 'error' || block.data.error) continue
+      const delta =
+        block.data.content || block.data.choices?.[0]?.delta?.content
+      if (delta) assistant += delta
+    }
+  }
+
+  const match = extractFencedCodeBlock(assistant)
+  if (!match) {
+    output.write(
+      `${colors.red}Brok did not return a fenced code block. Aborting write.${colors.reset}\n`
+    )
+    return
+  }
+  const newContent = match
+  const writeResult = writeLocalFile(filePath, newContent)
+  if (writeResult.error) {
+    output.write(`${colors.red}${writeResult.error}${colors.reset}\n`)
+    return
+  }
+  output.write(
+    `${colors.green}Wrote ${writeResult.path} (${formatBytes(writeResult.bytes)}).${colors.reset}\n`
+  )
+}
+
 async function handleCommand(raw) {
   const trimmed = raw.trim()
   const name = extractCommandName(trimmed)
@@ -1364,6 +1680,16 @@ async function handleCommand(raw) {
   if (name === 'usage') return showUsage(args[1] || 'day')
   if (name === 'worktree') return createWorktree(args[1])
   if (name === 'securityscan') return runSecurityScan(trimmed)
+  if (name === 'read') return showLocalFile(args[1])
+  if (name === 'head') return showLocalFileHead(args[1], args[2])
+  if (name === 'tail') return showLocalFileTail(args[1], args[2])
+  if (name === 'shell' || name === 'sh' || name === '!') {
+    return runShellCommand(args.slice(1))
+  }
+  if (name === 'git') return runGitCommand(args.slice(1))
+  if (name === 'build') return runBuildCommand(args.slice(1))
+  if (name === 'ask') return askAboutLocalFile(args.slice(1))
+  if (name === 'edit') return editLocalFile(args.slice(1))
   if (name === 'direct') {
     output.write(
       `${colors.yellow}Direct mode:${colors.reset} run Brok Code inside a repo. It can inspect and propose edits; you approve commits or risky writes.\n`
