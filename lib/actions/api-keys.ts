@@ -12,18 +12,14 @@ import {
 } from '@/lib/api-key'
 import { getCurrentAppAccess, hasFeatureAccess } from '@/lib/auth/app-access'
 import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
+import {
+  CreateApiKeyInput,
+  validateCreateApiKeyInput
+} from '@/lib/brok/api-platform'
 import { db } from '@/lib/db'
 import { apiKeys, workspaces } from '@/lib/db/schema'
 
-export interface CreateApiKeyInput {
-  name: string
-  environment: 'test' | 'live'
-  scopes: string[]
-  allowedModels: string[]
-  rpmLimit: number
-  dailyRequestLimit: number
-  monthlyBudgetCents: number
-}
+export type { CreateApiKeyInput }
 
 function canUseLocalApiPlatformFallback() {
   if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') return false
@@ -103,6 +99,7 @@ export async function createApiKey(
   if (!user || user.id !== userId) {
     throw new Error('Sign in to your Brok account before creating API keys.')
   }
+  const validatedInput = validateCreateApiKeyInput(input)
 
   const [workspace] = await db
     .select()
@@ -114,7 +111,7 @@ export async function createApiKey(
     throw new Error('This workspace does not belong to your Brok account.')
   }
 
-  const rawKey = generateApiKey(input.environment)
+  const rawKey = generateApiKey(validatedInput.environment)
   const keyHash = hashApiKey(rawKey)
   const keyPrefix = getKeyPrefix(rawKey)
 
@@ -123,15 +120,15 @@ export async function createApiKey(
     .values({
       workspaceId,
       userId,
-      name: input.name,
+      name: validatedInput.name,
       keyPrefix,
       keyHash,
-      environment: input.environment,
-      scopes: input.scopes,
-      allowedModels: input.allowedModels,
-      rpmLimit: input.rpmLimit,
-      dailyRequestLimit: input.dailyRequestLimit,
-      monthlyBudgetCents: input.monthlyBudgetCents
+      environment: validatedInput.environment,
+      scopes: validatedInput.scopes,
+      allowedModels: validatedInput.allowedModels,
+      rpmLimit: validatedInput.rpmLimit,
+      dailyRequestLimit: validatedInput.dailyRequestLimit,
+      monthlyBudgetCents: validatedInput.monthlyBudgetCents
     })
     .returning()
 
