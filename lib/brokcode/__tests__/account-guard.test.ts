@@ -158,6 +158,30 @@ describe('getBrokCodeBrowserSessionAuth', () => {
     })
   })
 
+  it('uses a local browser workspace without probing the database in file storage mode', async () => {
+    vi.stubEnv('BROKCODE_PROJECT_STORAGE', 'file')
+    mocks.getCurrentUserMock.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com'
+    })
+
+    const auth = await getBrokCodeBrowserSessionAuth()
+
+    expect(auth).toMatchObject({
+      success: true,
+      isBrowserSession: true,
+      apiKey: {
+        userId: 'user-1',
+        workspaceId: '00000000-0000-0000-0000-000000000003'
+      },
+      workspace: {
+        id: '00000000-0000-0000-0000-000000000003'
+      }
+    })
+    expect(mocks.selectMock).not.toHaveBeenCalled()
+    expect(mocks.insertMock).not.toHaveBeenCalled()
+  })
+
   it('uses a local browser workspace for local anonymous production smoke runs', async () => {
     vi.stubEnv('NODE_ENV', 'production')
     mocks.isAnonymousAuthModeMock.mockReturnValue(true)

@@ -207,16 +207,22 @@ function createProjectValue({
   }
 }
 
-async function makeUniqueProjectSlug(workspaceId: string, desiredSlug: string) {
+async function makeUniqueProjectSlug(
+  workspaceId: string,
+  desiredSlug: string,
+  excludeProjectId?: string
+) {
   const existingSlugs = new Set<string>()
 
   if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       const rows = await db
-        .select({ slug: brokCodeProjects.slug })
+        .select({ id: brokCodeProjects.id, slug: brokCodeProjects.slug })
         .from(brokCodeProjects)
         .where(eq(brokCodeProjects.workspaceId, workspaceId))
-      rows.forEach(row => existingSlugs.add(row.slug))
+      rows.forEach(row => {
+        if (row.id !== excludeProjectId) existingSlugs.add(row.slug)
+      })
     } catch (error) {
       console.error(
         'BrokCode project slug lookup failed; using file store:',
@@ -227,7 +233,10 @@ async function makeUniqueProjectSlug(workspaceId: string, desiredSlug: string) {
 
   const store = await readProjectStore()
   store.projects
-    .filter(project => project.workspaceId === workspaceId)
+    .filter(
+      project =>
+        project.workspaceId === workspaceId && project.id !== excludeProjectId
+    )
     .forEach(project => existingSlugs.add(project.slug))
 
   if (!existingSlugs.has(desiredSlug)) return desiredSlug
@@ -322,7 +331,10 @@ async function deleteFallbackProject({
   let removed = false
   await queueProjectStoreWrite(store => {
     const remainingProjects = store.projects.filter(project => {
-      const matches = project.id === id
+      const matches =
+        project.id === id &&
+        project.workspaceId === workspaceId &&
+        project.userId === userId
       if (matches) removed = true
       return !matches
     })
@@ -377,7 +389,8 @@ export async function deleteBrokCodeProject({
         .where(
           and(
             eq(brokCodeProjects.id, id),
-            eq(brokCodeProjects.workspaceId, workspaceId)
+            eq(brokCodeProjects.workspaceId, workspaceId),
+            eq(brokCodeProjects.userId, userId)
           )
         )
         .returning({ id: brokCodeProjects.id })
@@ -410,14 +423,24 @@ export async function renameBrokCodeProject({
   if (!trimmed) return null
   const project = await getBrokCodeProject({ id, workspaceId, userId })
   if (!project) return null
-  const slug = makeBrokCodeSlug(trimmed)
+  const slug = await makeUniqueProjectSlug(
+    workspaceId,
+    makeBrokCodeSlug(trimmed),
+    id
+  )
 
   if (canUseDatabaseStoreForWorkspace(workspaceId)) {
     try {
       const [updatedProject] = await db
         .update(brokCodeProjects)
         .set({ name: trimmed, slug, updatedAt: new Date() })
-        .where(eq(brokCodeProjects.id, id))
+        .where(
+          and(
+            eq(brokCodeProjects.id, id),
+            eq(brokCodeProjects.workspaceId, workspaceId),
+            eq(brokCodeProjects.userId, userId)
+          )
+        )
         .returning()
       if (updatedProject) {
         return updatedProject
