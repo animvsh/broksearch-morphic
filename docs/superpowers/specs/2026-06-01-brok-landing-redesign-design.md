@@ -62,7 +62,14 @@ A new component file: **`components/brok/brok-landing.tsx`**.
 ```ts
 // components/brok/brok-landing.tsx
 import Link from 'next/link'
-import { ArrowRight, ArrowUpRight, Code2, Mail, Plug, Search } from 'lucide-react'
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Code2,
+  Mail,
+  Plug,
+  Search
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 type BrokLandingProps = {
@@ -84,6 +91,7 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
 ## Wiring changes
 
 **`app/page.tsx`** changes:
+
 - Remove the inline `BrokLanding` function.
 - Import `BrokLanding` from `@/components/brok/brok-landing`.
 - Replace `<BrokLanding isSignedIn={Boolean(user)} />` (both call sites) with the imported component.
