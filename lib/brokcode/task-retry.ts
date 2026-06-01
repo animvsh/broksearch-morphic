@@ -17,6 +17,7 @@ export type BrokCodeTaskRetryRequest = {
 type RetryableBrokCodeTask = {
   id: string
   kind: string
+  status?: string | null
   metadata?: Record<string, any> | null
 }
 
@@ -61,6 +62,28 @@ function assignBoolean(
   }
 }
 
+function validateRetryableStatus(status: string | null | undefined) {
+  if (!status) return null
+
+  if (status === 'queued' || status === 'running') {
+    return {
+      status: 409 as const,
+      error:
+        'This BrokCode task is still running. Wait for it to finish or cancel it before retrying.'
+    }
+  }
+
+  if (status === 'succeeded') {
+    return {
+      status: 409 as const,
+      error:
+        'This BrokCode task already succeeded. Start a new edit instead of retrying it.'
+    }
+  }
+
+  return null
+}
+
 export function buildBrokCodeTaskRetryRequest(
   task: RetryableBrokCodeTask
 ): RetryBuildResult {
@@ -69,6 +92,14 @@ export function buildBrokCodeTaskRetryRequest(
       ok: false,
       status: 400,
       error: 'Only BrokCode tasks can be retried from this endpoint.'
+    }
+  }
+
+  const statusError = validateRetryableStatus(task.status)
+  if (statusError) {
+    return {
+      ok: false,
+      ...statusError
     }
   }
 
