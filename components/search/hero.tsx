@@ -135,20 +135,20 @@ export function Hero({
           Explore tools, pricing, and docs in
           <Link
             href="/features"
-            className="mx-1 font-medium text-foreground underline decoration-dotted underline-offset-4"
+            className="mx-1 inline-flex min-h-11 min-w-11 items-center rounded px-1 font-medium text-foreground underline decoration-dotted underline-offset-4"
           >
             Features
           </Link>
           <Link
             href="/pricing"
-            className="mx-1 font-medium text-foreground underline decoration-dotted underline-offset-4"
+            className="mx-1 inline-flex min-h-11 min-w-11 items-center rounded px-1 font-medium text-foreground underline decoration-dotted underline-offset-4"
           >
             Pricing
           </Link>
           and
           <Link
             href="/features/api"
-            className="mx-1 font-medium text-foreground underline decoration-dotted underline-offset-4"
+            className="mx-1 inline-flex min-h-11 min-w-11 items-center rounded px-1 font-medium text-foreground underline decoration-dotted underline-offset-4"
           >
             API
           </Link>
@@ -228,7 +228,7 @@ export function Hero({
               type="submit"
               disabled={!query.trim() || isSubmitting}
               className={cn(
-                'clicky-control inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg transition-all',
+                'clicky-control inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-lg transition-all',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                 query.trim() && !isSubmitting
                   ? 'bg-foreground text-background hover:bg-foreground/90'

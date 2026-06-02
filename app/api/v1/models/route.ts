@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import {
   apiKeyHasScope,
-  forbiddenScopeResponse,
   unauthorizedResponse,
   verifyRequestAuth
 } from '@/lib/brok/auth'
@@ -15,15 +14,20 @@ export async function GET(request: NextRequest) {
   if (!auth.success) {
     return unauthorizedResponse(auth)
   }
-  if (!apiKeyHasScope(auth.apiKey, 'usage:read')) {
-    return forbiddenScopeResponse('usage:read')
-  }
 
   const showPricing =
     apiKeyHasScope(auth.apiKey, 'usage:read') &&
     request.nextUrl.searchParams.get('include_pricing') === 'true'
 
-  const models = BROK_PUBLIC_MODEL_IDS.map(id => {
+  const allowedModels = Array.isArray(auth.apiKey.allowedModels)
+    ? (auth.apiKey.allowedModels as string[])
+    : []
+  const modelIds =
+    allowedModels.length > 0
+      ? BROK_PUBLIC_MODEL_IDS.filter(id => allowedModels.includes(id))
+      : BROK_PUBLIC_MODEL_IDS
+
+  const models = modelIds.map(id => {
     const config = BROK_MODELS[id]
 
     return {

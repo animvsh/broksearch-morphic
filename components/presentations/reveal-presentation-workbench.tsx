@@ -1059,13 +1059,15 @@ export function RevealPresentationWorkbench() {
               >
                 Upload or paste info
               </label>
-              <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-zinc-50">
+              <label className="relative inline-flex h-11 min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-zinc-50">
                 <Upload className="size-4" />
                 Upload
                 <input
                   type="file"
                   accept=".txt,.md,.markdown,text/plain,text/markdown"
-                  className="sr-only"
+                  id="presentation-material-upload"
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  aria-label="Upload presentation source file"
                   onChange={event => {
                     void handleMaterialUpload(event)
                   }}
@@ -1083,7 +1085,7 @@ export function RevealPresentationWorkbench() {
               <Button
                 type="button"
                 size="sm"
-                className="h-8 gap-2"
+                className="h-11 min-h-11 gap-2"
                 onClick={handleCreateOutline}
                 data-testid="create-outline"
               >
@@ -1094,7 +1096,7 @@ export function RevealPresentationWorkbench() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-8 gap-2"
+                className="h-11 min-h-11 gap-2"
                 onClick={handleCreateSlidesFromOutline}
                 data-testid="create-slides"
               >
