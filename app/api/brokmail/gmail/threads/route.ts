@@ -4,6 +4,7 @@ import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { MailThread } from '@/lib/brokmail/data'
 import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
+  canExecuteComposioTools,
   executeComposioTool,
   isComposioConfigured,
   listConnectedAccounts
@@ -368,6 +369,16 @@ export async function GET() {
   if (!isComposioConfigured()) {
     return NextResponse.json(
       { error: 'Composio is not configured for Gmail.' },
+      { status: 503 }
+    )
+  }
+
+  if (!canExecuteComposioTools()) {
+    return NextResponse.json(
+      {
+        error:
+          'BrokMail Gmail sync requires a backend COMPOSIO_API_KEY before it can load mail. Composio Connect can create links, but cannot execute Gmail reads.'
+      },
       { status: 503 }
     )
   }
