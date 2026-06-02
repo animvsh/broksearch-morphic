@@ -756,20 +756,37 @@ async function main() {
     const commandSubmit = page.getByTestId('brokcode-command-submit')
     const quickPrompt = page.getByRole('button', { name: prompt, exact: true })
     if ((await quickPrompt.count().catch(() => 0)) > 0) {
-      await quickPrompt.first().click()
+      await quickPrompt.first().waitFor({ timeout: 30_000 })
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await quickPrompt.first().click()
+        await page.waitForTimeout(500)
+        const value = await commandInput.inputValue().catch(() => '')
+        if (value === prompt) break
+      }
     } else {
       await commandInput.fill(prompt)
     }
-    await page.waitForFunction(
-      () => {
-        const button = document.querySelector<HTMLButtonElement>(
-          '[data-testid="brokcode-command-submit"]'
+    await page
+      .waitForFunction(
+        () => {
+          const button = document.querySelector<HTMLButtonElement>(
+            '[data-testid="brokcode-command-submit"]'
+          )
+          return button && !button.disabled
+        },
+        undefined,
+        { timeout: 10_000 }
+      )
+      .catch(async error => {
+        const value = await commandInput.inputValue().catch(() => '<unreadable>')
+        const disabled = await commandSubmit
+          .evaluate(button => (button as HTMLButtonElement).disabled)
+          .catch(() => '<unreadable>')
+        const message = error instanceof Error ? error.message : String(error)
+        throw new Error(
+          `BrokCode submit never enabled (value=${JSON.stringify(value)}, disabled=${disabled}): ${message}`
         )
-        return button && !button.disabled
-      },
-      undefined,
-      { timeout: 10_000 }
-    )
+      })
     await commandSubmit.click()
 
     await page.waitForFunction(
