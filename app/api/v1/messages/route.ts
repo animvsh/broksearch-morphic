@@ -520,11 +520,6 @@ function createAnthropicStream(
           } else {
             await options?.onComplete?.(usageAccumulator.snapshot())
           }
-          if (aborted) {
-            await options?.onAbort?.(usageAccumulator.snapshot())
-          } else {
-            await options?.onComplete?.(usageAccumulator.snapshot())
-          }
           controller.close()
           return
         }
