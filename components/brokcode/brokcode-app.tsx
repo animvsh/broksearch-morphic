@@ -5039,7 +5039,7 @@ export function BrokCodeApp({
                 <button
                   key={prompt}
                   type="button"
-                  className="shrink-0 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-950"
+                  className="shrink-0 h-11 min-h-11 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-950"
                   onClick={() => setInput(prompt)}
                 >
                   {prompt}
