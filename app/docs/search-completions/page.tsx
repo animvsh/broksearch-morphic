@@ -23,13 +23,13 @@ POST https://api.brok.ai/v1/search/completions
 |-----------|------|----------|-------------|
 | model | string | Yes | Any model with search enabled, including brok-lite, brok-search, brok-search-pro, and brok-agent |
 | query | string | Yes | User&apos;s search query |
-| search_depth | string | No | "basic" or "deep". Default: "basic" |
+| search_depth | string | No | "lite", "standard", or "deep". Compatibility aliases: "basic" and "quick" for lite, "advanced" for deep. Default: "standard" |
 | max_tokens | number | No | Maximum tokens to generate |
 | temperature | number | No | Sampling temperature (0-2). Default: 0.7 |
 
 ## Search Depth
 
-### Basic Search
+### Lite Search
 - Returns 3-5 source citations
 - Faster response times
 - Best for simple factual queries
@@ -68,7 +68,7 @@ curl https://api.brok.ai/v1/search/completions \\
   -d '{
     "model": "brok-lite",
     "query": "What are the latest developments in AI?",
-    "search_depth": "basic"
+    "search_depth": "standard"
   }'
 \`\`\`
 
@@ -168,20 +168,20 @@ ${BROK_PUBLIC_MODEL_IDS.map(id => [id, BROK_MODELS[id]] as const)
   .filter(([, m]) => m.supportsSearch)
   .map(
     ([id, config]) =>
-      `| \`${id}\` | ${config.description} | $${config.inputCostPerMillion}/1M | $${config.outputCostPerMillion}/1M | Basic: 3-5 sources${id === 'brok-search-pro' ? ', Deep: 10-20 sources' : ''} |`
+      `| \`${id}\` | ${config.description} | $${config.inputCostPerMillion}/1M | $${config.outputCostPerMillion}/1M | Lite: 3-5 sources${id === 'brok-search-pro' ? ', Deep: 10-20 sources' : ''} |`
   )
   .join('\n')}
 
 ## Use Cases
 
 - **Research assistance** - Deep search for comprehensive reports
-- **Fact-checking** - Quick basic search for verification
+- **Fact-checking** - Quick lite search for verification
 - **Content creation** - Search-powered content with citations
 - **Customer support** - Knowledge base augmented responses
 
 ## Best Practices
 
-1. Use basic search for simple factual queries
+1. Use lite search for simple factual queries
 2. Use deep search for research reports and analysis
 3. Always display citations for transparency
 4. Respect source freshness by checking published_date
@@ -268,8 +268,10 @@ export default function SearchCompletionsPage() {
                 <td className="py-2 px-3">string</td>
                 <td className="py-2 px-3">No</td>
                 <td className="py-2 px-3">
-                  &quot;basic&quot; or &quot;deep&quot;. Default:
-                  &quot;basic&quot;
+                  &quot;lite&quot;, &quot;standard&quot;, or &quot;deep&quot;.
+                  Compatibility aliases: &quot;basic&quot; and &quot;quick&quot;
+                  for lite, &quot;advanced&quot; for deep. Default:
+                  &quot;standard&quot;
                 </td>
               </tr>
               <tr className="border-b">
@@ -292,7 +294,7 @@ export default function SearchCompletionsPage() {
 
         <h2>Search Depth</h2>
 
-        <h3>Basic Search</h3>
+        <h3>Lite Search</h3>
         <ul>
           <li>Returns 3-5 source citations</li>
           <li>Faster response times</li>
@@ -332,7 +334,7 @@ export default function SearchCompletionsPage() {
   -d '{
     "model": "brok-lite",
     "query": "What are the latest developments in AI?",
-    "search_depth": "basic"
+    "search_depth": "standard"
   }'`}</code>
         </pre>
 
@@ -531,7 +533,7 @@ data: {"usage":{"total_tokens":215}}`}</code>
             reports
           </li>
           <li>
-            <strong>Fact-checking</strong> - Quick basic search for verification
+            <strong>Fact-checking</strong> - Quick lite search for verification
           </li>
           <li>
             <strong>Content creation</strong> - Search-powered content with
@@ -545,7 +547,7 @@ data: {"usage":{"total_tokens":215}}`}</code>
 
         <h2>Best Practices</h2>
         <ol>
-          <li>Use basic search for simple factual queries</li>
+          <li>Use lite search for simple factual queries</li>
           <li>Use deep search for research reports and analysis</li>
           <li>Always display citations for transparency</li>
           <li>Respect source freshness by checking published_date</li>
