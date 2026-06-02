@@ -49,13 +49,12 @@ export interface SearchAnswerSectionProps {
   className?: string
 }
 
-function extractSources(
+export function extractSources(
   citationMaps: Record<string, Record<number, SearchResultItem>> = {}
 ): SourceCardData[] {
   const seen = new Set<string>()
   const out: SourceCardData[] = []
-  let order = 0
-  for (const toolMap of Object.values(citationMaps)) {
+  for (const [toolCallId, toolMap] of Object.entries(citationMaps)) {
     if (!toolMap) continue
     const sortedKeys = Object.keys(toolMap)
       .map(Number)
@@ -63,20 +62,35 @@ function extractSources(
     for (const k of sortedKeys) {
       const item = toolMap[k]
       if (!item || !item.url) continue
-      if (seen.has(item.url)) continue
-      seen.add(item.url)
+      const sourceKey = normalizeSourceKey(item.url)
+      if (seen.has(sourceKey)) continue
+      seen.add(sourceKey)
       out.push({
-        id: String(k),
+        id: `${toolCallId}:${k}`,
         url: item.url,
         title: item.title,
         domain: safeHostname(item.url),
         snippet: item.content || item.snippet,
         publishedAt: formatDate(item.publishedDate || item.date)
       })
-      order += 1
     }
   }
   return out
+}
+
+function normalizeSourceKey(url: string): string {
+  try {
+    const parsed = new URL(url)
+    parsed.hash = ''
+    for (const key of Array.from(parsed.searchParams.keys())) {
+      if (/^utm_/i.test(key) || key === 'ref' || key === 'fbclid') {
+        parsed.searchParams.delete(key)
+      }
+    }
+    return parsed.toString().replace(/\/$/, '')
+  } catch {
+    return url.trim()
+  }
 }
 
 function safeHostname(url: string): string {
