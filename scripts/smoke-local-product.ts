@@ -125,7 +125,7 @@ async function sleep(ms: number) {
 
 async function probeServer() {
   try {
-    const response = await fetch(urlFor('/api/v1/models'), {
+    const response = await fetch(urlFor('/'), {
       signal: AbortSignal.timeout(2000)
     })
     return response.ok
@@ -147,15 +147,18 @@ async function waitForServer(getStartupError?: () => string | null) {
 }
 
 function localServerEnv() {
+  const databaseUrl =
+    process.env.DATABASE_URL ||
+    'postgres://brok:brok@127.0.0.1:5432/brok_local_smoke_unavailable'
+
   return {
     ...process.env,
     ENABLE_AUTH: 'false',
     APP_ACCESS_GATE: 'false',
     BROK_CLOUD_DEPLOYMENT: 'false',
     BROKCODE_ALLOW_LOCAL_BROWSER_SESSION_FALLBACK: 'true',
-    DATABASE_URL:
-      process.env.DATABASE_URL ||
-      'postgres://brok:brok@127.0.0.1:5432/brok_local_smoke_unavailable'
+    DATABASE_URL: databaseUrl,
+    DATABASE_RESTRICTED_URL: databaseUrl
   }
 }
 
@@ -334,30 +337,29 @@ async function checkModelsApi(): Promise<ApiResult> {
       signal: AbortSignal.timeout(timeoutMs)
     })
     const body = await response.json().catch(() => null)
-    const modelIds = Array.isArray(body?.data)
-      ? body.data.map((model: { id?: string }) => model.id).filter(Boolean)
-      : []
 
-    if (!response.ok) {
-      throw new Error(`expected 200, got ${response.status}`)
+    if (response.status !== 401) {
+      throw new Error(`expected unauthenticated 401, got ${response.status}`)
     }
 
-    if (!modelIds.includes('brok-lite')) {
-      throw new Error('expected /api/v1/models to include brok-lite')
+    if (body?.error?.code !== 'missing_authorization') {
+      throw new Error(
+        'expected /api/v1/models to require an Authorization Bearer token or x-api-key header'
+      )
     }
 
     return {
       kind: 'api',
-      label: 'models-api',
+      label: 'models-api-auth-required',
       path: '/api/v1/models',
       status: 'ok',
       httpStatus: response.status,
-      foundSignals: modelIds.slice(0, 6)
+      foundSignals: [body.error.code]
     }
   } catch (error) {
     return {
       kind: 'api',
-      label: 'models-api',
+      label: 'models-api-auth-required',
       path: '/api/v1/models',
       status: 'error',
       httpStatus: null,
