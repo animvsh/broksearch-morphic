@@ -24,6 +24,8 @@
     "smoke:brokcode:runtime": "bun run scripts/smoke-brokcode-runtime.ts",
     "smoke:auth-platform": "PATH=$HOME/.bun/bin:$PATH bun run scripts/smoke-authenticated-platform.ts",
     "smoke:platform": "npx --yes tsx --env-file=.env.local scripts/smoke-platform.ts",
+    "smoke:mobile-platform:all": "node scripts/mobile-route-smoke.mjs",
+    "smoke:mobile-touch-target": "node scripts/mobile-touch-target-smoke.mjs",
     "stress:platform": "npx --yes tsx --env-file=.env.local scripts/stress-platform.ts",
     "check:railway-production": "node scripts/verify-railway-production.mjs"
   },

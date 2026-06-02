@@ -55,7 +55,7 @@ export default async function PlaygroundPage() {
                   asChild
                   variant="outline"
                   size="sm"
-                  className="h-8 shrink-0 gap-2"
+                  className="min-h-11 shrink-0 gap-2"
                 >
                   <Link href={link.href}>
                     <Icon className="size-4" />

@@ -12,11 +12,11 @@ import {
 } from '@/lib/api-key'
 import { getCurrentAppAccess, hasFeatureAccess } from '@/lib/auth/app-access'
 import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
+import type { CreateApiKeyInput } from '@/lib/brok/api-platform'
 import {
   validateApiKeyStatusTransition,
   validateCreateApiKeyInput
 } from '@/lib/brok/api-platform'
-import type { CreateApiKeyInput } from '@/lib/brok/api-platform'
 import { db } from '@/lib/db'
 import { apiKeys, workspaces } from '@/lib/db/schema'
 
