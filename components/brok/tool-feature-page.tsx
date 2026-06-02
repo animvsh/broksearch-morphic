@@ -53,7 +53,7 @@ export const TOOL_FEATURES: ToolFeature[] = [
     subtitle:
       'Ask quick questions, run deep research, and keep sources attached so papers, labs, and projects do not turn into tab chaos.',
     priceLine: 'Included in the $7/month student plan.',
-    primaryHref: '/search',
+    primaryHref: '/dashboard',
     primaryLabel: 'Open Search',
     secondaryHref: '/search/demo',
     secondaryLabel: 'View demo',
@@ -253,29 +253,8 @@ export const TOOL_FEATURES: ToolFeature[] = [
   }
 ]
 
-const QUICK_LINKS = [
-  { label: 'Search', href: '/features/search' },
-  { label: 'BrokCode', href: '/features/brokcode' },
-  { label: 'BrokMail', href: '/features/brokmail' },
-  { label: 'Presentations', href: '/features/presentations' },
-  { label: 'API', href: '/features/api' },
-  { label: 'All Tools', href: '/features' }
-] as const
-
-const TOOL_FEATURE_ALIASES = {
-  'app-builder': 'brokcode',
-  'brok-presentations': 'presentations',
-  presentation: 'presentations',
-  code: 'brokcode'
-} as const
-
-export function resolveFeatureSlug(slug: string) {
-  return TOOL_FEATURE_ALIASES[slug as keyof typeof TOOL_FEATURE_ALIASES] ?? slug
-}
-
 export function getToolFeature(slug: string) {
-  const canonical = resolveFeatureSlug(slug)
-  return TOOL_FEATURES.find(feature => feature.slug === canonical)
+  return TOOL_FEATURES.find(feature => feature.slug === slug)
 }
 
 export function ToolFeaturePage({ feature }: { feature: ToolFeature }) {
@@ -289,13 +268,13 @@ export function ToolFeaturePage({ feature }: { feature: ToolFeature }) {
         <div className="relative flex flex-1 flex-col overflow-hidden bg-[#fbfbfb]">
           <DotPattern />
 
-          <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-4 py-14 text-center sm:px-8">
+          <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-5 py-14 text-center sm:px-8">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-600 shadow-sm">
               <HeroIcon className="size-3.5" />
               {feature.eyebrow}
             </div>
 
-            <h1 className="max-w-4xl text-[clamp(2rem,8vw,4rem)] font-semibold leading-[0.98] tracking-tight text-zinc-950 lg:text-7xl">
+            <h1 className="max-w-4xl text-4xl font-semibold leading-[0.98] tracking-tight text-zinc-950 sm:text-6xl lg:text-7xl">
               {feature.title}
             </h1>
 
@@ -308,7 +287,7 @@ export function ToolFeaturePage({ feature }: { feature: ToolFeature }) {
               {feature.priceLine}
             </div>
 
-            <div className="mt-7 flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
+            <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
               <Button asChild size="lg" className="h-11 rounded-md px-6">
                 <Link href={feature.primaryHref}>
                   {feature.primaryLabel}
@@ -319,7 +298,7 @@ export function ToolFeaturePage({ feature }: { feature: ToolFeature }) {
                 asChild
                 size="lg"
                 variant="outline"
-                className="h-11 w-full rounded-md bg-white px-6 sm:w-auto"
+                className="h-11 rounded-md bg-white px-6"
               >
                 <Link href={feature.secondaryHref}>
                   {feature.secondaryLabel}
@@ -363,14 +342,14 @@ export function FeaturesIndexPage() {
       <section className="mx-auto w-full max-w-7xl overflow-hidden rounded-lg border border-white/80 bg-white shadow-[0_42px_90px_-58px_rgba(24,24,27,0.7)]">
         <FeatureNav />
 
-        <div className="relative overflow-hidden bg-[#fbfbfb] px-4 py-16 text-center sm:px-8">
+        <div className="relative overflow-hidden bg-[#fbfbfb] px-5 py-16 text-center sm:px-8">
           <DotPattern />
           <div className="relative z-10 mx-auto max-w-4xl">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-600 shadow-sm">
               <IconBlinkingLogo animate className="size-3.5" />
               Brok tools
             </div>
-            <h1 className="text-[clamp(2rem,8vw,4rem)] font-semibold leading-tight tracking-tight">
+            <h1 className="text-4xl font-semibold leading-none tracking-tight sm:text-6xl">
               One $7/month workspace for every student workflow.
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-sm leading-6 text-zinc-600 sm:text-base">
@@ -414,52 +393,29 @@ export function FeaturesIndexPage() {
 
 function FeatureNav() {
   return (
-    <header className="shrink-0 border-b border-zinc-100 px-4 py-3 sm:px-7">
-      <div className="flex h-14 items-center justify-between">
-        <Link
-          href="/"
-          className="inline-flex h-11 min-h-11 min-w-11 items-center gap-2 rounded-md"
-        >
-          <span className="inline-flex size-7 items-center justify-center rounded-md border border-zinc-200 bg-white shadow-sm">
-            <IconBlinkingLogo animate className="size-3.5" />
-          </span>
-          <span className="text-sm font-semibold tracking-tight">Brok</span>
-        </Link>
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-100 px-5 sm:px-7">
+      <Link href="/" className="inline-flex items-center gap-2">
+        <span className="inline-flex size-7 items-center justify-center rounded-md border border-zinc-200 bg-white shadow-sm">
+          <IconBlinkingLogo animate className="size-3.5" />
+        </span>
+        <span className="text-sm font-semibold tracking-tight">Brok</span>
+      </Link>
 
-        <nav className="hidden items-center gap-6 md:flex">
-          {TOOL_FEATURES.map(feature => (
-            <Link
-              key={feature.slug}
-              href={`/features/${feature.slug}`}
-              className="inline-flex h-11 min-h-11 min-w-11 items-center rounded-md px-1.5 text-[11px] font-medium text-zinc-600 transition-colors hover:text-zinc-950"
-            >
-              {feature.eyebrow.replace('Brok ', '')}
-            </Link>
-          ))}
-        </nav>
+      <nav className="hidden items-center gap-6 md:flex">
+        {TOOL_FEATURES.map(feature => (
+          <Link
+            key={feature.slug}
+            href={`/features/${feature.slug}`}
+            className="text-[11px] font-medium text-zinc-600 transition-colors hover:text-zinc-950"
+          >
+            {feature.eyebrow.replace('Brok ', '')}
+          </Link>
+        ))}
+      </nav>
 
-        <Button
-          asChild
-          size="sm"
-          className="clicky-control h-11 rounded-md px-4 text-xs"
-        >
-          <Link href="/auth/login">Start for $7/mo</Link>
-        </Button>
-      </div>
-
-      <div className="mt-2 w-full overflow-x-auto pb-1 sm:hidden">
-        <div className="flex min-w-max gap-2">
-          {QUICK_LINKS.map(link => (
-            <Link
-              key={link.label}
-              href={link.href}
-              className="clicky-control shrink-0 whitespace-nowrap rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-950"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </div>
-      </div>
+      <Button asChild size="sm" className="h-8 rounded-md px-3 text-xs">
+        <Link href="/auth/login">Start for $7/mo</Link>
+      </Button>
     </header>
   )
 }
