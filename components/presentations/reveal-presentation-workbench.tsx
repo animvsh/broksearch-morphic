@@ -252,6 +252,10 @@ export function RevealPresentationWorkbench() {
   const latestTitleRef = useRef(title)
 
   const slides = useMemo(() => parsePresentationMarkdown(source), [source])
+  const selectedSlideIndex = useMemo(
+    () => selectedBlockIndex(selectedSlide, slides.length),
+    [selectedSlide, slides.length]
+  )
   const hasActiveDeck = Boolean(activeId)
   const deckListLabel =
     decks.length === 0
@@ -329,7 +333,10 @@ export function RevealPresentationWorkbench() {
   }, [])
 
   useEffect(() => {
-    void loadDecks()
+    const bootstrapDecks = async () => {
+      await loadDecks()
+    }
+    void bootstrapDecks()
   }, [loadDecks])
 
   useEffect(() => {
@@ -384,18 +391,12 @@ export function RevealPresentationWorkbench() {
   }, [])
 
   useEffect(() => {
-    setSelectedSlide(current =>
-      Math.min(current, Math.max(slides.length - 1, 0))
-    )
-  }, [slides.length])
-
-  useEffect(() => {
     if (!isRevealReady) return
     const deck = revealRef.current
     deck?.sync()
     deck?.layout()
-    deck?.slide(selectedSlide, 0, -1)
-  }, [isRevealReady, selectedSlide, slides])
+    deck?.slide(selectedSlideIndex, 0, -1)
+  }, [isRevealReady, selectedSlideIndex, slides])
 
   const persistCurrent = useCallback(
     async (
@@ -448,7 +449,7 @@ export function RevealPresentationWorkbench() {
     }
   }, [source, title, activeId, persistCurrent])
 
-  const currentSlide = slides[selectedSlide]
+  const currentSlide = slides[selectedSlideIndex]
 
   const addSlide = () => {
     const nextSlide = `\n\n---\n\n# New Slide\nkicker: Draft\nWrite the main point here.\n- Add a proof point\n- Add the user takeaway`
@@ -456,7 +457,7 @@ export function RevealPresentationWorkbench() {
     setOutline(
       value => `${value.trimEnd()}\n${slides.length + 1}. New Slide: Draft`
     )
-    setSelectedSlide(slides.length)
+    setSelectedSlide(selectedSlideIndex + 1)
   }
 
   const goToSlide = (index: number) => {
@@ -836,7 +837,7 @@ export function RevealPresentationWorkbench() {
 
   const updateSourceWithBlocks = (
     blocks: string[],
-    nextSlide = selectedSlide,
+    nextSlide = selectedSlideIndex,
     options: { syncOutline?: boolean } = {}
   ) => {
     const nextSource = joinBlocks(blocks)
@@ -872,7 +873,7 @@ export function RevealPresentationWorkbench() {
         ? block
         : `${block.trimEnd()}\nnotes: Introduce slide ${index + 1} with the punchline, then connect it to the deck narrative.`
     )
-    updateSourceWithBlocks(blocks, selectedSlide, { syncOutline: false })
+    updateSourceWithBlocks(blocks, selectedSlideIndex, { syncOutline: false })
     setStatus('saved')
     setStatusMessage('Speaker notes added')
   }
@@ -893,7 +894,7 @@ export function RevealPresentationWorkbench() {
 
   const duplicateSlide = () => {
     const blocks = splitSourceIntoBlocks(source)
-    const index = selectedBlockIndex(selectedSlide, blocks.length)
+    const index = selectedBlockIndex(selectedSlideIndex, blocks.length)
     if (!blocks[index]) return
     const duplicate = blocks[index].replace(/^#\s+(.+)$/m, '# $1 Copy')
     blocks.splice(index + 1, 0, duplicate)
@@ -904,7 +905,7 @@ export function RevealPresentationWorkbench() {
 
   const moveSlide = (direction: -1 | 1) => {
     const blocks = splitSourceIntoBlocks(source)
-    const index = selectedBlockIndex(selectedSlide, blocks.length)
+    const index = selectedBlockIndex(selectedSlideIndex, blocks.length)
     const nextIndex = index + direction
     if (nextIndex < 0 || nextIndex >= blocks.length) return
     const [block] = blocks.splice(index, 1)
@@ -921,7 +922,7 @@ export function RevealPresentationWorkbench() {
       setStatusMessage('A deck needs at least one slide.')
       return
     }
-    const index = selectedBlockIndex(selectedSlide, blocks.length)
+    const index = selectedBlockIndex(selectedSlideIndex, blocks.length)
     blocks.splice(index, 1)
     updateSourceWithBlocks(blocks, Math.max(index - 1, 0))
     setStatus('saved')
@@ -1541,13 +1542,13 @@ export function RevealPresentationWorkbench() {
                 size="sm"
                 className="h-8 w-8 p-0"
                 aria-label="Previous slide"
-                disabled={selectedSlide === 0}
-                onClick={() => goToSlide(selectedSlide - 1)}
+                disabled={selectedSlideIndex === 0}
+                onClick={() => goToSlide(selectedSlideIndex - 1)}
               >
                 <ArrowLeft className="size-4" />
               </Button>
               <span className="min-w-20 text-center text-sm text-muted-foreground">
-                {selectedSlide + 1} / {slides.length}
+                {selectedSlideIndex + 1} / {slides.length}
               </span>
               <Button
                 type="button"
@@ -1555,8 +1556,8 @@ export function RevealPresentationWorkbench() {
                 size="sm"
                 className="h-8 w-8 p-0"
                 aria-label="Next slide"
-                disabled={selectedSlide >= slides.length - 1}
-                onClick={() => goToSlide(selectedSlide + 1)}
+                disabled={selectedSlideIndex >= slides.length - 1}
+                onClick={() => goToSlide(selectedSlideIndex + 1)}
               >
                 <ArrowRight className="size-4" />
               </Button>
@@ -1617,7 +1618,7 @@ export function RevealPresentationWorkbench() {
                   key={slide.id}
                   type="button"
                   className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
-                    index === selectedSlide
+                    index === selectedSlideIndex
                       ? 'border-zinc-950 bg-zinc-950 text-white'
                       : 'border-border bg-white text-zinc-700 hover:bg-zinc-50'
                   }`}

@@ -5,6 +5,7 @@ import {
   SiGooglecloud,
   SiSlack
 } from 'react-icons/si'
+import Image from 'next/image'
 import Link from 'next/link'
 
 import {
@@ -138,7 +139,7 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
           />
 
           <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-8 sm:px-7 lg:px-9 lg:py-10">
-            <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
+            <div className="mx-auto flex w-full max-w-4xl flex-col items-center text-center">
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-600 shadow-sm">
                 <BadgeCheck className="size-3.5 text-emerald-600" />
                 All five student AI tools for $7/month
@@ -177,6 +178,17 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
                 >
                   <Link href="/features">Explore tools</Link>
                 </Button>
+              </div>
+
+              <div className="mt-8 w-full overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-[0_28px_72px_-42px_rgba(24,24,27,0.72)]">
+                <Image
+                  src="/images/brok-landing-hero.webp"
+                  alt="Students using Brok tools across research, coding, mail, and presentations"
+                  width={1600}
+                  height={900}
+                  className="h-auto w-full object-cover"
+                  priority
+                />
               </div>
             </div>
 
