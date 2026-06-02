@@ -39,7 +39,7 @@
     "@earendil-works/pi-coding-agent": "0.74.0",
     "@json-render/core": "^0.16.0",
     "@json-render/react": "^0.16.0",
-    "@next/swc-darwin-arm64": "^16.2.7",
+    "@next/swc-darwin-arm64": "^16.2.3",
     "@opentelemetry/api-logs": "0.57.2",
     "@opentelemetry/instrumentation": "0.57.2",
     "@opentelemetry/sdk-logs": "0.57.2",
@@ -107,7 +107,8 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@next/swc-wasm-nodejs": "^16.2.7",
+    "@next/swc-wasm-nodejs": "^16.2.3",
+    "@next/swc-wasm-web": "^16.2.3",
     "@tailwindcss/postcss": "^4.1.11",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.6.3",

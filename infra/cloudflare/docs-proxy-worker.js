@@ -1,9 +1,10 @@
 const worker = {
   async fetch(request) {
     const target = new URL(request.url)
-    const upstreamHost =
-      (process.env.BROK_UPSTREAM_ORIGIN ||
-      'https://brok-production.up.railway.app').trim()
+    const upstreamHost = (
+      process.env.BROK_UPSTREAM_ORIGIN ||
+      'https://brok-production.up.railway.app'
+    ).trim()
     let hostname = 'brok-production.up.railway.app'
 
     try {

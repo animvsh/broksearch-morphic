@@ -3,14 +3,12 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
-const APP_BASE_URL = (process.env.BROK_PROD_BASE_URL || 'https://www.brok.fyi').replace(
-  /\/+$/,
-  ''
-)
-const DOCS_BASE_URL = (process.env.BROK_PROD_DOCS_URL || 'https://docs.brok.fyi').replace(
-  /\/+$/,
-  ''
-)
+const APP_BASE_URL = (
+  process.env.BROK_PROD_BASE_URL || 'https://www.brok.fyi'
+).replace(/\/+$/, '')
+const DOCS_BASE_URL = (
+  process.env.BROK_PROD_DOCS_URL || 'https://docs.brok.fyi'
+).replace(/\/+$/, '')
 const TIMEOUT_MS = Number(process.env.BROK_PROD_CHECK_TIMEOUT_MS || '12000')
 const REPORT_DIR = process.env.BROK_PROD_CHECK_REPORT_DIR || '.brok-audits'
 const now = new Date().toISOString()
@@ -20,8 +18,9 @@ const checks = []
 function pushCheck(check) {
   checks.push(check)
   const status = `${check.ok ? 'PASS' : 'FAIL'} ${check.name}`
-  const details =
-    check.details.length ? ` | ${check.details}` : ' (no additional details)'
+  const details = check.details.length
+    ? ` | ${check.details}`
+    : ' (no additional details)'
   console.log(`${status}${details}`)
 }
 
@@ -124,7 +123,13 @@ async function checkHtmlRoute(
   }
 }
 
-async function checkJsonApi(name, url, validator, expectedStatuses = [200], requestInit = {}) {
+async function checkJsonApi(
+  name,
+  url,
+  validator,
+  expectedStatuses = [200],
+  requestInit = {}
+) {
   try {
     const response = await fetchWithTimeout(url, {
       method: 'GET',
@@ -215,37 +220,68 @@ async function main() {
     checkHtmlRoute('Docs route', `${DOCS_BASE_URL}/docs`),
     checkHtmlRoute('Features route', `${APP_BASE_URL}/features`, 'Brok tools'),
     checkHtmlRoute('Pricing route', `${APP_BASE_URL}/pricing`, '$7'),
-    checkHtmlRoute('BrokCode route (auth required)', `${APP_BASE_URL}/brokcode`, undefined, {
-      expectedStatuses: [302, 307, 308],
-      expectedLocationIncludes: protectedRedirectLocations.BrokCode
-    }),
-    checkHtmlRoute('Presentations route (auth required)', `${APP_BASE_URL}/presentations`, undefined, {
-      expectedStatuses: [302, 307, 308],
-      expectedLocationIncludes: protectedRedirectLocations.Presentations
-    }),
-    checkHtmlRoute('Integrations route (auth required)', `${APP_BASE_URL}/integrations`, undefined, {
-      expectedStatuses: [302, 307, 308],
-      expectedLocationIncludes: protectedRedirectLocations.Integrations
-    }),
-    checkJsonApi('Models API', `${APP_BASE_URL}/api/v1/models`, payload => {
-      if (!payload || typeof payload !== 'object' || !('data' in payload)) {
-        return 'Missing { data } in response'
+    checkHtmlRoute(
+      'BrokCode route (auth required)',
+      `${APP_BASE_URL}/brokcode`,
+      undefined,
+      {
+        expectedStatuses: [302, 307, 308],
+        expectedLocationIncludes: protectedRedirectLocations.BrokCode
       }
-
-      const data = payload.data
-      if (!Array.isArray(data) || data.length === 0) {
-        return 'Expected non-empty data array'
+    ),
+    checkHtmlRoute(
+      'Presentations route (auth required)',
+      `${APP_BASE_URL}/presentations`,
+      undefined,
+      {
+        expectedStatuses: [302, 307, 308],
+        expectedLocationIncludes: protectedRedirectLocations.Presentations
       }
-
-      return null
-    }),
-    checkJsonApi('API usage auth gate', `${APP_BASE_URL}/api/v1/usage`, payload => {
-      if (!hasMissingAuthorization(payload)) {
-        return 'Expected missing_authorization error without API key'
+    ),
+    checkHtmlRoute(
+      'Integrations route (auth required)',
+      `${APP_BASE_URL}/integrations`,
+      undefined,
+      {
+        expectedStatuses: [302, 307, 308],
+        expectedLocationIncludes: protectedRedirectLocations.Integrations
       }
+    ),
+    checkJsonApi(
+      'Models API',
+      `${APP_BASE_URL}/api/v1/models`,
+      (payload, response) => {
+        if (response.status === 401) {
+          return hasMissingAuthorization(payload)
+            ? null
+            : 'Expected missing_authorization'
+        }
 
-      return null
-    }, [401]),
+        if (!payload || typeof payload !== 'object' || !('data' in payload)) {
+          return 'Missing { data } in response'
+        }
+
+        const data = payload.data
+        if (!Array.isArray(data) || data.length === 0) {
+          return 'Expected non-empty data array'
+        }
+
+        return null
+      },
+      [200, 401]
+    ),
+    checkJsonApi(
+      'API usage auth gate',
+      `${APP_BASE_URL}/api/v1/usage`,
+      payload => {
+        if (!hasMissingAuthorization(payload)) {
+          return 'Expected missing_authorization error without API key'
+        }
+
+        return null
+      },
+      [401]
+    ),
     checkJsonApi(
       'Invalid API key rejection',
       `${APP_BASE_URL}/api/v1/usage`,
@@ -257,7 +293,9 @@ async function main() {
         }
 
         if (response.status === 403) {
-          return typeof payload?.error === 'object' ? null : 'Expected error JSON body for 403'
+          return typeof payload?.error === 'object'
+            ? null
+            : 'Expected error JSON body for 403'
         }
 
         return `Unexpected status ${response.status}`
