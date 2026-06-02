@@ -25,7 +25,7 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
         />
         <Link
           href="/"
-          className="clicky-control inline-flex h-11 min-h-11 items-center gap-2.5 px-1 md:hidden"
+          className="clicky-control inline-flex h-11 min-h-11 min-w-0 items-center gap-2.5 px-1 md:hidden"
         >
           <span className="brand-badge brand-halo rounded-full p-1.5">
             <IconBlinkingLogo className="size-4" />

@@ -33,7 +33,7 @@ export function FeatureRequestWidget() {
       ) : (
         <button
           type="button"
-          className="clicky-control flex h-11 w-full items-center gap-2 overflow-hidden rounded-full border border-zinc-200/80 bg-white/88 px-2.5 text-sm font-medium text-zinc-950 shadow-[0_16px_54px_-44px_rgba(24,24,27,0.5)] backdrop-blur transition-all duration-200 hover:border-zinc-300 hover:bg-white"
+          className="flex min-h-11 w-full items-center gap-2 overflow-hidden rounded-full border border-zinc-200/80 bg-white/88 px-2.5 text-sm font-medium text-zinc-950 shadow-[0_16px_54px_-44px_rgba(24,24,27,0.5)] backdrop-blur transition-all duration-200 hover:border-zinc-300 hover:bg-white"
           onClick={() => setOpen(true)}
           aria-label="Open feature request widget"
         >
