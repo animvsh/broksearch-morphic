@@ -53,7 +53,7 @@ export const TOOL_FEATURES: ToolFeature[] = [
     subtitle:
       'Ask quick questions, run deep research, and keep sources attached so papers, labs, and projects do not turn into tab chaos.',
     priceLine: 'Included in the $7/month student plan.',
-    primaryHref: '/dashboard',
+    primaryHref: '/search',
     primaryLabel: 'Open Search',
     secondaryHref: '/search/demo',
     secondaryLabel: 'View demo',
