@@ -82,6 +82,7 @@ export function LoginForm({
                   id="email"
                   type="email"
                   placeholder="you@example.com"
+                  className="min-h-11"
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
@@ -92,7 +93,7 @@ export function LoginForm({
                   <Label htmlFor="password">Password</Label>
                   <Link
                     href="/auth/forgot-password"
-                    className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
+                    className="ml-auto inline-flex h-11 min-h-11 min-w-11 items-center rounded-md px-2 text-sm font-medium underline-offset-4 hover:underline"
                   >
                     Forgot password?
                   </Link>
@@ -101,6 +102,7 @@ export function LoginForm({
                   id="password"
                   type="password"
                   placeholder="********"
+                  className="min-h-11"
                   required
                   value={password}
                   onChange={e => setPassword(e.target.value)}
@@ -114,14 +116,20 @@ export function LoginForm({
           </div>
           <div className="mt-6 text-center text-sm">
             Need access?{' '}
-            <Link href={signUpHref} className="underline underline-offset-4">
+            <Link
+              href={signUpHref}
+              className="inline-flex h-11 min-h-11 min-w-11 items-center rounded-md px-2.5 underline underline-offset-4"
+            >
               Request invite
             </Link>
           </div>
         </CardContent>
       </Card>
       <div className="text-center text-xs text-muted-foreground">
-        <Link href="/" className="hover:underline">
+        <Link
+          href="/"
+          className="inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-md px-2 hover:underline"
+        >
           &larr; Back to Home
         </Link>
       </div>

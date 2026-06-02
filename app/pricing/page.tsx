@@ -64,7 +64,7 @@ export default function PricingPage() {
                 Built for student universes
               </p>
 
-              <h1 className="mt-4 max-w-2xl text-4xl font-semibold leading-tight tracking-tight sm:text-6xl">
+              <h1 className="mt-4 max-w-2xl text-[clamp(2rem,9vw,4rem)] font-semibold leading-tight tracking-tight lg:text-6xl">
                 One plan. Five complete AI tools. $7/mo.
               </h1>
 
@@ -74,7 +74,7 @@ export default function PricingPage() {
                 tool, scale usage with one budget.
               </p>
 
-              <div className="mt-7 flex flex-wrap items-center gap-3">
+              <div className="mt-7 flex w-full flex-col gap-3 sm:flex-row">
                 <Button asChild className="h-11 rounded-md">
                   <Link href="/auth/login">
                     Start for $7/mo
@@ -84,7 +84,7 @@ export default function PricingPage() {
                 <Button
                   asChild
                   variant="outline"
-                  className="h-11 rounded-md bg-white"
+                  className="h-11 rounded-md bg-white sm:w-auto"
                 >
                   <Link href="/features">Browse features</Link>
                 </Button>
@@ -96,7 +96,7 @@ export default function PricingPage() {
                 Student plan
               </p>
               <div className="mt-2 flex items-end gap-2">
-                <span className="text-5xl font-semibold">$7</span>
+                <span className="text-4xl font-semibold sm:text-5xl">$7</span>
                 <span className="pb-1 text-sm text-zinc-500">/month</span>
               </div>
               <p className="mt-3 text-sm leading-6 text-zinc-600">

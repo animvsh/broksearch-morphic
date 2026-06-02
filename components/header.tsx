@@ -20,12 +20,12 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
     <header className="pointer-events-none sticky top-0 z-[70] flex h-13 w-full shrink-0 items-center justify-between border-b border-zinc-200/80 bg-white/95 px-3 text-zinc-950 backdrop-blur-md md:px-4">
       <div className="pointer-events-auto flex min-w-0 items-center gap-2">
         <SidebarTrigger
-          className="size-8 shrink-0 rounded-full border border-zinc-200/80 bg-white/82 text-zinc-600 shadow-none transition-colors duration-150 hover:border-zinc-300 hover:bg-white hover:text-zinc-950"
+          className="clicky-control shrink-0 rounded-full border border-zinc-200/80 bg-white/82 text-zinc-600 shadow-none transition-colors duration-150 hover:border-zinc-300 hover:bg-white hover:text-zinc-950"
           title="Toggle sidebar"
         />
         <Link
           href="/"
-          className="inline-flex min-w-0 items-center gap-2.5 md:hidden"
+          className="clicky-control inline-flex h-11 min-h-11 items-center gap-2.5 px-1 md:hidden"
         >
           <span className="brand-badge brand-halo rounded-full p-1.5">
             <IconBlinkingLogo className="size-4" />

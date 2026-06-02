@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import {
   SiGithub,
   SiGmail,
@@ -12,8 +13,6 @@ import {
   ArrowRight,
   ArrowUpRight,
   BadgeCheck,
-  BookOpen,
-  CalendarDays,
   Check,
   Code2,
   FileText,
@@ -42,60 +41,96 @@ const NAV_LINKS = [
   { label: 'Pricing', href: '/pricing' }
 ] as const
 
-const PRODUCTS = [
+const TOOL_HIGHLIGHTS = [
   {
     title: 'Search',
-    body: 'Fast answers with sources, citations, and deep research.',
+    body: 'Cited answers with source control and follow-up prompts.',
     icon: Search,
     href: '/features/search',
-    color: 'bg-blue-50 text-blue-700 border-blue-100'
+    toneClass: 'bg-blue-50 text-blue-700 border-blue-100'
   },
   {
     title: 'BrokCode',
-    body: 'A coding-agent workspace for browser, cloud, and TUI.',
+    body: 'Run browser tasks, edit files, and ship fixes quickly.',
     icon: Code2,
     href: '/features/brokcode',
-    color: 'bg-zinc-100 text-zinc-800 border-zinc-200'
+    toneClass: 'bg-zinc-100 text-zinc-800 border-zinc-200'
   },
   {
     title: 'BrokMail',
-    body: 'Connected Gmail workflows for triage and drafting.',
+    body: 'Gmail workflows for triage, drafting, and approvals.',
     icon: Mail,
     href: '/features/brokmail',
-    color: 'bg-rose-50 text-rose-700 border-rose-100'
+    toneClass: 'bg-rose-50 text-rose-700 border-rose-100'
   },
   {
-    title: 'Slides',
-    body: 'Reveal.js decks from research notes, with sharing and export.',
+    title: 'Presentations',
+    body: 'Build outlines and generate reveal.js-ready slide decks.',
     icon: Presentation,
     href: '/features/presentations',
-    color: 'bg-amber-50 text-amber-700 border-amber-100'
+    toneClass: 'bg-amber-50 text-amber-700 border-amber-100'
   },
   {
-    title: 'API',
-    body: 'OpenAI-compatible keys, chat, search, usage, and playgrounds.',
+    title: 'API Platform',
+    body: 'Chat, search, and usage-aware integrations in one plan.',
     icon: KeyRound,
     href: '/features/api',
-    color: 'bg-emerald-50 text-emerald-700 border-emerald-100'
+    toneClass: 'bg-emerald-50 text-emerald-700 border-emerald-100'
   }
 ] as const
 
-const OUTCOMES = [
-  'Cite research',
-  'Build assignments',
-  'Write emails',
-  'Create decks',
-  'Ship APIs'
+const QUICK_LINKS = [
+  { label: 'Search', href: '/features/search' },
+  { label: 'BrokCode', href: '/features/brokcode' },
+  { label: 'BrokMail', href: '/features/brokmail' },
+  { label: 'Presentations', href: '/features/presentations' },
+  { label: 'API', href: '/features/api' }
+] as const
+
+const WORKFLOW_STEPS = [
+  {
+    step: '1',
+    title: 'Research',
+    body: 'Start with a question, pull credible sources, and keep context.'
+  },
+  {
+    step: '2',
+    title: 'Build',
+    body: 'Move into coding, drafting, or slide creation without switching tools.'
+  },
+  {
+    step: '3',
+    title: 'Deliver',
+    body: 'Polish outputs and share instantly with class team or collaborators.'
+  }
+] as const
+
+const PLAN_BULLETS = [
+  'Cited search + research trail',
+  'BrokCode builder + preview + runtime',
+  'BrokMail triage, draft, and approvals',
+  'Reveal.js deck generation and sharing',
+  'OpenAI-compatible API usage and keys'
+] as const
+
+const TRUST_BARS = [
+  { label: 'Tools', value: '5' },
+  { label: 'Monthly price', value: '$7' },
+  { label: 'Best for', value: 'Students' }
 ] as const
 
 export function BrokLanding({ isSignedIn }: BrokLandingProps) {
   const primaryHref = isSignedIn ? '/auth/access-pending' : '/auth/login'
+  const accessLabel = isSignedIn ? 'Open app' : 'Sign in'
 
   return (
     <main className="min-h-svh bg-[#d9d9d9] px-3 py-4 text-zinc-950 sm:px-5 sm:py-6 lg:px-8">
-      <section className="mx-auto flex min-h-[min(780px,calc(100svh-3rem))] w-full max-w-7xl flex-col overflow-hidden rounded-lg border border-white/80 bg-white shadow-[0_46px_110px_-72px_rgba(24,24,27,0.82)]">
+      <section className="mx-auto flex min-h-[min(820px,calc(100svh-3rem))] w-full max-w-7xl flex-col overflow-hidden rounded-lg border border-white/80 bg-white shadow-[0_46px_110px_-72px_rgba(24,24,27,0.82)]">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-100 px-4 sm:px-7">
-          <Link href="/" className="inline-flex items-center gap-2">
+          <Link
+            href="/"
+            className="inline-flex h-11 min-h-11 min-w-11 items-center gap-2"
+          >
             <span className="inline-flex size-7 items-center justify-center rounded-md border border-zinc-200 bg-white shadow-sm">
               <IconBlinkingLogo animate className="size-3.5" />
             </span>
@@ -107,7 +142,7 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
               <Link
                 key={link.label}
                 href={link.href}
-                className="text-[11px] font-medium text-zinc-600 transition-colors hover:text-zinc-950"
+                className="inline-flex h-11 min-h-11 min-w-11 items-center rounded-md px-1.5 text-[11px] font-medium text-zinc-600 transition-colors hover:text-zinc-950"
               >
                 {link.label}
               </Link>
@@ -116,14 +151,11 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
 
           <div className="flex items-center gap-3">
             <Link
-              href={isSignedIn ? '/auth/access-pending' : '/auth/login'}
-              className="hidden text-[11px] font-medium text-zinc-600 hover:text-zinc-950 sm:inline"
+              href={primaryHref}
+              className="inline-flex h-11 min-h-11 min-w-11 items-center rounded-md px-1.5 text-[11px] font-medium text-zinc-600 hover:text-zinc-950"
             >
-              Sign in
+              {accessLabel}
             </Link>
-            <Button asChild size="sm" className="h-8 rounded-md px-3 text-xs">
-              <Link href={primaryHref}>Start for $7/mo</Link>
-            </Button>
           </div>
         </header>
 
@@ -138,32 +170,43 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
             }}
           />
 
-          <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-8 sm:px-7 lg:px-9 lg:py-10">
+          <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col px-3 py-8 sm:px-7 lg:px-9 lg:py-10">
             <div className="mx-auto flex w-full max-w-4xl flex-col items-center text-center">
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-600 shadow-sm">
                 <BadgeCheck className="size-3.5 text-emerald-600" />
-                All five student AI tools for $7/month
+                All AI tools students need, in one $7/month plan
               </div>
 
-              <h1 className="max-w-5xl text-4xl font-semibold leading-[0.94] tracking-tight text-zinc-950 sm:text-6xl lg:text-7xl">
-                One campus AI workspace
+              <h1 className="max-w-5xl text-[clamp(2rem,9vw,4.5rem)] font-semibold leading-[0.98] tracking-tight text-zinc-950 lg:text-7xl">
+                Your whole university workflow.
                 <br />
                 <span className="font-normal text-zinc-400">
-                  for the price of lunch
+                  Search, build, present, and send.
                 </span>
               </h1>
 
               <p className="mt-6 max-w-2xl text-sm leading-6 text-zinc-600 sm:text-base">
-                Brok bundles cited search, coding help, email workflows,
-                reveal.js presentations, and OpenAI-compatible APIs into one
-                simple student plan.
+                Brok combines research, coding, inbox automation, presentation
+                creation, and an API surface in one focused experience.
               </p>
 
-              <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+              <div className="mt-5 flex w-full flex-nowrap gap-2 overflow-x-auto pb-1">
+                {QUICK_LINKS.map(item => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className="inline-flex h-11 min-h-11 min-w-11 shrink-0 items-center rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium whitespace-nowrap text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-950"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+
+              <div className="mt-7 flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
                 <Button
                   asChild
                   size="lg"
-                  className="group h-11 rounded-md px-6"
+                  className="clicky-control h-11 w-full rounded-md px-6 sm:w-auto"
                 >
                   <Link href={primaryHref}>
                     Start for $7/mo
@@ -174,7 +217,7 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
                   asChild
                   size="lg"
                   variant="outline"
-                  className="h-11 rounded-md bg-white px-6"
+                  className="clicky-control h-11 w-full rounded-md bg-white px-6 sm:w-auto"
                 >
                   <Link href="/features">Explore tools</Link>
                 </Button>
@@ -214,25 +257,83 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
               </div>
             </div>
 
-            <ul className="mt-6 grid gap-2 sm:grid-cols-5">
-              {OUTCOMES.map(outcome => (
-                <li
-                  key={outcome}
-                  className="flex items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm"
+            <div className="mt-8 grid gap-2 px-0 sm:grid-cols-3">
+              {TRUST_BARS.map(item => (
+                <article
+                  key={item.label}
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-3 text-sm font-medium text-zinc-600 shadow-sm"
                 >
-                  <Check className="size-3.5 text-emerald-600" />
-                  {outcome}
-                </li>
+                  <div className="text-xs uppercase tracking-wide text-zinc-500">
+                    {item.label}
+                  </div>
+                  <div className="text-lg font-semibold text-zinc-900">
+                    {item.value}
+                  </div>
+                </article>
               ))}
+            </div>
+
+            <ul className="mt-4 grid gap-2 sm:grid-cols-5">
+              <li className="flex items-center gap-2 rounded-md border border-zinc-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm">
+                <Check className="size-3.5 text-emerald-600" />
+                Cited research
+              </li>
+              <li className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm">
+                <Check className="size-3.5 text-emerald-600" />
+                Live code context
+              </li>
+              <li className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm">
+                <Check className="size-3.5 text-emerald-600" />
+                Mail and calendar workflows
+              </li>
+              <li className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm">
+                <Check className="size-3.5 text-emerald-600" />
+                Reveal.js deck generation
+              </li>
+              <li className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm">
+                <Check className="size-3.5 text-emerald-600" />
+                API usage + usage controls
+              </li>
             </ul>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-7xl gap-4 px-1 py-5 md:grid-cols-5">
-        {PRODUCTS.map(product => (
-          <ProductCard key={product.title} {...product} />
+      <section className="mx-auto grid w-full max-w-7xl gap-4 px-1 py-5 md:grid-cols-2 xl:grid-cols-5">
+        {TOOL_HIGHLIGHTS.map(tool => (
+          <ProductCard key={tool.title} {...tool} />
         ))}
+      </section>
+
+      <section className="mx-auto w-full max-w-7xl rounded-lg border border-zinc-200 bg-white p-4 shadow-[0_24px_55px_-42px_rgba(24,24,27,0.72)]">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            Workflow in 3 simple steps
+          </h2>
+          <Link
+            href="/features"
+            className="inline-flex h-11 min-h-11 min-w-11 items-center gap-1 px-2 text-xs font-medium text-zinc-700 hover:text-zinc-950"
+          >
+            See all workflows
+            <ArrowRight className="size-3.5" />
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {WORKFLOW_STEPS.map(step => (
+            <article
+              key={step.step}
+              className="rounded-lg border border-zinc-200 bg-zinc-50 p-4"
+            >
+              <div className="inline-flex size-7 items-center justify-center rounded-full bg-zinc-900 text-xs font-semibold text-white">
+                {step.step}
+              </div>
+              <h3 className="mt-3 text-sm font-semibold">{step.title}</h3>
+              <p className="mt-1 text-xs leading-5 text-zinc-600">
+                {step.body}
+              </p>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section
@@ -245,15 +346,14 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
             Only $7/month
           </div>
           <h2 className="mt-5 text-2xl font-semibold tracking-tight sm:text-3xl">
-            Cheap enough for students. Useful enough for the whole semester.
+            Built for the whole semester, not one week.
           </h2>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-600">
-            One subscription covers research, building, communication,
-            presentations, and API projects. No separate upsells for the tools
-            students actually need.
+            Access search, BrokCode, BrokMail, deck-building, and API tools in
+            one student plan.
           </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Button asChild size="lg" className="h-11 rounded-md px-6">
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            <Button asChild size="lg" className="h-11 min-h-11 rounded-md px-6">
               <Link href={primaryHref}>
                 Start for $7/mo
                 <ArrowRight className="size-4" />
@@ -276,52 +376,63 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
             <span className="text-sm font-medium text-zinc-500">per month</span>
           </div>
           <ul className="mt-5 grid gap-3">
-            {[
-              'AI search with citations',
-              'BrokCode builder workspace',
-              'BrokMail and calendar workflows',
-              'Reveal.js presentation builder',
-              'OpenAI-compatible API platform'
-            ].map(item => (
+            {PLAN_BULLETS.map(item => (
               <li key={item} className="flex items-start gap-2 text-sm">
                 <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
                 <span>{item}</span>
               </li>
             ))}
           </ul>
+          <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+            No separate add-ons, no hidden per-tool charges.
+          </p>
         </div>
       </section>
 
       <section className="mx-auto w-full max-w-7xl px-1 pb-6">
-        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-zinc-600">
-          <FileText className="size-4" />
-          <span>Brok API is included in the $7/month plan</span>
-          <span aria-hidden="true">&middot;</span>
-          <Link
-            href="/docs/quickstart"
-            className="inline-flex items-center gap-1 font-medium text-zinc-950 underline-offset-4 hover:underline"
-          >
-            Read the quickstart
-            <ArrowRight className="size-3.5" />
-          </Link>
-        </div>
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-[0_12px_35px_-32px_rgba(24,24,27,0.65)]">
+          <div className="grid gap-2 text-sm text-zinc-600 sm:grid-cols-2">
+            <Button asChild size="lg" className="h-11 min-h-11 rounded-md px-4">
+              <Link href={primaryHref}>
+                Start for $7/mo
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
 
-        <footer className="mt-5 flex flex-col items-center justify-between gap-2 text-sm text-zinc-600 sm:flex-row">
-          <span>&copy; 2026 Brok</span>
-          <nav className="flex items-center gap-5">
-            <Link href="/docs" className="hover:text-zinc-950 hover:underline">
-              Docs
-            </Link>
-            <a
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-zinc-950 hover:underline"
-            >
-              GitHub
-            </a>
-          </nav>
-        </footer>
+            <div className="flex flex-wrap items-center justify-center gap-2 text-xs sm:justify-end">
+              <FileText className="size-4" />
+              Brok API is included in the $7/month plan
+              <span aria-hidden="true">&middot;</span>
+              <Link
+                href="/docs/quickstart"
+                className="inline-flex h-11 min-h-11 items-center gap-1 rounded-md px-1.5 font-medium text-zinc-950 underline-offset-4 hover:underline"
+              >
+                Quickstart
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </div>
+          </div>
+
+          <footer className="mt-4 flex flex-col items-center justify-between gap-2 text-sm text-zinc-600 border-t border-zinc-200 pt-4 sm:flex-row">
+            <span>&copy; 2026 Brok</span>
+            <nav className="flex items-center gap-5">
+              <Link
+                href="/docs"
+                className="inline-flex h-11 min-h-11 items-center rounded-md px-1.5 hover:text-zinc-950 hover:underline"
+              >
+                Docs
+              </Link>
+              <a
+                href={GITHUB_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-11 min-h-11 items-center rounded-md px-1.5 hover:text-zinc-950 hover:underline"
+              >
+                GitHub
+              </a>
+            </nav>
+          </footer>
+        </div>
       </section>
     </main>
   )
@@ -337,7 +448,7 @@ function ProductConsole() {
           </span>
           <div>
             <div className="text-sm font-semibold">Student workspace</div>
-            <div className="text-xs text-zinc-500">Live tools included</div>
+            <div className="text-xs text-zinc-500">All tools in one flow</div>
           </div>
         </div>
         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
@@ -350,25 +461,25 @@ function ProductConsole() {
           {
             icon: Search,
             title: 'Cited answer',
-            body: '8 sources ranked for a history paper',
+            body: '8 sources ranked for an assignment',
             color: 'bg-blue-50 text-blue-700'
           },
           {
             icon: TerminalSquare,
-            title: 'Code run',
-            body: 'Tests passing after a bug fix',
+            title: 'Code build',
+            body: 'Run, fix, and verify in one place',
             color: 'bg-zinc-100 text-zinc-800'
           },
           {
-            icon: CalendarDays,
-            title: 'Mail plan',
-            body: 'Draft reply plus lab deadline reminder',
+            icon: Mail,
+            title: 'Mail draft',
+            body: 'Create and approve before sending',
             color: 'bg-rose-50 text-rose-700'
           },
           {
-            icon: BookOpen,
+            icon: Presentation,
             title: 'Deck outline',
-            body: 'Reveal.js slides ready to present',
+            body: 'Turn notes into a slide stack',
             color: 'bg-amber-50 text-amber-700'
           }
         ].map(item => (
@@ -405,14 +516,11 @@ function FloatingCard({
   children
 }: {
   className?: string
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <div
-      className={
-        'rounded-lg border border-zinc-200/80 bg-white/95 p-4 shadow-[0_24px_50px_-30px_rgba(15,23,42,0.36)] backdrop-blur-sm ' +
-        (className ?? '')
-      }
+      className={`rounded-lg border border-zinc-200/80 bg-white/95 p-4 shadow-[0_24px_50px_-30px_rgba(15,23,42,0.36)] backdrop-blur-sm ${className ?? ''}`}
     >
       {children}
     </div>
@@ -422,7 +530,7 @@ function FloatingCard({
 function FloatingStickyNote() {
   return (
     <div className="-mx-2 -my-2 rotate-[-2deg] rounded-sm bg-[#fde68a] p-3 shadow-[0_8px_18px_-8px_rgba(120,53,15,0.25)]">
-      <p className="font-['Caveat','Comic_Sans_MS',cursive] text-[13px] leading-snug text-zinc-800">
+      <p className="text-[13px] leading-snug text-zinc-800">
         One plan for research, code, email, slides, and API projects.
       </p>
     </div>
@@ -440,7 +548,7 @@ function FloatingReminders() {
         <div className="truncate text-sm font-medium text-zinc-900">
           Lab due tonight
         </div>
-        <div className="text-xs text-zinc-500">Draft email, add calendar</div>
+        <div className="text-xs text-zinc-500">Draft reply, add calendar</div>
       </div>
     </div>
   )
@@ -515,13 +623,13 @@ function ProductCard({
   body,
   icon: Icon,
   href,
-  color
+  toneClass
 }: {
   title: string
   body: string
   icon: React.ComponentType<{ className?: string }>
   href: string
-  color: string
+  toneClass: string
 }) {
   return (
     <Link
@@ -530,7 +638,7 @@ function ProductCard({
     >
       <ArrowUpRight className="absolute right-3 top-3 size-3.5 text-zinc-400 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-zinc-700" />
       <span
-        className={`inline-flex size-10 items-center justify-center rounded-lg border ${color}`}
+        className={`inline-flex size-10 items-center justify-center rounded-lg border ${toneClass}`}
       >
         <Icon className="size-5" />
       </span>
