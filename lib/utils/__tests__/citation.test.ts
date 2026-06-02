@@ -122,6 +122,41 @@ describe('processCitations', () => {
     expect(result).toBe('Specific source [1](https://docs.github.com)')
   })
 
+  it('links tool-level citations from multiple searches to each search result', () => {
+    const citationMaps = {
+      toolCall1: {
+        1: {
+          title: 'OpenAI',
+          url: 'https://openai.com',
+          content: 'AI research lab'
+        }
+      },
+      toolCall2: {
+        1: {
+          title: 'Anthropic',
+          url: 'https://anthropic.com',
+          content: 'AI safety company'
+        }
+      }
+    } as Record<string, Record<number, SearchResultItem>>
+
+    const content = 'Compare [1](#toolCall1) and [2](#toolCall2)'
+    const result = processCitations(content, citationMaps)
+
+    expect(result).toBe(
+      'Compare [1](https://openai.com) and [2](https://anthropic.com)'
+    )
+  })
+
+  it('keeps repeated plain references to one search as source-index citations', () => {
+    const content = 'Try [1](#toolCall1) or [2](#toolCall1)'
+    const result = processCitations(content, mockCitationMaps)
+
+    expect(result).toBe(
+      'Try [1](https://www.google.com) or [2](https://docs.github.com)'
+    )
+  })
+
   it('encodes URLs to prevent injection', () => {
     const citationMaps = {
       toolCall1: {
