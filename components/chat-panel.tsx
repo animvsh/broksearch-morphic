@@ -22,8 +22,10 @@ import { SHORTCUT_EVENTS } from '@/lib/keyboard-shortcuts'
 import { UploadedFile } from '@/lib/types'
 import type { UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
 import type { ModelSelectorData } from '@/lib/types/model-selector'
+import type { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
 import { isSimpleUtilityText } from '@/lib/utils/chat-routing'
+import { setCookie } from '@/lib/utils/cookies'
 
 import { useSearchMode } from '@/hooks/use-search-mode'
 
@@ -61,6 +63,7 @@ interface ChatPanelProps {
   /** Whether the current chat is running without an authenticated user */
   isGuest?: boolean
   modelSelectorData?: ModelSelectorData
+  initialSearchMode?: SearchMode
   /** Chat sections for message navigation dots */
   sections?: { id: string; userMessage: UIMessage }[]
 }
@@ -107,6 +110,7 @@ export function ChatPanel({
   isCloudDeployment = false,
   isGuest = false,
   modelSelectorData,
+  initialSearchMode,
   sections = []
 }: ChatPanelProps) {
   const router = useRouter()
@@ -231,6 +235,12 @@ export function ChatPanel({
       window.clearInterval(interval)
     }
   }, [isGuest, isLoading, loadRecentTasks])
+
+  useEffect(() => {
+    if (initialSearchMode) {
+      setCookie('searchMode', initialSearchMode)
+    }
+  }, [initialSearchMode])
 
   const getActiveToolLabel = () => {
     if (!messages.length) return null
