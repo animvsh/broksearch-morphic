@@ -395,13 +395,13 @@ function validateOpenAiToolCalls(
         message: `${toolCallPath}.id must be a non-empty string.`
       }
     }
-      if (typedToolCall.type !== 'function') {
-        return {
-          ok: false,
-          code: 'invalid_tool_calls',
-          message: `${toolCallPath}.type must be function.`
-        }
+    if (typedToolCall.type !== 'function') {
+      return {
+        ok: false,
+        code: 'invalid_tool_calls',
+        message: `${toolCallPath}.type must be function.`
       }
+    }
 
     const fn = typedToolCall.function
     if (!fn || typeof fn !== 'object' || Array.isArray(fn)) {

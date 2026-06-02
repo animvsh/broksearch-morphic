@@ -110,7 +110,7 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@next/swc-wasm-nodejs": "^16.2.3",
+    "@next/swc-wasm-nodejs": "^16.2.7",
     "@next/swc-wasm-web": "^16.2.3",
     "@tailwindcss/postcss": "^4.1.11",
     "@testing-library/dom": "^10.4.1",

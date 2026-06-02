@@ -47,8 +47,8 @@ describe('BrokCode project file store', () => {
       name: 'Demo App'
     })
 
-  expect(first.slug).toBe('demo-app')
-  expect(second.slug).toBe('demo-app-2')
+    expect(first.slug).toBe('demo-app')
+    expect(second.slug).toBe('demo-app-2')
   })
 
   it('renames projects with a unique slug in fallback storage', async () => {

@@ -13,7 +13,6 @@ const isNextProductionBuild =
   process.env.NEXT_PHASE === 'phase-production-build'
 const canUseBuildDatabaseFallback = isTest || isNextProductionBuild
 
-<<<<<<< HEAD
 function isPlaceholderDatabaseUrl(value: string | undefined) {
   if (!value) return true
   const trimmed = value.trim()
@@ -35,22 +34,11 @@ if (!hasRealDatabaseUrl && !canUseBuildDatabaseFallback) {
       'DATABASE_URL or DATABASE_RESTRICTED_URL environment variable is not set'
     )
   }
-=======
-if (
-  !process.env.DATABASE_URL &&
-  !process.env.DATABASE_RESTRICTED_URL &&
-  !canUseBuildDatabaseFallback
-) {
-  throw new Error(
-    'DATABASE_URL or DATABASE_RESTRICTED_URL environment variable is not set'
-  )
->>>>>>> 15b6bc2 (Fix Vercel React peer install)
 }
 
 // Connection with connection pooling for server environments
 // Prefer restricted user for application runtime
 const connectionString =
-<<<<<<< HEAD
   process.env.DATABASE_RESTRICTED_URL && // Prefer restricted user
   !isPlaceholderDatabaseUrl(process.env.DATABASE_RESTRICTED_URL)
     ? process.env.DATABASE_RESTRICTED_URL
@@ -59,13 +47,6 @@ const connectionString =
       : canUseBuildDatabaseFallback || isDevelopment
         ? 'postgres://user:pass@localhost:5432/testdb'
         : undefined
-=======
-  process.env.DATABASE_RESTRICTED_URL ?? // Prefer restricted user
-  process.env.DATABASE_URL ??
-  (canUseBuildDatabaseFallback
-    ? 'postgres://user:pass@localhost:5432/testdb'
-    : undefined)
->>>>>>> 15b6bc2 (Fix Vercel React peer install)
 
 if (!connectionString) {
   throw new Error(

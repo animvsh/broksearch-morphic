@@ -1,7 +1,5 @@
 'use client'
 
-/* eslint-disable react-hooks/set-state-in-effect -- sync defaultMode prop and cookie side-effect */
-
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
