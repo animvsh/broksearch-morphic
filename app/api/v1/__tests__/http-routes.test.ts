@@ -77,27 +77,32 @@ describe('/v1/models auth gate', () => {
     expect(response.status).toBe(401)
   })
 
-  it('returns 403 when the API key lacks usage:read scope', async () => {
+  it('lists allowed models for a valid API key without usage:read scope', async () => {
     mockAuth.verifyRequestAuth.mockResolvedValueOnce({
       success: true,
-      apiKey: { id: 'k', scopes: ['chat:write'], allowedModels: [] },
+      apiKey: {
+        id: 'k',
+        scopes: ['chat:write'],
+        allowedModels: ['brok-fast', 'brok-search']
+      },
       workspace: { id: 'w', status: 'active' }
     })
     mockAuth.apiKeyHasScope.mockReturnValue(false)
-    mockAuth.forbiddenScopeResponse.mockReturnValueOnce(
-      new Response(
-        JSON.stringify({
-          error: { type: 'permission_error', code: 'missing_scope' }
-        }),
-        { status: 403 }
-      )
-    )
 
     const { GET } = await import('@/app/api/v1/models/route')
     const response = await GET(
-      new NextRequest('http://localhost/v1/models') as any
+      new NextRequest('http://localhost/v1/models?include_pricing=true') as any
     )
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.data.map((model: { id: string }) => model.id)).toEqual([
+      'brok-fast',
+      'brok-search'
+    ])
+    for (const model of body.data) {
+      expect(model).not.toHaveProperty('input_cost_per_million')
+      expect(model).not.toHaveProperty('output_cost_per_million')
+    }
   })
 
   it('returns 200 with no cost fields by default', async () => {
