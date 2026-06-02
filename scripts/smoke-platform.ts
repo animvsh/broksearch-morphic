@@ -36,9 +36,10 @@ type ShareSeed = {
 
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3001'
 const smokeUserId = process.env.ANONYMOUS_USER_ID || 'anonymous-user'
+const anonymousAuthMode = process.env.ENABLE_AUTH === 'false'
 
 const uiChecks: UiCheck[] = [
-  { path: '/', expectedText: 'Private beta' },
+  { path: '/', expectedText: 'AI search, better than ever' },
   { path: '/docs', expectedText: 'Brok Documentation' },
   { path: '/docs/quickstart', expectedText: 'Quickstart' },
   { path: '/docs/api-keys', expectedText: 'API Keys' }
@@ -57,8 +58,12 @@ const protectedUiChecks: ProtectedUiCheck[] = [
 const apiChecks: ApiCheck[] = [
   {
     name: 'GET /api/v1/models',
-    async run(url) {
-      const response = await fetch(`${url}/api/v1/models`)
+    async run(url, apiKey) {
+      const response = await fetch(`${url}/api/v1/models`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`
+        }
+      })
       const body = await response.json()
 
       if (!response.ok) {
@@ -755,7 +760,13 @@ async function runUiChecks(apiKeyName?: string, dbBacked = true) {
       const currentUrl = page.url()
       const status = response?.status() ?? 0
 
-      if (
+      if (anonymousAuthMode) {
+        if (currentUrl.includes('/auth/login') || status >= 400) {
+          throw new Error(
+            `${check.path} should render in local anonymous mode; got ${currentUrl} (${status})`
+          )
+        }
+      } else if (
         !currentUrl.includes('/auth/login') &&
         status !== 307 &&
         status !== 308
@@ -765,7 +776,7 @@ async function runUiChecks(apiKeyName?: string, dbBacked = true) {
         )
       }
 
-      if (!currentUrl.includes('redirectTo=')) {
+      if (!anonymousAuthMode && !currentUrl.includes('redirectTo=')) {
         throw new Error(`${check.path} login redirect missing redirectTo`)
       }
 
