@@ -141,6 +141,49 @@ describe('BrokMail Composio action route', () => {
     expect(consumeBrokMailApproval).not.toHaveBeenCalled()
     expect(executeComposioTool).not.toHaveBeenCalled()
   })
+
+  it('rejects malformed provider ids before issuing approval tokens', async () => {
+    const response = await createBrokMailApproval(
+      actionRequest({
+        action: 'archive_threads',
+        threads: [
+          {
+            id: 'thread_1',
+            providerThreadId: 'provider thread 1',
+            providerMessageIds: ['message_1']
+          }
+        ]
+      }) as any
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toContain('Provider thread id is invalid')
+    expect(executeComposioTool).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed provider ids before consuming approvals or executing actions', async () => {
+    const response = await runBrokMailAction(
+      actionRequest({
+        action: 'archive_threads',
+        threads: [
+          {
+            id: 'thread_1',
+            providerThreadId: 'provider_thread_1',
+            providerMessageIds: ['message 1']
+          }
+        ]
+      }) as any
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toContain('Provider message id is invalid')
+    expect(listConnectedAccounts).not.toHaveBeenCalled()
+    expect(consumeBrokMailApproval).not.toHaveBeenCalled()
+    expect(executeComposioTool).not.toHaveBeenCalled()
+  })
+
   it('rejects approval tokens that do not match the requested action', async () => {
     const approval = signBrokMailApproval({
       userId: 'user_123',
