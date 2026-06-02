@@ -27,7 +27,7 @@ function normalizePathname(pathname: string) {
   return trimmed === '/' ? '/' : trimmed.replace(/\/+$/, '')
 }
 
-function isPublicPath(pathname: string) {
+export function isPublicPath(pathname: string) {
   const normalized = normalizePathname(pathname)
   return (
     PUBLIC_PATH_EXACT.has(normalized) ||

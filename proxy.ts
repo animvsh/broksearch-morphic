@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 
-import { updateSession } from '@/lib/supabase/middleware'
+import { isPublicPath, updateSession } from '@/lib/supabase/middleware'
 
 const DOCS_HOSTS = new Set(['docs.brok.fyi'])
 const DOCS_CLEAN_PATHS = new Set([
@@ -69,8 +69,9 @@ export async function proxy(request: NextRequest) {
   // Handle Supabase session if configured
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const shouldSkipSession = isPublicPath(request.nextUrl.pathname)
 
-  if (supabaseUrl && supabaseAnonKey) {
+  if (!shouldSkipSession && supabaseUrl && supabaseAnonKey) {
     response = await updateSession(request)
   } else {
     // If Supabase is not configured, just pass the request through
