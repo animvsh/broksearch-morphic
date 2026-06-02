@@ -22,7 +22,7 @@ const routes = [
   '/admin'
 ]
 
-async function checkRoute(page, path) {
+async function checkRoute(page, path, attempt = 0) {
   await page.setViewportSize({ width: 390, height: 844 })
   let response
   try {
@@ -30,6 +30,10 @@ async function checkRoute(page, path) {
       waitUntil: 'domcontentloaded'
     })
   } catch (error) {
+    if (attempt < 2) {
+      await page.waitForTimeout(250)
+      return checkRoute(page, path, attempt + 1)
+    }
     return {
       path,
       status: 0,
@@ -54,12 +58,19 @@ async function checkRoute(page, path) {
             const rect = node.getBoundingClientRect()
             const element = node
             const style = window.getComputedStyle(element)
+            const isVisuallyHiddenMirror =
+              rect.width <= 1 &&
+              rect.height <= 1 &&
+              !element.textContent?.trim() &&
+              element.getAttribute('aria-hidden') === 'true'
             const isVisible =
               rect.width > 0 &&
               rect.height > 0 &&
               style.display !== 'none' &&
               style.visibility !== 'hidden' &&
-              +style.opacity > 0
+              +style.opacity > 0 &&
+              element.getAttribute('aria-hidden') !== 'true' &&
+              !isVisuallyHiddenMirror
             if (!isVisible) return null
 
             const isDisabled =
@@ -87,9 +98,12 @@ async function checkRoute(page, path) {
       }
     )
   } catch (error) {
-    if (String(error).includes('Execution context was destroyed')) {
+    if (
+      attempt < 2 &&
+      String(error).includes('Execution context was destroyed')
+    ) {
       await page.waitForTimeout(200)
-      return await checkRoute(page, path)
+      return await checkRoute(page, path, attempt + 1)
     }
     throw error
   }
@@ -126,10 +140,12 @@ for (const path of routes) {
 
 await browser.close()
 
-const bad = results.filter(result => result.smallCount > 0)
+const bad = results.filter(
+  result => result.status < 200 || result.status >= 400 || result.smallCount > 0
+)
 if (bad.length > 0) {
   console.error(
-    `touch-target-smoke found ${bad.length} routes with undersized controls`
+    `touch-target-smoke found ${bad.length} routes with failed loads or undersized controls`
   )
   process.exit(1)
 }

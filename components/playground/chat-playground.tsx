@@ -423,6 +423,7 @@ export function ChatPlayground() {
                       id="stream"
                       checked={stream}
                       onCheckedChange={setStream}
+                      className="min-h-11"
                     />
                   </div>
                 </div>
@@ -447,16 +448,16 @@ export function ChatPlayground() {
           className="dashboard-card flex h-full min-h-0 flex-col"
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b px-3 py-2">
-            <TabsList className="h-11 rounded-md border border-border/70 bg-muted/40 p-1">
+            <TabsList className="h-auto min-h-11 rounded-md border border-border/70 bg-muted/40 p-1">
               <TabsTrigger
                 value="response"
-                className="data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
+                className="min-h-11 data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
               >
                 Response
               </TabsTrigger>
               <TabsTrigger
                 value="snippets"
-                className="data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
+                className="min-h-11 data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
               >
                 Snippets
               </TabsTrigger>
