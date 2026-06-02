@@ -13,9 +13,8 @@ const syncRoot = await mkdtemp(path.join(tmpdir(), 'brokcode-sync-'))
 process.env.BROKCODE_RUNTIME_WORKSPACE_DIR = runtimeRoot
 process.env.BROKCODE_SYNC_DIR = syncRoot
 
-const { createBrokCodeRuntimeSpec } = await import(
-  '../lib/brokcode/runtime/contract'
-)
+const { createBrokCodeRuntimeSpec } =
+  await import('../lib/brokcode/runtime/contract')
 const {
   appendBrokCodeRuntimeBrowserEvent,
   getBrokCodeRuntimeDiagnostics,
@@ -24,9 +23,8 @@ const {
 } = await import('../lib/brokcode/runtime/process-manager')
 const { createBrokCodeRuntimeSandbox, refreshBrokCodeRuntimeSandbox } =
   await import('../lib/brokcode/runtime/store')
-const { materializeBrokCodeRuntimeWorkspace } = await import(
-  '../lib/brokcode/runtime/workspace'
-)
+const { materializeBrokCodeRuntimeWorkspace } =
+  await import('../lib/brokcode/runtime/workspace')
 
 type RuntimeFile = {
   path: string
