@@ -23,6 +23,8 @@ export type BrokCodeGithubExportSupportInput = {
 const MAX_EXPORT_FILES = 500
 const MAX_EXPORT_FILE_BYTES = 1_000_000
 const SECRET_FIELD_PATTERN = /(admin|secret|token|key|password|credential)/i
+const SENSITIVE_EXPORT_PATH_PATTERN =
+  /(^|\/)(\.env(?:\..*)?|\.npmrc|\.netrc|id_rsa|id_ed25519|[^/]+\.(?:pem|key|p12|pfx)|secrets?(?:\.[^/]*)?|credentials?(?:\.[^/]*)?|service-account(?:\.[^/]*)?)(\/|$)/i
 
 function normalizePathPart(part: string) {
   return part.trim().replace(/^\/+|\/+$/g, '')
@@ -65,6 +67,10 @@ function sanitizeProjectFilePath(value: string) {
         part.includes('\0')
     )
   ) {
+    return null
+  }
+
+  if (SENSITIVE_EXPORT_PATH_PATTERN.test(path)) {
     return null
   }
 
