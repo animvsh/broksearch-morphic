@@ -27,7 +27,7 @@ describe('BrokLanding', () => {
       '/auth/access-pending',
       '/auth/access-pending'
     ])
-    expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /open app/i })).toHaveAttribute(
       'href',
       '/auth/access-pending'
     )

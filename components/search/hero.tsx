@@ -1,7 +1,5 @@
 'use client'
 
-/* eslint-disable react-hooks/set-state-in-effect -- sync defaultMode prop and cookie side-effect */
-
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
@@ -203,7 +201,7 @@ export function Hero({
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-2 px-2 pb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-2">
             <div className="flex items-center gap-1.5">
               <input
                 ref={fileInputRef}
@@ -218,7 +216,7 @@ export function Hero({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="clicky-control inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Attach files"
               >
                 <Paperclip className="size-4" />
@@ -230,7 +228,7 @@ export function Hero({
               type="submit"
               disabled={!query.trim() || isSubmitting}
               className={cn(
-                'inline-flex size-9 items-center justify-center rounded-lg transition-all',
+                'clicky-control inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg transition-all',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                 query.trim() && !isSubmitting
                   ? 'bg-foreground text-background hover:bg-foreground/90'
@@ -288,7 +286,7 @@ function FileChip({ file, onRemove }: { file: File; onRemove: () => void }) {
       <button
         type="button"
         onClick={onRemove}
-        className="ml-0.5 inline-flex size-4 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+        className="ml-0.5 inline-flex size-11 min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
         aria-label={`Remove ${file.name}`}
       >
         ×

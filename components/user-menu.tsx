@@ -60,7 +60,7 @@ export default function UserMenu({ user }: UserMenuProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative size-6 rounded-full">
+        <Button variant="ghost" size="icon" className="relative rounded-full">
           <Avatar className="size-6">
             <AvatarImage src={avatarUrl} alt={userName} />
             <AvatarFallback>{getInitials(userName, user.email)}</AvatarFallback>

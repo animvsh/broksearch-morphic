@@ -485,6 +485,10 @@
 }
 
 @layer components {
+  .clicky-control {
+    @apply min-h-11 min-w-11 touch-manipulation;
+  }
+
   .dashboard-shell {
     position: relative;
     --background: oklch(0.982 0.004 285);
@@ -796,7 +800,7 @@
   }
 
   .clicky-control {
-    @apply transition-all duration-150 active:translate-y-px;
+    @apply min-h-11 min-w-11 transition-all duration-150 active:translate-y-px;
   }
 
   .smooth-composer {

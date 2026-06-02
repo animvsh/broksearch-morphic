@@ -215,6 +215,9 @@ export async function POST(
         })
       : null
   const refreshedRuntime = await refreshBrokCodeRuntimeSandbox(runtime)
+  const fallbackRuntime = (refreshedRuntime ??
+    runtime ??
+    runtimeSpec) as Record<string, unknown> | null
 
   return NextResponse.json({
     runtime: refreshedRuntime,
@@ -231,7 +234,7 @@ export async function POST(
       : ((refreshedRuntime?.metadata?.livePreview as
           | Record<string, unknown>
           | undefined) ?? null),
-    fallback: runtimeFallback(runtimeSpec)
+    fallback: runtimeFallback(fallbackRuntime)
   })
 }
 

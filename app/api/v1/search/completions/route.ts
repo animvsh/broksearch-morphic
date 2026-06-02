@@ -197,7 +197,6 @@ export async function POST(request: NextRequest) {
         { status: 503 }
       )
     }
-
     await recordRateLimitEvent(
       auth.apiKey.id,
       auth.workspace.id,

@@ -212,7 +212,6 @@ describe('BrokCode runtime process diagnostics', () => {
       }
     })
   })
-
   it('reuses a live runtime process for ordinary source-file hot reloads', () => {
     const previousManifest = createManifest()
     const nextManifest = createManifest({

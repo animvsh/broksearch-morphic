@@ -65,7 +65,7 @@ export function FeatureRequestWidgetPanel({
           type="button"
           variant="ghost"
           size="icon"
-          className="size-8 shrink-0 rounded-md"
+          className="shrink-0 rounded-md"
           onClick={onClose}
           aria-label="Collapse feature request widget"
         >

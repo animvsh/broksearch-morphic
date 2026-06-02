@@ -24,6 +24,9 @@
     "smoke:brokcode:runtime": "bun run scripts/smoke-brokcode-runtime.ts",
     "smoke:auth-platform": "PATH=$HOME/.bun/bin:$PATH bun run scripts/smoke-authenticated-platform.ts",
     "smoke:platform": "npx --yes tsx --env-file=.env.local scripts/smoke-platform.ts",
+    "smoke:mobile-platform": "node scripts/feature-browsing-smoke.js",
+    "smoke:mobile-platform:all": "node scripts/mobile-route-smoke.mjs",
+    "smoke:mobile-touch-target": "node scripts/mobile-touch-target-smoke.mjs",
     "stress:platform": "npx --yes tsx --env-file=.env.local scripts/stress-platform.ts",
     "check:railway-production": "node scripts/verify-railway-production.mjs"
   },
@@ -61,7 +64,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toggle": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.2.4",
-    "@rollup/rollup-darwin-arm64": "^4.61.0",
+    "@rollup/rollup-darwin-arm64": "4.46.2",
     "@streamdown/math": "^1.0.2",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/auth-ui-react": "^0.4.7",
@@ -107,7 +110,7 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@next/swc-wasm-nodejs": "^16.2.3",
+    "@next/swc-wasm-nodejs": "^16.2.7",
     "@next/swc-wasm-web": "^16.2.3",
     "@tailwindcss/postcss": "^4.1.11",
     "@testing-library/dom": "^10.4.1",

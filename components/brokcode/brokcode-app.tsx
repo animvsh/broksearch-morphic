@@ -5635,16 +5635,6 @@ export function BrokCodeApp({
                 )}
               </div>
             </div>
-            <DeployReadinessPanel
-              state={deployReadiness}
-              loading={deployReadinessLoading}
-              error={deployReadinessError}
-              hasProject={Boolean(activeProject)}
-              onRefresh={() => {
-                void refreshDeployReadiness()
-              }}
-              onOpenPreview={url => loadPreviewUrlIfAllowed(url)}
-            />
             <Tabs defaultValue="brain" className="mb-2">
               <TabsList className="grid h-auto grid-cols-3 rounded-lg border border-zinc-200 bg-white p-1 text-xs shadow-sm xl:grid-cols-6">
                 <TabsTrigger value="brain" className="rounded-md text-xs">

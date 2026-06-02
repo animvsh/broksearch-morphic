@@ -125,7 +125,9 @@ function ModePills({
               'group relative inline-flex items-center gap-1.5 rounded-full font-medium transition-all duration-200',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
               'disabled:opacity-50 disabled:cursor-not-allowed',
-              isCompact ? 'h-7 px-2.5 text-xs' : 'h-9 px-3.5 text-sm',
+              isCompact
+                ? 'h-11 min-h-11 min-w-[2.95rem] px-2.5 text-[11px]'
+                : 'h-9 px-3.5 text-sm',
               active
                 ? 'text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
