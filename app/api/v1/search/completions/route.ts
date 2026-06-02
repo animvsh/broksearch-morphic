@@ -78,10 +78,35 @@ function completionPayload({
   }
 }
 
-function normalizeSearchDepth(value: unknown): 'lite' | 'standard' | 'deep' {
-  if (value === 'deep' || value === 'advanced') return 'deep'
-  if (value === 'lite' || value === 'basic' || value === 'quick') return 'lite'
-  return 'standard'
+type SearchDepth = 'lite' | 'standard' | 'deep'
+
+function parseSearchDepth(
+  value: unknown
+):
+  | { ok: true; depth: SearchDepth }
+  | { ok: false; code: string; message: string } {
+  if (value === undefined || value === null) {
+    return { ok: true, depth: 'standard' }
+  }
+
+  if (value === 'deep' || value === 'advanced') {
+    return { ok: true, depth: 'deep' }
+  }
+
+  if (value === 'lite' || value === 'basic' || value === 'quick') {
+    return { ok: true, depth: 'lite' }
+  }
+
+  if (value === 'standard') {
+    return { ok: true, depth: 'standard' }
+  }
+
+  return {
+    ok: false,
+    code: 'invalid_search_depth',
+    message:
+      'search_depth must be one of lite, standard, deep, basic, quick, or advanced.'
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -131,7 +156,11 @@ export async function POST(request: NextRequest) {
   }
 
   const shouldStream = stream
-  const depth = normalizeSearchDepth(body.depth ?? body.search_depth)
+  const depthResult = parseSearchDepth(body.depth ?? body.search_depth)
+  if (!depthResult.ok) {
+    return invalidRequestResponse(depthResult.code, depthResult.message)
+  }
+  const depth = depthResult.depth
   const searchDomains = Array.isArray(domains)
     ? domains.filter((domain): domain is string => typeof domain === 'string')
     : undefined
