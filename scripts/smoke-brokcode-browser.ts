@@ -7,8 +7,7 @@ const baseUrl = (process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3000').replace(
 const baseOrigin = new URL(baseUrl).origin
 const basePort = new URL(baseUrl).port
 const prompt =
-  process.env.SMOKE_BROKCODE_BROWSER_PROMPT ||
-  'Build a polished bakery landing page with a newsletter form.'
+  process.env.SMOKE_BROKCODE_BROWSER_PROMPT || 'Build a polished landing page'
 
 const projectId = crypto.randomUUID()
 const sessionId = crypto.randomUUID()
@@ -755,7 +754,12 @@ async function main() {
 
     const commandInput = page.getByTestId('brokcode-command-input')
     const commandSubmit = page.getByTestId('brokcode-command-submit')
-    await commandInput.fill(prompt)
+    const quickPrompt = page.getByRole('button', { name: prompt, exact: true })
+    if ((await quickPrompt.count().catch(() => 0)) > 0) {
+      await quickPrompt.first().click()
+    } else {
+      await commandInput.fill(prompt)
+    }
     await page.waitForFunction(
       () => {
         const button = document.querySelector<HTMLButtonElement>(
