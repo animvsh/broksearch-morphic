@@ -84,6 +84,39 @@ export const presentationStatusEnum = pgEnum('presentation_status', [
   'error'
 ])
 
+// Admin audit logs — every privileged admin action is recorded
+// so support, finance, and owners can answer "who did what, when."
+export const adminAuditLogs = pgTable(
+  'admin_audit_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    adminUserId: text('admin_user_id'),
+    adminEmail: text('admin_email'),
+    action: text('action').notNull(),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id'),
+    beforeValue: jsonb('before_value').$type<Record<string, unknown>>(),
+    afterValue: jsonb('after_value').$type<Record<string, unknown>>(),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => ({
+    adminUserIdx: index('admin_audit_logs_admin_user_idx').on(
+      table.adminUserId
+    ),
+    actionIdx: index('admin_audit_logs_action_idx').on(table.action),
+    targetIdx: index('admin_audit_logs_target_idx').on(
+      table.targetType,
+      table.targetId
+    ),
+    createdAtIdx: index('admin_audit_logs_created_at_idx').on(
+      table.createdAt.desc()
+    )
+  })
+)
+
 // Workspaces
 export const workspaces = pgTable('workspaces', {
   id: uuid('id').primaryKey().defaultRandom(),

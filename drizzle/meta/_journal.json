@@ -281,6 +281,13 @@
       "when": 1779000000000,
       "tag": "0039_admin_appbuilder_presentations",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1778938800000,
+      "tag": "0040_admin_audit_logs",
+      "breakpoints": true
     }
   ]
 }
