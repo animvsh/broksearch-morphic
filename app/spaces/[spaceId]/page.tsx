@@ -300,8 +300,7 @@ export default async function SpaceDetailPage({
                 <CardTitle className="text-sm">Members</CardTitle>
                 <CardDescription>
                   {data.totals.members} member
-                  {data.totals.members === 1 ? '' : 's'} ·{' '}
-                  {ownerCount} owner
+                  {data.totals.members === 1 ? '' : 's'} · {ownerCount} owner
                   {ownerCount === 1 ? '' : 's'} · {editorCount} editor
                   {editorCount === 1 ? '' : 's'} · {viewerCount} viewer
                   {viewerCount === 1 ? '' : 's'}

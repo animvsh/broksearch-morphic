@@ -778,7 +778,9 @@ async function main() {
         { timeout: 10_000 }
       )
       .catch(async error => {
-        const value = await commandInput.inputValue().catch(() => '<unreadable>')
+        const value = await commandInput
+          .inputValue()
+          .catch(() => '<unreadable>')
         const disabled = await commandSubmit
           .evaluate(button => (button as HTMLButtonElement).disabled)
           .catch(() => '<unreadable>')

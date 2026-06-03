@@ -370,7 +370,10 @@ export default function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
                   className={navButtonClass}
                   isActive={isActive('/admin/search')}
                 >
-                  <Link href="/admin/search" className="flex items-center gap-2">
+                  <Link
+                    href="/admin/search"
+                    className="flex items-center gap-2"
+                  >
                     <span className={iconShellClass}>
                       <Search className="size-4" />
                     </span>
@@ -385,7 +388,10 @@ export default function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
                   className={navButtonClass}
                   isActive={isActive('/admin/projects')}
                 >
-                  <Link href="/admin/projects" className="flex items-center gap-2">
+                  <Link
+                    href="/admin/projects"
+                    className="flex items-center gap-2"
+                  >
                     <span className={iconShellClass}>
                       <FolderKanban className="size-4" />
                     </span>
@@ -415,7 +421,10 @@ export default function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
                   className={navButtonClass}
                   isActive={isActive('/admin/health')}
                 >
-                  <Link href="/admin/health" className="flex items-center gap-2">
+                  <Link
+                    href="/admin/health"
+                    className="flex items-center gap-2"
+                  >
                     <span className={iconShellClass}>
                       <ShieldCheck className="size-4" />
                     </span>

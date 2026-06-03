@@ -814,7 +814,10 @@ function emptyLibraryData(): LibraryData {
   return {
     items: [],
     tags: [],
-    totals: { ...EMPTY_LIBRARY_TOTALS, byKind: { ...EMPTY_LIBRARY_TOTALS.byKind } }
+    totals: {
+      ...EMPTY_LIBRARY_TOTALS,
+      byKind: { ...EMPTY_LIBRARY_TOTALS.byKind }
+    }
   }
 }
 
@@ -873,7 +876,12 @@ async function getLibraryTagRows(userId: string) {
         color: string | null
         count: number
       }>
-    })) as Array<{ id: string; name: string; color: string | null; count: number }>
+    })) as Array<{
+      id: string
+      name: string
+      color: string | null
+      count: number
+    }>
   } catch (error) {
     if (canUseDevDbFallback(error)) {
       return [] as Array<{
@@ -1310,13 +1318,14 @@ export async function getSpaceData(spaceId: string): Promise<SpaceData> {
   const userId = await getCurrentUserId()
   if (!userId) return emptySpaceData(spaceId)
 
-  const [summary, members, projects, invites, recentThreads] = await Promise.all([
-    getSpaceSummaryRow(userId, spaceId),
-    getSpaceMembersRows(userId, spaceId),
-    getSpaceProjectsRows(userId, spaceId),
-    getSpaceInvitesRows(userId, spaceId),
-    getSpaceRecentThreads(userId, spaceId)
-  ])
+  const [summary, members, projects, invites, recentThreads] =
+    await Promise.all([
+      getSpaceSummaryRow(userId, spaceId),
+      getSpaceMembersRows(userId, spaceId),
+      getSpaceProjectsRows(userId, spaceId),
+      getSpaceInvitesRows(userId, spaceId),
+      getSpaceRecentThreads(userId, spaceId)
+    ])
 
   if (!summary) return emptySpaceData(spaceId)
 
@@ -1541,13 +1550,19 @@ export async function getDiscoverFeedData(): Promise<DiscoverFeedData> {
 
   const byCategory = DISCOVER_CATEGORY_ORDER.reduce<
     Record<DiscoverCategory, { label: string; items: DiscoverPublicItem[] }>
-  >((acc, category) => {
-    acc[category] = {
-      label: DISCOVER_CATEGORY_LABELS[category],
-      items: items.filter(item => item.category === category).slice(0, 6)
-    }
-    return acc
-  }, {} as Record<DiscoverCategory, { label: string; items: DiscoverPublicItem[] }>)
+  >(
+    (acc, category) => {
+      acc[category] = {
+        label: DISCOVER_CATEGORY_LABELS[category],
+        items: items.filter(item => item.category === category).slice(0, 6)
+      }
+      return acc
+    },
+    {} as Record<
+      DiscoverCategory,
+      { label: string; items: DiscoverPublicItem[] }
+    >
+  )
 
   const featured = items.filter(item => item.isFeatured).slice(0, 4)
 

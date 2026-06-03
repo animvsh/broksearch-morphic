@@ -16,7 +16,11 @@ import {
   Users
 } from 'lucide-react'
 
-import { listSpaces, type SpaceRole, type SpaceSummary } from '@/lib/actions/platform-dashboard'
+import {
+  listSpaces,
+  type SpaceRole,
+  type SpaceSummary
+} from '@/lib/actions/platform-dashboard'
 import { requireFeatureAccess } from '@/lib/auth/app-access'
 
 import { Badge } from '@/components/ui/badge'
@@ -158,12 +162,10 @@ export default async function SpacesPage() {
           <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">
-                  How spaces work
-                </CardTitle>
+                <CardTitle className="text-base">How spaces work</CardTitle>
                 <CardDescription>
-                  Each space can hold threads, projects, and presentations,
-                  with member roles and presence.
+                  Each space can hold threads, projects, and presentations, with
+                  member roles and presence.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 text-sm sm:grid-cols-3">
@@ -184,8 +186,8 @@ export default async function SpacesPage() {
                 <div>
                   <p className="font-medium">Real-time presence</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    See who is active in the space right now and jump into
-                    their current thread.
+                    See who is active in the space right now and jump into their
+                    current thread.
                   </p>
                 </div>
               </CardContent>
@@ -274,10 +276,7 @@ function SpaceCard({ space }: { space: SpaceSummary }) {
             </span>
             <div>
               <CardTitle className="text-base">
-                <Link
-                  href={`/spaces/${space.id}`}
-                  className="hover:underline"
-                >
+                <Link href={`/spaces/${space.id}`} className="hover:underline">
                   {space.name}
                 </Link>
               </CardTitle>

@@ -1186,11 +1186,7 @@ export const libraryItemStatusEnum = pgEnum('library_item_status', [
   'deleted'
 ])
 
-export const spaceRoleEnum = pgEnum('space_role', [
-  'owner',
-  'editor',
-  'viewer'
-])
+export const spaceRoleEnum = pgEnum('space_role', ['owner', 'editor', 'viewer'])
 
 export const spaceVisibilityEnum = pgEnum('space_visibility', [
   'private',
@@ -1225,7 +1221,10 @@ export const libraryTags = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull()
   },
   table => [
-    uniqueIndex('library_tags_user_id_name_unique').on(table.userId, table.name),
+    uniqueIndex('library_tags_user_id_name_unique').on(
+      table.userId,
+      table.name
+    ),
     index('library_tags_user_id_idx').on(table.userId)
   ]
 )
@@ -1283,7 +1282,10 @@ export const libraryItemTags = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull()
   },
   table => [
-    uniqueIndex('library_item_tags_unique').on(table.libraryItemId, table.tagId),
+    uniqueIndex('library_item_tags_unique').on(
+      table.libraryItemId,
+      table.tagId
+    ),
     index('library_item_tags_tag_idx').on(table.tagId)
   ]
 )

@@ -229,11 +229,12 @@ export default async function DiscoverPage({
 
         <section className="space-y-4">
           {categories.map(category => {
-            const items = activeCategory === 'all'
-              ? category.items
-              : activeCategory === category.id
+            const items =
+              activeCategory === 'all'
                 ? category.items
-                : []
+                : activeCategory === category.id
+                  ? category.items
+                  : []
             if (activeCategory !== 'all' && activeCategory !== category.id) {
               return null
             }

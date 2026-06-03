@@ -19,7 +19,10 @@ import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 interface QuickActionsProps {
   text: string
   className?: string
-  onTransform?: (mode: QuickActionMode, prompt: string) => Promise<string> | string
+  onTransform?: (
+    mode: QuickActionMode,
+    prompt: string
+  ) => Promise<string> | string
 }
 
 export type QuickActionMode =
@@ -103,7 +106,11 @@ const PROMPTS: Record<QuickActionMode, string> = {
  * template is copied to the clipboard so the user can paste it into the
  * chat as a follow-up.
  */
-export function QuickActions({ text, className, onTransform }: QuickActionsProps) {
+export function QuickActions({
+  text,
+  className,
+  onTransform
+}: QuickActionsProps) {
   const [pendingMode, setPendingMode] = useState<QuickActionMode | null>(null)
 
   if (!text?.trim()) {
@@ -149,10 +156,7 @@ export function QuickActions({ text, className, onTransform }: QuickActionsProps
 
   return (
     <div
-      className={cn(
-        'flex flex-wrap items-center gap-1.5 self-end',
-        className
-      )}
+      className={cn('flex flex-wrap items-center gap-1.5 self-end', className)}
       data-testid="quick-actions"
     >
       {QUICK_ACTIONS.map(config => {

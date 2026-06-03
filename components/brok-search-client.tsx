@@ -15,10 +15,7 @@ import { toast } from 'sonner'
 import { FollowUpChips, type FollowUpItem } from './follow-up-chips'
 import { MarkdownMessage } from './message'
 import { RelatedQuestionsPanel } from './related-questions-panel'
-import {
-  VoiceInputButton,
-  VoiceOutputButton
-} from './voice-input-button'
+import { VoiceInputButton, VoiceOutputButton } from './voice-input-button'
 
 interface Source {
   id: string
@@ -35,7 +32,14 @@ interface SearchProgress {
   classification?: string
   searchQueries: string[]
   sources: Source[]
-  status: 'idle' | 'planning' | 'searching' | 'reading' | 'answering' | 'done' | 'error'
+  status:
+    | 'idle'
+    | 'planning'
+    | 'searching'
+    | 'reading'
+    | 'answering'
+    | 'done'
+    | 'error'
   message?: string
 }
 
@@ -202,7 +206,8 @@ export function BrokSearchClient({
             const dataLines: string[] = []
             for (const line of eventLines) {
               if (line.startsWith('event:')) eventName = line.slice(6).trim()
-              else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
+              else if (line.startsWith('data:'))
+                dataLines.push(line.slice(5).trim())
             }
             const dataStr = dataLines.join('\n')
             if (dataStr === '[DONE]') continue
@@ -310,9 +315,7 @@ export function BrokSearchClient({
           </div>
         )}
 
-        {isLoading && (
-          <SearchProgressIndicator progress={progress} />
-        )}
+        {isLoading && <SearchProgressIndicator progress={progress} />}
 
         {progress.sources.length > 0 && (
           <SourceList sources={progress.sources} />
@@ -349,7 +352,9 @@ export function BrokSearchClient({
         )}
 
         {pendingQuery && progress.status === 'planning' && (
-          <p className="text-xs text-muted-foreground">Searching for: {pendingQuery}</p>
+          <p className="text-xs text-muted-foreground">
+            Searching for: {pendingQuery}
+          </p>
         )}
       </section>
 

@@ -167,8 +167,8 @@ export default async function LibraryPage({
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                 Every search thread, chat, app project, presentation, and API
-                playground session you&apos;ve created — searchable, filterable, and
-                ready to share.
+                playground session you&apos;ve created — searchable, filterable,
+                and ready to share.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -220,7 +220,8 @@ export default async function LibraryPage({
                   if (dateFrom) next.set('from', dateFrom)
                   if (dateTo) next.set('to', dateTo)
                   if (view === 'list') next.set('view', view)
-                  if (statusFilter !== 'active') next.set('status', statusFilter)
+                  if (statusFilter !== 'active')
+                    next.set('status', statusFilter)
                   for (const tag of tags) next.append('tag', tag)
                   const remaining = new Set(kinds)
                   if (active) remaining.delete(kind)
@@ -265,7 +266,8 @@ export default async function LibraryPage({
                     if (dateFrom) next.set('from', dateFrom)
                     if (dateTo) next.set('to', dateTo)
                     if (view === 'list') next.set('view', view)
-                    if (statusFilter !== 'active') next.set('status', statusFilter)
+                    if (statusFilter !== 'active')
+                      next.set('status', statusFilter)
                     for (const k of kinds) next.append('kind', k)
                     const remaining = new Set(tags)
                     if (active) remaining.delete(tag.name)
@@ -595,7 +597,9 @@ function LibraryGridCard({ item }: { item: LibraryItem }) {
           </p>
         )}
         <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>Used {item.useCount} · cited {item.citeCount}</span>
+          <span>
+            Used {item.useCount} · cited {item.citeCount}
+          </span>
           <span>{formatRelative(item.updatedAt)}</span>
         </div>
         {item.tags.length > 0 ? (
@@ -662,13 +666,11 @@ function EmptyLibrary({ query }: { query: string }) {
           <BookOpen className="size-5" />
         </span>
         <h2 className="text-lg font-semibold">
-          {query
-            ? `No items match “${query}”`
-            : 'Your library is empty'}
+          {query ? `No items match “${query}”` : 'Your library is empty'}
         </h2>
         <p className="max-w-sm text-sm text-muted-foreground">
-          Search threads, chats, app projects, presentations, and API
-          playground sessions will appear here as you create them.
+          Search threads, chats, app projects, presentations, and API playground
+          sessions will appear here as you create them.
         </p>
         <Button asChild>
           <Link href="/">

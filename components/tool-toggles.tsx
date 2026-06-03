@@ -2,14 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
-import {
-  Code2,
-  Eye,
-  Globe,
-  Search,
-  Sparkles,
-  Wrench
-} from 'lucide-react'
+import { Code2, Eye, Globe, Search, Sparkles, Wrench } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { getCookie, setCookie } from '@/lib/utils/cookies'
@@ -145,16 +138,17 @@ export function ToolToggles({ className, onChange }: ToolTogglesProps) {
             className={cn(
               'inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[11px] font-medium transition-colors',
               isActive
-                ? cn('bg-zinc-950 text-white shadow-sm', toggle_.color, 'bg-opacity-90')
+                ? cn(
+                    'bg-zinc-950 text-white shadow-sm',
+                    toggle_.color,
+                    'bg-opacity-90'
+                  )
                 : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700'
             )}
             data-testid={`tool-toggle-${toggle_.key}`}
           >
             <Icon
-              className={cn(
-                'size-3',
-                isActive ? 'text-white' : toggle_.color
-              )}
+              className={cn('size-3', isActive ? 'text-white' : toggle_.color)}
             />
             <span>{toggle_.label}</span>
             {toggle_.key === 'browse' && isActive ? (

@@ -131,8 +131,9 @@ describe('presentation API routes', () => {
       callback(tx)
     )
 
-    const { GET } =
-      await import('@/app/api/presentations/share/[shareId]/route')
+    const { GET } = await import(
+      '@/app/api/presentations/share/[shareId]/route'
+    )
     const response = await GET(
       new Request('http://localhost/api/presentations/share/abcDEF1234') as any,
       routeParams({ shareId: 'abcDEF1234' })
@@ -153,8 +154,9 @@ describe('presentation API routes', () => {
       callback(tx)
     )
 
-    const { GET } =
-      await import('@/app/api/presentations/share/[shareId]/route')
+    const { GET } = await import(
+      '@/app/api/presentations/share/[shareId]/route'
+    )
     const response = await GET(
       new Request('http://localhost/api/presentations/share/missing1') as any,
       routeParams({ shareId: 'missing1' })
