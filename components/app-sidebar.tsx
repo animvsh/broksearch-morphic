@@ -10,12 +10,15 @@ import {
   Code2,
   Compass,
   FlaskConical,
+  FolderKanban,
+  ListTree,
   Mail,
   PanelLeft,
   PenLine,
   PlugZap,
   Plus,
   Presentation,
+  ScrollText,
   Search,
   ShieldCheck,
   TerminalSquare,
@@ -328,15 +331,75 @@ export default function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              tooltip="Brok API"
+              tooltip="Search admin"
               className={navButtonClass}
-              isActive={isActive('/admin/brok')}
+              isActive={isActive('/admin/search')}
             >
-              <Link href="/admin/brok" className="flex items-center gap-2">
+              <Link href="/admin/search" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <Search className="size-4" />
+                </span>
+                <span className="flex-1">Search</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="All projects"
+              className={navButtonClass}
+              isActive={isActive('/admin/projects')}
+            >
+              <Link href="/admin/projects" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <FolderKanban className="size-4" />
+                </span>
+                <span className="flex-1">All Projects</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Global logs"
+              className={navButtonClass}
+              isActive={isActive('/admin/logs')}
+            >
+              <Link href="/admin/logs" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <ListTree className="size-4" />
+                </span>
+                <span className="flex-1">Global Logs</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Audit"
+              className={navButtonClass}
+              isActive={isActive('/admin/health') || isActive('/admin/brok')}
+            >
+              <Link href="/admin/health" className="flex items-center gap-2">
                 <span className={iconShellClass}>
                   <ShieldCheck className="size-4" />
                 </span>
-                <span className="flex-1">Brok API</span>
+                <span className="flex-1">Audit</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Costs"
+              className={navButtonClass}
+              isActive={isActive('/admin/costs')}
+            >
+              <Link href="/admin/costs" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <ScrollText className="size-4" />
+                </span>
+                <span className="flex-1">Costs</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
