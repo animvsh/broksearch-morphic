@@ -22,6 +22,7 @@ import {
   ScrollText,
   Search,
   ShieldCheck,
+  Sparkles,
   TerminalSquare,
   Users
 } from 'lucide-react'
@@ -63,6 +64,7 @@ export default function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
     pathname.startsWith('/brokcode') && !pathname.startsWith('/brokcode/tui')
   const isBrokCodeGroupActive =
     pathname.startsWith('/brokcode') || pathname.startsWith('/playground')
+  const isBuildActive = pathname === '/build' || pathname.startsWith('/build/')
 
   return (
     <Sidebar
@@ -192,6 +194,21 @@ export default function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
                   <Presentation className="size-4" />
                 </span>
                 <span className="flex-1">Presentations</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Build"
+              className={navButtonClass}
+              isActive={isBuildActive}
+            >
+              <Link href="/build" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <Sparkles className="size-4" />
+                </span>
+                <span className="flex-1">Build</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
