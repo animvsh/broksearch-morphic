@@ -19,9 +19,11 @@ import { PwaLifecycle } from '@/components/pwa-lifecycle'
 
 export function AppChrome({
   user,
+  isAdmin = false,
   children
 }: {
   user: User | null
+  isAdmin?: boolean
   children: React.ReactNode
 }) {
   const pathname = usePathname()
@@ -74,7 +76,7 @@ export function AppChrome({
       open={sidebarState.open}
       onOpenChange={setSidebarOpen}
     >
-      <AppSidebar />
+      <AppSidebar isAdmin={isAdmin} />
       <KeyboardShortcutHandler />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header user={user} />

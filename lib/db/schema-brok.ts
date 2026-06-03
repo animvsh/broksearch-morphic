@@ -22,6 +22,31 @@ export const planEnum = pgEnum('plan', [
   'scale',
   'enterprise'
 ])
+export const appProjectStatusEnum = pgEnum('app_project_status', [
+  'draft',
+  'generating',
+  'preview_ready',
+  'build_failed',
+  'exported',
+  'deleted',
+  'suspended'
+])
+export const appGenerationStatusEnum = pgEnum('app_generation_status', [
+  'started',
+  'completed',
+  'failed'
+])
+export const appExportStatusEnum = pgEnum('app_export_status', [
+  'pending',
+  'processing',
+  'completed',
+  'failed'
+])
+export const presentationShareStatusEnum = pgEnum('presentation_share_status', [
+  'active',
+  'revoked',
+  'expired'
+])
 export const keyStatusEnum = pgEnum('key_status', [
   'active',
   'paused',
@@ -585,6 +610,9 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
   brokCodeVersions: many(brokCodeVersions),
   brokCodeProjects: many(brokCodeProjects),
   brokCodeRuntimeSandboxes: many(brokCodeRuntimeSandboxes),
+  brokCodeGenerations: many(brokCodeGenerations),
+  brokCodeBuilds: many(brokCodeBuilds),
+  brokCodeExports: many(brokCodeExports),
   connectorActionRuns: many(connectorActionRuns)
 }))
 
@@ -658,7 +686,10 @@ export const brokCodeProjectsRelations = relations(
     }),
     files: many(brokCodeProjectFiles),
     deployments: many(brokCodeDeployments),
-    runtimeSandboxes: many(brokCodeRuntimeSandboxes)
+    runtimeSandboxes: many(brokCodeRuntimeSandboxes),
+    generations: many(brokCodeGenerations),
+    builds: many(brokCodeBuilds),
+    exports: many(brokCodeExports)
   })
 )
 
@@ -897,12 +928,131 @@ export const presentationExports = pgTable(
   ]
 )
 
+export const presentationShares = pgTable(
+  'presentation_shares',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    presentationId: uuid('presentation_id')
+      .notNull()
+      .references(() => presentations.id, { onDelete: 'cascade' }),
+    shareId: text('share_id').notNull(),
+    isPublic: boolean('is_public').default(false).notNull(),
+    status: presentationShareStatusEnum('status').default('active').notNull(),
+    viewCount: integer('view_count').default(0).notNull(),
+    lastViewedAt: timestamp('last_viewed_at'),
+    expiresAt: timestamp('expires_at'),
+    revokedAt: timestamp('revoked_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    uniqueIndex('presentation_shares_share_id_unique').on(table.shareId),
+    index('presentation_shares_presentation_id_idx').on(table.presentationId),
+    index('presentation_shares_status_idx').on(table.status)
+  ]
+)
+
+export const brokCodeGenerations = pgTable(
+  'brokcode_generations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => brokCodeProjects.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    userId: text('user_id').notNull(),
+    prompt: text('prompt').notNull(),
+    model: text('model').notNull(),
+    inputTokens: integer('input_tokens').default(0).notNull(),
+    outputTokens: integer('output_tokens').default(0).notNull(),
+    costUsd: decimal('cost_usd', { precision: 10, scale: 6 })
+      .default('0')
+      .notNull(),
+    filesChanged: jsonb('files_changed')
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    buildResult: text('build_result').default('pending'),
+    status: appGenerationStatusEnum('status').default('started').notNull(),
+    errorCode: text('error_code'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    index('brokcode_generations_project_idx').on(table.projectId),
+    index('brokcode_generations_workspace_idx').on(table.workspaceId),
+    index('brokcode_generations_user_idx').on(table.userId),
+    index('brokcode_generations_status_idx').on(table.status),
+    index('brokcode_generations_created_at_idx').on(table.createdAt.desc())
+  ]
+)
+
+export const brokCodeBuilds = pgTable(
+  'brokcode_builds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => brokCodeProjects.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    userId: text('user_id').notNull(),
+    buildCommand: text('build_command'),
+    installCommand: text('install_command'),
+    status: text('status').default('queued').notNull(),
+    durationMs: integer('duration_ms').default(0).notNull(),
+    installLogs: text('install_logs'),
+    typeErrors: jsonb('type_errors').$type<unknown[]>().default([]),
+    viteErrors: jsonb('vite_errors').$type<unknown[]>().default([]),
+    repairAttempts: integer('repair_attempts').default(0).notNull(),
+    finalStatus: text('final_status'),
+    errorCode: text('error_code'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    index('brokcode_builds_project_idx').on(table.projectId),
+    index('brokcode_builds_workspace_idx').on(table.workspaceId),
+    index('brokcode_builds_status_idx').on(table.status),
+    index('brokcode_builds_created_at_idx').on(table.createdAt.desc())
+  ]
+)
+
+export const brokCodeExports = pgTable(
+  'brokcode_exports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => brokCodeProjects.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    userId: text('user_id').notNull(),
+    exportType: text('export_type').notNull(),
+    fileUrl: text('file_url'),
+    status: appExportStatusEnum('status').default('pending').notNull(),
+    errorCode: text('error_code'),
+    costUsd: decimal('cost_usd', { precision: 10, scale: 6 })
+      .default('0')
+      .notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    index('brokcode_exports_project_idx').on(table.projectId),
+    index('brokcode_exports_workspace_idx').on(table.workspaceId),
+    index('brokcode_exports_status_idx').on(table.status)
+  ]
+)
+
 export const presentationsRelations = relations(presentations, ({ many }) => ({
   slides: many(presentationSlides),
   outline: many(presentationOutlines),
   assets: many(presentationAssets),
   generations: many(presentationGenerations),
-  exports: many(presentationExports)
+  exports: many(presentationExports),
+  shares: many(presentationShares)
 }))
 
 export const presentationSlidesRelations = relations(
@@ -956,6 +1106,55 @@ export const presentationExportsRelations = relations(
     presentation: one(presentations, {
       fields: [presentationExports.presentationId],
       references: [presentations.id]
+    })
+  })
+)
+
+export const presentationSharesRelations = relations(
+  presentationShares,
+  ({ one }) => ({
+    presentation: one(presentations, {
+      fields: [presentationShares.presentationId],
+      references: [presentations.id]
+    })
+  })
+)
+
+export const brokCodeGenerationsRelations = relations(
+  brokCodeGenerations,
+  ({ one }) => ({
+    project: one(brokCodeProjects, {
+      fields: [brokCodeGenerations.projectId],
+      references: [brokCodeProjects.id]
+    }),
+    workspace: one(workspaces, {
+      fields: [brokCodeGenerations.workspaceId],
+      references: [workspaces.id]
+    })
+  })
+)
+
+export const brokCodeBuildsRelations = relations(brokCodeBuilds, ({ one }) => ({
+  project: one(brokCodeProjects, {
+    fields: [brokCodeBuilds.projectId],
+    references: [brokCodeProjects.id]
+  }),
+  workspace: one(workspaces, {
+    fields: [brokCodeBuilds.workspaceId],
+    references: [workspaces.id]
+  })
+}))
+
+export const brokCodeExportsRelations = relations(
+  brokCodeExports,
+  ({ one }) => ({
+    project: one(brokCodeProjects, {
+      fields: [brokCodeExports.projectId],
+      references: [brokCodeProjects.id]
+    }),
+    workspace: one(workspaces, {
+      fields: [brokCodeExports.workspaceId],
+      references: [workspaces.id]
     })
   })
 )
