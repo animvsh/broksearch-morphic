@@ -5,12 +5,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import {
+  Activity,
   BookOpen,
   Building2,
   Code2,
   Compass,
   FlaskConical,
   FolderKanban,
+  KeyRound,
   LayoutGrid,
   ListTree,
   Mail,
@@ -65,6 +67,7 @@ export default function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const isBrokCodeGroupActive =
     pathname.startsWith('/brokcode') || pathname.startsWith('/playground')
   const isBuildActive = pathname === '/build' || pathname.startsWith('/build/')
+  const isApiManagerActive = pathname.startsWith('/api-platform/')
 
   return (
     <Sidebar
@@ -272,6 +275,98 @@ export default function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
                       <TerminalSquare className="size-4" />
                     </span>
                     <span className="flex-1">TUI</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            </SidebarMenuSub>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="API Manager"
+              className={navButtonClass}
+              isActive={isApiManagerActive}
+            >
+              <Link
+                href="/api-platform/keys"
+                className="flex items-center gap-2"
+              >
+                <span className={iconShellClass}>
+                  <KeyRound className="size-4" />
+                </span>
+                <span className="flex-1">API Manager</span>
+              </Link>
+            </SidebarMenuButton>
+            <SidebarMenuSub>
+              <SidebarMenuSubItem>
+                <SidebarMenuSubButton
+                  asChild
+                  size="sm"
+                  className={subButtonClass}
+                  isActive={isActive('/api-platform/keys')}
+                >
+                  <Link
+                    href="/api-platform/keys"
+                    className="flex items-center gap-2"
+                  >
+                    <span className={subIconShellClass}>
+                      <KeyRound className="size-4" />
+                    </span>
+                    <span className="flex-1">API Keys</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+              <SidebarMenuSubItem>
+                <SidebarMenuSubButton
+                  asChild
+                  size="sm"
+                  className={subButtonClass}
+                  isActive={isActive('/api-platform/usage')}
+                >
+                  <Link
+                    href="/api-platform/usage"
+                    className="flex items-center gap-2"
+                  >
+                    <span className={subIconShellClass}>
+                      <Activity className="size-4" />
+                    </span>
+                    <span className="flex-1">Usage</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+              <SidebarMenuSubItem>
+                <SidebarMenuSubButton
+                  asChild
+                  size="sm"
+                  className={subButtonClass}
+                  isActive={isActive('/api-platform/logs')}
+                >
+                  <Link
+                    href="/api-platform/logs"
+                    className="flex items-center gap-2"
+                  >
+                    <span className={subIconShellClass}>
+                      <ScrollText className="size-4" />
+                    </span>
+                    <span className="flex-1">Logs</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+              <SidebarMenuSubItem>
+                <SidebarMenuSubButton
+                  asChild
+                  size="sm"
+                  className={subButtonClass}
+                  isActive={isActive('/api-platform/playground')}
+                >
+                  <Link
+                    href="/api-platform/playground"
+                    className="flex items-center gap-2"
+                  >
+                    <span className={subIconShellClass}>
+                      <FlaskConical className="size-4" />
+                    </span>
+                    <span className="flex-1">Playground</span>
                   </Link>
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>

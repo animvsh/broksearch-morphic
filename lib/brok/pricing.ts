@@ -1,27 +1,69 @@
 /**
- * Centralized pricing rules for the Brok developer API.
+ * Brok pricing utilities.
  *
- * All v1 routes (chat, search, code) read from this module so that a markup
- * change is a single edit rather than a cross-repo find-and-replace.
+ * Centralises cost calculations for the search pipeline so route handlers can
+ * share a single source of truth instead of duplicating the formula.
+ *
+ * Rates are expressed in USD. Defaults reflect the public search pricing
+ * model used prior to the /api-platform/* consolidation and can be overridden
+ * through environment variables for self-hosted deployments.
  */
 
-export const BROK_BILLING_MARKUP = 1.5
+const DEFAULT_SEARCH_COST_PER_QUERY_USD = 0.001
+const DEFAULT_TOKEN_COST_PER_MILLION_USD = 0.1
+const DEFAULT_BROK_MARKUP = 1.5
 
-export const SEARCH_BILLING = {
-  perQueryUsd: 0.001,
-  perMillionInputTokensUsd: 0.1
+function readPositiveNumber(envName: string, fallback: number): number {
+  const raw = process.env[envName]
+  if (!raw) return fallback
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
 }
 
+function searchCostPerQueryUsd() {
+  return readPositiveNumber(
+    'BROK_SEARCH_COST_PER_QUERY_USD',
+    DEFAULT_SEARCH_COST_PER_QUERY_USD
+  )
+}
+
+function tokenCostPerMillionUsd() {
+  return readPositiveNumber(
+    'BROK_TOKEN_COST_PER_MILLION_USD',
+    DEFAULT_TOKEN_COST_PER_MILLION_USD
+  )
+}
+
+function brokMarkupMultiplier() {
+  return readPositiveNumber('BROK_MARKUP_MULTIPLIER', DEFAULT_BROK_MARKUP)
+}
+
+/**
+ * Calculate the upstream (provider) cost of a search request in USD.
+ *
+ * Formula: (queries * $0.001) + (tokensUsed / 1_000_000 * $0.1)
+ */
 export function calculateSearchProviderCostUsd(
   searchQueries: number,
-  inputTokens: number
+  tokensUsed: number
 ): number {
-  const queryCost = SEARCH_BILLING.perQueryUsd * searchQueries
-  const tokenCost =
-    (inputTokens / 1_000_000) * SEARCH_BILLING.perMillionInputTokensUsd
+  const safeQueries = Math.max(0, Math.floor(searchQueries ?? 0))
+  const safeTokens = Math.max(0, Math.floor(tokensUsed ?? 0))
+
+  const queryCost = safeQueries * searchCostPerQueryUsd()
+  const tokenCost = (safeTokens / 1_000_000) * tokenCostPerMillionUsd()
+
   return queryCost + tokenCost
 }
 
+/**
+ * Apply the Brok markup (default 1.5x) to a provider cost to get the billed
+ * amount in USD. Markups of 1.0 or below disable the markup entirely so
+ * internal tools can record passthrough pricing.
+ */
 export function applyBrokMarkup(providerCostUsd: number): number {
-  return providerCostUsd * BROK_BILLING_MARKUP
+  const safeCost = Math.max(0, providerCostUsd ?? 0)
+  const markup = brokMarkupMultiplier()
+  if (markup <= 1) return safeCost
+  return safeCost * markup
 }
