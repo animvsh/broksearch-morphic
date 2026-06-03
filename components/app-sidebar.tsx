@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 
 import {
   BookOpen,
+  Building2,
   Code2,
   Compass,
   FlaskConical,
@@ -16,7 +17,9 @@ import {
   Plus,
   Presentation,
   Search,
-  TerminalSquare
+  ShieldCheck,
+  TerminalSquare,
+  Users
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -283,6 +286,57 @@ export default function AppSidebar() {
                   <PlugZap className="size-4" />
                 </span>
                 <span className="flex-1">Integrations</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-data-[collapsible=icon]:hidden">
+            Admin
+          </div>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Users"
+              className={navButtonClass}
+              isActive={isActive('/admin/users')}
+            >
+              <Link href="/admin/users" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <Users className="size-4" />
+                </span>
+                <span className="flex-1">Users</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Workspaces"
+              className={navButtonClass}
+              isActive={isActive('/admin/workspaces')}
+            >
+              <Link
+                href="/admin/workspaces"
+                className="flex items-center gap-2"
+              >
+                <span className={iconShellClass}>
+                  <Building2 className="size-4" />
+                </span>
+                <span className="flex-1">Workspaces</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Brok API"
+              className={navButtonClass}
+              isActive={isActive('/admin/brok')}
+            >
+              <Link href="/admin/brok" className="flex items-center gap-2">
+                <span className={iconShellClass}>
+                  <ShieldCheck className="size-4" />
+                </span>
+                <span className="flex-1">Brok API</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
