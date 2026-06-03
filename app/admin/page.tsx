@@ -131,6 +131,45 @@ export default function AdminPage() {
           </p>
         </div>
 
+        <div className="mb-8 flex flex-wrap gap-2">
+          <a
+            href="/admin/costs"
+            className="rounded-md border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+          >
+            Costs
+          </a>
+          <a
+            href="/admin/billing"
+            className="rounded-md border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+          >
+            Billing
+          </a>
+          <a
+            href="/admin/brok"
+            className="rounded-md border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+          >
+            Brok API
+          </a>
+          <a
+            href="/admin/brok/logs"
+            className="rounded-md border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+          >
+            Logs
+          </a>
+          <a
+            href="/admin/brok/api-keys"
+            className="rounded-md border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+          >
+            API Keys
+          </a>
+          <a
+            href="/admin/brok/providers"
+            className="rounded-md border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+          >
+            Providers
+          </a>
+        </div>
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-card rounded-lg border p-6">

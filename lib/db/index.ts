@@ -31,7 +31,7 @@ if (!hasRealDatabaseUrl && !canUseBuildDatabaseFallback) {
     )
   } else {
     throw new Error(
-        'DATABASE_URL or DATABASE_RESTRICTED_URL environment variable is not set'
+      'DATABASE_URL or DATABASE_RESTRICTED_URL environment variable is not set'
     )
   }
 }

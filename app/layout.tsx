@@ -4,6 +4,7 @@ import Script from 'next/script'
 
 import { Analytics } from '@vercel/analytics/next'
 
+import { requireAdminAccess } from '@/lib/auth/admin'
 import { UserProvider } from '@/lib/contexts/user-context'
 import { createClient } from '@/lib/supabase/server'
 import { cn } from '@/lib/utils'
@@ -90,6 +91,8 @@ export default async function RootLayout({
     user = supabaseUser
   }
 
+  const adminAccess = await requireAdminAccess()
+
   const publicEnvScript =
     supabaseUrl && supabaseAnonKey
       ? `window.__BROK_PUBLIC_ENV__=${JSON.stringify({
@@ -120,7 +123,9 @@ export default async function RootLayout({
             />
           ) : null}
           <UserProvider hasUser={!!user}>
-            <AppChrome user={user}>{children}</AppChrome>
+            <AppChrome user={user} isAdmin={adminAccess.ok}>
+              {children}
+            </AppChrome>
           </UserProvider>
           <Toaster />
           {enableVercelAnalytics ? <Analytics /> : null}

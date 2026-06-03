@@ -8,7 +8,13 @@ export interface RateLimitResult {
   current: number
   limit: number
   resetAt: number // Unix timestamp
-  reason?: 'over_limit' | 'rate_limit_check_failed'
+  /**
+   * Optional diagnostic reason for the rate-limit decision. Used by callers
+   * to distinguish a true overflow (`'rate_limit_exceeded'`) from a
+   * check-engine failure (`'rate_limit_check_failed'`) when surfacing 503 vs
+   * 429 responses to API consumers.
+   */
+  reason?: 'rate_limit_exceeded' | 'rate_limit_check_failed'
 }
 
 export interface RateLimitConfig {
@@ -56,7 +62,8 @@ export async function checkRateLimit(
       allowed,
       current: currentCount,
       limit: rpmLimit,
-      resetAt
+      resetAt,
+      reason: allowed ? undefined : 'rate_limit_exceeded'
     }
   } catch (error) {
     console.error('Rate limit check error:', error)
