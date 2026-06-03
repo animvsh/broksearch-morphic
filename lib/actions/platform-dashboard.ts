@@ -698,3 +698,867 @@ export async function getUsageDashboardData(
     }
   }
 }
+
+// ============================================================================
+// Brok Library
+// ============================================================================
+
+export type LibraryItemKind =
+  | 'search'
+  | 'chat'
+  | 'project'
+  | 'presentation'
+  | 'api_session'
+
+export type LibraryItemStatus = 'active' | 'archived' | 'shared' | 'deleted'
+
+export type LibrarySort = 'recent' | 'most_used' | 'most_cited'
+
+export type LibraryItem = {
+  id: string
+  kind: LibraryItemKind
+  title: string
+  summary: string | null
+  href: string
+  model: string | null
+  status: LibraryItemStatus
+  isPublic: boolean
+  useCount: number
+  citeCount: number
+  tags: string[]
+  updatedAt: Date
+  lastUsedAt: Date
+}
+
+export type LibraryTagSummary = {
+  id: string
+  name: string
+  color: string | null
+  count: number
+}
+
+export type LibraryData = {
+  items: LibraryItem[]
+  tags: LibraryTagSummary[]
+  totals: {
+    items: number
+    archived: number
+    public: number
+    byKind: Record<LibraryItemKind, number>
+  }
+}
+
+const LIBRARY_KIND_LABELS: Record<LibraryItemKind, string> = {
+  search: 'Search',
+  chat: 'Chat',
+  project: 'App project',
+  presentation: 'Presentation',
+  api_session: 'API session'
+}
+
+const LIBRARY_KIND_ORDER: LibraryItemKind[] = [
+  'search',
+  'chat',
+  'project',
+  'presentation',
+  'api_session'
+]
+
+export function getLibraryKindLabel(kind: LibraryItemKind) {
+  return LIBRARY_KIND_LABELS[kind]
+}
+
+export function getLibraryKindOrder() {
+  return [...LIBRARY_KIND_ORDER]
+}
+
+const LIBRARY_SORT_LABELS: Record<LibrarySort, string> = {
+  recent: 'Most recent',
+  most_used: 'Most used',
+  most_cited: 'Most cited'
+}
+
+export function getLibrarySortLabel(sort: LibrarySort) {
+  return LIBRARY_SORT_LABELS[sort]
+}
+
+type LibraryRow = {
+  id: string
+  kind: LibraryItemKind
+  title: string
+  summary: string | null
+  href: string
+  model: string | null
+  status: LibraryItemStatus
+  isPublic: boolean
+  useCount: number
+  citeCount: number
+  updatedAt: Date
+  lastUsedAt: Date
+}
+
+const EMPTY_LIBRARY_TOTALS: LibraryData['totals'] = {
+  items: 0,
+  archived: 0,
+  public: 0,
+  byKind: {
+    search: 0,
+    chat: 0,
+    project: 0,
+    presentation: 0,
+    api_session: 0
+  }
+}
+
+function emptyLibraryData(): LibraryData {
+  return {
+    items: [],
+    tags: [],
+    totals: { ...EMPTY_LIBRARY_TOTALS, byKind: { ...EMPTY_LIBRARY_TOTALS.byKind } }
+  }
+}
+
+async function getLibraryItemRows(userId: string) {
+  try {
+    return (await withRLS(userId, async tx => {
+      const result = await tx.execute(sql`
+        select
+          li.id,
+          li.kind,
+          li.title,
+          li.summary,
+          li.href,
+          li.model,
+          li.status,
+          li.is_public as "isPublic",
+          li.use_count as "useCount",
+          li.cite_count as "citeCount",
+          li.updated_at as "updatedAt",
+          li.last_used_at as "lastUsedAt"
+        from library_items li
+        where li.user_id = ${userId}
+          and li.status <> 'deleted'
+        order by li.updated_at desc
+        limit 200
+      `)
+      return result as unknown as LibraryRow[]
+    })) as LibraryRow[]
+  } catch (error) {
+    if (canUseDevDbFallback(error)) {
+      return [] as LibraryRow[]
+    }
+    throw error
+  }
+}
+
+async function getLibraryTagRows(userId: string) {
+  try {
+    return (await withRLS(userId, async tx => {
+      const result = await tx.execute(sql`
+        select
+          lt.id,
+          lt.name,
+          lt.color,
+          count(lit.library_item_id)::int as count
+        from library_tags lt
+        left join library_item_tags lit on lit.tag_id = lt.id
+        where lt.user_id = ${userId}
+        group by lt.id, lt.name, lt.color
+        order by count desc nulls last, lt.name asc
+        limit 50
+      `)
+      return result as unknown as Array<{
+        id: string
+        name: string
+        color: string | null
+        count: number
+      }>
+    })) as Array<{ id: string; name: string; color: string | null; count: number }>
+  } catch (error) {
+    if (canUseDevDbFallback(error)) {
+      return [] as Array<{
+        id: string
+        name: string
+        color: string | null
+        count: number
+      }>
+    }
+    throw error
+  }
+}
+
+async function getLibraryTagAssignments(userId: string) {
+  try {
+    return (await withRLS(userId, async tx => {
+      const result = await tx.execute(sql`
+        select
+          lit.library_item_id as "libraryItemId",
+          lt.name
+        from library_item_tags lit
+        inner join library_tags lt on lt.id = lit.tag_id
+        inner join library_items li on li.id = lit.library_item_id
+        where li.user_id = ${userId}
+      `)
+      return result as unknown as Array<{ libraryItemId: string; name: string }>
+    })) as Array<{ libraryItemId: string; name: string }>
+  } catch (error) {
+    if (canUseDevDbFallback(error)) {
+      return [] as Array<{ libraryItemId: string; name: string }>
+    }
+    throw error
+  }
+}
+
+function applyLibraryFilters(
+  rows: LibraryRow[],
+  filters: {
+    query?: string
+    kinds?: LibraryItemKind[]
+    statuses?: LibraryItemStatus[]
+    tagIds?: string[]
+    tagNames?: string[]
+    sort?: LibrarySort
+    dateFrom?: Date
+    dateTo?: Date
+  },
+  tagAssignments: Array<{ libraryItemId: string; name: string }>,
+  tagLookup: Map<string, string>
+) {
+  const query = filters.query?.trim().toLowerCase()
+  const kinds = new Set(filters.kinds ?? [])
+  const statuses = new Set(filters.statuses ?? [])
+  const tagNames = new Set(filters.tagNames ?? [])
+  const tagIds = new Set(filters.tagIds ?? [])
+
+  const tagNamesByItemId = new Map<string, Set<string>>()
+  for (const assignment of tagAssignments) {
+    const list = tagNamesByItemId.get(assignment.libraryItemId) ?? new Set()
+    list.add(assignment.name)
+    tagNamesByItemId.set(assignment.libraryItemId, list)
+  }
+
+  let filtered = rows.filter(row => {
+    if (kinds.size > 0 && !kinds.has(row.kind)) return false
+    if (statuses.size > 0 && !statuses.has(row.status)) return false
+    if (filters.dateFrom && row.updatedAt < filters.dateFrom) return false
+    if (filters.dateTo && row.updatedAt > filters.dateTo) return false
+    if (tagIds.size > 0) {
+      // filter by tag id is not currently stored per item; reserved for future
+      return true
+    }
+    if (tagNames.size > 0) {
+      const itemTags = tagNamesByItemId.get(row.id) ?? new Set()
+      const matches = Array.from(tagNames).some(name => itemTags.has(name))
+      if (!matches) return false
+    }
+    if (query) {
+      const haystack =
+        `${row.title} ${row.summary ?? ''} ${row.model ?? ''}`.toLowerCase()
+      if (!haystack.includes(query)) return false
+    }
+    return true
+  })
+
+  const sort = filters.sort ?? 'recent'
+  filtered = [...filtered].sort((a, b) => {
+    if (sort === 'most_used') {
+      if (b.useCount !== a.useCount) return b.useCount - a.useCount
+      return b.updatedAt.getTime() - a.updatedAt.getTime()
+    }
+    if (sort === 'most_cited') {
+      if (b.citeCount !== a.citeCount) return b.citeCount - a.citeCount
+      return b.updatedAt.getTime() - a.updatedAt.getTime()
+    }
+    return b.updatedAt.getTime() - a.updatedAt.getTime()
+  })
+
+  return filtered.map(row => ({
+    ...row,
+    tags: Array.from(tagNamesByItemId.get(row.id) ?? [])
+  }))
+}
+
+export type LibraryFiltersInput = {
+  query?: string
+  kinds?: LibraryItemKind[]
+  statuses?: LibraryItemStatus[]
+  tagNames?: string[]
+  sort?: LibrarySort
+  dateFrom?: string
+  dateTo?: string
+}
+
+export async function getLibraryData(
+  filters: LibraryFiltersInput = {}
+): Promise<LibraryData> {
+  const userId = await getCurrentUserId()
+  if (!userId) return emptyLibraryData()
+
+  const [itemRows, tagRows, tagAssignments] = await Promise.all([
+    getLibraryItemRows(userId),
+    getLibraryTagRows(userId),
+    getLibraryTagAssignments(userId)
+  ])
+
+  const tagLookup = new Map<string, string>()
+  for (const tag of tagRows) {
+    tagLookup.set(tag.id, tag.name)
+  }
+
+  const dateFrom = filters.dateFrom ? new Date(filters.dateFrom) : undefined
+  const dateTo = filters.dateTo ? new Date(filters.dateTo) : undefined
+
+  const items = applyLibraryFilters(
+    itemRows,
+    {
+      query: filters.query,
+      kinds: filters.kinds,
+      statuses: filters.statuses,
+      tagNames: filters.tagNames,
+      sort: filters.sort,
+      dateFrom,
+      dateTo
+    },
+    tagAssignments,
+    tagLookup
+  )
+
+  const totals: LibraryData['totals'] = {
+    items: items.length,
+    archived: items.filter(item => item.status === 'archived').length,
+    public: items.filter(item => item.isPublic).length,
+    byKind: LIBRARY_KIND_ORDER.reduce(
+      (acc, kind) => {
+        acc[kind] = items.filter(item => item.kind === kind).length
+        return acc
+      },
+      {} as Record<LibraryItemKind, number>
+    )
+  }
+
+  return {
+    items,
+    tags: tagRows.map(tag => ({
+      id: tag.id,
+      name: tag.name,
+      color: tag.color,
+      count: Number(tag.count) || 0
+    })),
+    totals
+  }
+}
+
+// ============================================================================
+// Brok Spaces
+// ============================================================================
+
+export type SpaceRole = 'owner' | 'editor' | 'viewer'
+export type SpaceVisibility = 'private' | 'link' | 'public'
+
+export type SpaceSummary = {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  visibility: SpaceVisibility
+  iconColor: string | null
+  role: SpaceRole
+  memberCount: number
+  threadCount: number
+  projectCount: number
+  presentationCount: number
+  lastActivityAt: Date
+  createdAt: Date
+  updatedAt: Date
+}
+
+export type SpaceMember = {
+  id: string
+  userId: string
+  email: string | null
+  displayName: string | null
+  role: SpaceRole
+  lastActiveAt: Date | null
+  invitedAt: Date
+  acceptedAt: Date | null
+}
+
+export type SpaceProject = {
+  id: string
+  title: string
+  description: string | null
+  status: string
+  createdBy: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export type SpaceInvite = {
+  id: string
+  email: string
+  role: SpaceRole
+  invitedBy: string
+  expiresAt: Date | null
+  createdAt: Date
+}
+
+export type SpaceData = {
+  space: SpaceSummary
+  members: SpaceMember[]
+  projects: SpaceProject[]
+  invites: SpaceInvite[]
+  recentThreads: LibraryItem[]
+  totals: {
+    members: number
+    projects: number
+    invites: number
+    threads: number
+  }
+}
+
+const EMPTY_SPACE_TOTALS: SpaceData['totals'] = {
+  members: 0,
+  projects: 0,
+  invites: 0,
+  threads: 0
+}
+
+function emptySpaceData(spaceId: string): SpaceData {
+  return {
+    space: {
+      id: spaceId,
+      slug: 'space',
+      name: 'Untitled space',
+      description: null,
+      visibility: 'private',
+      iconColor: null,
+      role: 'owner',
+      memberCount: 1,
+      threadCount: 0,
+      projectCount: 0,
+      presentationCount: 0,
+      lastActivityAt: new Date(0),
+      createdAt: new Date(0),
+      updatedAt: new Date(0)
+    },
+    members: [],
+    projects: [],
+    invites: [],
+    recentThreads: [],
+    totals: { ...EMPTY_SPACE_TOTALS }
+  }
+}
+
+async function getSpaceSummaryRow(
+  userId: string,
+  spaceId: string
+): Promise<SpaceSummary | null> {
+  try {
+    return (await withRLS(userId, async tx => {
+      const result = await tx.execute(sql`
+        select
+          s.id,
+          s.slug,
+          s.name,
+          s.description,
+          s.visibility,
+          s.icon_color as "iconColor",
+          coalesce(sm.role, 'owner') as role,
+          s.member_count as "memberCount",
+          s.thread_count as "threadCount",
+          s.project_count as "projectCount",
+          s.presentation_count as "presentationCount",
+          s.last_activity_at as "lastActivityAt",
+          s.created_at as "createdAt",
+          s.updated_at as "updatedAt"
+        from spaces s
+        left join space_members sm
+          on sm.space_id = s.id
+          and sm.user_id = ${userId}
+        where s.id = ${spaceId}::uuid
+        limit 1
+      `)
+      const rows = result as unknown as SpaceSummary[]
+      return rows[0] ?? null
+    })) as SpaceSummary | null
+  } catch (error) {
+    if (canUseDevDbFallback(error)) return null
+    throw error
+  }
+}
+
+async function getSpaceMembersRows(
+  userId: string,
+  spaceId: string
+): Promise<SpaceMember[]> {
+  try {
+    return (await withRLS(userId, async tx => {
+      const result = await tx.execute(sql`
+        select
+          id,
+          user_id as "userId",
+          email,
+          display_name as "displayName",
+          role,
+          last_active_at as "lastActiveAt",
+          invited_at as "invitedAt",
+          accepted_at as "acceptedAt"
+        from space_members
+        where space_id = ${spaceId}::uuid
+        order by role asc, invited_at asc
+      `)
+      return result as unknown as SpaceMember[]
+    })) as SpaceMember[]
+  } catch (error) {
+    if (canUseDevDbFallback(error)) return []
+    throw error
+  }
+}
+
+async function getSpaceProjectsRows(
+  userId: string,
+  spaceId: string
+): Promise<SpaceProject[]> {
+  try {
+    return (await withRLS(userId, async tx => {
+      const result = await tx.execute(sql`
+        select
+          id,
+          title,
+          description,
+          status,
+          created_by as "createdBy",
+          created_at as "createdAt",
+          updated_at as "updatedAt"
+        from space_projects
+        where space_id = ${spaceId}::uuid
+        order by updated_at desc
+        limit 100
+      `)
+      return result as unknown as SpaceProject[]
+    })) as SpaceProject[]
+  } catch (error) {
+    if (canUseDevDbFallback(error)) return []
+    throw error
+  }
+}
+
+async function getSpaceInvitesRows(
+  userId: string,
+  spaceId: string
+): Promise<SpaceInvite[]> {
+  try {
+    return (await withRLS(userId, async tx => {
+      const result = await tx.execute(sql`
+        select
+          id,
+          email,
+          role,
+          invited_by as "invitedBy",
+          expires_at as "expiresAt",
+          created_at as "createdAt"
+        from space_invites
+        where space_id = ${spaceId}::uuid
+          and accepted_at is null
+        order by created_at desc
+        limit 100
+      `)
+      return result as unknown as SpaceInvite[]
+    })) as SpaceInvite[]
+  } catch (error) {
+    if (canUseDevDbFallback(error)) return []
+    throw error
+  }
+}
+
+async function getSpaceRecentThreads(
+  userId: string,
+  spaceId: string
+): Promise<LibraryRow[]> {
+  try {
+    return (await withRLS(userId, async tx => {
+      const result = await tx.execute(sql`
+        select
+          li.id,
+          li.kind,
+          li.title,
+          li.summary,
+          li.href,
+          li.model,
+          li.status,
+          li.is_public as "isPublic",
+          li.use_count as "useCount",
+          li.cite_count as "citeCount",
+          li.updated_at as "updatedAt",
+          li.last_used_at as "lastUsedAt"
+        from library_items li
+        where li.user_id = ${userId}
+          and (li.metadata->>'spaceId')::uuid = ${spaceId}::uuid
+          and li.status <> 'deleted'
+        order by li.updated_at desc
+        limit 12
+      `)
+      return result as unknown as LibraryRow[]
+    })) as LibraryRow[]
+  } catch (error) {
+    if (canUseDevDbFallback(error)) return []
+    throw error
+  }
+}
+
+export async function getSpaceData(spaceId: string): Promise<SpaceData> {
+  const userId = await getCurrentUserId()
+  if (!userId) return emptySpaceData(spaceId)
+
+  const [summary, members, projects, invites, recentThreads] = await Promise.all([
+    getSpaceSummaryRow(userId, spaceId),
+    getSpaceMembersRows(userId, spaceId),
+    getSpaceProjectsRows(userId, spaceId),
+    getSpaceInvitesRows(userId, spaceId),
+    getSpaceRecentThreads(userId, spaceId)
+  ])
+
+  if (!summary) return emptySpaceData(spaceId)
+
+  return {
+    space: summary,
+    members,
+    projects,
+    invites,
+    recentThreads: recentThreads.map(row => ({ ...row, tags: [] })),
+    totals: {
+      members: members.length,
+      projects: projects.length,
+      invites: invites.length,
+      threads: recentThreads.length
+    }
+  }
+}
+
+export async function listSpaces(userId?: string): Promise<SpaceSummary[]> {
+  const owner = userId ?? (await getCurrentUserId())
+  if (!owner) return []
+
+  try {
+    return (await withRLS(owner, async tx => {
+      const result = await tx.execute(sql`
+        select
+          s.id,
+          s.slug,
+          s.name,
+          s.description,
+          s.visibility,
+          s.icon_color as "iconColor",
+          coalesce(sm.role, 'owner') as role,
+          s.member_count as "memberCount",
+          s.thread_count as "threadCount",
+          s.project_count as "projectCount",
+          s.presentation_count as "presentationCount",
+          s.last_activity_at as "lastActivityAt",
+          s.created_at as "createdAt",
+          s.updated_at as "updatedAt"
+        from spaces s
+        left join space_members sm
+          on sm.space_id = s.id
+          and sm.user_id = ${owner}
+        where s.owner_user_id = ${owner}
+          or sm.user_id = ${owner}
+        order by s.last_activity_at desc
+        limit 50
+      `)
+      return result as unknown as SpaceSummary[]
+    })) as SpaceSummary[]
+  } catch (error) {
+    if (canUseDevDbFallback(error)) return []
+    throw error
+  }
+}
+
+// ============================================================================
+// Brok Discover
+// ============================================================================
+
+export type DiscoverCategory =
+  | 'ai_apps'
+  | 'search'
+  | 'code'
+  | 'chat'
+  | 'presentations'
+
+export type DiscoverItemKind =
+  | 'thread'
+  | 'project'
+  | 'presentation'
+  | 'prompt'
+  | 'api_session'
+
+export type DiscoverPublicItem = {
+  id: string
+  kind: DiscoverItemKind
+  category: DiscoverCategory
+  title: string
+  summary: string | null
+  authorName: string | null
+  authorHandle: string | null
+  href: string
+  thumbnailUrl: string | null
+  likeCount: number
+  saveCount: number
+  shareCount: number
+  viewCount: number
+  isFeatured: boolean
+  publishedAt: Date
+}
+
+export type TrendingTopic = {
+  id: string
+  label: string
+  category: DiscoverCategory
+  velocity: number
+  window: '24h' | '7d'
+  rank: number
+}
+
+export type DiscoverFeedData = {
+  featured: DiscoverPublicItem[]
+  trending: TrendingTopic[]
+  byCategory: Record<
+    DiscoverCategory,
+    { label: string; items: DiscoverPublicItem[] }
+  >
+  totals: {
+    items: number
+    likes: number
+    saves: number
+  }
+}
+
+const DISCOVER_CATEGORY_LABELS: Record<DiscoverCategory, string> = {
+  ai_apps: 'AI apps',
+  search: 'Search',
+  code: 'Code',
+  chat: 'Chat',
+  presentations: 'Presentations'
+}
+
+const DISCOVER_CATEGORY_ORDER: DiscoverCategory[] = [
+  'ai_apps',
+  'search',
+  'code',
+  'chat',
+  'presentations'
+]
+
+export function getDiscoverCategoryLabel(category: DiscoverCategory) {
+  return DISCOVER_CATEGORY_LABELS[category]
+}
+
+export function getDiscoverCategoryOrder() {
+  return [...DISCOVER_CATEGORY_ORDER]
+}
+
+const EMPTY_DISCOVER_TOTALS: DiscoverFeedData['totals'] = {
+  items: 0,
+  likes: 0,
+  saves: 0
+}
+
+function emptyDiscoverFeedData(): DiscoverFeedData {
+  return {
+    featured: [],
+    trending: [],
+    byCategory: DISCOVER_CATEGORY_ORDER.reduce(
+      (acc, category) => {
+        acc[category] = { label: DISCOVER_CATEGORY_LABELS[category], items: [] }
+        return acc
+      },
+      {} as Record<
+        DiscoverCategory,
+        { label: string; items: DiscoverPublicItem[] }
+      >
+    ),
+    totals: { ...EMPTY_DISCOVER_TOTALS }
+  }
+}
+
+async function getDiscoverItemsRows(): Promise<DiscoverPublicItem[]> {
+  try {
+    const result = (await db.execute(sql`
+      select
+        di.id,
+        di.kind,
+        di.category,
+        di.title,
+        di.summary,
+        di.author_name as "authorName",
+        di.author_handle as "authorHandle",
+        di.href,
+        di.thumbnail_url as "thumbnailUrl",
+        di.like_count as "likeCount",
+        di.save_count as "saveCount",
+        di.share_count as "shareCount",
+        di.view_count as "viewCount",
+        di.is_featured as "isFeatured",
+        di.published_at as "publishedAt"
+      from discover_items di
+      order by di.published_at desc
+      limit 80
+    `)) as unknown as DiscoverPublicItem[]
+    return result
+  } catch (error) {
+    if (canUseDevDbFallback(error)) return []
+    throw error
+  }
+}
+
+async function getTrendingTopicRows(): Promise<TrendingTopic[]> {
+  try {
+    const result = (await db.execute(sql`
+      select
+        id,
+        label,
+        category,
+        velocity,
+        window,
+        rank
+      from trending_topics
+      where window = '24h'
+      order by rank asc
+      limit 24
+    `)) as unknown as TrendingTopic[]
+    return result
+  } catch (error) {
+    if (canUseDevDbFallback(error)) return []
+    throw error
+  }
+}
+
+export async function getDiscoverFeedData(): Promise<DiscoverFeedData> {
+  const [items, trending] = await Promise.all([
+    getDiscoverItemsRows(),
+    getTrendingTopicRows()
+  ])
+
+  const byCategory = DISCOVER_CATEGORY_ORDER.reduce<
+    Record<DiscoverCategory, { label: string; items: DiscoverPublicItem[] }>
+  >((acc, category) => {
+    acc[category] = {
+      label: DISCOVER_CATEGORY_LABELS[category],
+      items: items.filter(item => item.category === category).slice(0, 6)
+    }
+    return acc
+  }, {} as Record<DiscoverCategory, { label: string; items: DiscoverPublicItem[] }>)
+
+  const featured = items.filter(item => item.isFeatured).slice(0, 4)
+
+  return {
+    featured,
+    trending,
+    byCategory,
+    totals: {
+      items: items.length,
+      likes: items.reduce((sum, item) => sum + item.likeCount, 0),
+      saves: items.reduce((sum, item) => sum + item.saveCount, 0)
+    }
+  }
+}

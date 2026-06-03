@@ -288,6 +288,13 @@
       "when": 1778938800000,
       "tag": "0040_admin_audit_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1778940000000,
+      "tag": "0041_brok_library_spaces_discover",
+      "breakpoints": true
     }
   ]
 }
