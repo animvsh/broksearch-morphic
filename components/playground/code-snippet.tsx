@@ -87,12 +87,22 @@ export ANTHROPIC_MODEL="${model}"
 
   return (
     <Tabs defaultValue="curl" className="w-full">
-      <TabsList className="h-9 w-full justify-start overflow-x-auto rounded-md">
-        <TabsTrigger value="curl">curl</TabsTrigger>
-        <TabsTrigger value="codex">Codex</TabsTrigger>
-        <TabsTrigger value="claude">Claude</TabsTrigger>
-        <TabsTrigger value="javascript">JavaScript</TabsTrigger>
-        <TabsTrigger value="python">Python</TabsTrigger>
+      <TabsList className="h-auto min-h-11 w-full justify-start overflow-x-auto rounded-md">
+        <TabsTrigger value="curl" className="min-h-11">
+          curl
+        </TabsTrigger>
+        <TabsTrigger value="codex" className="min-h-11">
+          Codex
+        </TabsTrigger>
+        <TabsTrigger value="claude" className="min-h-11">
+          Claude
+        </TabsTrigger>
+        <TabsTrigger value="javascript" className="min-h-11">
+          JavaScript
+        </TabsTrigger>
+        <TabsTrigger value="python" className="min-h-11">
+          Python
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="curl" className="relative">

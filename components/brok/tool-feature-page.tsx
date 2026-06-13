@@ -253,20 +253,26 @@ export const TOOL_FEATURES: ToolFeature[] = [
   }
 ]
 
-const TOOL_FEATURE_ALIASES = {
+const FEATURE_SLUG_ALIASES: Record<string, string> = {
   'app-builder': 'brokcode',
-  'brok-presentations': 'presentations',
+  builder: 'brokcode',
+  code: 'brokcode',
+  'brok-code': 'brokcode',
   presentation: 'presentations',
-  code: 'brokcode'
-} as const
+  'brok-presentation': 'presentations',
+  'brok-presentations': 'presentations',
+  keys: 'api',
+  'api-keys': 'api',
+  platform: 'api'
+}
 
 export function resolveFeatureSlug(slug: string) {
-  return TOOL_FEATURE_ALIASES[slug as keyof typeof TOOL_FEATURE_ALIASES] ?? slug
+  return FEATURE_SLUG_ALIASES[slug] ?? slug
 }
 
 export function getToolFeature(slug: string) {
-  const canonical = resolveFeatureSlug(slug)
-  return TOOL_FEATURES.find(feature => feature.slug === canonical)
+  const resolvedSlug = resolveFeatureSlug(slug)
+  return TOOL_FEATURES.find(feature => feature.slug === resolvedSlug)
 }
 
 export function ToolFeaturePage({ feature }: { feature: ToolFeature }) {

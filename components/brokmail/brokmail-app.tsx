@@ -2002,7 +2002,7 @@ export function BrokMailApp() {
                 <Button
                   variant={connected ? 'secondary' : 'outline'}
                   size="sm"
-                  className="h-8 gap-1.5 px-2 text-xs"
+                  className="h-11 min-h-11 gap-1.5 px-2 text-xs"
                   onClick={connected ? loadComposioGmailThreads : connectGmail}
                   disabled={isConnecting || isSyncingMail}
                 >
@@ -2016,7 +2016,7 @@ export function BrokMailApp() {
                 <Button
                   variant={calendarConnected ? 'secondary' : 'outline'}
                   size="sm"
-                  className="h-8 gap-1.5 px-2 text-xs"
+                  className="h-11 min-h-11 gap-1.5 px-2 text-xs"
                   onClick={
                     calendarConnected
                       ? loadComposioCalendarEvents
@@ -2038,7 +2038,7 @@ export function BrokMailApp() {
           <div className="border-b border-zinc-200/80 bg-white px-3 py-2 lg:hidden">
             <div className="mobile-chip-row -mx-1 flex gap-2 overflow-x-auto px-1">
               <Button
-                className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs sm:gap-2 sm:text-sm"
+                className="h-11 min-h-11 shrink-0 gap-1.5 rounded-full px-3 text-xs sm:gap-2 sm:text-sm"
                 onClick={focusComposer}
               >
                 <PenLine className="size-4" />
@@ -2046,7 +2046,7 @@ export function BrokMailApp() {
               </Button>
               <Button
                 variant="outline"
-                className="h-8 shrink-0 gap-1.5 rounded-full border-zinc-200 bg-zinc-50 px-3 text-xs shadow-none sm:gap-2 sm:text-sm"
+                className="h-11 min-h-11 shrink-0 gap-1.5 rounded-full border-zinc-200 bg-zinc-50 px-3 text-xs shadow-none sm:gap-2 sm:text-sm"
                 onClick={() => {
                   void (connected ? loadComposioGmailThreads() : connectGmail())
                 }}
@@ -2073,7 +2073,7 @@ export function BrokMailApp() {
               </Button>
               <Button
                 variant="outline"
-                className="h-8 shrink-0 gap-1.5 rounded-full border-zinc-200 bg-zinc-50 px-3 text-xs shadow-none sm:gap-2 sm:text-sm"
+                className="h-11 min-h-11 shrink-0 gap-1.5 rounded-full border-zinc-200 bg-zinc-50 px-3 text-xs shadow-none sm:gap-2 sm:text-sm"
                 onClick={() => {
                   void (calendarConnected
                     ? loadComposioCalendarEvents()
@@ -2120,7 +2120,7 @@ export function BrokMailApp() {
             <div className="grid grid-cols-3 rounded-full border border-zinc-200 bg-white p-1 shadow-sm">
               <button
                 className={cn(
-                  'flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium transition-colors',
+                  'flex h-11 min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium transition-colors',
                   mobilePane === 'list'
                     ? 'bg-zinc-950 text-white shadow-sm'
                     : 'text-zinc-600 hover:bg-zinc-100'
@@ -2142,7 +2142,7 @@ export function BrokMailApp() {
               </button>
               <button
                 className={cn(
-                  'flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium transition-colors',
+                  'flex h-11 min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium transition-colors',
                   mobilePane === 'thread'
                     ? 'bg-zinc-950 text-white shadow-sm'
                     : 'text-zinc-600 hover:bg-zinc-100'
@@ -2153,7 +2153,7 @@ export function BrokMailApp() {
                 <span className="truncate">Thread</span>
               </button>
               <button
-                className="flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100"
+                className="flex h-11 min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100"
                 onClick={() => setAgentOpen(true)}
               >
                 <Bot className="size-4 shrink-0" />
@@ -2182,7 +2182,7 @@ export function BrokMailApp() {
                   value={query}
                   onChange={event => setQuery(event.target.value)}
                   placeholder="Search mail..."
-                  className="h-8 min-w-0 rounded-full border-zinc-200 bg-zinc-50 text-sm shadow-none"
+                  className="h-11 min-h-11 min-w-0 rounded-full border-zinc-200 bg-zinc-50 text-sm shadow-none"
                 />
               </div>
               <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground sm:gap-3">
@@ -2195,7 +2195,7 @@ export function BrokMailApp() {
                     <button
                       key={option.id}
                       className={cn(
-                        'h-6 shrink-0 rounded-full px-2 text-xs transition-colors hover:bg-white',
+                        'h-11 min-h-11 shrink-0 rounded-full px-2 text-xs transition-colors hover:bg-white',
                         sortMode === option.id
                           ? 'bg-zinc-950 text-white'
                           : 'text-muted-foreground'
@@ -2216,7 +2216,7 @@ export function BrokMailApp() {
                       <button
                         key={item.id}
                         className={cn(
-                          'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-100',
+                          'inline-flex h-11 min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-100',
                           view === item.id &&
                             'border-zinc-950 bg-zinc-950 text-white hover:bg-zinc-900'
                         )}
@@ -2239,7 +2239,7 @@ export function BrokMailApp() {
                   <DropdownMenuTrigger asChild>
                     <button
                       className={cn(
-                        'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-2.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-100',
+                        'inline-flex h-11 min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-2.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-100',
                         !primaryCompactViewIds.has(view) &&
                           'border-zinc-950 bg-zinc-950 text-white hover:bg-zinc-900'
                       )}
@@ -2599,7 +2599,7 @@ function BrokMailStatusBar({
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 gap-1.5 rounded-full px-2.5 text-xs hover:bg-zinc-100 sm:gap-2 sm:px-3"
+            className="h-11 min-h-11 gap-1.5 rounded-full px-2.5 text-xs hover:bg-zinc-100 sm:gap-2 sm:px-3"
             onClick={runPriorityBrief}
             disabled={isRunning}
           >
@@ -2609,7 +2609,7 @@ function BrokMailStatusBar({
           <Button
             variant="default"
             size="sm"
-            className="h-7 shrink-0 gap-1.5 rounded-full bg-zinc-950 px-2.5 text-xs text-white hover:bg-zinc-800 sm:gap-2 sm:px-3 2xl:hidden"
+            className="h-11 min-h-11 shrink-0 gap-1.5 rounded-full bg-zinc-950 px-2.5 text-xs text-white hover:bg-zinc-800 sm:gap-2 sm:px-3 2xl:hidden"
             onClick={onOpenAgent}
           >
             <Bot className="size-3.5" />
@@ -2956,14 +2956,14 @@ function AgentPanel({
           <div className="flex items-center gap-2">
             <Badge
               variant="secondary"
-              className="hidden h-7 rounded-md sm:inline-flex"
+              className="hidden h-11 min-h-11 rounded-md sm:inline-flex"
             >
               Approval gated
             </Badge>
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-1.5 px-2.5 text-xs sm:gap-2 sm:px-3 sm:text-sm"
+              className="h-11 min-h-11 gap-1.5 px-2.5 text-xs sm:gap-2 sm:px-3 sm:text-sm"
               onClick={onShare}
               disabled={isSharing}
             >
@@ -3083,14 +3083,14 @@ function AgentPanel({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 w-full sm:w-auto"
+                      className="h-11 min-h-11 w-full sm:w-auto"
                       onClick={() => insertDraft(message.draft!)}
                     >
                       Insert
                     </Button>
                     <Button
                       size="sm"
-                      className="h-8 w-full sm:w-auto"
+                      className="h-11 min-h-11 w-full sm:w-auto"
                       onClick={() => insertDraft(message.draft!)}
                     >
                       Edit
@@ -3123,7 +3123,7 @@ function AgentPanel({
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <Button
                         size="sm"
-                        className="h-8 w-full sm:w-auto"
+                        className="h-11 min-h-11 w-full sm:w-auto"
                         onClick={() =>
                           approveAction(message.approval!, message.draft)
                         }
@@ -3133,7 +3133,7 @@ function AgentPanel({
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-8 w-full border-amber-300 bg-white/60 sm:w-auto"
+                        className="h-11 min-h-11 w-full border-amber-300 bg-white/60 sm:w-auto"
                         onClick={() => cancelAction(message.approval!)}
                       >
                         Cancel

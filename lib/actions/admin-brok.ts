@@ -259,20 +259,28 @@ function parseAllowlistFeatures(formData: FormData): AppFeature[] {
 export async function getAppAccessAllowlist() {
   await assertAdminAccess()
 
-  return db
-    .select({
-      id: appAccessAllowlist.id,
-      email: appAccessAllowlist.email,
-      status: appAccessAllowlist.status,
-      features: appAccessAllowlist.features,
-      note: appAccessAllowlist.note,
-      createdBy: appAccessAllowlist.createdBy,
-      createdAt: appAccessAllowlist.createdAt,
-      updatedAt: appAccessAllowlist.updatedAt,
-      revokedAt: appAccessAllowlist.revokedAt
-    })
-    .from(appAccessAllowlist)
-    .orderBy(asc(appAccessAllowlist.email))
+  try {
+    return await db
+      .select({
+        id: appAccessAllowlist.id,
+        email: appAccessAllowlist.email,
+        status: appAccessAllowlist.status,
+        features: appAccessAllowlist.features,
+        note: appAccessAllowlist.note,
+        createdBy: appAccessAllowlist.createdBy,
+        createdAt: appAccessAllowlist.createdAt,
+        updatedAt: appAccessAllowlist.updatedAt,
+        revokedAt: appAccessAllowlist.revokedAt
+      })
+      .from(appAccessAllowlist)
+      .orderBy(asc(appAccessAllowlist.email))
+  } catch (error) {
+    if (canUseDevDbFallback(error)) {
+      return []
+    }
+
+    throw error
+  }
 }
 
 export async function addAppAccessAllowlistEmail(formData: FormData) {

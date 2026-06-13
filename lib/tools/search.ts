@@ -86,7 +86,6 @@ async function runSearchProvider({
 function fallbackSearchProvider(searchAPI: SearchProviderType) {
   return searchAPI === DEFAULT_PROVIDER ? null : DEFAULT_PROVIDER
 }
-
 /**
  * Creates a search tool with the appropriate schema for the given model.
  */

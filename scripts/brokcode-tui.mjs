@@ -25,6 +25,7 @@ import {
   formatPhaseLabel,
   isDangerousShellCommand,
   isValidBrokKey,
+  normalizeUsagePeriod,
   parseSseBlock,
   relativeTime,
   spinnerFrame,
@@ -1156,6 +1157,8 @@ async function showSync() {
 }
 
 async function showUsage(period = 'day') {
+  const normalizedPeriod = normalizeUsagePeriod(period)
+
   if (!apiKey) {
     output.write(
       `${colors.red}Save a Brok API key first with /key.${colors.reset}\n`
@@ -1164,7 +1167,7 @@ async function showUsage(period = 'day') {
   }
 
   const response = await fetch(
-    `${baseUrl}/usage?period=${encodeURIComponent(period)}`,
+    `${baseUrl}/usage?period=${encodeURIComponent(normalizedPeriod)}`,
     {
       headers: {
         Authorization: `Bearer ${apiKey}`

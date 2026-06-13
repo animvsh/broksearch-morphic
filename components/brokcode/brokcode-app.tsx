@@ -4858,7 +4858,7 @@ export function BrokCodeApp({
                 key={item.id}
                 type="button"
                 className={cn(
-                  'flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium transition-colors',
+                  'flex h-11 min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium transition-colors',
                   active
                     ? 'bg-zinc-950 text-white shadow-sm'
                     : 'text-zinc-600 hover:bg-white hover:text-zinc-950'
@@ -5039,7 +5039,7 @@ export function BrokCodeApp({
                 <button
                   key={prompt}
                   type="button"
-                  className="shrink-0 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-950"
+                  className="shrink-0 h-11 min-h-11 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-950"
                   onClick={() => setInput(prompt)}
                 >
                   {prompt}
@@ -5635,16 +5635,6 @@ export function BrokCodeApp({
                 )}
               </div>
             </div>
-            <DeployReadinessPanel
-              state={deployReadiness}
-              loading={deployReadinessLoading}
-              error={deployReadinessError}
-              hasProject={Boolean(activeProject)}
-              onRefresh={() => {
-                void refreshDeployReadiness()
-              }}
-              onOpenPreview={url => loadPreviewUrlIfAllowed(url)}
-            />
             <Tabs defaultValue="brain" className="mb-2">
               <TabsList className="grid h-auto grid-cols-3 rounded-lg border border-zinc-200 bg-white p-1 text-xs shadow-sm xl:grid-cols-6">
                 <TabsTrigger value="brain" className="rounded-md text-xs">

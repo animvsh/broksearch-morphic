@@ -6,6 +6,7 @@ import type { SearchResultItem } from '@/lib/types'
 
 interface CitationContextValue {
   citationMaps?: Record<string, Record<number, SearchResultItem>>
+  onCitationOpen?: (citation: SearchResultItem) => void
 }
 
 const CitationContext = createContext<CitationContextValue | undefined>(
@@ -14,13 +15,15 @@ const CitationContext = createContext<CitationContextValue | undefined>(
 
 export function CitationProvider({
   children,
-  citationMaps
+  citationMaps,
+  onCitationOpen
 }: {
   children: ReactNode
   citationMaps?: Record<string, Record<number, SearchResultItem>>
+  onCitationOpen?: (citation: SearchResultItem) => void
 }) {
   return (
-    <CitationContext.Provider value={{ citationMaps }}>
+    <CitationContext.Provider value={{ citationMaps, onCitationOpen }}>
       {children}
     </CitationContext.Provider>
   )
@@ -28,5 +31,5 @@ export function CitationProvider({
 
 export function useCitation() {
   const context = useContext(CitationContext)
-  return context || { citationMaps: undefined }
+  return context || { citationMaps: undefined, onCitationOpen: undefined }
 }

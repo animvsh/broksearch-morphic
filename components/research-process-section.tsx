@@ -362,7 +362,8 @@ function RenderPart({
   openSectionId,
   handleAccordionChange,
   status,
-  addToolResult
+  addToolResult,
+  suppressReasoningPreview
 }: {
   part: MessagePart
   partId: string
@@ -378,6 +379,7 @@ function RenderPart({
   handleAccordionChange: (id: string, open: boolean, isSingle: boolean) => void
   status?: any
   addToolResult?: (params: { toolCallId: string; result: any }) => void
+  suppressReasoningPreview: boolean
 }) {
   const hasSubsequent = hasNext || hasSubsequentContent
 
@@ -394,6 +396,7 @@ function RenderPart({
         isSingle={isSingle}
         isFirst={isFirstGroup && partIndex === 0}
         isLast={isLastGroup && partIndex === groupLength - 1}
+        suppressPreview={suppressReasoningPreview}
       />
     )
   }
@@ -540,6 +543,8 @@ export function ResearchProcessSection({
     status,
     hasSubsequentText
   })
+  const isStreaming = status === 'submitted' || status === 'streaming'
+  const suppressReasoningPreview = isStreaming && progressSteps.length > 0
 
   const segments = partsOverride ? [filteredParts] : splitByText(filteredParts)
 
@@ -606,6 +611,7 @@ export function ResearchProcessSection({
                       handleAccordionChange={handleAccordionChange}
                       status={status}
                       addToolResult={addToolResult}
+                      suppressReasoningPreview={suppressReasoningPreview}
                     />
                   )
                 })}

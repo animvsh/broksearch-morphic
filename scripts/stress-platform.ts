@@ -1,10 +1,8 @@
 import { eq } from 'drizzle-orm'
+import type { Page } from 'playwright'
 import { chromium } from 'playwright'
 
-import { ensureWorkspaceForUser } from '../lib/actions/api-keys'
-import { generateApiKey, getKeyPrefix, hashApiKey } from '../lib/api-key'
-import { db } from '../lib/db'
-import { apiKeys, usageEvents } from '../lib/db/schema'
+import { generateApiKey, getKeyPrefix, hashNewApiKey } from '../lib/api-key'
 
 import {
   createApiKeyViaSupabaseRest,
@@ -16,7 +14,21 @@ import {
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3001'
 const stressUserId =
   process.env.ANONYMOUS_USER_ID || '00000000-0000-0000-0000-000000000000'
+const browserNavigationTimeoutMs = readPositiveIntegerEnv(
+  'STRESS_PLATFORM_BROWSER_TIMEOUT_MS',
+  120_000
+)
+const contractsOnly = process.env.STRESS_PLATFORM_CONTRACTS_ONLY === 'true'
 let useSupabaseRestSeed = false
+
+type RouteContract = {
+  name: string
+  path: string
+  init?: RequestInit
+  expectedStatus: number
+  expectedText?: string
+  expectedErrorText?: string
+}
 
 async function expectJson(
   response: Response,
@@ -31,6 +43,91 @@ async function expectJson(
   }
 
   return body
+}
+
+async function expectRouteContract(contract: RouteContract) {
+  const response = await fetchRouteContract(contract)
+  const contentType = response.headers.get('content-type') || ''
+  const body = contentType.includes('application/json')
+    ? await response.json().catch(() => null)
+    : await response.text().catch(() => '')
+
+  if (response.status !== contract.expectedStatus) {
+    throw new Error(
+      `${contract.name} expected ${contract.expectedStatus}, got ${response.status}: ${JSON.stringify(body)}`
+    )
+  }
+
+  const searchable = typeof body === 'string' ? body : JSON.stringify(body)
+  if (contract.expectedText && !searchable.includes(contract.expectedText)) {
+    throw new Error(
+      `${contract.name} missing expected text "${contract.expectedText}"`
+    )
+  }
+  if (
+    contract.expectedErrorText &&
+    !searchable.includes(contract.expectedErrorText)
+  ) {
+    throw new Error(
+      `${contract.name} missing expected error text "${contract.expectedErrorText}"`
+    )
+  }
+
+  console.log(`stress route ok ${contract.name}`)
+}
+
+async function fetchRouteContract(contract: RouteContract) {
+  const url = `${baseUrl}${contract.path}`
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await fetch(url, contract.init)
+    } catch (error) {
+      lastError = error
+      if (attempt < 3) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+      }
+    }
+  }
+
+  throw lastError
+}
+
+function readPositiveIntegerEnv(name: string, fallback: number) {
+  const value = Number(process.env[name])
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback
+}
+
+async function getDrizzleSeedDeps() {
+  const [{ ensureWorkspaceForUser }, { db }, { apiKeys, usageEvents }] =
+    await Promise.all([
+      import('../lib/actions/api-keys'),
+      import('../lib/db'),
+      import('../lib/db/schema')
+    ])
+
+  return { ensureWorkspaceForUser, db, apiKeys, usageEvents }
+}
+
+async function gotoForSmoke(page: Page, path: string) {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await page.goto(`${baseUrl}${path}`, {
+        waitUntil: 'domcontentloaded',
+        timeout: browserNavigationTimeoutMs
+      })
+    } catch (error) {
+      lastError = error
+      if (attempt < 3) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+      }
+    }
+  }
+
+  throw lastError
 }
 
 async function createStressKeys() {
@@ -78,9 +175,10 @@ async function createStressKeys() {
 }
 
 async function createStressKeysWithDrizzle() {
-  const workspace = await ensureWorkspaceForUser(stressUserId)
+  const deps = await getDrizzleSeedDeps()
+  const workspace = await deps.ensureWorkspaceForUser(stressUserId)
 
-  const mainKey = await createStressKey(workspace.id, {
+  const mainKey = await createStressKey(deps, workspace.id, {
     name: 'Stress Main Key',
     environment: 'test',
     scopes: ['chat:write', 'search:write', 'code:write', 'usage:read'],
@@ -90,7 +188,7 @@ async function createStressKeysWithDrizzle() {
     monthlyBudgetCents: 0
   })
 
-  const lowRpmKey = await createStressKey(workspace.id, {
+  const lowRpmKey = await createStressKey(deps, workspace.id, {
     name: 'Stress Low RPM Key',
     environment: 'test',
     scopes: ['chat:write', 'usage:read'],
@@ -100,7 +198,7 @@ async function createStressKeysWithDrizzle() {
     monthlyBudgetCents: 0
   })
 
-  const dailyLimitedKey = await createStressKey(workspace.id, {
+  const dailyLimitedKey = await createStressKey(deps, workspace.id, {
     name: 'Stress Daily Limited Key',
     environment: 'test',
     scopes: ['chat:write'],
@@ -109,7 +207,7 @@ async function createStressKeysWithDrizzle() {
     dailyRequestLimit: 1,
     monthlyBudgetCents: 0
   })
-  await db.insert(usageEvents).values({
+  await deps.db.insert(deps.usageEvents).values({
     requestId: `stress_daily_${Date.now()}`,
     workspaceId: workspace.id,
     userId: stressUserId,
@@ -125,7 +223,7 @@ async function createStressKeysWithDrizzle() {
     status: 'success'
   })
 
-  const pausedKey = await createStressKey(workspace.id, {
+  const pausedKey = await createStressKey(deps, workspace.id, {
     name: 'Stress Paused Key',
     environment: 'test',
     scopes: ['chat:write'],
@@ -134,12 +232,12 @@ async function createStressKeysWithDrizzle() {
     dailyRequestLimit: 5000,
     monthlyBudgetCents: 0
   })
-  await db
-    .update(apiKeys)
+  await deps.db
+    .update(deps.apiKeys)
     .set({ status: 'paused' })
-    .where(eq(apiKeys.id, pausedKey.id))
+    .where(eq(deps.apiKeys.id, pausedKey.id))
 
-  const revokedKey = await createStressKey(workspace.id, {
+  const revokedKey = await createStressKey(deps, workspace.id, {
     name: 'Stress Revoked Key',
     environment: 'test',
     scopes: ['chat:write'],
@@ -148,10 +246,10 @@ async function createStressKeysWithDrizzle() {
     dailyRequestLimit: 5000,
     monthlyBudgetCents: 0
   })
-  await db
-    .update(apiKeys)
+  await deps.db
+    .update(deps.apiKeys)
     .set({ status: 'revoked', revokedAt: new Date() })
-    .where(eq(apiKeys.id, revokedKey.id))
+    .where(eq(deps.apiKeys.id, revokedKey.id))
 
   return {
     workspaceId: workspace.id,
@@ -256,12 +354,14 @@ async function createStressKeyViaSupabaseRest(
   }
 ) {
   const rawKey = generateApiKey(input.environment)
+  const { hash: keyHash, salt: keySalt } = hashNewApiKey(rawKey)
   const created = await createApiKeyViaSupabaseRest({
     workspace_id: workspaceId,
     user_id: stressUserId,
     name: input.name,
     key_prefix: getKeyPrefix(rawKey),
-    key_hash: hashApiKey(rawKey),
+    key_hash: keyHash,
+    key_salt: keySalt,
     environment: input.environment,
     scopes: input.scopes,
     allowed_models: input.allowedModels,
@@ -274,6 +374,7 @@ async function createStressKeyViaSupabaseRest(
 }
 
 async function createStressKey(
+  deps: Awaited<ReturnType<typeof getDrizzleSeedDeps>>,
   workspaceId: string,
   input: {
     name: string
@@ -286,14 +387,16 @@ async function createStressKey(
   }
 ) {
   const rawKey = generateApiKey(input.environment)
-  const [created] = await db
-    .insert(apiKeys)
+  const { hash: keyHash, salt: keySalt } = hashNewApiKey(rawKey)
+  const [created] = await deps.db
+    .insert(deps.apiKeys)
     .values({
       workspaceId,
       userId: stressUserId,
       name: input.name,
       keyPrefix: getKeyPrefix(rawKey),
-      keyHash: hashApiKey(rawKey),
+      keyHash,
+      keySalt,
       environment: input.environment,
       scopes: input.scopes,
       allowedModels: input.allowedModels,
@@ -497,6 +600,100 @@ async function runApiStress(
   console.log('stress api ok rate limit enforcement')
 }
 
+async function runRouteContracts() {
+  const contracts: RouteContract[] = [
+    {
+      name: 'GET /api/v1/usage rejects missing auth',
+      path: '/api/v1/usage',
+      expectedStatus: 401,
+      expectedErrorText: 'authorization'
+    },
+    {
+      name: 'POST /api/build/plan rejects invalid JSON',
+      path: '/api/build/plan',
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{'
+      },
+      expectedStatus: 400,
+      expectedErrorText: 'Invalid JSON body.'
+    },
+    {
+      name: 'POST /api/build/plan rejects empty prompt',
+      path: '/api/build/plan',
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: '' })
+      },
+      expectedStatus: 400,
+      expectedErrorText: 'A non-empty prompt is required.'
+    },
+    {
+      name: 'GET /api/brokmail/gmail/status requires auth',
+      path: '/api/brokmail/gmail/status',
+      expectedStatus: 401,
+      expectedErrorText: 'Authentication required'
+    },
+    {
+      name: 'GET /api/brokmail/gmail/threads requires auth',
+      path: '/api/brokmail/gmail/threads',
+      expectedStatus: 401,
+      expectedErrorText: 'Authentication required'
+    },
+    {
+      name: 'GET /api/brokmail/gcal/status requires auth',
+      path: '/api/brokmail/gcal/status',
+      expectedStatus: 401,
+      expectedErrorText: 'Authentication required'
+    },
+    {
+      name: 'GET /api/brokmail/gcal/events requires auth',
+      path: '/api/brokmail/gcal/events',
+      expectedStatus: 401,
+      expectedErrorText: 'Authentication required'
+    },
+    {
+      name: 'POST /api/brokmail/pi-agent requires auth before prompt work',
+      path: '/api/brokmail/pi-agent',
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Summarize inbox.' })
+      },
+      expectedStatus: 401,
+      expectedErrorText: 'Authentication required'
+    },
+    {
+      name: 'GET /api/brokcode/sessions rejects missing auth',
+      path: '/api/brokcode/sessions',
+      expectedStatus: 401,
+      expectedErrorText: 'authorization'
+    },
+    {
+      name: 'POST /api/brokcode/sessions rejects missing auth',
+      path: '/api/brokcode/sessions',
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: 'stress-route',
+          source: 'tui',
+          role: 'user',
+          content: 'stress route contract'
+        })
+      },
+      expectedStatus: 401,
+      expectedErrorText: 'authorization'
+    }
+  ]
+
+  for (const contract of contracts) {
+    await expectRouteContract(contract)
+  }
+}
+
 async function runBrowserChecks() {
   const browser = await chromium.launch({ headless: true })
   const page = await browser.newPage()
@@ -507,23 +704,58 @@ async function runBrowserChecks() {
   })
 
   try {
+    const publicChecks = [
+      { path: '/docs/brokcode', expectedText: 'Terminal TUI' },
+      {
+        path: '/docs/brokcode-api',
+        expectedText: 'POST /api/brokcode/execute'
+      },
+      { path: '/docs/brokmail', expectedText: '/api/brokmail/gcal/events' }
+    ]
     const protectedChecks = [
       '/admin/brok',
       '/admin/brok/logs',
-      '/admin/brok/providers'
+      '/admin/brok/providers',
+      '/api-platform/usage',
+      '/brokcode/tui',
+      '/brokmail'
     ]
+
+    for (const check of publicChecks) {
+      pageErrors.length = 0
+      const response = await gotoForSmoke(page, check.path)
+      if (!response?.ok()) {
+        throw new Error(
+          `${check.path} expected 200, got ${response?.status() ?? 'no response'}`
+        )
+      }
+      const bodyText = (await page.locator('body').innerText()).replace(
+        /\s+/g,
+        ' '
+      )
+      if (!bodyText.includes(check.expectedText)) {
+        throw new Error(`${check.path} missing text "${check.expectedText}"`)
+      }
+      if (pageErrors.length > 0) {
+        throw new Error(`${check.path} page errors: ${pageErrors.join('; ')}`)
+      }
+
+      console.log(`stress ui public ok ${check.path}`)
+    }
 
     for (const path of protectedChecks) {
       pageErrors.length = 0
-      await page.goto(`${baseUrl}${path}`, {
-        waitUntil: 'networkidle'
-      })
+      const response = await gotoForSmoke(page, path)
+      const redirectLocation = response?.headers()['location'] ?? ''
+      const redirectedToLogin =
+        page.url().includes('/auth/login') && page.url().includes('redirectTo=')
+      const explicitLoginRedirect =
+        (response?.status() === 307 || response?.status() === 308) &&
+        redirectLocation.includes('/auth/login') &&
+        redirectLocation.includes('redirectTo=')
 
-      if (!page.url().includes('/auth/login')) {
+      if (!redirectedToLogin && !explicitLoginRedirect) {
         throw new Error(`${path} should redirect to login when unauthenticated`)
-      }
-      if (!page.url().includes('redirectTo=')) {
-        throw new Error(`${path} login redirect missing redirectTo`)
       }
       if (pageErrors.length > 0) {
         throw new Error(`${path} page errors: ${pageErrors.join('; ')}`)
@@ -538,6 +770,14 @@ async function runBrowserChecks() {
 
 async function main() {
   console.log(`stress base ${baseUrl}`)
+  await runRouteContracts()
+
+  if (contractsOnly) {
+    await runBrowserChecks()
+    console.log('stress contracts ok')
+    process.exit(0)
+  }
+
   const keys = await createStressKeys()
   console.log(`stress workspace ${keys.workspaceId}`)
 

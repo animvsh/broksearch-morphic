@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 
+import { UniversalAdminSearch } from '@/components/admin/universal-search'
+
 export const dynamic = 'force-dynamic'
 
 const FEATURE_LABELS: Record<AppFeature, string> = {
@@ -221,32 +223,53 @@ export default async function BrokAdminPage() {
 
   return (
     <div className="space-y-8 px-4 pb-8 sm:px-6 lg:px-8">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Brok API</h1>
           <p className="text-muted-foreground">
             Platform health, BrokCode usage, key activity, and cost telemetry.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/admin/brok/logs?endpoint=code"
-            className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
-          >
-            Code logs
-          </Link>
-          <Link
-            href="/admin/brok/api-keys"
-            className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
-          >
-            API keys
-          </Link>
-          <Link
-            href="/admin/brok/providers"
-            className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
-          >
-            Providers
-          </Link>
+        <div className="flex flex-col gap-3 lg:items-end">
+          <UniversalAdminSearch />
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/health"
+              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              System health
+            </Link>
+            <Link
+              href="/admin/audit-logs"
+              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              Audit logs
+            </Link>
+            <Link
+              href="/admin/settings"
+              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              Settings
+            </Link>
+            <Link
+              href="/admin/brok/logs?endpoint=code"
+              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              Code logs
+            </Link>
+            <Link
+              href="/admin/brok/api-keys"
+              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              API keys
+            </Link>
+            <Link
+              href="/admin/brok/providers"
+              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              Providers
+            </Link>
+          </div>
         </div>
       </div>
 

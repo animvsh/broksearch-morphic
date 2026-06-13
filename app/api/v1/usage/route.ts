@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { and, eq, gte, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 
 import {
   apiKeyHasScope,
@@ -10,6 +10,16 @@ import {
 } from '@/lib/brok/auth'
 import { db } from '@/lib/db'
 import { usageEvents } from '@/lib/db/schema-brok'
+
+function usagePeriodWindow(period: 'day' | 'week' | 'month') {
+  if (period === 'day') {
+    return sql`${usageEvents.createdAt} >= date_trunc('day', now())::timestamp`
+  }
+  if (period === 'week') {
+    return sql`${usageEvents.createdAt} >= now()::timestamp - interval '7 days'`
+  }
+  return sql`${usageEvents.createdAt} >= now()::timestamp - interval '1 month'`
+}
 
 export async function GET(request: NextRequest) {
   const auth = await verifyRequestAuth(request)
@@ -33,15 +43,6 @@ export async function GET(request: NextRequest) {
       },
       { status: 400 }
     )
-  }
-
-  let dateFrom = new Date()
-  if (period === 'day') {
-    dateFrom.setHours(0, 0, 0, 0)
-  } else if (period === 'week') {
-    dateFrom.setDate(dateFrom.getDate() - 7)
-  } else if (period === 'month') {
-    dateFrom.setMonth(dateFrom.getMonth() - 1)
   }
 
   let stats:
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
       .where(
         and(
           eq(usageEvents.workspaceId, auth.workspace.id),
-          gte(usageEvents.createdAt, dateFrom)
+          usagePeriodWindow(period)
         )
       )
   } catch (error) {

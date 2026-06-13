@@ -141,6 +141,48 @@ describe('POST /api/v1/search/completions', () => {
     expect(mockRunSearchPipeline).not.toHaveBeenCalled()
   })
 
+  it('rejects unsupported search_depth values before consuming RPM', async () => {
+    const response = await POST(
+      searchRequest({
+        query: 'What is Brok?',
+        model: 'brok-lite',
+        stream: false,
+        search_depth: 'expensive'
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      type: 'invalid_request_error',
+      code: 'invalid_search_depth',
+      message:
+        'search_depth must be one of lite, standard, deep, basic, quick, or advanced.'
+    })
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRecordRateLimitEvent).not.toHaveBeenCalled()
+    expect(mockRunSearchPipeline).not.toHaveBeenCalled()
+  })
+
+  it('maps compatibility search_depth aliases to supported internal depths', async () => {
+    const response = await POST(
+      searchRequest({
+        query: 'What is Brok?',
+        model: 'brok-lite',
+        stream: false,
+        search_depth: 'basic'
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockRunSearchPipeline).toHaveBeenCalledWith({
+      query: 'What is Brok?',
+      depth: 'lite',
+      recencyDays: undefined,
+      domains: undefined
+    })
+  })
+
   it('returns JSON completions when stream is explicitly false', async () => {
     const response = await POST(
       searchRequest({

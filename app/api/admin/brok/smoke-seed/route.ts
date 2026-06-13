@@ -4,7 +4,7 @@ import { and, eq } from 'drizzle-orm'
 import { timingSafeEqual } from 'node:crypto'
 
 import { ensureWorkspaceForUser } from '@/lib/actions/api-keys'
-import { generateApiKey, getKeyPrefix, hashApiKey } from '@/lib/api-key'
+import { generateApiKey, getKeyPrefix, hashNewApiKey } from '@/lib/api-key'
 import { db } from '@/lib/db'
 import {
   apiKeys,
@@ -49,6 +49,7 @@ async function createKey(
   }
 ) {
   const rawKey = generateApiKey(input.environment)
+  const { hash: keyHash, salt: keySalt } = hashNewApiKey(rawKey)
   const [created] = await db
     .insert(apiKeys)
     .values({
@@ -56,7 +57,8 @@ async function createKey(
       userId,
       name: input.name,
       keyPrefix: getKeyPrefix(rawKey),
-      keyHash: hashApiKey(rawKey),
+      keyHash,
+      keySalt,
       environment: input.environment,
       scopes: input.scopes,
       allowedModels: input.allowedModels,

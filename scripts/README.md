@@ -77,6 +77,37 @@ mobile-first utility, and backend-backed prototype prompts. Set
 `SMOKE_BROKCODE_SKIP_TUI=true` to skip the terminal smoke when the release gate
 only needs generated-app coverage.
 
+## stress-platform.ts
+
+Production-readiness stress gate for API keys, route contracts, protected
+tools, BrokCode, and BrokMail. It first checks unauthenticated API/build/mail
+routes fail with the expected status, then seeds scoped API keys and verifies
+chat/search/code execution, usage aggregation, missing scopes, paused/revoked
+keys, daily limits, and RPM limits. Browser checks also render public
+BrokCode/BrokMail docs and verify protected admin, usage, TUI, and mail
+surfaces redirect to login when unauthenticated.
+
+```bash
+# Local or deployed target; defaults to http://127.0.0.1:3001
+SMOKE_BASE_URL=https://your-brok-domain.com \
+SMOKE_SEED_TOKEN="$SMOKE_SEED_TOKEN" \
+bun run stress:platform
+```
+
+For route/browser contracts without DB seeding, use:
+
+```bash
+SMOKE_BASE_URL=https://your-brok-domain.com \
+STRESS_PLATFORM_CONTRACTS_ONLY=true \
+bun run stress:platform
+```
+
+For production deployments, prefer `SMOKE_SEED_TOKEN` so the script can seed
+through `/api/admin/brok/smoke-seed` without direct database access. In local
+development it can fall back to Drizzle or Supabase REST seeding when the
+environment is configured. Set `STRESS_PLATFORM_BROWSER_TIMEOUT_MS` when cold
+deployments or local dev compiles need a longer browser navigation timeout.
+
 ### Features
 
 - Send messages to the chat API via command line

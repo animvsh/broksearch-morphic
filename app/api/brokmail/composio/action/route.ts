@@ -305,7 +305,6 @@ export async function POST(request: NextRequest) {
       { status: 503 }
     )
   }
-
   const body = await request.json().catch(() => null)
   if (!isRecord(body)) {
     return NextResponse.json(

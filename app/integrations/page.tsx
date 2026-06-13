@@ -128,6 +128,14 @@ const FEATURED_TOOLKITS = [
     envKeys: ['COMPOSIO_LINEAR_AUTH_CONFIG_ID']
   },
   {
+    slug: 'slack',
+    aliases: ['slack'],
+    name: 'Slack',
+    description:
+      'Inspect channels and prepare approved Slack workspace actions.',
+    envKeys: ['COMPOSIO_SLACK_AUTH_CONFIG_ID']
+  },
+  {
     slug: 'supabase',
     aliases: ['supabase'],
     name: 'Supabase',

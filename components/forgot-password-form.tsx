@@ -79,6 +79,7 @@ export function ForgotPasswordForm({
                     id="email"
                     type="email"
                     placeholder="m@example.com"
+                    className="min-h-11"
                     required
                     value={email}
                     onChange={e => setEmail(e.target.value)}
@@ -93,7 +94,7 @@ export function ForgotPasswordForm({
                 Already have an account?{' '}
                 <Link
                   href="/auth/login"
-                  className="underline underline-offset-4"
+                  className="inline-flex h-11 min-h-11 min-w-11 items-center rounded-md px-2 underline underline-offset-4"
                 >
                   Login
                 </Link>

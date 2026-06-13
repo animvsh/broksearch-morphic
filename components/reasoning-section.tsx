@@ -27,6 +27,7 @@ export interface ReasoningSectionProps {
   isSingle?: boolean // Whether this is a single item or part of a group
   isFirst?: boolean
   isLast?: boolean
+  suppressPreview?: boolean
 }
 
 export function ReasoningSection({
@@ -37,7 +38,8 @@ export function ReasoningSection({
   variant = 'default',
   isSingle = true,
   isFirst = false,
-  isLast = false
+  isLast = false,
+  suppressPreview = false
 }: ReasoningSectionProps) {
   const { open } = useArtifact()
   // Show a short preview when collapsed; switch to a generic label when expanded
@@ -58,6 +60,7 @@ export function ReasoningSection({
 
   // Lock a preview during streaming to avoid frequent churn; refresh once when done
   useEffect(() => {
+    if (suppressPreview) return
     const text = content?.reasoning || ''
     if (!text) return
     const prepared = toPreview(text)
@@ -74,7 +77,7 @@ export function ReasoningSection({
 
   const headerLabel = isOpen
     ? 'Analysis'
-    : preview && preview.length > 0
+    : !suppressPreview && preview && preview.length > 0
       ? preview
       : !content.isDone
         ? 'Analyzing...'

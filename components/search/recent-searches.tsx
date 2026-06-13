@@ -1,7 +1,5 @@
 'use client'
 
-/* eslint-disable react-hooks/set-state-in-effect -- localStorage sync is the documented pattern */
-
 import { useEffect, useState } from 'react'
 
 import { Clock, Search } from 'lucide-react'

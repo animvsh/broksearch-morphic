@@ -6,90 +6,13 @@ import {
   resolveBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 import { resolvePublicPreviewOrigin } from '@/lib/brokcode/preview'
+import {
+  isAllowedBrokCodePreviewStatusUrl,
+  isReadyManagedBrokCodePreviewStatusUrl
+} from '@/lib/brokcode/preview-status'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-function resolveAllowedOrigins() {
-  const derivedPreviewUrls = [
-    process.env.BROKCODE_PREVIEW_URL,
-    process.env.BROKCODE_DEPLOY_PREVIEW_URL,
-    process.env.NEXT_PUBLIC_BROKCODE_PREVIEW_URL,
-    process.env.NEXT_PUBLIC_APP_URL,
-    process.env.NEXT_PUBLIC_BASE_URL,
-    process.env.BASE_URL,
-    process.env.RAILWAY_PUBLIC_DOMAIN,
-    process.env.RAILWAY_STATIC_URL,
-    process.env.NEXT_PUBLIC_SITE_URL
-  ]
-
-  return new Set(
-    [
-      ...(process.env.BROKCODE_PREVIEW_ALLOWED_ORIGINS ?? '')
-        .split(',')
-        .map(value => value.trim()),
-      ...derivedPreviewUrls
-    ].flatMap(value => originVariants(value))
-  )
-}
-
-function normalizeOrigin(value: unknown) {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim().replace(/\/+$/, '')
-  if (!trimmed) return null
-
-  try {
-    const withProtocol = /^https?:\/\//i.test(trimmed)
-      ? trimmed
-      : `https://${trimmed}`
-    return new URL(withProtocol).origin
-  } catch {
-    return null
-  }
-}
-
-function originVariants(value: unknown) {
-  const origin = normalizeOrigin(value)
-  if (!origin) return []
-
-  const variants = new Set([origin])
-  try {
-    const url = new URL(origin)
-    if (url.hostname.startsWith('www.')) {
-      url.hostname = url.hostname.slice(4)
-      variants.add(url.origin)
-    } else if (!isLocalPreviewHost(url.hostname)) {
-      url.hostname = `www.${url.hostname}`
-      variants.add(url.origin)
-    }
-  } catch {
-    return [origin]
-  }
-
-  return [...variants]
-}
-
-function isLocalPreviewHost(hostname: string) {
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === '0.0.0.0' ||
-    hostname === '::1'
-  )
-}
-
-function canCheckLocalPreviewHost() {
-  if (process.env.BROKCODE_ALLOW_PRIVATE_PREVIEW === 'true') return true
-  return process.env.NODE_ENV !== 'production'
-}
-
-function isAllowedPreviewUrl(url: URL, requestOrigin: string) {
-  if (!['http:', 'https:'].includes(url.protocol)) return false
-  if (url.pathname.startsWith('/brokcode')) return false
-  if (isLocalPreviewHost(url.hostname)) return canCheckLocalPreviewHost()
-  if (url.origin === requestOrigin) return true
-  return resolveAllowedOrigins().has(url.origin)
-}
 
 function jsonNoStore(body: unknown, init?: ResponseInit) {
   const response = NextResponse.json(body, init)
@@ -142,11 +65,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  if (
-    url.origin === publicOrigin &&
-    (url.pathname.startsWith('/api/brokcode/previews/') ||
-      url.pathname.startsWith('/api/brokcode/runtime/'))
-  ) {
+  if (isReadyManagedBrokCodePreviewStatusUrl(url, publicOrigin)) {
     return jsonNoStore({
       ok: true,
       reason: 'ready',
@@ -157,12 +76,12 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  if (!isAllowedPreviewUrl(url, publicOrigin)) {
+  if (!isAllowedBrokCodePreviewStatusUrl(url, publicOrigin)) {
     return jsonNoStore(
       {
         ok: false,
         message:
-          'Preview checks are limited to localhost or configured BrokCode preview origins.'
+          'Preview checks are limited to BrokCode preview URLs, localhost, or configured preview origins.'
       },
       { status: 400 }
     )
