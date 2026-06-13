@@ -92,6 +92,14 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
     }
   }
 
+  if (!key.startsWith('brok_sk_')) {
+    return { success: false, error: 'invalid_api_key', status: 401 }
+  }
+
+  if (shouldRejectMalformedCloudKey(key)) {
+    return { success: false, error: 'invalid_api_key', status: 401 }
+  }
+
   const fallbackAuth = await createLocalFallbackAuth(key)
 
   let keyRecord: typeof apiKeys.$inferSelect | undefined
@@ -183,6 +191,19 @@ function getApiKeyLookupPrefixes(
     prefixes.add(key.slice(0, 12))
   }
   return Array.from(prefixes)
+}
+
+function hasBrokApiKeyShape(key: string) {
+  return /^brok_sk_(live|test)_[A-Za-z0-9_-]{16,}$/.test(key)
+}
+
+function shouldRejectMalformedCloudKey(key: string) {
+  return (
+    process.env.BROK_CLOUD_DEPLOYMENT === 'true' &&
+    key !== process.env.BROK_SMOKE_API_KEY &&
+    !key.startsWith('brok_sk_local_') &&
+    !hasBrokApiKeyShape(key)
+  )
 }
 
 // Throttle lastUsedAt writes to once per 5 minutes per key.

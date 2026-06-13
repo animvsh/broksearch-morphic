@@ -12,7 +12,6 @@ import {
   Zap
 } from 'lucide-react'
 
-import { getUsageDashboardData } from '@/lib/actions/platform-dashboard'
 import { requireFeatureAccess } from '@/lib/auth/app-access'
 
 import { Badge } from '@/components/ui/badge'
@@ -59,6 +58,9 @@ export default async function UsagePage() {
     )
   }
 
+  const { getUsageDashboardData } = await import(
+    '@/lib/actions/platform-dashboard'
+  )
   const data = await getUsageDashboardData(user.id)
 
   return (
