@@ -13,11 +13,15 @@ const checks = [
   ['/features/api', [], 390],
   ['/docs', [], 390],
   ['/docs/quickstart', [], 390],
+  ['/docs/brokcode', ['terminal tui'], 390],
+  ['/docs/brokmail', ['/api/brokmail/gcal/events'], 390],
   ['/tools', [], 390],
   ['/auth/login', [], 390],
   ['/pricing', [], 768],
   ['/features', [], 768],
   ['/docs', [], 768],
+  ['/docs/brokcode', ['terminal tui'], 768],
+  ['/docs/brokmail', ['/api/brokmail/gcal/events'], 768],
   ['/features/brokcode', [], 768],
   ['/features/presentations', [], 768]
 ]

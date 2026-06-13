@@ -14,7 +14,7 @@
     "migrate": "bun run lib/db/migrate.ts",
     "test": "NODE_ENV=test vitest run",
     "test:watch": "vitest --watch",
-    "brokcode": "node scripts/brokcode-tui.mjs",
+    "brokcode": "bun scripts/brokcode-tui.mjs",
     "chat": "bun run scripts/chat-cli.ts",
     "smoke:brokcode": "npx --yes tsx --env-file=.env.local scripts/smoke-brokcode.ts",
     "smoke:brokcode:matrix": "SMOKE_BROKCODE_MATRIX=true npx --yes tsx --env-file=.env.local scripts/smoke-brokcode.ts",
@@ -24,10 +24,11 @@
     "smoke:brokcode:runtime": "bun run scripts/smoke-brokcode-runtime.ts",
     "smoke:auth-platform": "PATH=$HOME/.bun/bin:$PATH bun run scripts/smoke-authenticated-platform.ts",
     "smoke:platform": "bun run --env-file=.env.local scripts/smoke-platform.ts",
-    "smoke:mobile-platform": "node scripts/feature-browsing-smoke.js",
-    "smoke:mobile-platform:all": "node scripts/mobile-route-smoke.mjs",
-    "smoke:mobile-touch-target": "node scripts/mobile-touch-target-smoke.mjs",
+    "smoke:mobile-platform": "bun scripts/feature-browsing-smoke.js",
+    "smoke:mobile-platform:all": "bun scripts/mobile-route-smoke.mjs",
+    "smoke:mobile-touch-target": "bun scripts/mobile-touch-target-smoke.mjs",
     "stress:platform": "bun run --env-file=.env.local scripts/stress-platform.ts",
+    "check:deploy-env": "bun run scripts/check-deploy-env.mjs",
     "check:railway-production": "bun run scripts/verify-railway-production.mjs"
   },
   "dependencies": {

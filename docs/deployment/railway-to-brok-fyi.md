@@ -57,6 +57,19 @@ Railway uses:
 
 ## Deployment verification
 
+Before running live route checks, confirm the deployment target has the required
+environment variable names without printing secret values:
+
+```bash
+bun run check:deploy-env -- --provider railway --environment production
+bun run check:deploy-env -- --provider vercel --environment production
+```
+
+The readiness checker reports only variable names as present or missing. It does
+not echo raw values from Railway, Vercel, or local `.env` files. If Vercel has no
+environment variables configured, this check should fail with the full missing
+required-name list; add those names in Vercel Project Settings and redeploy.
+
 Run:
 
 ```bash

@@ -32,6 +32,7 @@ export function AppChrome({
   const isPublicMarketingRoute =
     !user &&
     (pathname === '/' ||
+      isDocsRoute ||
       pathname?.startsWith('/features') ||
       pathname?.startsWith('/p/'))
   const isFocusWorkspace =
