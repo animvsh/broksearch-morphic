@@ -162,6 +162,31 @@ async function seedStress(userId: string) {
     status: 'success'
   })
 
+  const monthlyBudgetKey = await createKey(workspace.id, userId, {
+    name: 'Stress Monthly Budget Key',
+    environment: 'test',
+    scopes: ['chat:write'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 1
+  })
+  await db.insert(usageEvents).values({
+    requestId: `stress_budget_${Date.now()}`,
+    workspaceId: workspace.id,
+    userId,
+    apiKeyId: monthlyBudgetKey.id,
+    endpoint: 'chat',
+    model: 'brok-lite',
+    provider: 'Brok',
+    inputTokens: 1,
+    outputTokens: 1,
+    providerCostUsd: '0.01',
+    billedUsd: '0.01',
+    latencyMs: 1,
+    status: 'success'
+  })
+
   const pausedKey = await createKey(workspace.id, userId, {
     name: 'Stress Paused Key',
     environment: 'test',
@@ -196,6 +221,7 @@ async function seedStress(userId: string) {
     mainKey: mainKey.key,
     lowRpmKey: lowRpmKey.key,
     dailyLimitedKey: dailyLimitedKey.key,
+    monthlyBudgetKey: monthlyBudgetKey.key,
     pausedKey: pausedKey.key,
     revokedKey: revokedKey.key
   }
