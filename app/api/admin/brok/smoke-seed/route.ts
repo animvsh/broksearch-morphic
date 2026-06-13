@@ -1,19 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { and, eq } from 'drizzle-orm'
 import { timingSafeEqual } from 'node:crypto'
-
-import { ensureWorkspaceForUser } from '@/lib/actions/api-keys'
-import { generateApiKey, getKeyPrefix, hashNewApiKey } from '@/lib/api-key'
-import { db } from '@/lib/db'
-import {
-  apiKeys,
-  chats,
-  generateId,
-  messages,
-  parts,
-  usageEvents
-} from '@/lib/db/schema'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -35,6 +22,38 @@ function isAuthorized(request: NextRequest) {
   )
 }
 
+async function getSeedDependencies() {
+  const [
+    { and, eq },
+    { ensureWorkspaceForUser },
+    { generateApiKey, getKeyPrefix, hashNewApiKey },
+    { db },
+    { apiKeys, chats, generateId, messages, parts, usageEvents }
+  ] = await Promise.all([
+    import('drizzle-orm'),
+    import('@/lib/actions/api-keys'),
+    import('@/lib/api-key'),
+    import('@/lib/db'),
+    import('@/lib/db/schema')
+  ])
+
+  return {
+    and,
+    eq,
+    ensureWorkspaceForUser,
+    generateApiKey,
+    getKeyPrefix,
+    hashNewApiKey,
+    db,
+    apiKeys,
+    chats,
+    generateId,
+    messages,
+    parts,
+    usageEvents
+  }
+}
+
 async function createKey(
   workspaceId: string,
   userId: string,
@@ -48,6 +67,8 @@ async function createKey(
     monthlyBudgetCents: number
   }
 ) {
+  const { apiKeys, db, generateApiKey, getKeyPrefix, hashNewApiKey } =
+    await getSeedDependencies()
   const rawKey = generateApiKey(input.environment)
   const { hash: keyHash, salt: keySalt } = hashNewApiKey(rawKey)
   const [created] = await db
@@ -72,6 +93,7 @@ async function createKey(
 }
 
 async function seedSmoke(userId: string) {
+  const { ensureWorkspaceForUser } = await getSeedDependencies()
   const workspace = await ensureWorkspaceForUser(userId)
   const key = await createKey(workspace.id, userId, {
     name: 'Smoke Test Key',
@@ -91,6 +113,8 @@ async function seedSmoke(userId: string) {
 }
 
 async function seedStress(userId: string) {
+  const { apiKeys, db, ensureWorkspaceForUser, eq, usageEvents } =
+    await getSeedDependencies()
   const workspace = await ensureWorkspaceForUser(userId)
 
   const mainKey = await createKey(workspace.id, userId, {
@@ -185,6 +209,7 @@ async function seedShare(
     assistantText?: string
   }
 ) {
+  const { chats, db, generateId, messages, parts } = await getSeedDependencies()
   const chatId = generateId()
   const userMessageId = generateId()
   const assistantMessageId = generateId()
@@ -241,6 +266,7 @@ async function seedShare(
 }
 
 async function cleanupShare(userId: string, chatId: string) {
+  const { and, chats, db, eq } = await getSeedDependencies()
   const deleted = await db
     .delete(chats)
     .where(and(eq(chats.id, chatId), eq(chats.userId, userId)))

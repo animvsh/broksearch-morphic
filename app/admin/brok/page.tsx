@@ -1,12 +1,5 @@
 import Link from 'next/link'
 
-import {
-  addAppAccessAllowlistEmail,
-  getAppAccessAllowlist,
-  getBrokStats,
-  revokeAppAccessAllowlistEmail,
-  updateAppAccessAllowlistFeatures
-} from '@/lib/actions/admin-brok'
 import { APP_FEATURES, AppFeature } from '@/lib/auth/app-access'
 import { requirePageAuth } from '@/lib/auth/require-page-auth'
 
@@ -215,6 +208,13 @@ function SplitBars({
 
 export default async function BrokAdminPage() {
   await requirePageAuth('/admin/brok')
+  const {
+    addAppAccessAllowlistEmail,
+    getAppAccessAllowlist,
+    getBrokStats,
+    revokeAppAccessAllowlistEmail,
+    updateAppAccessAllowlistFeatures
+  } = await import('@/lib/actions/admin-brok')
   const [stats, allowlist] = await Promise.all([
     getBrokStats(),
     getAppAccessAllowlist()
