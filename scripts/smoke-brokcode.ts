@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -20,8 +21,25 @@ import {
 
 const execFileAsync = promisify(execFile)
 
+function resolveBunExecutable() {
+  const explicit = process.env.BUN_EXECUTABLE || process.env.BUN_BIN
+  if (explicit) return explicit
+
+  if (process.versions.bun) return process.execPath
+
+  const home = process.env.HOME
+  const candidates = [
+    home ? path.join(home, '.bun/bin/bun') : null,
+    '/opt/homebrew/bin/bun',
+    '/usr/local/bin/bun'
+  ].filter(Boolean) as string[]
+
+  return candidates.find(candidate => existsSync(candidate)) ?? 'bun'
+}
+
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3000'
 const apiKey = process.env.SMOKE_BROKCODE_API_KEY || 'brok_sk_local_smoke'
+const bunExecutable = resolveBunExecutable()
 const skipTui = process.env.SMOKE_BROKCODE_SKIP_TUI === 'true'
 const matrixMode = process.env.SMOKE_BROKCODE_MATRIX === 'true'
 const acceptanceCase =
@@ -620,7 +638,7 @@ async function runTuiSmoke() {
 
   async function runOnce(command: string) {
     const { stdout, stderr } = await execFileAsync(
-      'bun',
+      bunExecutable,
       ['run', 'brokcode', '--', '--once', command],
       {
         cwd: process.cwd(),
