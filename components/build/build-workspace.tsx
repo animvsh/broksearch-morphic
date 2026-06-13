@@ -102,6 +102,8 @@ export function BrokBuildWorkspace({
         phase={phase}
         progress={state.progress}
         previewUrl={state.previewUrl}
+        deploymentUrl={state.deploymentUrl}
+        projectId={state.projectId}
         onRestart={() => {
           startedRef.current = false
           setAutoStarted(false)
@@ -176,6 +178,8 @@ type HeaderProps = {
   phase: BrokBuildPhase
   progress: number
   previewUrl: string | null
+  deploymentUrl: string | null
+  projectId: string | null
   onRestart: () => void
 }
 
@@ -184,8 +188,14 @@ function WorkspaceHeader({
   phase,
   progress,
   previewUrl,
+  deploymentUrl,
+  projectId,
   onRestart
 }: HeaderProps) {
+  const brokCodeProjectUrl = projectId
+    ? `/brokcode?project=${encodeURIComponent(projectId)}`
+    : null
+
   return (
     <header className="flex h-12 items-center justify-between border-b border-border/60 bg-background/80 px-4 backdrop-blur">
       <div className="flex items-center gap-2 text-sm font-medium text-foreground/80">
@@ -204,24 +214,27 @@ function WorkspaceHeader({
           href={previewUrl ?? '#'}
           target="_blank"
           rel="noreferrer"
-          className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground"
+          aria-disabled={!previewUrl}
+          className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground aria-disabled:pointer-events-none aria-disabled:opacity-50"
         >
           Preview
         </a>
-        <button
-          type="button"
-          className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground disabled:opacity-50"
-          disabled={!previewUrl}
+        <a
+          href={deploymentUrl ?? previewUrl ?? '#'}
+          target="_blank"
+          rel="noreferrer"
+          aria-disabled={!deploymentUrl && !previewUrl}
+          className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground aria-disabled:pointer-events-none aria-disabled:opacity-50"
         >
           Deploy
-        </button>
-        <button
-          type="button"
-          className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground disabled:opacity-50"
-          disabled={!previewUrl}
+        </a>
+        <a
+          href={brokCodeProjectUrl ?? '#'}
+          aria-disabled={!brokCodeProjectUrl}
+          className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground aria-disabled:pointer-events-none aria-disabled:opacity-50"
         >
           Export
-        </button>
+        </a>
         <button
           type="button"
           onClick={onRestart}

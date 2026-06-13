@@ -1,3 +1,5 @@
+import { getCurrentUser } from '@/lib/auth/get-current-user'
+
 import {
   ADMIN_ROLE_CAPABILITIES,
   ADMIN_ROLES,
@@ -7,7 +9,6 @@ import {
   resolveAdminRole,
   ResolvedAdminRole
 } from './admin-roles'
-import { getCurrentUser } from './get-current-user'
 
 function parseList(value: string | undefined): string[] {
   return (value ?? '')

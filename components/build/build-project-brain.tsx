@@ -11,7 +11,6 @@ import {
   TerminalSquare
 } from 'lucide-react'
 
-import { PHASE_LABELS } from '@/lib/build/stream'
 import type {
   BrokBuildBackendStatus,
   BrokBuildFilePreview,
@@ -20,6 +19,7 @@ import type {
   InternalPlan,
   UserVisiblePlan
 } from '@/lib/build/types'
+import { PHASE_LABELS } from '@/lib/build/types'
 import { cn } from '@/lib/utils'
 
 import { Badge } from '@/components/ui/badge'

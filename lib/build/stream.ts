@@ -8,6 +8,11 @@
 // real time, plus a few synthetic file diffs so the right panel feels alive.
 
 import { classifyApp } from './app-types'
+import {
+  persistBrokBuildProject,
+  type PersistBrokBuildProjectOptions,
+  type PersistedBrokBuildProject
+} from './brokcode-project'
 import { buildInternalPlan, buildUserVisiblePlan } from './plan'
 import type {
   BrokBuildFilePreview,
@@ -67,6 +72,10 @@ export type BuildStreamOptions = {
   emit?: (event: BrokStreamEvent) => void
   signal?: AbortSignal
   now?: () => number
+  brokCodeProject?: Omit<
+    PersistBrokBuildProjectOptions,
+    'prompt' | 'userPlan'
+  >
 }
 
 function sleep(ms: number, signal?: AbortSignal) {
@@ -194,6 +203,8 @@ export async function runBuildStream(
     classification
   )
   const userPlan = buildUserVisiblePlan(options.prompt, internalPlan)
+  let activeProjectId = options.projectId
+  let persistedProject: PersistedBrokBuildProject | null = null
 
   const events: BrokStreamEvent[] = []
 
@@ -210,6 +221,45 @@ export async function runBuildStream(
 
   emit({ kind: 'internal_plan', internalPlan })
   events.push({ kind: 'internal_plan', internalPlan })
+
+  if (options.brokCodeProject) {
+    try {
+      persistedProject = await persistBrokBuildProject({
+        ...options.brokCodeProject,
+        prompt: options.prompt,
+        userPlan
+      })
+      activeProjectId = persistedProject.projectId
+      const projectEvent: BrokStreamEvent = {
+        kind: 'brokcode_project',
+        projectId: persistedProject.projectId,
+        previewUrl: persistedProject.previewUrl,
+        deploymentUrl: persistedProject.deploymentUrl,
+        fileCount: persistedProject.fileCount
+      }
+      emit(projectEvent)
+      events.push(projectEvent)
+      const logEvent: BrokStreamEvent = {
+        kind: 'log',
+        level: 'info',
+        message: `Created BrokCode project ${persistedProject.projectId} with ${persistedProject.fileCount} managed preview files.`
+      }
+      emit(logEvent)
+      events.push(logEvent)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'BrokCode project persistence failed.'
+      const warnEvent: BrokStreamEvent = {
+        kind: 'log',
+        level: 'warn',
+        message: `BrokCode project persistence skipped: ${message}`
+      }
+      emit(warnEvent)
+      events.push(warnEvent)
+    }
+  }
 
   for (const step of PHASE_SEQUENCE) {
     if (signal?.aborted) {
@@ -247,7 +297,7 @@ export async function runBuildStream(
       events.push({ kind: 'backend_status', status: 'connected' })
     }
     if (step.phase === 'starting_opencode') {
-      const sessionId = `oc-${options.projectId.slice(0, 8)}-${Date.now().toString(36)}`
+      const sessionId = `oc-${activeProjectId.slice(0, 8)}-${Date.now().toString(36)}`
       emit({ kind: 'opencode_session', sessionId })
       events.push({ kind: 'opencode_session', sessionId })
     }
@@ -255,11 +305,12 @@ export async function runBuildStream(
     await sleep(DELAY_PER_PHASE_MS, signal)
   }
 
-  const filePreview = filePreviewForPlan(internalPlan)
+  const filePreview = persistedProject?.files ?? filePreviewForPlan(internalPlan)
   emit({ kind: 'files', files: filePreview })
   events.push({ kind: 'files', files: filePreview })
 
-  const previewUrl = `/api/preview/${options.projectId}`
+  const previewUrl =
+    persistedProject?.previewUrl ?? `/api/brokcode/previews/${options.projectId}/index.html`
   emit({ kind: 'preview_url', url: previewUrl })
   events.push({ kind: 'preview_url', url: previewUrl })
 
@@ -275,12 +326,12 @@ export async function runBuildStream(
   })
   emit({
     kind: 'done',
-    projectId: options.projectId,
+    projectId: activeProjectId,
     previewUrl
   })
   events.push({
     kind: 'done',
-    projectId: options.projectId,
+    projectId: activeProjectId,
     previewUrl
   })
 
@@ -288,22 +339,7 @@ export async function runBuildStream(
     classification,
     internalPlan,
     userPlan,
-    projectId: options.projectId,
+    projectId: activeProjectId,
     events
   }
-}
-
-export const PHASE_LABELS: Record<string, string> = {
-  idle: 'Idle',
-  understanding: 'Understanding',
-  planning_core_modules: 'Planning core modules',
-  designing_backend_schema: 'Designing backend schema',
-  preparing_backend: 'Preparing backend',
-  starting_opencode: 'Starting OpenCode',
-  generating_frontend: 'Generating frontend',
-  wiring_backend: 'Wiring backend',
-  building_preview: 'Building preview',
-  ready: 'Ready',
-  failed: 'Failed',
-  adjusting: 'Adjusting'
 }

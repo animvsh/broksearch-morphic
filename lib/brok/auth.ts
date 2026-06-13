@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 
-import { hashApiKey, verifyApiKey } from '@/lib/api-key'
+import { getKeyPrefix, hashApiKey, verifyApiKey } from '@/lib/api-key'
 import { db } from '@/lib/db'
 import { apiKeys, workspaces } from '@/lib/db/schema'
 
@@ -77,60 +77,34 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
 
   try {
     // Two-stage lookup:
-    //   1. Hash with the legacy global-salt path. Catches all keys issued
-    //      before the per-key salt migration.
-    //   2. Newer keys carry a per-key salt; we look up by hashing with the
-    //      global salt + a sentinel, which won't match legacy rows, then
-    //      we re-hash on the DB-looked-up row using its stored salt.
-    //
-    // We do the lookup by trying the global-salt hash first, which is the
-    // common case. Rows with a per-key salt will still match because the
-    // sha256(key + perKeySalt + global) is unique per key, but the
-    // stored keyHash is computed that way too, so the lookup will only
-    // hit by exact match. To keep the query cheap, we read the row by
-    // an index on a prefix-based lookup is not feasible (we don't have
-    // the salt until we've read the row), so we fall back to a
-    // candidate-set scan.
+    //   1. Exact hash lookup for legacy global-salt keys.
+    //   2. Prefix-indexed candidate lookup for per-key salted keys. We cannot
+    //      compute a salted hash until we read the row salt, so the visible key
+    //      prefix must be selective enough to avoid scanning active keys.
     const legacyHash = hashApiKey(key, null)
-    const candidateHashes = new Set<string>([legacyHash])
 
     ;[keyRecord] = await db
       .select()
       .from(apiKeys)
-      .where(
-        // or() is the right shape; we need to match either hash.
-        eq(apiKeys.keyHash, legacyHash)
-      )
+      .where(eq(apiKeys.keyHash, legacyHash))
       .limit(1)
 
     if (!keyRecord) {
-      // Try the new-style: read recent active keys and re-hash with their
-      // stored salt. Capped at 100 rows to bound the scan; production should
-      // add a dedicated index on (key_salt) or migrate to a wider index.
+      // New keys store a 20-character prefix that includes random material.
+      // Older rows may only have the static 12-character environment prefix,
+      // so include it as a compatibility fallback without scanning every key.
+      const lookupPrefixes = getApiKeyLookupPrefixes(key)
       const candidates = await db
-        .select({
-          id: apiKeys.id,
-          keyHash: apiKeys.keyHash,
-          keySalt: apiKeys.keySalt
-        })
+        .select()
         .from(apiKeys)
-        .where(eq(apiKeys.status, 'active'))
+        .where(inArray(apiKeys.keyPrefix, lookupPrefixes))
         .limit(100)
 
       for (const candidate of candidates) {
         if (!candidate.keySalt) continue
-        const candidateHash = hashApiKey(key, candidate.keySalt)
-        if (candidateHash === candidate.keyHash) {
-          candidateHashes.add(candidateHash)
-          const [matched] = await db
-            .select()
-            .from(apiKeys)
-            .where(eq(apiKeys.keyHash, candidateHash))
-            .limit(1)
-          if (matched && verifyApiKey(key, matched.keyHash, matched.keySalt)) {
-            keyRecord = matched
-            break
-          }
+        if (verifyApiKey(key, candidate.keyHash, candidate.keySalt)) {
+          keyRecord = candidate
+          break
         }
       }
     }
@@ -174,6 +148,14 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   await updateApiKeyLastUsedAt(keyRecord.id)
 
   return { success: true, apiKey: keyRecord, workspace }
+}
+
+function getApiKeyLookupPrefixes(key: string): string[] {
+  const prefixes = new Set<string>([getKeyPrefix(key)])
+  if (key.length >= 12) {
+    prefixes.add(key.slice(0, 12))
+  }
+  return Array.from(prefixes)
 }
 
 // Throttle lastUsedAt writes to once per 5 minutes per key.

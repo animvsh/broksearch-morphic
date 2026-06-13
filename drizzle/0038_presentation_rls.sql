@@ -26,8 +26,8 @@ BEGIN
       ON "presentations"
       FOR ALL
       TO authenticated
-      USING ("user_id" = current_setting(''app.current_user_id'', true)::uuid)
-      WITH CHECK ("user_id" = current_setting(''app.current_user_id'', true)::uuid)$p$;
+      USING ("user_id" = current_setting('app.current_user_id', true)::uuid)
+      WITH CHECK ("user_id" = current_setting('app.current_user_id', true)::uuid)$p$;
 
     EXECUTE 'DROP POLICY IF EXISTS "presentations_public_read" ON "presentations"';
     EXECUTE $p$CREATE POLICY "presentations_public_read"
@@ -45,14 +45,14 @@ BEGIN
         EXISTS (
           SELECT 1 FROM "presentations" p
           WHERE p.id = "presentation_slides"."presentation_id"
-            AND p."user_id" = current_setting(''app.current_user_id'', true)::uuid
+            AND p."user_id" = current_setting('app.current_user_id', true)::uuid
         )
       )
       WITH CHECK (
         EXISTS (
           SELECT 1 FROM "presentations" p
           WHERE p.id = "presentation_slides"."presentation_id"
-            AND p."user_id" = current_setting(''app.current_user_id'', true)::uuid
+            AND p."user_id" = current_setting('app.current_user_id', true)::uuid
         )
       )$p$;
 
@@ -78,14 +78,14 @@ BEGIN
         EXISTS (
           SELECT 1 FROM "presentations" p
           WHERE p.id = "presentation_outlines"."presentation_id"
-            AND p."user_id" = current_setting(''app.current_user_id'', true)::uuid
+            AND p."user_id" = current_setting('app.current_user_id', true)::uuid
         )
       )
       WITH CHECK (
         EXISTS (
           SELECT 1 FROM "presentations" p
           WHERE p.id = "presentation_outlines"."presentation_id"
-            AND p."user_id" = current_setting(''app.current_user_id'', true)::uuid
+            AND p."user_id" = current_setting('app.current_user_id', true)::uuid
         )
       )$p$;
 
@@ -98,14 +98,14 @@ BEGIN
         EXISTS (
           SELECT 1 FROM "presentations" p
           WHERE p.id = "presentation_assets"."presentation_id"
-            AND p."user_id" = current_setting(''app.current_user_id'', true)::uuid
+            AND p."user_id" = current_setting('app.current_user_id', true)::uuid
         )
       )
       WITH CHECK (
         EXISTS (
           SELECT 1 FROM "presentations" p
           WHERE p.id = "presentation_assets"."presentation_id"
-            AND p."user_id" = current_setting(''app.current_user_id'', true)::uuid
+            AND p."user_id" = current_setting('app.current_user_id', true)::uuid
         )
       )$p$;
 
@@ -114,8 +114,8 @@ BEGIN
       ON "presentation_generations"
       FOR ALL
       TO authenticated
-      USING ("user_id" = current_setting(''app.current_user_id'', true)::uuid)
-      WITH CHECK ("user_id" = current_setting(''app.current_user_id'', true)::uuid)$p$;
+      USING ("user_id" = current_setting('app.current_user_id', true)::uuid)
+      WITH CHECK ("user_id" = current_setting('app.current_user_id', true)::uuid)$p$;
 
     EXECUTE 'DROP POLICY IF EXISTS "presentation_exports_owner_all" ON "presentation_exports"';
     EXECUTE $p$CREATE POLICY "presentation_exports_owner_all"
@@ -126,14 +126,14 @@ BEGIN
         EXISTS (
           SELECT 1 FROM "presentations" p
           WHERE p.id = "presentation_exports"."presentation_id"
-            AND p."user_id" = current_setting(''app.current_user_id'', true)::uuid
+            AND p."user_id" = current_setting('app.current_user_id', true)::uuid
         )
       )
       WITH CHECK (
         EXISTS (
           SELECT 1 FROM "presentations" p
           WHERE p.id = "presentation_exports"."presentation_id"
-            AND p."user_id" = current_setting(''app.current_user_id'', true)::uuid
+            AND p."user_id" = current_setting('app.current_user_id', true)::uuid
         )
       )$p$;
 
@@ -142,8 +142,8 @@ BEGIN
       ON "presentation_themes"
       FOR ALL
       TO authenticated
-      USING ("user_id" = current_setting(''app.current_user_id'', true)::uuid OR "is_builtin" = true)
-      WITH CHECK ("user_id" = current_setting(''app.current_user_id'', true)::uuid)$p$;
+      USING ("user_id" = current_setting('app.current_user_id', true)::uuid OR "is_builtin" = true)
+      WITH CHECK ("user_id" = current_setting('app.current_user_id', true)::uuid)$p$;
 
     EXECUTE 'DROP POLICY IF EXISTS "presentation_themes_builtin_read" ON "presentation_themes"';
     EXECUTE $p$CREATE POLICY "presentation_themes_builtin_read"

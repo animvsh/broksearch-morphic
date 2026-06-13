@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { createId } from '@paralleldrive/cuid2'
-import { and, eq, gte, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
 import { apiKeys, usageEvents, workspaces } from '@/lib/db/schema-brok'
@@ -130,18 +130,6 @@ export async function recordUsage(record: UsageRecord): Promise<void> {
   }
 }
 
-function startOfUtcDay() {
-  const now = new Date()
-  return new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  )
-}
-
-function startOfUtcMonth() {
-  const now = new Date()
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-}
-
 function dollarsToCents(value: unknown) {
   const numeric =
     typeof value === 'number'
@@ -184,7 +172,7 @@ export async function checkUsageLimits({
         .where(
           and(
             eq(usageEvents.apiKeyId, apiKey.id),
-            gte(usageEvents.createdAt, startOfUtcDay())
+            sql`${usageEvents.createdAt} >= date_trunc('day', now())::timestamp`
           )
         )
 
@@ -198,7 +186,6 @@ export async function checkUsageLimits({
       }
     }
 
-    const monthlyStart = startOfUtcMonth()
     const [monthlyForKey] = await db
       .select({
         billedUsd: sql<string>`coalesce(sum(${usageEvents.billedUsd}), 0)::text`
@@ -207,7 +194,7 @@ export async function checkUsageLimits({
       .where(
         and(
           eq(usageEvents.apiKeyId, apiKey.id),
-          gte(usageEvents.createdAt, monthlyStart)
+          sql`${usageEvents.createdAt} >= date_trunc('month', now())::timestamp`
         )
       )
 
@@ -246,7 +233,7 @@ export async function checkUsageLimits({
         .where(
           and(
             eq(usageEvents.workspaceId, workspace.id),
-            gte(usageEvents.createdAt, monthlyStart)
+            sql`${usageEvents.createdAt} >= date_trunc('month', now())::timestamp`
           )
         )
 

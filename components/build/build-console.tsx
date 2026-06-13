@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 
 import { CheckCircle2, CircleDot, Loader2, RotateCcw, X } from 'lucide-react'
 
-import { PHASE_LABELS } from '@/lib/build/stream'
 import type { BrokBuildPhase, BrokStreamEvent } from '@/lib/build/types'
+import { PHASE_LABELS } from '@/lib/build/types'
 import { cn } from '@/lib/utils'
 
 import { Button } from '@/components/ui/button'

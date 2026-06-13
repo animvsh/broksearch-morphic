@@ -1,11 +1,12 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 import { UseChatHelpers } from '@ai-sdk/react'
 import { ChatRequestOptions } from 'ai'
 import { toast } from 'sonner'
 
+import { extractFollowUpsFromText } from '@/lib/render/follow-ups'
 import type { SearchResultItem } from '@/lib/types'
 import type {
   UIDataTypes,
@@ -26,6 +27,7 @@ import {
   type SourceCardData,
   SourcesPanel
 } from '@/components/search/source-card'
+import { SourceSidePanel } from '@/components/search/source-side-panel'
 import { StreamingProgress } from '@/components/search/streaming-progress'
 
 import { CollapsibleMessage } from '../collapsible-message'
@@ -75,6 +77,31 @@ export function extractSources(
       })
     }
   }
+  return out
+}
+
+function extractSourcesFromItems(
+  sources: SearchResultItem[],
+  toolCallId = 'answer'
+): SourceCardData[] {
+  const seen = new Set<string>()
+  const out: SourceCardData[] = []
+
+  sources.forEach((item, index) => {
+    if (!item?.url) return
+    const sourceKey = normalizeSourceKey(item.url)
+    if (seen.has(sourceKey)) return
+    seen.add(sourceKey)
+    out.push({
+      id: `${toolCallId}:${index + 1}`,
+      url: item.url,
+      title: item.title,
+      domain: safeHostname(item.url),
+      snippet: item.content || item.snippet,
+      publishedAt: formatDate(item.publishedDate || item.date)
+    })
+  })
+
   return out
 }
 
@@ -140,24 +167,75 @@ function generateFollowUps(content: string): FollowUp[] {
   ]
 }
 
+function getMetadataSources(
+  metadata?: UIMessageMetadata
+): SearchResultItem[] | undefined {
+  return Array.isArray(metadata?.answer?.sources)
+    ? metadata.answer.sources
+    : undefined
+}
+
+function getMetadataFollowUps(metadata?: UIMessageMetadata): FollowUp[] {
+  if (!Array.isArray(metadata?.answer?.followUps)) return []
+
+  return metadata.answer.followUps
+    .filter(
+      followUp =>
+        typeof followUp?.query === 'string' && followUp.query.trim().length > 0
+    )
+    .map((followUp, index) => ({
+      id: followUp.id || `metadata-follow-up-${index + 1}`,
+      kind: 'related' as const,
+      query: followUp.query.trim()
+    }))
+}
+
 export function SearchAnswerSection({
   content,
   isOpen,
   onOpenChange,
   messageId,
+  metadata,
   status,
   reload,
   citationMaps,
   isGuest = false,
+  showActions = true,
   className
 }: SearchAnswerSectionProps) {
-  const sources = useMemo(() => extractSources(citationMaps), [citationMaps])
+  const metadataSources = useMemo(
+    () => getMetadataSources(metadata),
+    [metadata]
+  )
+  const sources = useMemo(
+    () =>
+      metadataSources && metadataSources.length > 0
+        ? extractSourcesFromItems(metadataSources)
+        : extractSources(citationMaps),
+    [citationMaps, metadataSources]
+  )
   const isStreaming = status === 'submitted' || status === 'streaming'
   const streaming = useStreamingPhases(isStreaming)
+  const [activeSource, setActiveSource] = useState<SearchResultItem | null>(
+    null
+  )
+  const generatedFollowUps = useMemo(
+    () => extractFollowUpsFromText(content, messageId),
+    [content, messageId]
+  )
+  const metadataFollowUps = useMemo(
+    () => getMetadataFollowUps(metadata),
+    [metadata]
+  )
 
   const followUps = useMemo(
-    () => (isStreaming ? [] : generateFollowUps(content)),
-    [content, isStreaming]
+    () =>
+      isStreaming || generatedFollowUps.length > 0
+        ? []
+        : metadataFollowUps.length > 0
+          ? metadataFollowUps
+          : generateFollowUps(content),
+    [content, generatedFollowUps.length, isStreaming, metadataFollowUps]
   )
 
   const handleReload = () => {
@@ -240,7 +318,11 @@ export function SearchAnswerSection({
 
         {content && (
           <div className="flex flex-col gap-1" data-testid="answer-section">
-            <MarkdownMessage message={content} citationMaps={citationMaps} />
+            <MarkdownMessage
+              message={content}
+              citationMaps={citationMaps}
+              onCitationOpen={setActiveSource}
+            />
           </div>
         )}
 
@@ -248,7 +330,7 @@ export function SearchAnswerSection({
           <SourcesPanel sources={sources} defaultExpanded={true} />
         )}
 
-        {!isStreaming && content && (
+        {!isStreaming && content && showActions && (
           <div className="flex flex-col gap-4">
             <AnswerToolbar
               answerText={content}
@@ -265,6 +347,14 @@ export function SearchAnswerSection({
             )}
           </div>
         )}
+
+        <SourceSidePanel
+          source={activeSource}
+          open={Boolean(activeSource)}
+          onOpenChange={open => {
+            if (!open) setActiveSource(null)
+          }}
+        />
       </div>
     </CollapsibleMessage>
   )

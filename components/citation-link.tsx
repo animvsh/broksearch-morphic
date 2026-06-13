@@ -18,6 +18,7 @@ interface CitationLinkProps {
   children: React.ReactNode
   className?: string
   citationData?: SearchResultItem
+  onCitationOpen?: (citation: SearchResultItem) => void
 }
 
 // Helper function to safely extract hostname from URL
@@ -33,7 +34,8 @@ export const CitationLink = memo(function CitationLink({
   href,
   children,
   className,
-  citationData
+  citationData,
+  onCitationOpen
 }: CitationLinkProps) {
   const [open, setOpen] = useState(false)
   const childrenText = children?.toString() || ''
@@ -74,6 +76,13 @@ export const CitationLink = memo(function CitationLink({
             target="_blank"
             rel="noopener noreferrer"
             className={linkClasses}
+            onClick={event => {
+              if (onCitationOpen) {
+                event.preventDefault()
+                onCitationOpen(citationData)
+                setOpen(false)
+              }
+            }}
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
           >

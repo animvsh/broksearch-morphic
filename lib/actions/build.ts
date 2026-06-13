@@ -1,6 +1,7 @@
 'use server'
 
 import { classifyApp } from '@/lib/build/app-types'
+import type { PersistBrokBuildProjectOptions } from '@/lib/build/brokcode-project'
 import { buildInternalPlan, buildUserVisiblePlan } from '@/lib/build/plan'
 import { runBuildStream } from '@/lib/build/stream'
 import type {
@@ -39,13 +40,15 @@ export async function startBrokBuild(input: {
   projectId?: string
   emit?: (event: BrokStreamEvent) => void
   signal?: AbortSignal
+  brokCodeProject?: Omit<PersistBrokBuildProjectOptions, 'prompt' | 'userPlan'>
 }) {
   const projectId = input.projectId ?? newProjectId()
   return runBuildStream({
     prompt: input.prompt,
     projectId,
     emit: input.emit,
-    signal: input.signal
+    signal: input.signal,
+    brokCodeProject: input.brokCodeProject
   })
 }
 

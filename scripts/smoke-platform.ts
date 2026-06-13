@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm'
+import type { Page } from 'playwright'
 import { chromium } from 'playwright'
 
 import { ensureWorkspaceForUser } from '../lib/actions/api-keys'
-import { generateApiKey, getKeyPrefix, hashApiKey } from '../lib/api-key'
+import { generateApiKey, getKeyPrefix, hashNewApiKey } from '../lib/api-key'
 import { db } from '../lib/db'
 import { apiKeys, chats, messages, parts } from '../lib/db/schema'
 
@@ -37,9 +38,13 @@ type ShareSeed = {
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3001'
 const smokeUserId = process.env.ANONYMOUS_USER_ID || 'anonymous-user'
 const anonymousAuthMode = process.env.ENABLE_AUTH === 'false'
+const browserNavigationTimeoutMs = readPositiveIntegerEnv(
+  'SMOKE_PLATFORM_BROWSER_TIMEOUT_MS',
+  120_000
+)
 
 const uiChecks: UiCheck[] = [
-  { path: '/', expectedText: 'AI search, better than ever' },
+  { path: '/', expectedText: 'Save research, code context' },
   { path: '/docs', expectedText: 'Brok Documentation' },
   { path: '/docs/quickstart', expectedText: 'Quickstart' },
   { path: '/docs/api-keys', expectedText: 'API Keys' }
@@ -363,6 +368,7 @@ async function createSmokeTestKey() {
   }
 
   const rawKey = generateApiKey('test')
+  const { hash: keyHash, salt: keySalt } = hashNewApiKey(rawKey)
 
   try {
     const workspace = await ensureWorkspaceForUser(smokeUserId)
@@ -372,7 +378,8 @@ async function createSmokeTestKey() {
       userId: smokeUserId,
       name: 'Smoke Test Key',
       keyPrefix: getKeyPrefix(rawKey),
-      keyHash: hashApiKey(rawKey),
+      keyHash,
+      keySalt,
       environment: 'test',
       scopes: ['chat:write', 'search:write', 'usage:read'],
       allowedModels: [],
@@ -394,7 +401,8 @@ async function createSmokeTestKey() {
       user_id: smokeUserId,
       name: 'Smoke Test Key',
       key_prefix: getKeyPrefix(rawKey),
-      key_hash: hashApiKey(rawKey),
+      key_hash: keyHash,
+      key_salt: keySalt,
       environment: 'test',
       scopes: ['chat:write', 'search:write', 'usage:read'],
       allowed_models: [],
@@ -417,6 +425,39 @@ function encodePortableSharePayload(payload: unknown) {
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/g, '')
+}
+
+function readPositiveIntegerEnv(name: string, fallback: number) {
+  const value = Number(process.env[name])
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback
+}
+
+async function gotoForSmoke(page: Page, path: string) {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await page.goto(`${baseUrl}${path}`, {
+        waitUntil: 'domcontentloaded',
+        timeout: browserNavigationTimeoutMs
+      })
+    } catch (error) {
+      lastError = error
+      if (attempt < 3) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+      }
+    }
+  }
+
+  throw lastError
+}
+
+async function waitForBodyText(page: Page, expectedText: string) {
+  await page.waitForFunction(
+    text => document.body.innerText.includes(text),
+    expectedText,
+    { timeout: browserNavigationTimeoutMs }
+  )
 }
 
 async function createShareSeed(): Promise<ShareSeed> {
@@ -605,9 +646,7 @@ async function runShareChecks() {
   })
 
   try {
-    const shareResponse = await page.goto(`${baseUrl}/search/${seed.chatId}`, {
-      waitUntil: 'networkidle'
-    })
+    const shareResponse = await gotoForSmoke(page, `/search/${seed.chatId}`)
 
     if (!shareResponse || !shareResponse.ok()) {
       throw new Error(
@@ -617,6 +656,8 @@ async function runShareChecks() {
       )
     }
 
+    await waitForBodyText(page, seed.userText)
+    await waitForBodyText(page, seed.assistantText)
     const shareText = (await page.locator('body').innerText()).replace(
       /\s+/g,
       ' '
@@ -660,9 +701,9 @@ async function runShareChecks() {
         }
       ]
     })
-    const portableResponse = await page.goto(
-      `${baseUrl}/brokcode/shared?data=${portablePayload}`,
-      { waitUntil: 'networkidle' }
+    const portableResponse = await gotoForSmoke(
+      page,
+      `/brokcode/shared?data=${portablePayload}`
     )
 
     if (!portableResponse || !portableResponse.ok()) {
@@ -673,6 +714,9 @@ async function runShareChecks() {
       )
     }
 
+    await waitForBodyText(page, 'Portable BrokCode smoke share')
+    await waitForBodyText(page, 'Build a small notes app.')
+    await waitForBodyText(page, 'Created a compact notes app plan.')
     const portableText = (await page.locator('body').innerText()).replace(
       /\s+/g,
       ' '
@@ -717,9 +761,7 @@ async function runUiChecks(apiKeyName?: string, dbBacked = true) {
     for (const check of uiChecks) {
       pageErrors.length = 0
 
-      const response = await page.goto(`${baseUrl}${check.path}`, {
-        waitUntil: 'networkidle'
-      })
+      const response = await gotoForSmoke(page, check.path)
 
       if (!response || !response.ok()) {
         throw new Error(
@@ -727,6 +769,7 @@ async function runUiChecks(apiKeyName?: string, dbBacked = true) {
         )
       }
 
+      await waitForBodyText(page, check.expectedText)
       const bodyText = (await page.locator('body').innerText()).replace(
         /\s+/g,
         ' '
@@ -754,11 +797,16 @@ async function runUiChecks(apiKeyName?: string, dbBacked = true) {
     for (const check of protectedUiChecks) {
       pageErrors.length = 0
 
-      const response = await page.goto(`${baseUrl}${check.path}`, {
-        waitUntil: 'networkidle'
-      })
+      const response = await gotoForSmoke(page, check.path)
       const currentUrl = page.url()
       const status = response?.status() ?? 0
+      const redirectLocation = response?.headers()['location'] ?? ''
+      const redirectedToLogin =
+        currentUrl.includes('/auth/login') && currentUrl.includes('redirectTo=')
+      const explicitLoginRedirect =
+        (status === 307 || status === 308) &&
+        redirectLocation.includes('/auth/login') &&
+        redirectLocation.includes('redirectTo=')
 
       if (anonymousAuthMode) {
         if (currentUrl.includes('/auth/login') || status >= 400) {
@@ -766,17 +814,13 @@ async function runUiChecks(apiKeyName?: string, dbBacked = true) {
             `${check.path} should render in local anonymous mode; got ${currentUrl} (${status})`
           )
         }
-      } else if (
-        !currentUrl.includes('/auth/login') &&
-        status !== 307 &&
-        status !== 308
-      ) {
+      } else if (!redirectedToLogin && !explicitLoginRedirect) {
         throw new Error(
           `${check.path} should redirect to /auth/login when unauthenticated; got ${currentUrl}`
         )
       }
 
-      if (!anonymousAuthMode && !currentUrl.includes('redirectTo=')) {
+      if (!anonymousAuthMode && !redirectedToLogin && !explicitLoginRedirect) {
         throw new Error(`${check.path} login redirect missing redirectTo`)
       }
 

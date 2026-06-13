@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 
 import { newBrokBuildProjectId, startBrokBuild } from '@/lib/actions/build'
+import {
+  enforceBrokCodeAccountOwnership,
+  resolveBrokCodeRequestAuth
+} from '@/lib/brokcode/account-guard'
 import type { BrokStreamEvent } from '@/lib/build/types'
 
 export const runtime = 'nodejs'
@@ -46,6 +50,20 @@ export async function POST(request: Request) {
     typeof body.projectId === 'string' && body.projectId.length > 0
       ? body.projectId
       : await newBrokBuildProjectId()
+  const { authResult } = await resolveBrokCodeRequestAuth(request, {
+    allowBrowserSession: true
+  })
+  const accountMismatch = authResult.success
+    ? await enforceBrokCodeAccountOwnership(authResult)
+    : null
+  const brokCodeProject =
+    authResult.success && !accountMismatch
+      ? {
+          workspaceId: authResult.workspace.id,
+          userId: authResult.apiKey.userId,
+          request
+        }
+      : undefined
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -56,7 +74,8 @@ export async function POST(request: Request) {
           projectId,
           emit: event => {
             controller.enqueue(encoder.encode(encode(event)))
-          }
+          },
+          brokCodeProject
         })
       } catch (error) {
         const message =

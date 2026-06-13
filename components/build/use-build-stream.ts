@@ -16,6 +16,8 @@ export type BuildStreamState = {
   files: BrokBuildFilePreview[]
   logs: Array<{ time: string; level: 'info' | 'warn' | 'error'; message: string }>
   previewUrl: string | null
+  projectId: string | null
+  deploymentUrl: string | null
   opencodeSessionId: string | null
   backendStatus: BrokBuildBackendStatus
   errorMessage: string | null
@@ -28,6 +30,8 @@ const INITIAL_STATE: BuildStreamState = {
   files: [],
   logs: [],
   previewUrl: null,
+  projectId: null,
+  deploymentUrl: null,
   opencodeSessionId: null,
   backendStatus: 'not_started',
   errorMessage: null
@@ -60,6 +64,14 @@ function applyEvent(
       }
     case 'preview_url':
       return { ...state, events: nextEvents, previewUrl: event.url }
+    case 'brokcode_project':
+      return {
+        ...state,
+        events: nextEvents,
+        projectId: event.projectId,
+        previewUrl: event.previewUrl,
+        deploymentUrl: event.deploymentUrl
+      }
     case 'opencode_session':
       return {
         ...state,
@@ -81,7 +93,8 @@ function applyEvent(
         events: nextEvents,
         phase: 'ready',
         progress: 100,
-        previewUrl: event.previewUrl
+        previewUrl: event.previewUrl,
+        projectId: event.projectId
       }
     default:
       return { ...state, events: nextEvents }

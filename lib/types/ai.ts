@@ -7,6 +7,7 @@ import { fetchTool } from '@/lib/tools/fetch'
 import { askQuestionTool } from '@/lib/tools/question'
 import { searchTool } from '@/lib/tools/search'
 import { createTodoTools, type TodoItem } from '@/lib/tools/todo'
+import type { SearchResultItem } from '@/lib/types'
 import type { SearchMode } from '@/lib/types/search'
 
 // Re-export TodoItem for external use
@@ -18,6 +19,15 @@ export interface UIMessageMetadata {
   feedbackScore?: number | null
   searchMode?: SearchMode
   modelId?: string
+  answer?: {
+    sources?: SearchResultItem[]
+    citationCount?: number
+    followUps?: Array<{
+      id: string
+      label: string
+      query: string
+    }>
+  }
   [key: string]: any
 }
 

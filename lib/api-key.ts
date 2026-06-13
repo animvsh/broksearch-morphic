@@ -71,5 +71,5 @@ export function maskApiKey(key: string): string {
 
 export function getKeyPrefix(key: string): string {
   if (key.length < 8) return key
-  return key.slice(0, 12)
+  return key.slice(0, 20)
 }

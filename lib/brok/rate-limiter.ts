@@ -1,4 +1,4 @@
-import { and, eq, gte } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
 import { rateLimitEvents } from '@/lib/db/schema-brok'
@@ -38,24 +38,24 @@ export async function checkRateLimit(
 ): Promise<RateLimitResult> {
   const now = Date.now()
   const windowMs = 60 * 1000 // 1 minute window
-  const windowStart = new Date(now - windowMs)
   const resetAt = Math.floor((now + windowMs) / 1000) // Unix timestamp
 
   try {
     // Count accepted requests in the current window. Blocked attempts are still
     // recorded for observability, but they should not extend the lockout window.
-    const result = await db
-      .select({ count: rateLimitEvents.id })
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
       .from(rateLimitEvents)
       .where(
         and(
           eq(rateLimitEvents.apiKeyId, apiKeyId),
+          eq(rateLimitEvents.workspaceId, workspaceId),
           eq(rateLimitEvents.blocked, false),
-          gte(rateLimitEvents.createdAt, windowStart)
+          sql`${rateLimitEvents.createdAt} >= now() - interval '60 seconds'`
         )
       )
 
-    const currentCount = result.length
+    const currentCount = Number(result?.count ?? 0)
     const allowed = currentCount < rpmLimit
 
     return {

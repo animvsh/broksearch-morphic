@@ -44,6 +44,13 @@ export type BrokStreamEvent =
   | { kind: 'progress'; phase: BrokBuildPhase; percent: number }
   | { kind: 'plan'; plan: UserVisiblePlan }
   | { kind: 'internal_plan'; internalPlan: InternalPlan }
+  | {
+      kind: 'brokcode_project'
+      projectId: string
+      previewUrl: string | null
+      deploymentUrl: string | null
+      fileCount: number
+    }
   | { kind: 'files'; files: BrokBuildFilePreview[] }
   | { kind: 'log'; level: 'info' | 'warn' | 'error'; message: string }
   | { kind: 'preview_url'; url: string | null }
@@ -121,3 +128,18 @@ export type BrokBuildEmptyStateChip = {
 }
 
 export const DEFAULT_BROK_BUILD_MODEL = 'brok-build-architect'
+
+export const PHASE_LABELS: Record<string, string> = {
+  idle: 'Idle',
+  understanding: 'Understanding',
+  planning_core_modules: 'Planning core modules',
+  designing_backend_schema: 'Designing backend schema',
+  preparing_backend: 'Preparing backend',
+  starting_opencode: 'Starting OpenCode',
+  generating_frontend: 'Generating frontend',
+  wiring_backend: 'Wiring backend',
+  building_preview: 'Building preview',
+  ready: 'Ready',
+  failed: 'Failed',
+  adjusting: 'Adjusting'
+}

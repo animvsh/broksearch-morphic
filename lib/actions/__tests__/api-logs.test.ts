@@ -23,9 +23,8 @@ vi.mock('@/lib/auth/get-current-user', () => ({
 
 vi.mock('@/lib/db/dev-db-fallback', () => ({
   canUseDevDbFallback: vi.fn(() => true),
-  getErrorMessage: vi.fn(
-    (error: unknown) =>
-      error instanceof Error ? error.message : String(error ?? '')
+  getErrorMessage: vi.fn((error: unknown) =>
+    error instanceof Error ? error.message : String(error ?? '')
   )
 }))
 

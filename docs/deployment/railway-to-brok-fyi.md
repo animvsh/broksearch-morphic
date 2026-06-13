@@ -14,6 +14,8 @@ Set these in Railway (Project → Settings → Variables):
 
 - `NODE_ENV=production`
 - `DATABASE_URL=...` (managed Postgres URL)
+- `DATABASE_RESTRICTED_URL=...` (restricted app-user URL for RLS-backed app access)
+- `API_KEY_SALT=...` (required when `BROK_CLOUD_DEPLOYMENT=true`)
 - `OPENAI_COMPATIBLE_API_KEY=...`
 - `OPENAI_COMPATIBLE_API_BASE_URL=...`
 - `TAVILY_API_KEY=...` (or your selected search provider)
@@ -27,11 +29,15 @@ Set these in Railway (Project → Settings → Variables):
 - `NEXT_PUBLIC_BROK_API_BASE_URL=https://www.brok.fyi/api/v1` (optional override for docs/examples)
 - `BASE_URL=https://www.brok.fyi`
 - `PORT=8080` (nixpacks/runtime)
+- `SMOKE_SEED_TOKEN=...` (required for seeded production smoke/stress)
 
 ### Optional but recommended
 
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `OPENAI_API_KEY` (if not using OpenAI-compatible provider only)
+- `COMPOSIO_API_KEY` for BrokMail execution
+- `COMPOSIO_GMAIL_TOOLKIT_SLUGS=gmail,googlesuper`
+- `COMPOSIO_GCAL_TOOLKIT_SLUGS=googlecalendar,googlesuper`
 - Redis vars for rate limiting in production
 
 ## Domain mapping checklist
@@ -54,7 +60,7 @@ Railway uses:
 Run:
 
 ```bash
-npm run check:railway-production
+bun run check:railway-production
 ```
 
 This checks:
@@ -65,6 +71,10 @@ This checks:
 - `/api/v1/models` returns model list
 - `/api/v1/usage` properly requires auth
 - production routes like `/brokcode`, `/presentations`, `/integrations`
+- newer BrokCode, BrokMail, and build-plan auth/input contracts
+- BrokCode and BrokMail public docs on the app host
+- BrokMail public docs on the docs host
+- smoke-seed endpoint is either hidden or auth-gated
 - docs route `/docs`
 
 Set custom URLs when needed:
@@ -72,7 +82,24 @@ Set custom URLs when needed:
 ```bash
 BROK_PROD_BASE_URL=https://www.brok.fyi \\
 BROK_PROD_DOCS_URL=https://docs.brok.fyi \\
-npm run check:railway-production
+bun run check:railway-production
+```
+
+For full seeded proof against the deployed app, set `SMOKE_SEED_TOKEN` in the
+deployment and local shell, then run:
+
+```bash
+SMOKE_BASE_URL=https://www.brok.fyi \\
+STRESS_PLATFORM_CONTRACTS_ONLY=true \\
+bun run stress:platform
+
+SMOKE_BASE_URL=https://www.brok.fyi \\
+SMOKE_SEED_TOKEN="$SMOKE_SEED_TOKEN" \\
+bun run smoke:platform
+
+SMOKE_BASE_URL=https://www.brok.fyi \\
+SMOKE_SEED_TOKEN="$SMOKE_SEED_TOKEN" \\
+bun run stress:platform
 ```
 
 A report is written to:

@@ -175,6 +175,7 @@ export const apiKeys = pgTable(
   },
   table => ({
     workspaceIdx: index('api_keys_workspace_idx').on(table.workspaceId),
+    keyPrefixIdx: index('api_keys_key_prefix_idx').on(table.keyPrefix),
     keyHashIdx: index('api_keys_key_hash_idx').on(table.keyHash)
   })
 )
