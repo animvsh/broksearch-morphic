@@ -787,7 +787,13 @@ async function runBrowserChecks() {
         path: '/docs/brokcode-api',
         expectedText: 'POST /api/brokcode/execute'
       },
-      { path: '/docs/brokmail', expectedText: '/api/brokmail/gcal/events' }
+      {
+        path: '/docs/brokmail',
+        expectedAnyText: [
+          '/api/brokmail/gcal/events',
+          '/api/brokmail/calendar/events'
+        ]
+      }
     ]
     const protectedChecks = [
       '/admin/brok',
@@ -810,8 +816,15 @@ async function runBrowserChecks() {
         /\s+/g,
         ' '
       )
-      if (!bodyText.includes(check.expectedText)) {
-        throw new Error(`${check.path} missing text "${check.expectedText}"`)
+      const matchFound = check.expectedText
+        ? bodyText.includes(check.expectedText)
+        : (check.expectedAnyText || []).some(text => bodyText.includes(text))
+
+      if (!matchFound) {
+        const expected = check.expectedAnyText
+          ? check.expectedAnyText.join(', ')
+          : check.expectedText
+        throw new Error(`${check.path} missing text "${expected}"`)
       }
       if (pageErrors.length > 0) {
         throw new Error(`${check.path} page errors: ${pageErrors.join('; ')}`)

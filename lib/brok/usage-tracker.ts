@@ -32,6 +32,18 @@ export interface UsageRecord {
   metadata?: Record<string, unknown>
 }
 
+const LOCAL_FALLBACK_API_KEY_ID = '00000000-0000-0000-0000-000000000001'
+const LOCAL_FALLBACK_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000'
+
+function isLocalFallbackIdentity(apiKeyId: string | null, workspaceId: string) {
+  return (
+    process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK === 'true' &&
+    process.env.BROK_CLOUD_DEPLOYMENT !== 'true' &&
+    apiKeyId === LOCAL_FALLBACK_API_KEY_ID &&
+    workspaceId === LOCAL_FALLBACK_WORKSPACE_ID
+  )
+}
+
 export type UsageLimitResult =
   | { allowed: true }
   | {
@@ -84,6 +96,10 @@ export function generateRequestId(): string {
  * production whenever the new columns weren't present.
  */
 export async function recordUsage(record: UsageRecord): Promise<void> {
+  if (isLocalFallbackIdentity(record.apiKeyId, record.workspaceId)) {
+    return
+  }
+
   try {
     await db.insert(usageEvents).values({
       requestId: record.requestId,

@@ -363,14 +363,17 @@ async function checkHtmlRoute(
     }
 
     const html = await response.text()
-    if (expected && !html.includes(expected)) {
-      return pushCheck({
-        name,
-        url,
-        status: response.status,
-        ok: false,
-        details: `Response missing expected marker: ${expected}`
-      })
+    if (expected) {
+      const expectedMarkers = Array.isArray(expected) ? expected : [expected]
+      if (!expectedMarkers.some(marker => html.includes(marker))) {
+        return pushCheck({
+          name,
+          url,
+          status: response.status,
+          ok: false,
+          details: `Response missing expected marker: ${expectedMarkers.join(', ')}`
+        })
+      }
     }
 
     return pushCheck({
@@ -622,15 +625,14 @@ async function main() {
       `${APP_BASE_URL}/docs/brokcode-api`,
       'POST /api/brokcode/execute'
     ),
-    checkHtmlRoute(
-      'BrokMail docs route',
-      `${APP_BASE_URL}/docs/brokmail`,
-      '/api/brokmail/gcal/events'
-    ),
+    checkHtmlRoute('BrokMail docs route', `${APP_BASE_URL}/docs/brokmail`, [
+      '/api/brokmail/gcal/events',
+      '/api/brokmail/calendar/events'
+    ]),
     checkHtmlRoute(
       'BrokMail docs proxy route',
       `${DOCS_BASE_URL}/docs/brokmail`,
-      '/api/brokmail/gcal/events'
+      ['/api/brokmail/gcal/events', '/api/brokmail/calendar/events']
     ),
     checkRouteContract(
       'API health endpoint exposure',

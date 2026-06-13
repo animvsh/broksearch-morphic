@@ -3,6 +3,18 @@ import { and, eq, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { rateLimitEvents } from '@/lib/db/schema-brok'
 
+const LOCAL_FALLBACK_API_KEY_ID = '00000000-0000-0000-0000-000000000001'
+const LOCAL_FALLBACK_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000'
+
+function isLocalFallbackIdentity(apiKeyId: string, workspaceId: string) {
+  return (
+    process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK === 'true' &&
+    process.env.BROK_CLOUD_DEPLOYMENT !== 'true' &&
+    apiKeyId === LOCAL_FALLBACK_API_KEY_ID &&
+    workspaceId === LOCAL_FALLBACK_WORKSPACE_ID
+  )
+}
+
 export interface RateLimitResult {
   allowed: boolean
   current: number
@@ -100,6 +112,10 @@ export async function recordRateLimitEvent(
   currentValue: number,
   blocked: boolean
 ): Promise<void> {
+  if (isLocalFallbackIdentity(apiKeyId, workspaceId)) {
+    return
+  }
+
   try {
     await db.insert(rateLimitEvents).values({
       workspaceId,

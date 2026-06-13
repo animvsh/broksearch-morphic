@@ -121,21 +121,52 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
       .limit(1)
 
     if (!keyRecord) {
-      // New keys store a 20-character prefix that includes random material.
-      // Older rows may only have the static 12-character environment prefix,
-      // so include it as a compatibility fallback without scanning every key.
-      const lookupPrefixes = getApiKeyLookupPrefixes(key, getKeyPrefix)
-      const candidates = await db
+      const primaryPrefix = getKeyPrefix(key)
+      const exactPrefixCandidates = await db
         .select()
         .from(apiKeys)
-        .where(inArray(apiKeys.keyPrefix, lookupPrefixes))
-        .limit(100)
+        .where(eq(apiKeys.keyPrefix, primaryPrefix))
+        .limit(1)
 
-      for (const candidate of candidates) {
-        if (!candidate.keySalt) continue
-        if (verifyApiKey(key, candidate.keyHash, candidate.keySalt)) {
+      for (const candidate of exactPrefixCandidates) {
+        if (candidate.keySalt) {
+          if (verifyApiKey(key, candidate.keyHash, candidate.keySalt)) {
+            keyRecord = candidate
+            break
+          }
+          continue
+        }
+
+        if (verifyApiKey(key, candidate.keyHash, null)) {
           keyRecord = candidate
           break
+        }
+      }
+
+      if (!keyRecord) {
+        // No per-key-salt match with the full prefix; keep compatibility fallback.
+        const fallbackPrefixes = getApiKeyLookupPrefixes(key, getKeyPrefix)
+        const candidates = await db
+          .select()
+          .from(apiKeys)
+          .where(inArray(apiKeys.keyPrefix, fallbackPrefixes))
+          .limit(100)
+
+        for (const candidate of candidates) {
+          if (candidate.keySalt) {
+            if (verifyApiKey(key, candidate.keyHash, candidate.keySalt)) {
+              keyRecord = candidate
+              break
+            }
+            continue
+          }
+
+          // Fallback support for pre-migration legacy rows that still use the
+          // global salt path but may have an older key prefix layout.
+          if (verifyApiKey(key, candidate.keyHash, null)) {
+            keyRecord = candidate
+            break
+          }
         }
       }
     }
