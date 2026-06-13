@@ -3,22 +3,158 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+const cliOptions = parseArgs(process.argv.slice(2))
 const APP_BASE_URL = (
-  process.env.BROK_PROD_BASE_URL || 'https://www.brok.fyi'
+  cliOptions.appUrl ||
+  process.env.BROK_PROD_BASE_URL ||
+  'https://www.brok.fyi'
 ).replace(/\/+$/, '')
 const DOCS_BASE_URL = (
-  process.env.BROK_PROD_DOCS_URL || 'https://docs.brok.fyi'
+  cliOptions.docsUrl ||
+  (cliOptions.appUrl ? cliOptions.appUrl : undefined) ||
+  process.env.BROK_PROD_DOCS_URL ||
+  'https://docs.brok.fyi'
 ).replace(/\/+$/, '')
 const TIMEOUT_MS = Number(process.env.BROK_PROD_CHECK_TIMEOUT_MS || '12000')
 const REPORT_DIR = process.env.BROK_PROD_CHECK_REPORT_DIR || '.brok-audits'
 const now = new Date().toISOString()
 
 const checks = []
+const serverRouteDiagnostics = [
+  {
+    pattern: /^\/api\/health$/,
+    surface: 'health API',
+    expected: 'health JSON or an explicit 404 when the endpoint is not exposed',
+    blockerHint: 'runtime health/config endpoint crashed before responding'
+  },
+  {
+    pattern: /^\/api\/v1\/models$/,
+    surface: 'Brok API models',
+    expected: '200 model catalog or 401 missing_authorization JSON',
+    blockerHint: 'API runtime/config crashed before the auth/model contract ran'
+  },
+  {
+    pattern: /^\/api\/v1\//,
+    surface: 'Brok API platform',
+    expected: 'JSON auth/error contract',
+    blockerHint: 'API runtime/config crashed before the platform contract ran'
+  },
+  {
+    pattern: /^\/api\/build\/plan$/,
+    surface: 'BrokCode build planner',
+    expected: '400 validation JSON for malformed demo requests',
+    blockerHint: 'BrokCode planner runtime/config crashed before validation ran'
+  },
+  {
+    pattern: /^\/api\/brokcode\//,
+    surface: 'BrokCode route contract',
+    expected: '401 authorization contract for unauthenticated requests',
+    blockerHint: 'BrokCode server runtime/config crashed before auth ran'
+  },
+  {
+    pattern: /^\/api\/brokmail\//,
+    surface: 'BrokMail route contract',
+    expected:
+      '401 Authentication required contract for unauthenticated requests',
+    blockerHint: 'BrokMail server runtime/config crashed before auth ran'
+  },
+  {
+    pattern: /^\/api\/admin\/brok\/smoke-seed$/,
+    surface: 'smoke seed gate',
+    expected: '401 Unauthorized or 404 Not found without a seed token',
+    blockerHint: 'admin runtime/config crashed before the smoke-seed gate ran'
+  }
+]
+const protectedAppRouteDiagnostics = [
+  {
+    pattern: /^\/brokcode$/,
+    surface: 'BrokCode protected page',
+    expected: 'redirect to login'
+  },
+  {
+    pattern: /^\/brokmail$/,
+    surface: 'BrokMail protected page',
+    expected: 'redirect to login'
+  },
+  {
+    pattern: /^\/presentations$/,
+    surface: 'presentations protected page',
+    expected: 'redirect to login'
+  },
+  {
+    pattern: /^\/integrations$/,
+    surface: 'integrations protected page',
+    expected: 'redirect to login'
+  },
+  {
+    pattern: /^\/admin\/brok$/,
+    surface: 'admin protected page',
+    expected: 'redirect to login'
+  },
+  {
+    pattern: /^\/api-platform\/usage$/,
+    surface: 'API usage protected page',
+    expected: 'redirect to login'
+  }
+]
+const docsRouteDiagnostics = [
+  {
+    pattern: /^\/docs\/brokcode-api$/,
+    surface: 'BrokCode API docs proxy',
+    expected: 'static docs HTML with API route markers'
+  },
+  {
+    pattern: /^\/docs\/brokcode$/,
+    surface: 'BrokCode docs proxy',
+    expected: 'static docs HTML with Terminal TUI marker'
+  },
+  {
+    pattern: /^\/docs\/brokmail$/,
+    surface: 'BrokMail docs proxy',
+    expected: 'static docs HTML with mail/calendar route markers'
+  },
+  {
+    pattern: /^\/docs$/,
+    surface: 'docs index proxy',
+    expected: 'static docs HTML'
+  }
+]
 const fullProofCommands = [
   `SMOKE_BASE_URL=${APP_BASE_URL} STRESS_PLATFORM_CONTRACTS_ONLY=true bun run stress:platform`,
   `SMOKE_BASE_URL=${APP_BASE_URL} SMOKE_SEED_TOKEN="$SMOKE_SEED_TOKEN" bun run smoke:platform`,
   `SMOKE_BASE_URL=${APP_BASE_URL} SMOKE_SEED_TOKEN="$SMOKE_SEED_TOKEN" bun run stress:platform`
 ]
+
+function parseArgs(args) {
+  const options = {}
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    const next = args[index + 1]
+
+    if (arg === '--url' || arg === '--app-url') {
+      options.appUrl = readArgValue(arg, next)
+      index += 1
+    } else if (arg === '--docs-url') {
+      options.docsUrl = readArgValue(arg, next)
+      index += 1
+    } else {
+      throw new Error(
+        `Unknown argument: ${arg}. Use --url, --app-url, or --docs-url.`
+      )
+    }
+  }
+
+  return options
+}
+
+function readArgValue(flag, value) {
+  if (!value || value.startsWith('--')) {
+    throw new Error(`${flag} requires a value`)
+  }
+
+  return value
+}
 
 function pushCheck(check) {
   checks.push(check)
@@ -27,6 +163,116 @@ function pushCheck(check) {
     ? ` | ${check.details}`
     : ' (no additional details)'
   console.log(`${status}${details}`)
+}
+
+function getPathname(url) {
+  try {
+    return new URL(url).pathname
+  } catch {
+    return ''
+  }
+}
+
+function findRouteDiagnostic(url) {
+  const pathname = getPathname(url)
+  return (
+    serverRouteDiagnostics.find(route => route.pattern.test(pathname)) ||
+    protectedAppRouteDiagnostics.find(route => route.pattern.test(pathname)) ||
+    docsRouteDiagnostics.find(route => route.pattern.test(pathname))
+  )
+}
+
+function looksLikeNextRuntimeError(raw) {
+  if (!raw || typeof raw !== 'string') return false
+  return raw.includes('id="__next_error__"') || raw.includes('__next_error__')
+}
+
+function buildUnexpectedStatusDiagnostic({ url, status, raw, contentType }) {
+  const route = findRouteDiagnostic(url)
+  if (!route) return null
+
+  if (status === 500 && looksLikeNextRuntimeError(raw)) {
+    const routeHint = route.blockerHint ?? `${route.surface} crashed`
+    return {
+      classification: 'environment_deployment_blocker',
+      confidence: 'high',
+      surface: route.surface,
+      details: `${route.surface}: expected ${route.expected}; got Next.js runtime 500. ${routeHint}. This is a deployment environment/config blocker until runtime env is present, not proof of an app-regression root cause.`
+    }
+  }
+
+  if (status === 500) {
+    return {
+      classification: 'runtime_failure_unclassified',
+      confidence: 'medium',
+      surface: route.surface,
+      details: `${route.surface}: expected ${route.expected}; got HTTP 500${
+        contentType ? ` (${contentType})` : ''
+      }. Investigate server logs before classifying as env/config.`
+    }
+  }
+
+  return {
+    classification: 'route_contract_failure',
+    confidence: 'high',
+    surface: route.surface,
+    details: `${route.surface}: expected ${route.expected}; got HTTP ${status}.`
+  }
+}
+
+function formatUnexpectedDetails(baseDetails, diagnostic) {
+  if (!diagnostic) return baseDetails
+  return `${baseDetails} | ${diagnostic.details}`
+}
+
+function buildFailureSummary(failedChecks) {
+  const envBlockers = failedChecks.filter(
+    check => check.classification === 'environment_deployment_blocker'
+  )
+  const unclassified = failedChecks.filter(
+    check => check.classification !== 'environment_deployment_blocker'
+  )
+
+  if (envBlockers.length > 0 && unclassified.length === 0) {
+    return {
+      classification: 'environment_deployment_blocker',
+      confidence: 'high',
+      blocker:
+        'Static/docs routes responded, but server/API/protected route contracts returned Next.js runtime 500 documents. Restore required runtime env/config and re-run before treating this as an app regression.',
+      environmentBlockerFailures: envBlockers.length,
+      unclassifiedFailures: 0
+    }
+  }
+
+  if (envBlockers.length > 0) {
+    return {
+      classification: 'mixed_failures',
+      confidence: 'medium',
+      blocker:
+        'Some failures look like missing runtime env/config, but other route contract failures remain. Fix env/config first, then re-run to isolate app regressions.',
+      environmentBlockerFailures: envBlockers.length,
+      unclassifiedFailures: unclassified.length
+    }
+  }
+
+  if (failedChecks.length > 0) {
+    return {
+      classification: 'app_or_runtime_regression',
+      confidence: 'medium',
+      blocker:
+        'Failures did not match the conservative missing-env/config pattern. Investigate route behavior and server logs.',
+      environmentBlockerFailures: 0,
+      unclassifiedFailures: failedChecks.length
+    }
+  }
+
+  return {
+    classification: 'passed',
+    confidence: 'high',
+    blocker: null,
+    environmentBlockerFailures: 0,
+    unclassifiedFailures: 0
+  }
 }
 
 async function fetchWithTimeout(url, init = {}) {
@@ -58,12 +304,28 @@ async function checkHtmlRoute(
     const location = response.headers.get('location')
 
     if (!options.expectedStatuses.includes(response.status)) {
+      const raw = response.status >= 500 ? await response.text() : ''
+      const diagnostic = buildUnexpectedStatusDiagnostic({
+        url,
+        status: response.status,
+        raw,
+        contentType: response.headers.get('content-type') || ''
+      })
+
       return pushCheck({
         name,
         url,
         status: response.status,
         ok: false,
-        details: `Expected ${options.expectedStatuses.join(', ')}, got ${response.status}`
+        classification: diagnostic?.classification,
+        confidence: diagnostic?.confidence,
+        surface: diagnostic?.surface,
+        details: formatUnexpectedDetails(
+          `Expected ${options.expectedStatuses.join(', ')}, got ${
+            response.status
+          }`,
+          diagnostic
+        )
       })
     }
 
@@ -147,15 +409,27 @@ async function checkJsonApi(
     const raw = await response.text()
 
     if (!expectedStatuses.includes(response.status)) {
+      const diagnostic = buildUnexpectedStatusDiagnostic({
+        url,
+        status: response.status,
+        raw,
+        contentType: response.headers.get('content-type') || ''
+      })
+
       return pushCheck({
         name,
         url,
         status: response.status,
         ok: false,
-        details: `Expected ${expectedStatuses.join(', ')}, got ${response.status}: ${raw.slice(
-          0,
-          180
-        )}`
+        classification: diagnostic?.classification,
+        confidence: diagnostic?.confidence,
+        surface: diagnostic?.surface,
+        details: formatUnexpectedDetails(
+          `Expected ${expectedStatuses.join(', ')}, got ${
+            response.status
+          }: ${raw.slice(0, 180)}`,
+          diagnostic
+        )
       })
     }
 
@@ -231,14 +505,27 @@ async function checkRouteContract(
 
     const allowedStatuses = expectedStatuses ?? [expectedStatus]
     if (!allowedStatuses.includes(response.status)) {
+      const diagnostic = buildUnexpectedStatusDiagnostic({
+        url,
+        status: response.status,
+        raw,
+        contentType
+      })
+
       return pushCheck({
         name,
         url,
         status: response.status,
         ok: false,
-        details: `Expected ${allowedStatuses.join(', ')}, got ${
-          response.status
-        }: ${raw.slice(0, 180)}`
+        classification: diagnostic?.classification,
+        confidence: diagnostic?.confidence,
+        surface: diagnostic?.surface,
+        details: formatUnexpectedDetails(
+          `Expected ${allowedStatuses.join(', ')}, got ${
+            response.status
+          }: ${raw.slice(0, 180)}`,
+          diagnostic
+        )
       })
     }
 
@@ -341,6 +628,13 @@ async function main() {
       'BrokMail docs proxy route',
       `${DOCS_BASE_URL}/docs/brokmail`,
       '/api/brokmail/gcal/events'
+    ),
+    checkRouteContract(
+      'API health endpoint exposure',
+      `${APP_BASE_URL}/api/health`,
+      {
+        expectedStatuses: [200, 404]
+      }
     ),
     checkHtmlRoute(
       'BrokCode route (auth required)',
@@ -570,6 +864,7 @@ async function main() {
   ])
 
   const failed = checks.filter(check => !check.ok)
+  const failureSummary = buildFailureSummary(failed)
   const report = {
     checkedAt: now,
     appBase: APP_BASE_URL,
@@ -579,7 +874,12 @@ async function main() {
     summary: {
       total: checks.length,
       passed: checks.length - failed.length,
-      failed: failed.length
+      failed: failed.length,
+      failureClassification: failureSummary.classification,
+      failureConfidence: failureSummary.confidence,
+      environmentBlockerFailures: failureSummary.environmentBlockerFailures,
+      unclassifiedFailures: failureSummary.unclassifiedFailures,
+      blocker: failureSummary.blocker
     },
     checks
   }
@@ -597,6 +897,12 @@ async function main() {
 
   if (failed.length > 0) {
     console.error(`\n${failed.length} production checks failed.`)
+    console.error(
+      `Failure classification: ${failureSummary.classification} (${failureSummary.confidence})`
+    )
+    if (failureSummary.blocker) {
+      console.error(`Blocker: ${failureSummary.blocker}`)
+    }
     process.exitCode = 1
     return
   }

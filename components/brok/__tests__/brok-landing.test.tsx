@@ -8,6 +8,11 @@ describe('BrokLanding', () => {
     render(<BrokLanding isSignedIn={false} />)
 
     expect(
+      screen.getByRole('heading', {
+        name: /search, code, and ship all in one place/i
+      })
+    ).toBeInTheDocument()
+    expect(
       screen
         .getAllByRole('link', { name: /start for \$7\/mo/i })
         .map(link => link.getAttribute('href'))

@@ -24,23 +24,23 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 const installSteps = [
   'git clone <your Brok repo URL> brok',
   'cd brok',
-  'npm install',
+  'bun install',
   'open Brok Code Cloud or /api-keys/new and create a Brok API key',
   'export BROK_API_KEY="brok_sk_..."',
   'export BROK_BASE_URL="https://your-brok-domain.com/api/v1"',
   'export BROK_SYNC_URL="https://your-brok-domain.com"',
   'export BROKCODE_SESSION_ID="default"',
-  'npm run brokcode'
+  'bun run brokcode'
 ]
 
 const localDevSteps = [
-  'npm run dev -- --hostname 127.0.0.1 --port 3001',
+  'bun dev --hostname 127.0.0.1 --port 3001',
   'create a real Brok API key from http://127.0.0.1:3001/api-keys/new',
   'export BROK_API_KEY="brok_sk_..."',
   'export BROK_BASE_URL="http://127.0.0.1:3001/api/v1"',
   'export BROK_SYNC_URL="http://127.0.0.1:3001"',
   'export BROKCODE_SESSION_ID="default"',
-  'npm run brokcode'
+  'bun run brokcode'
 ]
 
 const coreCommands = [
@@ -217,7 +217,7 @@ export default function BrokCodeTuiPage() {
                 <p className="text-sm leading-6 text-muted-foreground">
                   The TUI ships with this repo as{' '}
                   <code>scripts/brokcode-tui.mjs</code>. Clone the repo and run
-                  it with <code>npm run brokcode</code>; no standalone binary is
+                  it with <code>bun run brokcode</code>; no standalone binary is
                   claimed here.
                 </p>
                 <ol className="space-y-2 text-sm">
@@ -424,7 +424,7 @@ export default function BrokCodeTuiPage() {
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
                     The key is missing, inactive, or not a real Brok key. Run{' '}
                     <code>/key brok_sk_...</code> or{' '}
-                    <code>BROK_API_KEY=… npm run brokcode</code>.
+                    <code>BROK_API_KEY=... bun run brokcode</code>.
                   </p>
                 </div>
                 <div className="rounded-md border bg-muted/20 p-3">

@@ -130,8 +130,7 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
             </div>
 
             <h1 className="max-w-4xl text-4xl font-semibold leading-[0.98] tracking-tight text-zinc-950 sm:text-6xl lg:text-7xl">
-              Search, code, and ship
-              <br />
+              Search, code, and ship <br />
               <span className="font-normal text-zinc-400">
                 all in one place
               </span>
