@@ -2,14 +2,6 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { asc, eq } from 'drizzle-orm'
-
-import {
-  generateApiKey,
-  getKeyPrefix,
-  hashNewApiKey,
-  maskApiKey
-} from '@/lib/api-key'
 import { getCurrentAppAccess, hasFeatureAccess } from '@/lib/auth/app-access'
 import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
 import type { CreateApiKeyInput } from '@/lib/brok/api-platform'
@@ -17,8 +9,7 @@ import {
   validateApiKeyStatusTransition,
   validateCreateApiKeyInput
 } from '@/lib/brok/api-platform'
-import { db } from '@/lib/db'
-import { apiKeys, workspaces } from '@/lib/db/schema'
+import type { apiKeys, workspaces } from '@/lib/db/schema'
 
 function canUseLocalApiPlatformFallback() {
   if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') return false
@@ -40,8 +31,26 @@ function localWorkspaceForUser(userId: string) {
   } satisfies typeof workspaces.$inferSelect
 }
 
+async function getApiKeyDependencies() {
+  const [{ asc, eq }, { db }, { apiKeys, workspaces }] = await Promise.all([
+    import('drizzle-orm'),
+    import('@/lib/db'),
+    import('@/lib/db/schema')
+  ])
+
+  return { asc, eq, db, apiKeys, workspaces }
+}
+
+async function getApiKeyCrypto() {
+  const { generateApiKey, getKeyPrefix, hashNewApiKey, maskApiKey } =
+    await import('@/lib/api-key')
+
+  return { generateApiKey, getKeyPrefix, hashNewApiKey, maskApiKey }
+}
+
 export async function ensureWorkspaceForUser(userId: string) {
   try {
+    const { asc, eq, db, workspaces } = await getApiKeyDependencies()
     const [workspace] = await db
       .select()
       .from(workspaces)
@@ -99,6 +108,9 @@ export async function createApiKey(
     throw new Error('Sign in to your Brok account before creating API keys.')
   }
   const validatedInput = validateCreateApiKeyInput(input)
+  const { eq, db, apiKeys, workspaces } = await getApiKeyDependencies()
+  const { generateApiKey, getKeyPrefix, hashNewApiKey, maskApiKey } =
+    await getApiKeyCrypto()
 
   const [workspace] = await db
     .select()
@@ -150,6 +162,8 @@ export async function createApiKey(
 
 export async function listApiKeys(workspaceId: string) {
   const user = await requireApiPlatformUser()
+  const { eq, db, apiKeys, workspaces } = await getApiKeyDependencies()
+  const { maskApiKey } = await getApiKeyCrypto()
 
   let keys: Array<typeof apiKeys.$inferSelect>
 
@@ -196,6 +210,7 @@ export async function listApiKeys(workspaceId: string) {
 
 async function requireOwnedApiKey(keyId: string) {
   const user = await requireApiPlatformUser()
+  const { eq, db, apiKeys, workspaces } = await getApiKeyDependencies()
 
   const [key] = await db
     .select()
@@ -225,6 +240,7 @@ async function requireOwnedApiKey(keyId: string) {
 export async function revokeApiKey(keyId: string) {
   const key = await requireOwnedApiKey(keyId)
   validateApiKeyStatusTransition(key.status, 'revoke')
+  const { eq, db, apiKeys } = await getApiKeyDependencies()
 
   await db
     .update(apiKeys)
@@ -237,6 +253,7 @@ export async function revokeApiKey(keyId: string) {
 export async function pauseApiKey(keyId: string) {
   const key = await requireOwnedApiKey(keyId)
   validateApiKeyStatusTransition(key.status, 'pause')
+  const { eq, db, apiKeys } = await getApiKeyDependencies()
 
   await db
     .update(apiKeys)
@@ -249,6 +266,7 @@ export async function pauseApiKey(keyId: string) {
 export async function resumeApiKey(keyId: string) {
   const key = await requireOwnedApiKey(keyId)
   validateApiKeyStatusTransition(key.status, 'resume')
+  const { eq, db, apiKeys } = await getApiKeyDependencies()
 
   await db
     .update(apiKeys)

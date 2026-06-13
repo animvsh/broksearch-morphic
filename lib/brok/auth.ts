@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { eq, inArray } from 'drizzle-orm'
-
-import { getKeyPrefix, hashApiKey, verifyApiKey } from '@/lib/api-key'
-import { db } from '@/lib/db'
-import { apiKeys, workspaces } from '@/lib/db/schema'
+import type { apiKeys, workspaces } from '@/lib/db/schema'
 
 export type AuthResult =
   | {
@@ -45,6 +41,31 @@ export function forbiddenScopeResponse(requiredScope: string) {
   )
 }
 
+async function getAuthDependencies() {
+  const [
+    { eq, inArray },
+    { getKeyPrefix, hashApiKey, verifyApiKey },
+    { db },
+    { apiKeys, workspaces }
+  ] = await Promise.all([
+    import('drizzle-orm'),
+    import('@/lib/api-key'),
+    import('@/lib/db'),
+    import('@/lib/db/schema')
+  ])
+
+  return {
+    eq,
+    inArray,
+    getKeyPrefix,
+    hashApiKey,
+    verifyApiKey,
+    db,
+    apiKeys,
+    workspaces
+  }
+}
+
 export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   const authHeader = request.headers.get('authorization')
   const apiKeyHeader = request.headers.get('x-api-key')
@@ -71,11 +92,13 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
     }
   }
 
-  const fallbackAuth = createLocalFallbackAuth(key)
+  const fallbackAuth = await createLocalFallbackAuth(key)
 
   let keyRecord: typeof apiKeys.$inferSelect | undefined
 
   try {
+    const { eq, inArray, getKeyPrefix, hashApiKey, verifyApiKey, db, apiKeys } =
+      await getAuthDependencies()
     // Two-stage lookup:
     //   1. Exact hash lookup for legacy global-salt keys.
     //   2. Prefix-indexed candidate lookup for per-key salted keys. We cannot
@@ -93,7 +116,7 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
       // New keys store a 20-character prefix that includes random material.
       // Older rows may only have the static 12-character environment prefix,
       // so include it as a compatibility fallback without scanning every key.
-      const lookupPrefixes = getApiKeyLookupPrefixes(key)
+      const lookupPrefixes = getApiKeyLookupPrefixes(key, getKeyPrefix)
       const candidates = await db
         .select()
         .from(apiKeys)
@@ -129,6 +152,7 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   let workspace: typeof workspaces.$inferSelect | undefined
 
   try {
+    const { eq, db, workspaces } = await getAuthDependencies()
     ;[workspace] = await db
       .select()
       .from(workspaces)
@@ -150,7 +174,10 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   return { success: true, apiKey: keyRecord, workspace }
 }
 
-function getApiKeyLookupPrefixes(key: string): string[] {
+function getApiKeyLookupPrefixes(
+  key: string,
+  getKeyPrefix: (key: string) => string
+): string[] {
   const prefixes = new Set<string>([getKeyPrefix(key)])
   if (key.length >= 12) {
     prefixes.add(key.slice(0, 12))
@@ -172,6 +199,7 @@ async function updateApiKeyLastUsedAt(apiKeyId: string) {
   }
   lastUsedWrites.set(apiKeyId, now)
   try {
+    const { eq, db, apiKeys } = await getAuthDependencies()
     await db
       .update(apiKeys)
       .set({ lastUsedAt: new Date() })
@@ -196,7 +224,9 @@ function canUseLocalAuthFallback() {
   return false
 }
 
-function createLocalFallbackAuth(key: string): AuthResult | null {
+async function createLocalFallbackAuth(
+  key: string
+): Promise<AuthResult | null> {
   if (!canUseLocalAuthFallback()) {
     return null
   }
@@ -214,6 +244,7 @@ function createLocalFallbackAuth(key: string): AuthResult | null {
     return null
   }
 
+  const { hashApiKey } = await import('@/lib/api-key')
   const now = new Date()
   const keyHash = hashApiKey(key)
   const keyPrefix = key.slice(0, 20)

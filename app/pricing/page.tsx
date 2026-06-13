@@ -77,7 +77,7 @@ export default function PricingPage() {
               <div className="mt-7 flex w-full flex-col gap-3 sm:flex-row">
                 <Button asChild className="h-11 rounded-md">
                   <Link href="/auth/login">
-                    Start for $7/mo
+                    Request invite
                     <ArrowRight className="size-4" />
                   </Link>
                 </Button>

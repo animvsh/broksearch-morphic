@@ -83,7 +83,7 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
               Sign in
             </Link>
             <Button asChild size="sm" className="h-8 rounded-md px-3 text-xs">
-              <Link href={primaryHref}>Start for $7/mo</Link>
+              <Link href={primaryHref}>Request invite</Link>
             </Button>
           </div>
         </header>
@@ -152,7 +152,7 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
             <div className="mt-7">
               <Button asChild size="lg" className="group h-11 rounded-md px-6">
                 <Link href={primaryHref}>
-                  Start for $7/mo
+                  Request invite
                   <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
                 </Link>
               </Button>

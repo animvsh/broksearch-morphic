@@ -53,7 +53,7 @@ export const TOOL_FEATURES: ToolFeature[] = [
     subtitle:
       'Ask quick questions, run deep research, and keep sources attached so papers, labs, and projects do not turn into tab chaos.',
     priceLine: 'Included in the $7/month student plan.',
-    primaryHref: '/dashboard',
+    primaryHref: '/',
     primaryLabel: 'Open Search',
     secondaryHref: '/search/demo',
     secondaryLabel: 'View demo',
@@ -217,7 +217,7 @@ export const TOOL_FEATURES: ToolFeature[] = [
     subtitle:
       'Create keys, call chat and search endpoints, track usage, and build projects without learning a new API shape.',
     priceLine: 'API access is included in the $7/month plan.',
-    primaryHref: '/api-keys',
+    primaryHref: '/api-platform/keys',
     primaryLabel: 'Create API key',
     secondaryHref: '/docs/quickstart',
     secondaryLabel: 'Read quickstart',
