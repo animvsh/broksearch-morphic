@@ -763,6 +763,12 @@ async function runRouteContracts() {
       },
       expectedStatus: 401,
       expectedErrorText: 'authorization'
+    },
+    {
+      name: 'GET /api/search/stream/msg_missing returns 404 search error contract',
+      path: '/api/search/stream/msg_missing',
+      expectedStatus: 404,
+      expectedErrorText: 'search_request_not_found'
     }
   ]
 

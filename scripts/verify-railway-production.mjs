@@ -865,6 +865,14 @@ async function main() {
           body: JSON.stringify({ kind: 'smoke' })
         }
       }
+    ),
+    checkRouteContract(
+      'Search stream missing message contract',
+      `${APP_BASE_URL}/api/search/stream/msg_missing`,
+      {
+        expectedStatus: 404,
+        expectedErrorText: 'search_request_not_found'
+      }
     )
   ])
 
