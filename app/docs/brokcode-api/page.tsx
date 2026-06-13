@@ -96,7 +96,9 @@ export default function BrokCodeApiDocsPage() {
             <Link href="/docs/insforge">Configure InsForge</Link>
           </li>
           <li>
-            <Link href="/playground">Open BrokCode API playground</Link>
+            <Link href="/api-platform/playground">
+              Open BrokCode API playground
+            </Link>
           </li>
         </ul>
       </div>

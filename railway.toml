@@ -31,6 +31,10 @@ ENABLE_AUTH = "true"
 BROK_CLOUD_DEPLOYMENT = "true"
 API_KEY_SALT = "${API_KEY_SALT}"
 SMOKE_SEED_TOKEN = "${SMOKE_SEED_TOKEN}"
+NEXT_PUBLIC_APP_URL = "https://www.brok.fyi"
+NEXT_PUBLIC_BASE_URL = "https://www.brok.fyi"
+NEXT_PUBLIC_BROK_API_BASE_URL = "https://www.brok.fyi/api/v1"
+BASE_URL = "https://www.brok.fyi"
 
 # Integrations
 COMPOSIO_API_KEY = "${COMPOSIO_API_KEY}"

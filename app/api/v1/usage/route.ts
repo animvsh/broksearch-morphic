@@ -1,17 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { and, eq, sql } from 'drizzle-orm'
-
 import {
   apiKeyHasScope,
   forbiddenScopeResponse,
   unauthorizedResponse,
   verifyRequestAuth
 } from '@/lib/brok/auth'
-import { db } from '@/lib/db'
-import { usageEvents } from '@/lib/db/schema-brok'
 
-function usagePeriodWindow(period: 'day' | 'week' | 'month') {
+async function getUsageDependencies() {
+  const [{ and, eq, sql }, { db }, { usageEvents }] = await Promise.all([
+    import('drizzle-orm'),
+    import('@/lib/db'),
+    import('@/lib/db/schema-brok')
+  ])
+
+  return { and, eq, sql, db, usageEvents }
+}
+
+function usagePeriodWindow(
+  period: 'day' | 'week' | 'month',
+  deps: Awaited<ReturnType<typeof getUsageDependencies>>
+) {
+  const { sql, usageEvents } = deps
+
   if (period === 'day') {
     return sql`${usageEvents.createdAt} >= date_trunc('day', now())::timestamp`
   }
@@ -57,6 +68,9 @@ export async function GET(request: NextRequest) {
     | undefined
 
   try {
+    const usageDeps = await getUsageDependencies()
+    const { and, db, eq, sql, usageEvents } = usageDeps
+
     ;[stats] = await db
       .select({
         totalRequests: sql<number>`count(*)`,
@@ -70,7 +84,7 @@ export async function GET(request: NextRequest) {
       .where(
         and(
           eq(usageEvents.workspaceId, auth.workspace.id),
-          usagePeriodWindow(period)
+          usagePeriodWindow(period, usageDeps)
         )
       )
   } catch (error) {

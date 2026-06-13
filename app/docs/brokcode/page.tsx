@@ -374,7 +374,7 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
             <Link href="/brokcode/tui">Open TUI Instructions</Link>
           </li>
           <li>
-            <Link href="/playground">Test the BrokCode API</Link>
+            <Link href="/api-platform/playground">Test the BrokCode API</Link>
           </li>
         </ul>
       </div>

@@ -115,7 +115,9 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
         <h2>Download And Use</h2>
         <ul>
           <li>
-            <Link href="/playground">Run a request in BrokCode API</Link>
+            <Link href="/api-platform/playground">
+              Run a request in BrokCode API
+            </Link>
           </li>
           <li>
             <Link href="/docs/models">Choose a Brok model</Link>

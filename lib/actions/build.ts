@@ -3,7 +3,6 @@
 import { classifyApp } from '@/lib/build/app-types'
 import type { PersistBrokBuildProjectOptions } from '@/lib/build/brokcode-project'
 import { buildInternalPlan, buildUserVisiblePlan } from '@/lib/build/plan'
-import { runBuildStream } from '@/lib/build/stream'
 import type {
   BrokStreamEvent,
   ClassifiedApp,
@@ -43,6 +42,8 @@ export async function startBrokBuild(input: {
   brokCodeProject?: Omit<PersistBrokBuildProjectOptions, 'prompt' | 'userPlan'>
 }) {
   const projectId = input.projectId ?? newProjectId()
+  const { runBuildStream } = await import('@/lib/build/stream')
+
   return runBuildStream({
     prompt: input.prompt,
     projectId,
