@@ -17,6 +17,7 @@ const DOCS_BASE_URL = (
 ).replace(/\/+$/, '')
 const TIMEOUT_MS = Number(process.env.BROK_PROD_CHECK_TIMEOUT_MS || '12000')
 const REPORT_DIR = process.env.BROK_PROD_CHECK_REPORT_DIR || '.brok-audits'
+const WRITE_REPORTS = !cliOptions.noWrite
 const now = new Date().toISOString()
 
 const checks = []
@@ -138,9 +139,11 @@ function parseArgs(args) {
     } else if (arg === '--docs-url') {
       options.docsUrl = readArgValue(arg, next)
       index += 1
+    } else if (arg === '--no-write') {
+      options.noWrite = true
     } else {
       throw new Error(
-        `Unknown argument: ${arg}. Use --url, --app-url, or --docs-url.`
+        `Unknown argument: ${arg}. Use --url, --app-url, --docs-url, or --no-write.`
       )
     }
   }
@@ -884,16 +887,20 @@ async function main() {
     checks
   }
 
-  const outputDir = REPORT_DIR
-  const stamp = now.replace(/[:.]/g, '-')
-  const file = `${outputDir}/${stamp}.json`
-  const latest = `${outputDir}/railway-production-check-latest.json`
+  if (WRITE_REPORTS) {
+    const outputDir = REPORT_DIR
+    const stamp = now.replace(/[:.]/g, '-')
+    const file = `${outputDir}/${stamp}.json`
+    const latest = `${outputDir}/railway-production-check-latest.json`
 
-  await mkdir(outputDir, { recursive: true })
-  await writeFile(file, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
-  await writeFile(latest, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+    await mkdir(outputDir, { recursive: true })
+    await writeFile(file, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+    await writeFile(latest, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
 
-  console.log(`\nSaved report: ${path.resolve(file)}`)
+    console.log(`\nSaved report: ${path.resolve(file)}`)
+  } else {
+    console.log('\nReport writing skipped (--no-write).')
+  }
 
   if (failed.length > 0) {
     console.error(`\n${failed.length} production checks failed.`)
