@@ -4,13 +4,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { verifyApiKey } from '@/lib/api-key'
 
-const { mockEnsureWorkspaceForUser, mockInsert, mockReturning, mockValues } =
-  vi.hoisted(() => ({
-    mockEnsureWorkspaceForUser: vi.fn(),
-    mockInsert: vi.fn(),
-    mockReturning: vi.fn(),
-    mockValues: vi.fn()
-  }))
+const {
+  mockEnsureWorkspaceForUser,
+  mockInsert,
+  mockReturning,
+  mockSet,
+  mockUpdate,
+  mockUpdateWhere,
+  mockValues
+} = vi.hoisted(() => ({
+  mockEnsureWorkspaceForUser: vi.fn(),
+  mockInsert: vi.fn(),
+  mockReturning: vi.fn(),
+  mockSet: vi.fn(),
+  mockUpdate: vi.fn(),
+  mockUpdateWhere: vi.fn(),
+  mockValues: vi.fn()
+}))
 
 vi.mock('@/lib/actions/api-keys', () => ({
   ensureWorkspaceForUser: mockEnsureWorkspaceForUser
@@ -18,7 +28,8 @@ vi.mock('@/lib/actions/api-keys', () => ({
 
 vi.mock('@/lib/db', () => ({
   db: {
-    insert: mockInsert
+    insert: mockInsert,
+    update: mockUpdate
   }
 }))
 
@@ -41,6 +52,9 @@ describe('smoke seed route', () => {
     mockReturning.mockResolvedValue([{ id: 'key_123' }])
     mockValues.mockReturnValue({ returning: mockReturning })
     mockInsert.mockReturnValue({ values: mockValues })
+    mockUpdateWhere.mockResolvedValue(undefined)
+    mockSet.mockReturnValue({ where: mockUpdateWhere })
+    mockUpdate.mockReturnValue({ set: mockSet })
   })
 
   it('stays hidden when the seed token is not configured', async () => {
@@ -70,6 +84,9 @@ describe('smoke seed route', () => {
       workspaceId: 'workspace_123'
     })
     expect(body.apiKey).toMatch(/^brok_sk_test_/)
+    expect(mockUpdate).toHaveBeenCalled()
+    expect(mockSet).toHaveBeenCalledWith({ monthlyBudgetCents: 100 })
+    expect(inserted.monthlyBudgetCents).toBe(100)
     expect(inserted.keyHash).toEqual(expect.any(String))
     expect(inserted.keySalt).toEqual(expect.any(String))
     expect(verifyApiKey(body.apiKey, inserted.keyHash, inserted.keySalt)).toBe(

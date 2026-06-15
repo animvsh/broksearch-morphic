@@ -28,7 +28,7 @@ async function getSeedDependencies() {
     { ensureWorkspaceForUser },
     { generateApiKey, getKeyPrefix, hashNewApiKey },
     { db },
-    { apiKeys, chats, generateId, messages, parts, usageEvents }
+    { apiKeys, chats, generateId, messages, parts, usageEvents, workspaces }
   ] = await Promise.all([
     import('drizzle-orm'),
     import('@/lib/actions/api-keys'),
@@ -50,8 +50,18 @@ async function getSeedDependencies() {
     generateId,
     messages,
     parts,
-    usageEvents
+    usageEvents,
+    workspaces
   }
+}
+
+async function ensureSeedWorkspaceBudget(workspaceId: string) {
+  const { db, eq, workspaces } = await getSeedDependencies()
+
+  await db
+    .update(workspaces)
+    .set({ monthlyBudgetCents: 100 })
+    .where(eq(workspaces.id, workspaceId))
 }
 
 async function createKey(
@@ -95,6 +105,7 @@ async function createKey(
 async function seedSmoke(userId: string) {
   const { ensureWorkspaceForUser } = await getSeedDependencies()
   const workspace = await ensureWorkspaceForUser(userId)
+  await ensureSeedWorkspaceBudget(workspace.id)
   const key = await createKey(workspace.id, userId, {
     name: 'Smoke Test Key',
     environment: 'test',
@@ -102,7 +113,7 @@ async function seedSmoke(userId: string) {
     allowedModels: [],
     rpmLimit: 60,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: 100
   })
 
   return {
@@ -116,6 +127,7 @@ async function seedStress(userId: string) {
   const { apiKeys, db, ensureWorkspaceForUser, eq, usageEvents } =
     await getSeedDependencies()
   const workspace = await ensureWorkspaceForUser(userId)
+  await ensureSeedWorkspaceBudget(workspace.id)
 
   const mainKey = await createKey(workspace.id, userId, {
     name: 'Stress Main Key',
@@ -124,7 +136,7 @@ async function seedStress(userId: string) {
     allowedModels: [],
     rpmLimit: 5,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: 100
   })
 
   const lowRpmKey = await createKey(workspace.id, userId, {
