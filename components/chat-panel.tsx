@@ -17,13 +17,16 @@ import {
 import { toast } from 'sonner'
 
 import { appendAssistantMessageToChat } from '@/lib/actions/chat'
+import { normalizeSearchMode } from '@/lib/config/search-modes'
 import { generateId } from '@/lib/db/schema'
 import { SHORTCUT_EVENTS } from '@/lib/keyboard-shortcuts'
 import { UploadedFile } from '@/lib/types'
 import type { UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
 import type { ModelSelectorData } from '@/lib/types/model-selector'
+import type { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
 import { isSimpleUtilityText } from '@/lib/utils/chat-routing'
+import { setCookie } from '@/lib/utils/cookies'
 
 import { useSearchMode } from '@/hooks/use-search-mode'
 
@@ -56,6 +59,8 @@ interface ChatPanelProps {
   onFilesSelected: (files: File[]) => Promise<void> | void
   /** Callback to reset chatId when starting a new chat */
   onNewChat?: () => void
+  /** Search mode requested by a query-backed /search URL */
+  initialSearchMode?: SearchMode
   /** Whether the deployment is cloud mode */
   isCloudDeployment?: boolean
   /** Whether the current chat is running without an authenticated user */
@@ -104,6 +109,7 @@ export function ChatPanel({
   onFilesSelected,
   scrollContainerRef,
   onNewChat,
+  initialSearchMode,
   isCloudDeployment = false,
   isGuest = false,
   modelSelectorData,
@@ -358,6 +364,12 @@ export function ChatPanel({
     },
     [chatId, isGuest, messages, router, setMessages]
   )
+
+  useEffect(() => {
+    if (initialSearchMode) {
+      setCookie('searchMode', normalizeSearchMode(initialSearchMode))
+    }
+  }, [initialSearchMode])
 
   // if query is not empty, submit the query
   useEffect(() => {

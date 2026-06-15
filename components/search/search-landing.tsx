@@ -3,18 +3,21 @@
 import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
+import type { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
 
 import { Hero } from '@/components/search/hero'
 import { recordRecentSearch } from '@/components/search/recent-searches'
 
 interface SearchLandingProps {
+  defaultMode?: SearchMode
   isCloudDeployment?: boolean
   hasModels?: boolean
   className?: string
 }
 
 export function SearchLanding({
+  defaultMode,
   isCloudDeployment = false,
   hasModels = true,
   className
@@ -46,6 +49,7 @@ export function SearchLanding({
     >
       <Hero
         onSubmit={handleSubmit}
+        defaultMode={defaultMode}
         isCloudDeployment={isCloudDeployment}
         hasModels={hasModels}
       />

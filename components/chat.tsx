@@ -19,6 +19,7 @@ import {
   isToolTypePart
 } from '@/lib/types/dynamic-tools'
 import type { ModelSelectorData } from '@/lib/types/model-selector'
+import type { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
@@ -61,6 +62,7 @@ export function Chat({
   id: providedId,
   savedMessages = [],
   query,
+  initialSearchMode,
   isGuest = false,
   isCloudDeployment = false,
   modelSelectorData
@@ -68,6 +70,7 @@ export function Chat({
   id?: string
   savedMessages?: UIMessage[]
   query?: string
+  initialSearchMode?: SearchMode
   isGuest?: boolean
   isCloudDeployment?: boolean
   modelSelectorData?: ModelSelectorData
@@ -691,6 +694,7 @@ export function Chat({
           onFilesSelected={processFiles}
           scrollContainerRef={scrollContainerRef}
           onNewChat={handleNewChat}
+          initialSearchMode={initialSearchMode}
           isCloudDeployment={isCloudDeployment}
           isGuest={isGuest}
           modelSelectorData={modelSelectorData}
