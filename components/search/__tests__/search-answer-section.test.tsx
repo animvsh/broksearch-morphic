@@ -188,6 +188,27 @@ describe('SearchAnswerSection actions', () => {
     expect(screen.getByText('Sources')).toBeInTheDocument()
     expect(screen.getByText('Stored source')).toBeInTheDocument()
   })
+
+  it('opens source cards in the verifier side panel', () => {
+    renderAnswer({
+      content: 'Answer text.',
+      metadata: {
+        answer: {
+          sources: [
+            source({
+              title: 'Stored source',
+              url: 'https://stored.example/report'
+            })
+          ]
+        }
+      }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stored source' }))
+
+    expect(screen.getByText('Relevant excerpt')).toBeInTheDocument()
+    expect(screen.getByText('Why Brok used this')).toBeInTheDocument()
+  })
 })
 
 function source({

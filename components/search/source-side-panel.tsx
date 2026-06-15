@@ -12,6 +12,8 @@ import {
   SheetTitle
 } from '@/components/ui/sheet'
 
+import type { SourceCardData } from '@/components/search/source-card'
+
 function getHostname(url: string) {
   try {
     return new URL(url).hostname.replace(/^www\./, '')
@@ -25,14 +27,20 @@ export function SourceSidePanel({
   open,
   onOpenChange
 }: {
-  source: SearchResultItem | null
+  source: SearchResultItem | SourceCardData | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
   if (!source) return null
 
-  const host = source.publisher || getHostname(source.url)
-  const excerpt = source.snippet || source.content
+  const host =
+    'publisher' in source && source.publisher
+      ? source.publisher
+      : 'domain' in source
+        ? source.domain
+        : getHostname(source.url)
+  const excerpt =
+    source.snippet || ('content' in source ? source.content : undefined)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -63,9 +71,9 @@ export function SourceSidePanel({
               Why Brok used this
             </div>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              This source was returned by the research pipeline and linked to
+              This source was returned by the research pipeline and kept with
               the cited answer so you can verify the claim against the original
-              page.
+              page before opening it.
             </p>
           </section>
 

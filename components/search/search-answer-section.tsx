@@ -218,9 +218,9 @@ export function SearchAnswerSection({
   )
   const isStreaming = status === 'submitted' || status === 'streaming'
   const streaming = useStreamingPhases(isStreaming)
-  const [activeSource, setActiveSource] = useState<SearchResultItem | null>(
-    null
-  )
+  const [activeSource, setActiveSource] = useState<
+    SearchResultItem | SourceCardData | null
+  >(null)
   const generatedFollowUps = useMemo(
     () => extractFollowUpsFromText(content, messageId),
     [content, messageId]
@@ -334,7 +334,11 @@ export function SearchAnswerSection({
         )}
 
         {!isStreaming && sources.length > 0 && (
-          <SourcesPanel sources={sources} defaultExpanded={true} />
+          <SourcesPanel
+            sources={sources}
+            defaultExpanded={true}
+            onOpenSource={setActiveSource}
+          />
         )}
 
         {!isStreaming && content && showActions && (

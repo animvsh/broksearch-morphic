@@ -4,7 +4,7 @@
 
 import { useState } from 'react'
 
-import { ExternalLink, Star } from 'lucide-react'
+import { ExternalLink, PanelRightOpen, Star } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -56,18 +56,16 @@ export function SourceCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <a
-              href={source.url}
-              target="_blank"
-              rel="noreferrer noopener"
+            <button
+              type="button"
               onClick={() => onOpen?.(source)}
               className={cn(
-                'line-clamp-2 text-sm font-medium leading-snug text-foreground/90 transition-colors',
+                'line-clamp-2 text-left text-sm font-medium leading-snug text-foreground/90 transition-colors',
                 'hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded'
               )}
             >
               {source.title || source.domain}
-            </a>
+            </button>
             <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <SourceFavicon domain={source.domain} favicon={source.favicon} />
               <span className="truncate">{source.domain}</span>
@@ -92,7 +90,6 @@ export function SourceCard({
             href={source.url}
             target="_blank"
             rel="noreferrer noopener"
-            onClick={() => onOpen?.(source)}
             className={cn(
               'inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors',
               'hover:bg-foreground/5 hover:text-foreground',
@@ -117,6 +114,16 @@ export function SourceCard({
               </button>
             )}
           </p>
+        )}
+        {onOpen && (
+          <button
+            type="button"
+            onClick={() => onOpen(source)}
+            className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-foreground/70 transition-colors hover:text-foreground"
+          >
+            Inspect source
+            <PanelRightOpen className="size-3.5" />
+          </button>
         )}
       </div>
     </article>
@@ -160,12 +167,14 @@ function SourceFavicon({
 interface SourcesPanelProps {
   sources: SourceCardData[]
   defaultExpanded?: boolean
+  onOpenSource?: (source: SourceCardData) => void
   className?: string
 }
 
 export function SourcesPanel({
   sources,
   defaultExpanded = true,
+  onOpenSource,
   className
 }: SourcesPanelProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
@@ -199,7 +208,12 @@ export function SourcesPanel({
       {expanded && (
         <div className="grid gap-2 sm:grid-cols-2">
           {sources.map((src, idx) => (
-            <SourceCard key={src.id} source={src} index={idx + 1} />
+            <SourceCard
+              key={src.id}
+              source={src}
+              index={idx + 1}
+              onOpen={onOpenSource}
+            />
           ))}
         </div>
       )}
