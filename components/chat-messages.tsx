@@ -8,6 +8,7 @@ import type { UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
 import { cn } from '@/lib/utils'
 import { extractCitationMapsFromMessages } from '@/lib/utils/citation'
 
+import { PendingAnswer } from './search/pending-answer'
 import { AnimatedLogo } from './ui/animated-logo'
 import { ChatError } from './chat-error'
 import { ChatFooterMessage } from './chat-footer-message'
@@ -87,6 +88,16 @@ export function ChatMessages({
   const latestSection = sections.at(-1)
   const showAssistantLogo = Boolean(
     latestSection && (isLoading || latestSection.assistantMessages.length > 0)
+  )
+  const latestSectionHasAnswerText = Boolean(
+    latestSection?.assistantMessages.some(message =>
+      message.parts?.some(
+        part =>
+          part.type === 'text' &&
+          typeof (part as { text?: unknown }).text === 'string' &&
+          (part as { text: string }).text.trim().length > 0
+      )
+    )
   )
 
   // Helper function to get tool count with caching
@@ -227,6 +238,13 @@ export function ChatMessages({
                 </div>
               )
             })}
+            {isLoading &&
+              sectionIndex === sections.length - 1 &&
+              !latestSectionHasAnswerText && (
+                <div className="mt-3">
+                  <PendingAnswer />
+                </div>
+              )}
             {/* Show assistant logo and footer message after assistant messages */}
             {showAssistantLogo && sectionIndex === sections.length - 1 && (
               <div className="flex items-center gap-3 py-3">
