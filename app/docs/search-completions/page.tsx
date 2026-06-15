@@ -24,8 +24,10 @@ POST https://api.brok.ai/v1/search/completions
 | model | string | Yes | Any model with search enabled, including brok-lite, brok-search, brok-search-pro, and brok-agent |
 | query | string | Yes | User&apos;s search query |
 | search_depth | string | No | "lite", "standard", or "deep". Compatibility aliases: "basic" and "quick" for lite, "advanced" for deep. Default: "standard" |
-| max_tokens | number | No | Maximum tokens to generate |
-| temperature | number | No | Sampling temperature (0-2). Default: 0.7 |
+| depth | string | No | Alias for search_depth. If both are provided, depth wins. |
+| stream | boolean | No | Stream Server-Sent Events when true. Default: true |
+| recency_days | number | No | Bias search planning toward recent sources from the last N days. |
+| domains | string[] | No | Optional domain hints, such as ["openai.com", "docs.github.com"]. |
 
 ## Search Depth
 
@@ -48,12 +50,13 @@ Citations are included in the response with:
 {
   "citations": [
     {
-      "index": 0,
+      "id": "src_1",
       "url": "https://example.com/source",
       "title": "Source Title",
+      "publisher": "example.com",
       "snippet": "Relevant text excerpt...",
-      "domain": "example.com",
-      "published_date": "2024-01-15"
+      "retrievedAt": "2026-06-15T04:00:00.000Z",
+      "qualityScore": 88
     }
   ]
 }
@@ -80,7 +83,11 @@ curl https://api.brok.ai/v1/search/completions \\
   "object": "search.completion",
   "model": "brok-lite",
   "resolved_query": "What are the latest developments in AI?",
-  "classification": "current",
+  "classification": {
+    "type": "news",
+    "needsSearch": true,
+    "reason": "The query asks for recent developments."
+  },
   "search_queries": ["latest developments in AI"],
   "choices": [
     {
@@ -92,18 +99,23 @@ curl https://api.brok.ai/v1/search/completions \\
   ],
   "citations": [
     {
-      "index": 0,
-      "url": "https://techcrunch.com/2024/ai-developments",
+      "url": "https://techcrunch.com/2026/ai-developments",
+      "id": "src_1",
       "title": "Latest AI Developments",
+      "publisher": "techcrunch.com",
       "snippet": "Major tech companies have announced...",
-      "domain": "techcrunch.com",
-      "published_date": "2024-01-20"
+      "retrievedAt": "2026-06-15T04:00:00.000Z",
+      "qualityScore": 91
     }
   ],
   "follow_ups": [
-    "Which source changed most recently?"
+    {
+      "label": "Which source changed most recently?",
+      "query": "Which source changed most recently?"
+    }
   ],
   "usage": {
+    "search_queries": 1,
     "prompt_tokens": 15,
     "completion_tokens": 200,
     "total_tokens": 215
@@ -184,7 +196,7 @@ ${BROK_PUBLIC_MODEL_IDS.map(id => [id, BROK_MODELS[id]] as const)
 1. Use lite search for simple factual queries
 2. Use deep search for research reports and analysis
 3. Always display citations for transparency
-4. Respect source freshness by checking published_date
+4. Respect source freshness by checking retrievedAt
 5. Handle rate limits gracefully
 
 ## Error Codes
@@ -275,17 +287,37 @@ export default function SearchCompletionsPage() {
                 </td>
               </tr>
               <tr className="border-b">
-                <td className="py-2 px-3 font-mono">max_tokens</td>
-                <td className="py-2 px-3">number</td>
+                <td className="py-2 px-3 font-mono">depth</td>
+                <td className="py-2 px-3">string</td>
                 <td className="py-2 px-3">No</td>
-                <td className="py-2 px-3">Maximum tokens to generate</td>
+                <td className="py-2 px-3">
+                  Alias for <code>search_depth</code>. If both are provided,
+                  <code>depth</code> wins.
+                </td>
               </tr>
-              <tr>
-                <td className="py-2 px-3 font-mono">temperature</td>
+              <tr className="border-b">
+                <td className="py-2 px-3 font-mono">stream</td>
+                <td className="py-2 px-3">boolean</td>
+                <td className="py-2 px-3">No</td>
+                <td className="py-2 px-3">
+                  Stream Server-Sent Events when true. Default: true
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 px-3 font-mono">recency_days</td>
                 <td className="py-2 px-3">number</td>
                 <td className="py-2 px-3">No</td>
                 <td className="py-2 px-3">
-                  Sampling temperature (0-2). Default: 0.7
+                  Bias search planning toward recent sources from the last N
+                  days.
+                </td>
+              </tr>
+              <tr>
+                <td className="py-2 px-3 font-mono">domains</td>
+                <td className="py-2 px-3">string[]</td>
+                <td className="py-2 px-3">No</td>
+                <td className="py-2 px-3">
+                  Optional domain hints, such as openai.com or docs.github.com.
                 </td>
               </tr>
             </tbody>
@@ -315,12 +347,13 @@ export default function SearchCompletionsPage() {
           <code>{`{
   "citations": [
     {
-      "index": 0,
+      "id": "src_1",
       "url": "https://example.com/source",
       "title": "Source Title",
+      "publisher": "example.com",
       "snippet": "Relevant text excerpt...",
-      "domain": "example.com",
-      "published_date": "2024-01-15"
+      "retrievedAt": "2026-06-15T04:00:00.000Z",
+      "qualityScore": 88
     }
   ]
 }`}</code>
@@ -345,7 +378,11 @@ export default function SearchCompletionsPage() {
   "object": "search.completion",
   "model": "brok-lite",
   "resolved_query": "What are the latest developments in AI?",
-  "classification": "current",
+  "classification": {
+    "type": "news",
+    "needsSearch": true,
+    "reason": "The query asks for recent developments."
+  },
   "search_queries": ["latest developments in AI"],
   "choices": [
     {
@@ -357,18 +394,23 @@ export default function SearchCompletionsPage() {
   ],
   "citations": [
     {
-      "index": 0,
-      "url": "https://techcrunch.com/2024/ai-developments",
+      "id": "src_1",
+      "url": "https://techcrunch.com/2026/ai-developments",
       "title": "Latest AI Developments",
+      "publisher": "techcrunch.com",
       "snippet": "Major tech companies have announced...",
-      "domain": "techcrunch.com",
-      "published_date": "2024-01-20"
+      "retrievedAt": "2026-06-15T04:00:00.000Z",
+      "qualityScore": 91
     }
   ],
   "follow_ups": [
-    "Which source changed most recently?"
+    {
+      "label": "Which source changed most recently?",
+      "query": "Which source changed most recently?"
+    }
   ],
   "usage": {
+    "search_queries": 1,
     "prompt_tokens": 15,
     "completion_tokens": 200,
     "total_tokens": 215
@@ -550,7 +592,7 @@ data: {"usage":{"total_tokens":215}}`}</code>
           <li>Use lite search for simple factual queries</li>
           <li>Use deep search for research reports and analysis</li>
           <li>Always display citations for transparency</li>
-          <li>Respect source freshness by checking published_date</li>
+          <li>Respect source freshness by checking retrievedAt</li>
           <li>Handle rate limits gracefully</li>
         </ol>
 
