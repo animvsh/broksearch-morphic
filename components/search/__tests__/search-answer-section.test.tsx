@@ -90,6 +90,36 @@ describe('extractSources', () => {
 })
 
 describe('SearchAnswerSection actions', () => {
+  it('shows immediate progress and skeletons while an answer is starting', () => {
+    renderAnswer({ status: 'submitted' })
+
+    expect(screen.getByRole('status')).toHaveTextContent('Reading sources')
+    expect(screen.getByTestId('source-skeleton-strip')).toBeInTheDocument()
+    expect(screen.getByTestId('answer-skeleton')).toBeInTheDocument()
+  })
+
+  it('keeps sources visible while the answer is still streaming', () => {
+    renderAnswer({
+      status: 'streaming',
+      content: 'Draft answer',
+      metadata: {
+        answer: {
+          sources: [
+            source({
+              title: 'Streaming source',
+              url: 'https://streaming.example/report'
+            })
+          ]
+        }
+      }
+    })
+
+    expect(screen.getByRole('status')).toHaveTextContent('Synthesizing answer')
+    expect(
+      screen.getByRole('button', { name: /verify source 1: streaming source/i })
+    ).toBeInTheDocument()
+  })
+
   it('hides toolbar and fallback follow-ups when answer actions are disabled', () => {
     renderAnswer({ content: 'Brok searches and cites sources.' }, false)
 

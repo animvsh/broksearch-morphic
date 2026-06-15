@@ -47,7 +47,12 @@ async function persistSimpleMessages({
   const title = getVisibleTextFromParts(userMessage.parts) || 'Quick check'
 
   if (isNewChat) {
-    await createChatWithFirstMessage(chatId, userMessage, userId, title)
+    try {
+      await createChatWithFirstMessage(chatId, userMessage, userId, title)
+    } catch (error) {
+      if (!isDuplicateChatError(error)) throw error
+      await upsertMessage(chatId, userMessage, userId)
+    }
   } else {
     try {
       await upsertMessage(chatId, userMessage, userId)
@@ -68,6 +73,18 @@ async function persistSimpleMessages({
       }
     },
     userId
+  )
+}
+
+function isDuplicateChatError(error: unknown) {
+  if (!(error instanceof Error)) return false
+  const cause = (error as Error & { cause?: unknown }).cause
+  return (
+    error.message.includes('duplicate key') ||
+    (typeof cause === 'object' &&
+      cause !== null &&
+      'code' in cause &&
+      cause.code === '23505')
   )
 }
 

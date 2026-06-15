@@ -218,6 +218,22 @@ export function SearchAnswerSection({
   )
   const isStreaming = status === 'submitted' || status === 'streaming'
   const streaming = useStreamingPhases(isStreaming)
+  const streamingSources = useMemo(
+    () =>
+      sources.map(source => ({
+        id: source.id,
+        title: source.title,
+        url: source.url,
+        domain: source.domain,
+        snippet: source.snippet
+      })),
+    [sources]
+  )
+  const streamingPhase = content.trim()
+    ? 'synthesizing'
+    : sources.length > 0
+      ? 'gathering'
+      : 'reading'
   const [activeSource, setActiveSource] = useState<
     SearchResultItem | SourceCardData | null
   >(null)
@@ -310,12 +326,12 @@ export function SearchAnswerSection({
         className={cn('flex flex-col gap-4', className)}
         data-testid="search-answer-section"
       >
-        {isStreaming && sources.length === 0 && (
+        {isStreaming && (
           <StreamingProgress
             state={{
-              phase: 'reading',
-              sourceCount: 0,
-              sources: [],
+              phase: streamingPhase,
+              sourceCount: sources.length,
+              sources: streamingSources,
               elapsedMs: streaming.state.elapsedMs,
               startedAt: streaming.state.startedAt,
               error: null
@@ -323,7 +339,9 @@ export function SearchAnswerSection({
           />
         )}
 
-        {content && (
+        {isStreaming && sources.length === 0 && <SourceSkeletonStrip />}
+
+        {content ? (
           <div className="flex flex-col gap-1" data-testid="answer-section">
             <MarkdownMessage
               message={content}
@@ -331,9 +349,11 @@ export function SearchAnswerSection({
               onCitationOpen={setActiveSource}
             />
           </div>
-        )}
+        ) : isStreaming ? (
+          <AnswerSkeleton />
+        ) : null}
 
-        {!isStreaming && sources.length > 0 && (
+        {sources.length > 0 && (
           <SourcesPanel
             sources={sources}
             defaultExpanded={false}
@@ -368,5 +388,37 @@ export function SearchAnswerSection({
         />
       </div>
     </CollapsibleMessage>
+  )
+}
+
+function SourceSkeletonStrip() {
+  return (
+    <div
+      className="flex items-center gap-2 overflow-hidden"
+      aria-label="Loading sources"
+      data-testid="source-skeleton-strip"
+    >
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div
+          key={index}
+          className="h-9 w-28 shrink-0 animate-pulse rounded-lg border border-border/60 bg-muted/55"
+          data-testid="source-skeleton"
+        />
+      ))}
+    </div>
+  )
+}
+
+function AnswerSkeleton() {
+  return (
+    <div
+      className="flex flex-col gap-2 rounded-xl border border-border/50 bg-background/60 p-4"
+      aria-label="Writing answer"
+      data-testid="answer-skeleton"
+    >
+      <div className="h-3 w-11/12 animate-pulse rounded-full bg-muted" />
+      <div className="h-3 w-10/12 animate-pulse rounded-full bg-muted" />
+      <div className="h-3 w-8/12 animate-pulse rounded-full bg-muted" />
+    </div>
   )
 }

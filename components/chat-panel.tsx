@@ -8,9 +8,12 @@ import { UseChatHelpers } from '@ai-sdk/react'
 import {
   ArrowUp,
   Brain,
+  Check,
   ChevronDown,
   Clock3,
+  Loader2,
   MessageCirclePlus,
+  Search,
   Sparkles,
   Square
 } from 'lucide-react'
@@ -90,6 +93,44 @@ type BackgroundTaskSummary = {
     researchPlan?: Array<{ label: string; query: string }>
     gaps?: string[]
   }
+}
+
+type ComposerLoadingStage = {
+  id: string
+  label: string
+}
+
+const COMPOSER_LOADING_STAGES: ComposerLoadingStage[] = [
+  { id: 'understanding', label: 'Understanding' },
+  { id: 'searching', label: 'Searching' },
+  { id: 'reading', label: 'Reading' },
+  { id: 'writing', label: 'Writing' }
+]
+
+function getComposerStageIndex(label: string | null) {
+  const normalized = label?.toLowerCase() ?? ''
+  if (
+    normalized.includes('search') ||
+    normalized.includes('source') ||
+    normalized.includes('web')
+  ) {
+    return 1
+  }
+  if (
+    normalized.includes('read') ||
+    normalized.includes('fetch') ||
+    normalized.includes('extract')
+  ) {
+    return 2
+  }
+  if (
+    normalized.includes('answer') ||
+    normalized.includes('compos') ||
+    normalized.includes('writ')
+  ) {
+    return 3
+  }
+  return 0
 }
 
 export function ChatPanel({
@@ -379,6 +420,7 @@ export function ChatPanel({
   const activeToolLabel = getActiveToolLabel()
   const hasActiveToolInvocation = Boolean(activeToolLabel)
   const loadingLabel = activeToolLabel ?? 'Composing answer'
+  const loadingStageIndex = getComposerStageIndex(loadingLabel)
 
   return (
     <div
@@ -453,19 +495,57 @@ export function ChatPanel({
         )}
         {messages.length > 0 && isLoading && (
           <div className="mx-auto mb-2 max-w-3xl px-1">
-            <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/88 px-3 py-2 shadow-[0_16px_42px_-38px_rgba(15,23,42,0.38)] backdrop-blur">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <IconBlinkingLogo className="size-3.5" />
-                <span className="inline-flex min-w-0 items-center gap-1">
-                  <span className="font-medium text-foreground/80">
-                    {loadingLabel}
+            <div
+              className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/90 px-3 py-2 shadow-[0_16px_42px_-38px_rgba(15,23,42,0.38)] backdrop-blur"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                  <IconBlinkingLogo className="size-3.5 shrink-0" />
+                  <span className="inline-flex min-w-0 items-center gap-1">
+                    <span className="truncate font-medium text-foreground/80">
+                      {loadingLabel}
+                    </span>
+                    <span className="typing-dots shrink-0" aria-hidden>
+                      <span />
+                      <span />
+                      <span />
+                    </span>
                   </span>
-                  <span className="typing-dots" aria-hidden>
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                </span>
+                </div>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  {COMPOSER_LOADING_STAGES.map((stage, index) => {
+                    const isDone = index < loadingStageIndex
+                    const isActive = index === loadingStageIndex
+                    return (
+                      <span
+                        key={stage.id}
+                        className={cn(
+                          'inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium',
+                          isActive
+                            ? 'bg-zinc-950 text-white'
+                            : isDone
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-zinc-100 text-zinc-500'
+                        )}
+                      >
+                        {isDone ? (
+                          <Check className="size-3" />
+                        ) : isActive ? (
+                          index <= 1 ? (
+                            <Search className="size-3" />
+                          ) : (
+                            <Loader2 className="size-3 animate-spin" />
+                          )
+                        ) : (
+                          <span className="size-1.5 rounded-full bg-current/45" />
+                        )}
+                        <span className="hidden sm:inline">{stage.label}</span>
+                      </span>
+                    )
+                  })}
+                </div>
               </div>
               <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted/70">
                 <div className="h-full w-1/2 animate-[brok-progress_1.35s_ease-in-out_infinite] rounded-full bg-zinc-950/80 dark:bg-white/80" />
