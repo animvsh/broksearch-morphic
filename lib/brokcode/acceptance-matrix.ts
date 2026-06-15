@@ -26,12 +26,7 @@ export const BROKCODE_ACCEPTANCE_MATRIX: BrokCodeAcceptanceCase[] = [
       'Return named files for index.html, styles.css, and app.js.',
       'Include a hero, menu cards, social proof, and a working newsletter form.'
     ].join(' '),
-    requiredFiles: [
-      'index.html',
-      'styles.css',
-      'app.js',
-      'api/mock-feedback.json'
-    ],
+    requiredFiles: ['index.html', 'styles.css', 'app.js'],
     requiredCapabilities: ['responsive-layout', 'newsletter-form'],
     minimumInteractions: 2,
     expectedTerms: ['bakery', 'menu', 'newsletter'],
@@ -106,7 +101,12 @@ export const BROKCODE_ACCEPTANCE_MATRIX: BrokCodeAcceptanceCase[] = [
       'Return named files for index.html, styles.css, app.js, and api/mock-feedback.json.',
       'Include a feedback feed, submit form, loading/error states, and JavaScript that reads or simulates persisted feedback data.'
     ].join(' '),
-    requiredFiles: ['index.html', 'styles.css', 'app.js'],
+    requiredFiles: [
+      'index.html',
+      'styles.css',
+      'app.js',
+      'api/mock-feedback.json'
+    ],
     requiredCapabilities: [
       'feedback-feed',
       'submit-flow',
