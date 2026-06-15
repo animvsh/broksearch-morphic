@@ -138,6 +138,34 @@ describe('SearchAnswerSection actions', () => {
     )
   })
 
+  it('labels completed answers without attached sources as model knowledge', () => {
+    renderAnswer({ content: 'This answer has no attached source cards.' })
+
+    expect(screen.getByTestId('knowledge-fallback-notice')).toHaveTextContent(
+      'No web sources were attached'
+    )
+  })
+
+  it('does not show the model-knowledge label when sources are attached', () => {
+    renderAnswer({
+      content: 'Answer text.',
+      metadata: {
+        answer: {
+          sources: [
+            source({
+              title: 'Stored source',
+              url: 'https://stored.example/report'
+            })
+          ]
+        }
+      }
+    })
+
+    expect(
+      screen.queryByTestId('knowledge-fallback-notice')
+    ).not.toBeInTheDocument()
+  })
+
   it('does not add generic follow-ups when the answer contains generated submitQuery follow-ups', () => {
     renderAnswer({
       content: `Answer text.

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 
 import { UseChatHelpers } from '@ai-sdk/react'
 import { ChatRequestOptions } from 'ai'
+import { Info } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { extractFollowUpsFromText } from '@/lib/render/follow-ups'
@@ -353,6 +354,10 @@ export function SearchAnswerSection({
           <AnswerSkeleton />
         ) : null}
 
+        {!isStreaming && content && sources.length === 0 && (
+          <KnowledgeFallbackNotice />
+        )}
+
         {sources.length > 0 && (
           <SourcesPanel
             sources={sources}
@@ -388,6 +393,21 @@ export function SearchAnswerSection({
         />
       </div>
     </CollapsibleMessage>
+  )
+}
+
+function KnowledgeFallbackNotice() {
+  return (
+    <div
+      className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/35 px-3 py-2 text-xs leading-5 text-muted-foreground"
+      data-testid="knowledge-fallback-notice"
+    >
+      <Info className="mt-0.5 size-3.5 shrink-0 text-foreground/55" />
+      <span>
+        No web sources were attached to this answer. Treat it as model knowledge
+        and verify important details before relying on it.
+      </span>
+    </div>
   )
 }
 
