@@ -145,31 +145,48 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const messageId = registerSearchStreamRequest({
-    thread:
-      shouldPersistThread && userId
-        ? {
-            id: threadId,
-            userId,
-            userMessageId
-          }
-        : undefined,
-    body: {
-      ...forwardedBody,
-      stream: true,
-      mode:
-        body.mode === 'deep'
-          ? 'deep'
-          : body.mode === 'quick'
-            ? 'quick'
-            : 'search'
-    },
-    createdAt: Date.now(),
-    headers: {
-      xApiKey: headers.get('x-api-key') ?? undefined,
-      authorization: headers.get('authorization') ?? undefined
-    }
-  })
+  let messageId: string
+  try {
+    messageId = await registerSearchStreamRequest({
+      thread:
+        shouldPersistThread && userId
+          ? {
+              id: threadId,
+              userId,
+              userMessageId
+            }
+          : undefined,
+      body: {
+        ...forwardedBody,
+        stream: true,
+        mode:
+          body.mode === 'deep'
+            ? 'deep'
+            : body.mode === 'quick'
+              ? 'quick'
+              : 'search'
+      },
+      createdAt: Date.now(),
+      headers: {
+        xApiKey: headers.get('x-api-key') ?? undefined,
+        authorization: headers.get('authorization') ?? undefined
+      }
+    })
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'configuration_error',
+          code: 'search_stream_registry_unavailable',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Search stream registry is unavailable.'
+        }
+      },
+      { status: 503 }
+    )
+  }
 
   return NextResponse.json({
     thread_id: threadId,

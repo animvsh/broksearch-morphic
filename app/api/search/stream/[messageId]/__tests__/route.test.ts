@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { upsertMessage } from '@/lib/actions/chat'
 import {
@@ -11,6 +11,9 @@ import {
 import { GET } from '../route'
 
 const mockPostSearchCompletion = vi.fn()
+const originalCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT
+const originalUpstashUrl = process.env.UPSTASH_REDIS_REST_URL
+const originalUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN
 
 vi.mock('@/lib/actions/chat', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/actions/chat')>()
@@ -28,9 +31,19 @@ describe('GET /api/search/stream/[messageId]', () => {
   let lastPayload: Record<string, unknown> | null = null
 
   beforeEach(() => {
+    delete process.env.BROK_CLOUD_DEPLOYMENT
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+
     mockPostSearchCompletion.mockReset()
     lastPayload = null
     vi.mocked(upsertMessage).mockReset()
+  })
+
+  afterEach(() => {
+    process.env.BROK_CLOUD_DEPLOYMENT = originalCloudDeployment
+    process.env.UPSTASH_REDIS_REST_URL = originalUpstashUrl
+    process.env.UPSTASH_REDIS_REST_TOKEN = originalUpstashToken
   })
 
   it('returns 404 when stream request is missing', async () => {
@@ -52,7 +65,7 @@ describe('GET /api/search/stream/[messageId]', () => {
   })
 
   it('forwards saved stream request to v1 completions route with stream=true', async () => {
-    const messageId = registerSearchStreamRequest({
+    const messageId = await registerSearchStreamRequest({
       body: {
         query: 'Brok API streaming',
         model: 'brok-search',
@@ -97,12 +110,52 @@ describe('GET /api/search/stream/[messageId]', () => {
       depth: 'standard'
     })
 
-    const saved = getSearchStreamRequest(messageId)
-    expect(saved).toBeTruthy()
+    const saved = await getSearchStreamRequest(messageId)
+    expect(saved).toBeNull()
+  })
+
+  it('does not replay a consumed stream request', async () => {
+    const messageId = await registerSearchStreamRequest({
+      body: {
+        query: 'single use stream',
+        model: 'brok-search',
+        stream: true,
+        depth: 'standard',
+        mode: 'search'
+      },
+      createdAt: Date.now(),
+      headers: {}
+    })
+
+    mockPostSearchCompletion.mockImplementation(async () => {
+      return new Response('event: done\ndata: {}\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      })
+    })
+
+    const first = await GET(
+      new NextRequest('http://localhost/api/search/stream/msg_1'),
+      {
+        params: Promise.resolve({ messageId })
+      }
+    )
+    await first.text()
+
+    const replay = await GET(
+      new NextRequest('http://localhost/api/search/stream/msg_1'),
+      {
+        params: Promise.resolve({ messageId })
+      }
+    )
+
+    expect(first.status).toBe(200)
+    expect(replay.status).toBe(404)
+    expect(mockPostSearchCompletion).toHaveBeenCalledTimes(1)
   })
 
   it('persists assistant message after completion event', async () => {
-    const messageId = registerSearchStreamRequest({
+    const messageId = await registerSearchStreamRequest({
       body: {
         query: 'persisted answer',
         model: 'brok-search',
@@ -208,12 +261,12 @@ describe('GET /api/search/stream/[messageId]', () => {
       'user_1'
     )
 
-    const saved = getSearchStreamRequest(messageId)
-    expect(saved).toBeTruthy()
+    const saved = await getSearchStreamRequest(messageId)
+    expect(saved).toBeNull()
   })
 
   it('persists source and follow-up events when completion metadata is sparse', async () => {
-    const messageId = registerSearchStreamRequest({
+    const messageId = await registerSearchStreamRequest({
       body: {
         query: 'event metadata',
         model: 'brok-search',
@@ -324,7 +377,7 @@ describe('GET /api/search/stream/[messageId]', () => {
   })
 
   it('does not persist when thread context is missing', async () => {
-    const messageId = registerSearchStreamRequest({
+    const messageId = await registerSearchStreamRequest({
       body: {
         query: 'no thread context',
         model: 'brok-search',

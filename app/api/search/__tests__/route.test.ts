@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createChatWithFirstMessage } from '@/lib/actions/chat'
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
@@ -12,6 +12,10 @@ const { mockPostSearchCompletion, mockVerifyRequestAuth } = vi.hoisted(() => ({
   mockPostSearchCompletion: vi.fn(),
   mockVerifyRequestAuth: vi.fn()
 }))
+
+const originalCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT
+const originalUpstashUrl = process.env.UPSTASH_REDIS_REST_URL
+const originalUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN
 
 vi.mock('@/lib/brok/auth', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/brok/auth')>()
@@ -72,6 +76,10 @@ function authSuccess(userId = 'api_user_1') {
 
 describe('POST /api/search', () => {
   beforeEach(() => {
+    delete process.env.BROK_CLOUD_DEPLOYMENT
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+
     mockVerifyRequestAuth.mockReset()
     mockVerifyRequestAuth.mockResolvedValue(authSuccess())
 
@@ -83,6 +91,12 @@ describe('POST /api/search', () => {
       chat: { id: 'thr_id' } as never,
       message: { id: 'msg-1' } as never
     })
+  })
+
+  afterEach(() => {
+    process.env.BROK_CLOUD_DEPLOYMENT = originalCloudDeployment
+    process.env.UPSTASH_REDIS_REST_URL = originalUpstashUrl
+    process.env.UPSTASH_REDIS_REST_TOKEN = originalUpstashToken
   })
 
   it('returns 401 for missing authorization', async () => {
@@ -190,7 +204,7 @@ describe('POST /api/search', () => {
     })
     expect(mockPostSearchCompletion).not.toHaveBeenCalled()
 
-    const saved = getSearchStreamRequest(body.message_id)
+    const saved = await getSearchStreamRequest(body.message_id)
     expect(saved).toBeTruthy()
     expect(saved?.body).toMatchObject({
       query: 'Brok is awesome?',
@@ -230,6 +244,26 @@ describe('POST /api/search', () => {
     expect(mockPostSearchCompletion).not.toHaveBeenCalled()
   })
 
+  it('returns 503 instead of unsafe stream URLs when cloud registry storage is missing', async () => {
+    process.env.BROK_CLOUD_DEPLOYMENT = 'true'
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+
+    const response = await searchPost(
+      makeRequest({ query: 'cloud stream needs durable storage', stream: true })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body).toMatchObject({
+      error: {
+        code: 'search_stream_registry_unavailable'
+      }
+    })
+    expect(body).not.toHaveProperty('stream_url')
+    expect(mockPostSearchCompletion).not.toHaveBeenCalled()
+  })
+
   it('falls back to API key user id when session user is missing', async () => {
     vi.mocked(getCurrentUserId).mockResolvedValue(undefined)
 
@@ -239,7 +273,7 @@ describe('POST /api/search', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    const saved = getSearchStreamRequest(body.message_id)
+    const saved = await getSearchStreamRequest(body.message_id)
     expect(saved?.thread).toMatchObject({
       id: body.thread_id,
       userId: 'api_user_1',

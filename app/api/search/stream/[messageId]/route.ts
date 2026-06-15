@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 
 import { upsertMessage } from '@/lib/actions/chat'
-import { getSearchStreamRequest } from '@/lib/brok/search-stream-registry'
+import { consumeSearchStreamRequest } from '@/lib/brok/search-stream-registry'
 import { generateId } from '@/lib/db/schema'
 import type { SearchResultItem } from '@/lib/types'
 import type { UIMessageMetadata } from '@/lib/types/ai'
@@ -78,7 +78,7 @@ export async function GET(
     )
   }
 
-  const storedRequest = getSearchStreamRequest(messageId)
+  const storedRequest = await consumeSearchStreamRequest(messageId)
   if (!storedRequest) {
     return Response.json(
       {
