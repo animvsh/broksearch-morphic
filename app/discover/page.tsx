@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
@@ -7,11 +8,12 @@ import {
   Clock3,
   Code2,
   Compass,
+  FileText,
   Flame,
+  Globe2,
   MessageSquare,
   Presentation,
   Search,
-  Share2,
   Sparkles,
   TerminalSquare,
   ThumbsUp,
@@ -24,28 +26,25 @@ import {
   type DiscoverPublicItem,
   getDiscoverCategoryLabel,
   getDiscoverCategoryOrder,
-  getDiscoverFeedData
+  getDiscoverFeedData,
+  type TrendingTopic
 } from '@/lib/actions/platform-dashboard'
 import { requireFeatureAccess } from '@/lib/auth/app-access'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 
 export const dynamic = 'force-dynamic'
 
+type SearchMode = 'quick' | 'search' | 'deep'
+
 const CATEGORY_DESCRIPTIONS: Record<DiscoverCategory, string> = {
-  ai_apps: 'Community-built AI apps and demos',
-  search: 'Trending research threads and deep dives',
-  code: 'Popular code snippets, repos, and BrokCode apps',
-  chat: 'Conversation starters and useful prompts',
-  presentations: 'Beautiful decks worth a second look'
+  ai_apps: 'Useful app workflows worth investigating',
+  search: 'Research threads with source-backed answers',
+  code: 'Repos, implementations, and technical explainers',
+  chat: 'Reusable question patterns for sharper answers',
+  presentations: 'Decks and reports with a point of view'
 }
 
 const KIND_ICON: Record<DiscoverItemKind, typeof Sparkles> = {
@@ -54,6 +53,38 @@ const KIND_ICON: Record<DiscoverItemKind, typeof Sparkles> = {
   presentation: Presentation,
   prompt: Sparkles,
   api_session: TerminalSquare
+}
+
+const CURATED_PROMPTS = [
+  {
+    title: 'What changed in AI search quality this week?',
+    query: 'What changed in AI search quality this week?',
+    detail: 'Compare benchmarks, product launches, and independent analysis.',
+    mode: 'search' as const,
+    sources: ['arxiv.org', 'semianalysis.com', 'theverge.com']
+  },
+  {
+    title: 'Which companies are turning agents into revenue?',
+    query: 'Which companies are turning AI agents into revenue?',
+    detail: 'Look for pricing, adoption signals, and credible customer proof.',
+    mode: 'deep' as const,
+    sources: ['sec.gov', 'stripe.com', 'company blogs']
+  },
+  {
+    title: 'How are teams evaluating coding agents?',
+    query: 'How are engineering teams evaluating coding agents?',
+    detail:
+      'Find real evaluation methods, failure modes, and workflow patterns.',
+    mode: 'search' as const,
+    sources: ['github.com', 'simonwillison.net', 'anthropic.com']
+  }
+]
+
+function buildSearchHref(query: string, mode: SearchMode = 'search') {
+  const params = new URLSearchParams()
+  params.set('q', query)
+  params.set('mode', mode)
+  return `/search?${params.toString()}`
 }
 
 function formatRelative(value: Date) {
@@ -77,6 +108,23 @@ function formatCount(value: number) {
   if (value < 10000) return `${(value / 1000).toFixed(1)}k`
   if (value < 1_000_000) return `${Math.round(value / 1000)}k`
   return `${(value / 1_000_000).toFixed(1)}M`
+}
+
+function getDomain(value: string) {
+  if (value.startsWith('/')) return 'brok.app'
+  try {
+    return new URL(value).hostname.replace(/^www\./, '')
+  } catch {
+    return 'source'
+  }
+}
+
+function getSourceLabel(item: DiscoverPublicItem) {
+  if (item.kind === 'thread') return 'Public thread'
+  if (item.kind === 'project') return 'Project'
+  if (item.kind === 'presentation') return 'Deck'
+  if (item.kind === 'api_session') return 'API session'
+  return 'Prompt'
 }
 
 export default async function DiscoverPage({
@@ -107,60 +155,60 @@ export default async function DiscoverPage({
     items: data.byCategory[category]?.items ?? []
   }))
 
+  const visibleCategories =
+    activeCategory === 'all'
+      ? categories
+      : categories.filter(category => category.id === activeCategory)
+
   return (
-    <div className="dashboard-shell min-h-svh px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className="overflow-hidden rounded-xl border bg-background shadow-sm">
-          <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1fr_auto] lg:items-end">
+    <main className="dashboard-shell min-h-svh px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+        <header className="border-b pb-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <Badge variant="outline" className="mb-4 gap-2 bg-background">
                 <Compass className="size-3.5" />
                 Discover
               </Badge>
-              <h1 className="text-3xl font-semibold tracking-normal sm:text-4xl">
-                What the Brok community is researching
+              <h1 className="max-w-3xl text-3xl font-semibold tracking-normal text-foreground sm:text-4xl">
+                Research worth opening next
               </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Trending searches, popular public projects, featured
-                presentations, and reusable prompts from across the Brok
-                network.
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+                Curated prompts, public research threads, and source-aware
+                starting points for faster answers in Brok Search.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button asChild variant="outline" className="gap-2">
-                <Link href="/library">
-                  <Sparkles className="size-4" />
-                  My library
-                </Link>
-              </Button>
-              <Button asChild className="gap-2">
-                <Link href="/">
-                  <Search className="size-4" />
-                  Start a search
-                </Link>
-              </Button>
+            <div className="grid grid-cols-3 gap-2 rounded-lg border bg-background p-2 text-center shadow-sm sm:min-w-80">
+              <Metric label="Items" value={formatCount(data.totals.items)} />
+              <Metric label="Likes" value={formatCount(data.totals.likes)} />
+              <Metric label="Saves" value={formatCount(data.totals.saves)} />
             </div>
           </div>
-          <div className="grid border-t bg-muted/25 sm:grid-cols-3">
-            <Metric
-              label="Public items"
-              value={formatCount(data.totals.items)}
-              icon={Compass}
-            />
-            <Metric
-              label="Total likes"
-              value={formatCount(data.totals.likes)}
-              icon={ThumbsUp}
-            />
-            <Metric
-              label="Saves"
-              value={formatCount(data.totals.saves)}
-              icon={Bookmark}
-            />
-          </div>
+
+          <form
+            action="/search"
+            className="mt-6 flex flex-col gap-2 rounded-lg border bg-background p-2 shadow-sm sm:flex-row"
+          >
+            <input type="hidden" name="mode" value="search" />
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                name="q"
+                placeholder="Research a topic, company, paper, or question"
+                className="border-0 pl-9 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+            </div>
+            <Button type="submit" className="gap-2 sm:w-auto">
+              Search
+              <ArrowUpRight className="size-4" />
+            </Button>
+          </form>
         </header>
 
-        <nav className="flex flex-wrap items-center gap-2 rounded-xl border bg-background p-3 shadow-sm">
+        <nav
+          aria-label="Discover categories"
+          className="flex gap-2 overflow-x-auto pb-1"
+        >
           <CategoryChip
             label="All"
             active={activeCategory === 'all'}
@@ -178,103 +226,88 @@ export default async function DiscoverPage({
           ))}
         </nav>
 
-        {data.featured.length > 0 ? (
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Featured</h2>
-              <span className="text-xs text-muted-foreground">
-                Hand-picked by Brok editors
-              </span>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {data.featured.map(item => (
-                <FeaturedCard key={item.id} item={item} />
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Trending now</h2>
-            <span className="text-xs text-muted-foreground">
-              Top searches in the last 24h
-            </span>
-          </div>
-          {data.trending.length === 0 ? (
-            <Card>
-              <CardContent className="py-6 text-center text-sm text-muted-foreground">
-                No trending topics yet. As the community searches, topics will
-                appear here.
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {data.trending.map(topic => (
-                <Link
-                  key={topic.id}
-                  href={`/?q=${encodeURIComponent(topic.label)}`}
-                  className="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-1 text-xs font-medium transition-colors hover:border-primary/40 hover:bg-primary/5"
-                >
-                  <Flame className="size-3 text-orange-500" />
-                  {topic.label}
-                  <span className="text-[10px] text-muted-foreground">
-                    {topic.velocity}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
+        <section className="grid gap-3 lg:grid-cols-3">
+          {CURATED_PROMPTS.map(prompt => (
+            <CuratedPromptCard key={prompt.query} prompt={prompt} />
+          ))}
         </section>
 
-        <section className="space-y-4">
-          {categories.map(category => {
-            const items =
-              activeCategory === 'all'
-                ? category.items
-                : activeCategory === category.id
-                  ? category.items
-                  : []
-            if (activeCategory !== 'all' && activeCategory !== category.id) {
-              return null
-            }
-            return (
-              <div key={category.id} className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-base font-semibold">
-                      {category.label}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {category.description}
-                    </p>
-                  </div>
-                  <Button asChild variant="ghost" size="sm" className="gap-1">
-                    <Link href={`/discover?category=${category.id}`}>
-                      See all
-                      <ArrowUpRight className="size-3" />
-                    </Link>
-                  </Button>
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="space-y-6">
+            {data.featured.length > 0 ? (
+              <FeedSection
+                title="Editor picks"
+                description="Human-curated examples and public work to use as research launchpads."
+              >
+                <div className="grid gap-3 md:grid-cols-2">
+                  {data.featured.map(item => (
+                    <DiscoverItemCard key={item.id} item={item} featured />
+                  ))}
                 </div>
-                {items.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-6 text-center text-sm text-muted-foreground">
-                      No items in this category yet.
-                    </CardContent>
-                  </Card>
+              </FeedSection>
+            ) : null}
+
+            {visibleCategories.map(category => (
+              <FeedSection
+                key={category.id}
+                title={category.label}
+                description={category.description}
+                action={
+                  activeCategory === 'all' ? (
+                    <Button asChild variant="ghost" size="sm" className="gap-1">
+                      <Link href={`/discover?category=${category.id}`}>
+                        View
+                        <ArrowUpRight className="size-3.5" />
+                      </Link>
+                    </Button>
+                  ) : null
+                }
+              >
+                {category.items.length === 0 ? (
+                  <EmptyState label="No public items in this section yet." />
                 ) : (
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {items.map(item => (
-                      <DiscoverCard key={item.id} item={item} />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {category.items.map(item => (
+                      <DiscoverItemCard key={item.id} item={item} />
                     ))}
                   </div>
                 )}
+              </FeedSection>
+            ))}
+          </div>
+
+          <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+            <FeedSection
+              title="Trending prompts"
+              description="From public activity, framed as questions you can research now."
+              compact
+            >
+              {data.trending.length === 0 ? (
+                <EmptyState label="Trending topics will appear as public research activity grows." />
+              ) : (
+                <div className="space-y-2">
+                  {data.trending.slice(0, 8).map(topic => (
+                    <TrendingTopicLink key={topic.id} topic={topic} />
+                  ))}
+                </div>
+              )}
+            </FeedSection>
+
+            <div className="rounded-lg border bg-muted/20 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <FileText className="size-4 text-muted-foreground" />
+                Source signals
               </div>
-            )
-          })}
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                Domain chips show where an item points or which sources a
+                curated prompt is designed to inspect. They are starting lenses,
+                not live verification claims.
+              </p>
+            </div>
+          </aside>
         </section>
       </div>
-    </div>
+    </main>
   )
 }
 
@@ -288,26 +321,13 @@ function isDiscoverCategory(value: string): value is DiscoverCategory {
   )
 }
 
-function Metric({
-  icon: Icon,
-  label,
-  value
-}: {
-  icon: typeof Search
-  label: string
-  value: string
-}) {
+function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center gap-3 border-b p-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-background shadow-sm ring-1 ring-border">
-        <Icon className="size-4 text-muted-foreground" />
-      </div>
-      <div>
-        <p className="text-2xl font-semibold leading-none">{value}</p>
-        <p className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-      </div>
+    <div className="rounded-md px-2 py-2">
+      <p className="text-lg font-semibold leading-none">{value}</p>
+      <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
     </div>
   )
 }
@@ -326,120 +346,188 @@ function CategoryChip({
   return (
     <Link
       href={href}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+      className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors ${
         active
-          ? 'border-primary/40 bg-primary/10 text-foreground'
-          : 'border-border/60 bg-background text-muted-foreground hover:border-border/80'
+          ? 'border-foreground/20 bg-foreground text-background'
+          : 'border-border/70 bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground'
       }`}
     >
-      <Icon className="size-3" />
+      <Icon className="size-3.5" />
       {label}
     </Link>
   )
 }
 
-function FeaturedCard({ item }: { item: DiscoverPublicItem }) {
-  const Icon = KIND_ICON[item.kind]
+function FeedSection({
+  title,
+  description,
+  action,
+  compact = false,
+  children
+}: {
+  title: string
+  description: string
+  action?: ReactNode
+  compact?: boolean
+  children: ReactNode
+}) {
   return (
-    <Card className="flex h-full flex-col">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <Badge variant="secondary" className="gap-1 text-[10px]">
-            <Icon className="size-3" />
-            {item.kind.replace('_', ' ')}
-          </Badge>
-          <Badge variant="outline" className="gap-1 text-[10px]">
-            <Sparkles className="size-3" />
-            Featured
-          </Badge>
-        </div>
-        <CardTitle className="mt-2 line-clamp-2 text-base">
-          <Link href={item.href} className="hover:underline">
-            {item.title}
-          </Link>
-        </CardTitle>
-        {item.authorName ? (
-          <CardDescription>
-            by {item.authorName}
-            {item.authorHandle ? ` · @${item.authorHandle}` : ''}
-          </CardDescription>
-        ) : null}
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col justify-between gap-3 pt-0">
-        {item.summary ? (
-          <p className="line-clamp-3 text-sm text-muted-foreground">
-            {item.summary}
+    <section className={compact ? 'space-y-3' : 'space-y-4'}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">{title}</h2>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {description}
           </p>
-        ) : null}
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            <ThumbsUp className="size-3" />
-            {formatCount(item.likeCount)}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Bookmark className="size-3" />
-            {formatCount(item.saveCount)}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Clock3 className="size-3" />
-            {formatRelative(item.publishedAt)}
-          </span>
         </div>
-      </CardContent>
-    </Card>
+        {action}
+      </div>
+      {children}
+    </section>
   )
 }
 
-function DiscoverCard({ item }: { item: DiscoverPublicItem }) {
-  const Icon = KIND_ICON[item.kind]
+function CuratedPromptCard({
+  prompt
+}: {
+  prompt: (typeof CURATED_PROMPTS)[number]
+}) {
   return (
-    <Card className="group flex h-full flex-col">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+    <Link
+      href={buildSearchHref(prompt.query, prompt.mode)}
+      className="group rounded-lg border bg-background p-4 shadow-sm transition-colors hover:border-foreground/25"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <Badge variant="secondary" className="gap-1 text-[10px]">
+          <Sparkles className="size-3" />
+          Curated prompt
+        </Badge>
+        <ArrowUpRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+      </div>
+      <h2 className="mt-3 line-clamp-2 text-base font-semibold leading-6">
+        {prompt.title}
+      </h2>
+      <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+        {prompt.detail}
+      </p>
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        {prompt.sources.map(source => (
+          <SourceChip key={source} label={source} />
+        ))}
+      </div>
+    </Link>
+  )
+}
+
+function DiscoverItemCard({
+  item,
+  featured = false
+}: {
+  item: DiscoverPublicItem
+  featured?: boolean
+}) {
+  const Icon = KIND_ICON[item.kind]
+  const researchHref = buildSearchHref(item.title, featured ? 'deep' : 'search')
+  return (
+    <article className="group flex min-h-56 flex-col rounded-lg border bg-background p-4 shadow-sm transition-colors hover:border-foreground/25">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5">
           <Badge variant="secondary" className="gap-1 text-[10px]">
             <Icon className="size-3" />
             {item.kind.replace('_', ' ')}
           </Badge>
-          <span className="text-[11px] text-muted-foreground">
-            {formatRelative(item.publishedAt)}
-          </span>
+          {featured ? (
+            <Badge variant="outline" className="gap-1 text-[10px]">
+              <Sparkles className="size-3" />
+              Pick
+            </Badge>
+          ) : null}
         </div>
-        <CardTitle className="mt-2 line-clamp-2 text-sm">
-          <Link href={item.href} className="hover:underline">
-            {item.title}
-          </Link>
-        </CardTitle>
-        {item.authorName ? (
-          <CardDescription className="text-xs">
-            by {item.authorName}
-            {item.authorHandle ? ` · @${item.authorHandle}` : ''}
-          </CardDescription>
-        ) : null}
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col justify-between gap-3 pt-0">
-        {item.summary ? (
-          <p className="line-clamp-3 text-xs text-muted-foreground">
-            {item.summary}
-          </p>
-        ) : (
-          <p className="text-xs italic text-muted-foreground">
-            No summary yet.
-          </p>
-        )}
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+        <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+          <Clock3 className="size-3" />
+          {formatRelative(item.publishedAt)}
+        </span>
+      </div>
+
+      <h3 className="mt-3 line-clamp-2 text-base font-semibold leading-6">
+        <Link href={researchHref} className="hover:underline">
+          {item.title}
+        </Link>
+      </h3>
+
+      {item.summary ? (
+        <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">
+          {item.summary}
+        </p>
+      ) : (
+        <p className="mt-2 text-sm italic leading-6 text-muted-foreground">
+          Public item without a summary yet.
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        <SourceChip label={getDomain(item.href)} />
+        <SourceChip label={getSourceLabel(item)} />
+      </div>
+
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5 text-xs text-muted-foreground">
+        <div className="flex items-center gap-3">
           <span className="inline-flex items-center gap-1">
-            <ThumbsUp className="size-3" />
+            <ThumbsUp className="size-3.5" />
             {formatCount(item.likeCount)}
           </span>
           <span className="inline-flex items-center gap-1">
-            <Share2 className="size-3" />
-            {formatCount(item.shareCount)}
-          </span>
-          <Button variant="ghost" size="icon" className="size-7">
             <Bookmark className="size-3.5" />
+            {formatCount(item.saveCount)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="ghost" size="sm" className="h-8 gap-1 px-2">
+            <Link href={item.href}>Open</Link>
+          </Button>
+          <Button asChild size="sm" className="h-8 gap-1 px-2">
+            <Link href={researchHref}>
+              Research
+              <ArrowUpRight className="size-3.5" />
+            </Link>
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </article>
+  )
+}
+
+function TrendingTopicLink({ topic }: { topic: TrendingTopic }) {
+  return (
+    <Link
+      href={buildSearchHref(topic.label, 'search')}
+      className="group flex items-center justify-between gap-3 rounded-lg border bg-background p-3 text-sm transition-colors hover:border-foreground/25"
+    >
+      <span className="min-w-0">
+        <span className="line-clamp-2 font-medium">{topic.label}</span>
+        <span className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+          <Flame className="size-3 text-muted-foreground" />
+          {getDiscoverCategoryLabel(topic.category)} · {topic.velocity} signals
+        </span>
+      </span>
+      <ArrowUpRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+    </Link>
+  )
+}
+
+function SourceChip({ label }: { label: string }) {
+  return (
+    <span className="inline-flex min-h-6 items-center gap-1 rounded-full border bg-muted/20 px-2 text-[11px] font-medium text-muted-foreground">
+      <Globe2 className="size-3" />
+      {label}
+    </span>
+  )
+}
+
+function EmptyState({ label }: { label: string }) {
+  return (
+    <div className="rounded-lg border border-dashed bg-muted/10 px-4 py-8 text-center text-sm text-muted-foreground">
+      {label}
+    </div>
   )
 }

@@ -21,6 +21,7 @@ import {
 import type { ModelSelectorData } from '@/lib/types/model-selector'
 import type { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
+import { getCookie } from '@/lib/utils/cookies'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
@@ -99,6 +100,7 @@ export function Chat({
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const isAtBottomRef = useRef(true)
+  const submittedInitialQueryRef = useRef<string | null>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [input, setInput] = useState('')
@@ -149,6 +151,7 @@ export function Chat({
                 : trigger === 'submit-message'
                   ? lastMessage
                   : undefined,
+            mode: getCookie('searchMode') ?? initialSearchMode,
             isNewChat:
               trigger === 'submit-message' &&
               messages.length === 1 &&
@@ -590,6 +593,18 @@ export function Chat({
     e.preventDefault()
     submitToSearch()
   }
+
+  useEffect(() => {
+    const initialQuery = query?.trim()
+    if (!initialQuery) return
+    if (submittedInitialQueryRef.current === initialQuery) return
+
+    submittedInitialQueryRef.current = initialQuery
+    submitToSearch(initialQuery)
+    // submitToSearch intentionally remains local to this component; including
+    // it would resubmit whenever chat UI state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query])
 
   const {
     isDragging,

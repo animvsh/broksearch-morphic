@@ -1,11 +1,5 @@
 import type { UIMessage } from 'ai'
 
-import {
-  createChat,
-  createChatWithFirstMessage,
-  upsertMessage
-} from '@/lib/actions/chat'
-import { generateId } from '@/lib/db/schema'
 import type { SearchMode } from '@/lib/types/search'
 import { getVisibleTextFromParts } from '@/lib/utils/message-utils'
 
@@ -36,6 +30,14 @@ async function persistSimpleMessages({
   'chatId' | 'isNewChat' | 'message' | 'text' | 'userId'
 >) {
   if (!chatId || !userId || !message) return
+
+  const [
+    { createChat, createChatWithFirstMessage, upsertMessage },
+    { generateId }
+  ] = await Promise.all([
+    import('@/lib/actions/chat'),
+    import('@/lib/db/schema')
+  ])
 
   const userMessage = {
     ...message,

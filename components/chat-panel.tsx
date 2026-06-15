@@ -117,7 +117,6 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const router = useRouter()
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const isFirstRender = useRef(true)
   const [isComposing, setIsComposing] = useState(false) // Composition state
   const [enterDisabled, setEnterDisabled] = useState(false) // Disable Enter after composition ends
   const [isInputFocused, setIsInputFocused] = useState(false) // Track input focus
@@ -265,16 +264,6 @@ export function ChatPanel({
     return null
   }
 
-  const sendProgrammaticPrompt = useCallback(
-    (text: string) => {
-      append({
-        role: 'user',
-        parts: [{ type: 'text', text }]
-      })
-    },
-    [append]
-  )
-
   const startDeepResearch = useCallback(async () => {
     const queryText = input.trim()
     if (!queryText) return
@@ -370,14 +359,6 @@ export function ChatPanel({
       setCookie('searchMode', normalizeSearchMode(initialSearchMode))
     }
   }, [initialSearchMode])
-
-  // if query is not empty, submit the query
-  useEffect(() => {
-    if (isFirstRender.current && query && query.trim().length > 0) {
-      sendProgrammaticPrompt(query)
-      isFirstRender.current = false
-    }
-  }, [query, sendProgrammaticPrompt])
 
   const handleFileRemove = useCallback(
     (index: number) => {

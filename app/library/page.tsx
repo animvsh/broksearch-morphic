@@ -7,7 +7,9 @@ import {
   BookOpen,
   CalendarRange,
   CheckSquare,
+  ChevronRight,
   Code2,
+  ExternalLink,
   Filter,
   Folder,
   Globe2,
@@ -20,7 +22,7 @@ import {
   Sparkles,
   Tag as TagIcon,
   TerminalSquare,
-  Trash2
+  TextSearch
 } from 'lucide-react'
 
 import {
@@ -56,6 +58,12 @@ const KIND_ICON: Record<LibraryItemKind, typeof BookOpen> = {
 }
 
 const SORT_OPTIONS: LibrarySort[] = ['recent', 'most_used', 'most_cited']
+
+const STATUS_OPTIONS = [
+  { value: 'active', label: 'Saved' },
+  { value: 'public', label: 'Public' },
+  { value: 'all', label: 'All' }
+] as const
 
 function isLibraryItemKind(value: string): value is LibraryItemKind {
   return (
@@ -145,17 +153,24 @@ export default async function LibraryPage({
     sort,
     dateFrom,
     dateTo,
-    statuses: statusFilter === 'all' ? undefined : ['active', 'shared']
+    statuses:
+      statusFilter === 'all' || statusFilter === 'public'
+        ? undefined
+        : ['active', 'shared']
   }
 
   const data = await getLibraryData(filters)
+  const visibleItems =
+    statusFilter === 'public'
+      ? data.items.filter(item => item.isPublic)
+      : data.items
   const kindOrder = getLibraryKindOrder()
   const kindActive = new Set(kinds)
 
   return (
     <div className="dashboard-shell min-h-svh px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className="overflow-hidden rounded-xl border bg-background shadow-sm">
+        <header className="overflow-hidden border-b bg-background">
           <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1fr_auto] lg:items-end">
             <div className="min-w-0">
               <Badge variant="outline" className="mb-4 gap-2 bg-background">
@@ -163,12 +178,11 @@ export default async function LibraryPage({
                 Library
               </Badge>
               <h1 className="text-3xl font-semibold tracking-normal sm:text-4xl">
-                Your everything page
+                Saved intelligence, ready to reuse
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Every search thread, chat, app project, presentation, and API
-                playground session you&apos;ve created — searchable, filterable,
-                and ready to share.
+                Keep your source-grounded answers, research threads, app work,
+                and generated artifacts in one calm, searchable place.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -179,7 +193,7 @@ export default async function LibraryPage({
                 </Link>
               </Button>
               <Button asChild className="gap-2">
-                <Link href="/">
+                <Link href="/search">
                   <Search className="size-4" />
                   New search
                 </Link>
@@ -189,7 +203,7 @@ export default async function LibraryPage({
           <div className="grid border-t bg-muted/25 sm:grid-cols-4">
             <Metric label="Items" value={data.totals.items.toString()} />
             <Metric
-              label="Public"
+              label="Shared"
               value={data.totals.public.toString()}
               icon={Globe2}
             />
@@ -208,31 +222,55 @@ export default async function LibraryPage({
 
         <section className="grid gap-6 lg:grid-cols-[260px_1fr]">
           <aside className="space-y-4">
+            <FilterCard title="Saved view" icon={TextSearch}>
+              <div className="grid grid-cols-3 rounded-md border bg-muted/30 p-0.5 text-xs">
+                {STATUS_OPTIONS.map(option => (
+                  <Link
+                    key={option.value}
+                    href={buildLibraryHref({
+                      query,
+                      kinds,
+                      tags,
+                      sort,
+                      from: dateFrom,
+                      to: dateTo,
+                      view,
+                      status: option.value
+                    })}
+                    className={`rounded px-2 py-1.5 text-center font-medium transition-colors ${
+                      statusFilter === option.value
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {option.label}
+                  </Link>
+                ))}
+              </div>
+            </FilterCard>
+
             <FilterCard title="Type" icon={Filter}>
               <div className="flex flex-col gap-1.5">
                 {kindOrder.map(kind => {
                   const count = data.totals.byKind[kind] ?? 0
                   const Icon = KIND_ICON[kind]
                   const active = kindActive.has(kind)
-                  const next = new URLSearchParams()
-                  if (query) next.set('q', query)
-                  if (sort !== 'recent') next.set('sort', sort)
-                  if (dateFrom) next.set('from', dateFrom)
-                  if (dateTo) next.set('to', dateTo)
-                  if (view === 'list') next.set('view', view)
-                  if (statusFilter !== 'active')
-                    next.set('status', statusFilter)
-                  for (const tag of tags) next.append('tag', tag)
                   const remaining = new Set(kinds)
                   if (active) remaining.delete(kind)
                   else remaining.add(kind)
-                  if (remaining.size > 0) {
-                    for (const k of remaining) next.append('kind', k)
-                  }
                   return (
                     <Link
                       key={kind}
-                      href={`/library?${next.toString()}`}
+                      href={buildLibraryHref({
+                        query,
+                        kinds: Array.from(remaining),
+                        tags,
+                        sort,
+                        from: dateFrom,
+                        to: dateTo,
+                        view,
+                        status: statusFilter
+                      })}
                       className={`flex items-center justify-between rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
                         active
                           ? 'border-primary/40 bg-primary/10 text-foreground'
@@ -260,23 +298,22 @@ export default async function LibraryPage({
                 <div className="flex flex-wrap gap-1.5">
                   {data.tags.map(tag => {
                     const active = tags.includes(tag.name)
-                    const next = new URLSearchParams()
-                    if (query) next.set('q', query)
-                    if (sort !== 'recent') next.set('sort', sort)
-                    if (dateFrom) next.set('from', dateFrom)
-                    if (dateTo) next.set('to', dateTo)
-                    if (view === 'list') next.set('view', view)
-                    if (statusFilter !== 'active')
-                      next.set('status', statusFilter)
-                    for (const k of kinds) next.append('kind', k)
                     const remaining = new Set(tags)
                     if (active) remaining.delete(tag.name)
                     else remaining.add(tag.name)
-                    for (const t of remaining) next.append('tag', t)
                     return (
                       <Link
                         key={tag.id}
-                        href={`/library?${next.toString()}`}
+                        href={buildLibraryHref({
+                          query,
+                          kinds,
+                          tags: Array.from(remaining),
+                          sort,
+                          from: dateFrom,
+                          to: dateTo,
+                          view,
+                          status: statusFilter
+                        })}
                         className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
                           active
                             ? 'border-primary/40 bg-primary/10 text-foreground'
@@ -305,6 +342,9 @@ export default async function LibraryPage({
                 {tags.map(t => (
                   <input key={t} type="hidden" name="tag" value={t} />
                 ))}
+                {statusFilter !== 'active' ? (
+                  <input type="hidden" name="status" value={statusFilter} />
+                ) : null}
                 <input
                   type="hidden"
                   name="view"
@@ -346,7 +386,7 @@ export default async function LibraryPage({
                     type="search"
                     name="q"
                     defaultValue={query}
-                    placeholder="Search title, summary, model..."
+                    placeholder="Search saved answers, sources, models..."
                     className="h-9 w-full rounded-md border bg-background pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
@@ -360,6 +400,9 @@ export default async function LibraryPage({
                   <input type="hidden" name="from" value={dateFrom} />
                 )}
                 {dateTo && <input type="hidden" name="to" value={dateTo} />}
+                {statusFilter !== 'active' ? (
+                  <input type="hidden" name="status" value={statusFilter} />
+                ) : null}
                 <input
                   type="hidden"
                   name="view"
@@ -384,6 +427,9 @@ export default async function LibraryPage({
                     <input type="hidden" name="from" value={dateFrom} />
                   )}
                   {dateTo && <input type="hidden" name="to" value={dateTo} />}
+                  {statusFilter !== 'active' ? (
+                    <input type="hidden" name="status" value={statusFilter} />
+                  ) : null}
                   <input
                     type="hidden"
                     name="view"
@@ -417,7 +463,8 @@ export default async function LibraryPage({
                       tags,
                       sort,
                       dateFrom,
-                      dateTo
+                      dateTo,
+                      statusFilter
                     )}
                     className={`inline-flex items-center gap-1 rounded-sm px-2 py-1 ${
                       view === 'grid'
@@ -436,7 +483,8 @@ export default async function LibraryPage({
                       tags,
                       sort,
                       dateFrom,
-                      dateTo
+                      dateTo,
+                      statusFilter
                     )}
                     className={`inline-flex items-center gap-1 rounded-sm px-2 py-1 ${
                       view === 'list'
@@ -451,11 +499,20 @@ export default async function LibraryPage({
               </div>
             </div>
 
-            {data.items.length === 0 ? (
-              <EmptyLibrary query={query} />
+            {visibleItems.length === 0 ? (
+              <EmptyLibrary
+                query={query}
+                hasFilters={
+                  kinds.length > 0 ||
+                  tags.length > 0 ||
+                  Boolean(dateFrom) ||
+                  Boolean(dateTo) ||
+                  statusFilter !== 'active'
+                }
+              />
             ) : view === 'grid' ? (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {data.items.map(item => (
+                {visibleItems.map(item => (
                   <LibraryGridCard key={item.id} item={item} />
                 ))}
               </div>
@@ -464,8 +521,8 @@ export default async function LibraryPage({
                 <CardHeader className="flex flex-row items-center justify-between pb-3">
                   <div>
                     <CardTitle className="text-base">
-                      {data.items.length} item
-                      {data.items.length === 1 ? '' : 's'}
+                      {visibleItems.length} item
+                      {visibleItems.length === 1 ? '' : 's'}
                     </CardTitle>
                     <CardDescription>
                       {getLibrarySortLabel(sort)}
@@ -477,7 +534,7 @@ export default async function LibraryPage({
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2 px-3 pb-3">
-                  {data.items.map(item => (
+                  {visibleItems.map(item => (
                     <LibraryListRow key={item.id} item={item} />
                   ))}
                 </CardContent>
@@ -497,17 +554,42 @@ function buildViewHref(
   tags: string[],
   sort: LibrarySort,
   from: string | undefined,
-  to: string | undefined
+  to: string | undefined,
+  status: string
 ) {
+  return buildLibraryHref({ query, kinds, tags, sort, from, to, view, status })
+}
+
+function buildLibraryHref({
+  query,
+  kinds,
+  tags,
+  sort,
+  from,
+  to,
+  view,
+  status
+}: {
+  query: string
+  kinds: LibraryItemKind[]
+  tags: string[]
+  sort: LibrarySort
+  from: string | undefined
+  to: string | undefined
+  view: 'grid' | 'list'
+  status: string
+}) {
   const next = new URLSearchParams()
   if (query) next.set('q', query)
-  next.set('view', view)
+  if (view === 'list') next.set('view', view)
   if (sort !== 'recent') next.set('sort', sort)
   if (from) next.set('from', from)
   if (to) next.set('to', to)
+  if (status !== 'active') next.set('status', status)
   for (const k of kinds) next.append('kind', k)
   for (const t of tags) next.append('tag', t)
-  return `/library?${next.toString()}`
+  const queryString = next.toString()
+  return queryString ? `/library?${queryString}` : '/library'
 }
 
 function Metric({
@@ -562,8 +644,15 @@ function FilterCard({
 
 function LibraryGridCard({ item }: { item: LibraryItem }) {
   const Icon = KIND_ICON[item.kind]
+  const sourceLabel =
+    item.kind === 'search'
+      ? item.citeCount > 0
+        ? `${item.citeCount} source${item.citeCount === 1 ? '' : 's'} cited`
+        : 'Saved thread'
+      : getLibraryKindLabel(item.kind)
+
   return (
-    <Card className="flex h-full flex-col">
+    <Card className="flex h-full flex-col rounded-lg transition-colors hover:border-foreground/20">
       <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-2">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40">
           <Icon className="size-4" />
@@ -575,7 +664,7 @@ function LibraryGridCard({ item }: { item: LibraryItem }) {
             </Link>
           </CardTitle>
           <CardDescription className="mt-0.5 text-[11px] uppercase tracking-wide">
-            {getLibraryKindLabel(item.kind)}
+            {sourceLabel}
             {item.model ? ` · ${item.model}` : ''}
           </CardDescription>
         </div>
@@ -593,14 +682,16 @@ function LibraryGridCard({ item }: { item: LibraryItem }) {
           </p>
         ) : (
           <p className="text-xs italic text-muted-foreground">
-            No summary available.
+            Open this saved thread to continue from the original context.
           </p>
         )}
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>
-            Used {item.useCount} · cited {item.citeCount}
+        <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+          <span className="rounded-md border bg-muted/25 px-2 py-1">
+            Used {item.useCount}
           </span>
-          <span>{formatRelative(item.updatedAt)}</span>
+          <span className="rounded-md border bg-muted/25 px-2 py-1">
+            Updated {formatRelative(item.updatedAt)}
+          </span>
         </div>
         {item.tags.length > 0 ? (
           <div className="flex flex-wrap gap-1">
@@ -615,6 +706,19 @@ function LibraryGridCard({ item }: { item: LibraryItem }) {
             ))}
           </div>
         ) : null}
+        <div className="flex items-center justify-between border-t pt-3">
+          <Button asChild variant="ghost" size="sm" className="gap-1.5 px-2">
+            <Link href={item.href}>
+              Open
+              <ChevronRight className="size-3.5" />
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm" className="gap-1.5">
+            <Link href={`/search?q=${encodeURIComponent(item.title)}`}>
+              Ask follow-up
+            </Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )
@@ -623,16 +727,13 @@ function LibraryGridCard({ item }: { item: LibraryItem }) {
 function LibraryListRow({ item }: { item: LibraryItem }) {
   const Icon = KIND_ICON[item.kind]
   return (
-    <Link
-      href={item.href}
-      className="group flex items-center gap-3 rounded-lg border bg-background p-3 transition-colors hover:bg-muted/40"
-    >
+    <div className="group flex items-center gap-3 rounded-lg border bg-background p-3 transition-colors hover:bg-muted/40">
       <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40">
         <Icon className="size-4" />
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold group-hover:underline">
-          {item.title}
+          <Link href={item.href}>{item.title}</Link>
         </p>
         <p className="truncate text-xs text-muted-foreground">
           {getLibraryKindLabel(item.kind)}
@@ -643,22 +744,32 @@ function LibraryListRow({ item }: { item: LibraryItem }) {
       <div className="hidden items-center gap-3 text-[11px] text-muted-foreground sm:flex">
         <span className="flex items-center gap-1">
           <Share2 className="size-3" />
-          {item.useCount}
+          {item.isPublic ? 'Shared' : 'Private'}
         </span>
-        <span>Used {item.useCount}</span>
+        <span>{item.citeCount} sources</span>
         <span>{formatRelative(item.updatedAt)}</span>
       </div>
-      <Button variant="ghost" size="icon" aria-label="Archive item">
-        <Archive className="size-4" />
+      <Button asChild variant="ghost" size="icon" aria-label="Open item">
+        <Link href={item.href}>
+          <ExternalLink className="size-4" />
+        </Link>
       </Button>
-      <Button variant="ghost" size="icon" aria-label="Delete item">
-        <Trash2 className="size-4" />
+      <Button asChild variant="ghost" size="icon" aria-label="Ask follow-up">
+        <Link href={`/search?q=${encodeURIComponent(item.title)}`}>
+          <Search className="size-4" />
+        </Link>
       </Button>
-    </Link>
+    </div>
   )
 }
 
-function EmptyLibrary({ query }: { query: string }) {
+function EmptyLibrary({
+  query,
+  hasFilters
+}: {
+  query: string
+  hasFilters: boolean
+}) {
   return (
     <Card>
       <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
@@ -666,18 +777,28 @@ function EmptyLibrary({ query }: { query: string }) {
           <BookOpen className="size-5" />
         </span>
         <h2 className="text-lg font-semibold">
-          {query ? `No items match “${query}”` : 'Your library is empty'}
+          {query || hasFilters
+            ? `No saved items match${query ? ` "${query}"` : ' these filters'}`
+            : 'Your library is empty'}
         </h2>
         <p className="max-w-sm text-sm text-muted-foreground">
-          Search threads, chats, app projects, presentations, and API playground
-          sessions will appear here as you create them.
+          {query || hasFilters
+            ? 'Try clearing the filters or starting a new search from the question you want to answer next.'
+            : 'Saved search threads and generated work will appear here once you save them from Brok.'}
         </p>
-        <Button asChild>
-          <Link href="/">
-            <Search className="mr-2 size-4" />
-            Start a new search
-          </Link>
-        </Button>
+        <div className="flex flex-wrap justify-center gap-2">
+          {query || hasFilters ? (
+            <Button asChild variant="outline">
+              <Link href="/library">Clear filters</Link>
+            </Button>
+          ) : null}
+          <Button asChild>
+            <Link href="/search">
+              <Search className="mr-2 size-4" />
+              Start a new search
+            </Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )
