@@ -26,6 +26,23 @@ Optional credential mode is supported with `BROK_SMOKE_EMAIL` and
 `BROK_SMOKE_PASSWORD`, but storage state is preferred so secrets are never
 written into repo files. Reports are written under `.brok-smoke/`.
 
+## smoke-brokmail-composio.ts
+
+Live BrokMail Composio gate for Gmail and Google Calendar. It requires an
+authenticated Brok session and fails unless both connectors are
+account-connected, execution-ready, and able to return Composio-backed route
+payloads.
+
+```bash
+BROK_AUTH_STATE_PATH=/absolute/path/to/storage-state.json \
+bun run smoke:brokmail:composio
+```
+
+Cookie mode is also supported with `BROKMAIL_SMOKE_COOKIE` or
+`BROK_SMOKE_COOKIE`. Set `BROKMAIL_SMOKE_REQUIRE_RESULTS=true` when the smoke
+account is expected to have at least one Gmail thread and one upcoming Calendar
+event. Reports are written under `.brok-smoke/brokmail-composio/`.
+
 ## smoke-local-product.ts
 
 Local whole-product smoke for the auth-disabled development path. It reuses a
