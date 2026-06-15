@@ -59,6 +59,42 @@ function getMessageText(message: UIMessage) {
   )
 }
 
+const CHAT_FETCH_RETRY_DELAY_MS = 250
+
+function wait(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isTransientFetchError(error: unknown) {
+  if (!(error instanceof Error)) return false
+
+  const message = error.message.toLowerCase()
+  return (
+    error.name === 'TypeError' &&
+    (message.includes('failed to fetch') ||
+      message.includes('networkerror') ||
+      message.includes('load failed'))
+  )
+}
+
+async function resilientChatFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit
+) {
+  const retryInput = input instanceof Request ? input.clone() : input
+
+  try {
+    return await fetch(input, init)
+  } catch (error) {
+    if (init?.signal?.aborted || !isTransientFetchError(error)) {
+      throw error
+    }
+
+    await wait(CHAT_FETCH_RETRY_DELAY_MS)
+    return fetch(retryInput, init)
+  }
+}
+
 export function Chat({
   id: providedId,
   savedMessages = [],
@@ -139,6 +175,7 @@ export function Chat({
     id: chatId, // use the client-generated or provided chatId
     transport: new DefaultChatTransport({
       api: '/api/chat',
+      fetch: resilientChatFetch,
       prepareSendMessagesRequest: ({ messages, trigger, messageId }) => {
         // Simplify by passing AI SDK's default trigger values directly
         const lastMessage = messages[messages.length - 1]

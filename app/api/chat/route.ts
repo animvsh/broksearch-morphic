@@ -20,7 +20,6 @@ import {
 import { createChatStreamResponse } from '@/lib/streaming/create-chat-stream-response'
 import { createEphemeralChatStreamResponse } from '@/lib/streaming/create-ephemeral-chat-stream-response'
 import { createSimpleChatStreamResponse } from '@/lib/streaming/create-simple-chat-stream-response'
-import { createBackgroundTask } from '@/lib/tasks/background-tasks'
 import { SearchMode } from '@/lib/types/search'
 import {
   getLatestUserMessage,
@@ -231,27 +230,6 @@ export async function POST(req: Request) {
       `createChatStreamResponse - Start: model=${selectedModel.providerId}:${selectedModel.id}, searchMode=${searchMode}`
     )
 
-    const task = !isGuest
-      ? await createBackgroundTask({
-          userId,
-          chatId,
-          kind: 'chat',
-          title: 'Chat response',
-          metadata: {
-            trigger,
-            searchMode,
-            intent: intentDecision.intent,
-            intentReason: intentDecision.reason,
-            connector: intentDecision.connector,
-            modelId: selectedModel.id,
-            providerId: selectedModel.providerId
-          }
-        }).catch(error => {
-          console.error('Failed to create background task:', error)
-          return null
-        })
-      : null
-
     const response = isGuest
       ? await createEphemeralChatStreamResponse({
           messages: Array.isArray(messages) ? messages : [],
@@ -269,8 +247,7 @@ export async function POST(req: Request) {
           messageId,
           abortSignal: req.signal,
           isNewChat,
-          searchMode,
-          taskId: task?.id
+          searchMode
         })
 
     perfTime('createChatStreamResponse resolved', streamStart)
