@@ -14,6 +14,8 @@ const mockPostSearchCompletion = vi.fn()
 const originalCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT
 const originalUpstashUrl = process.env.UPSTASH_REDIS_REST_URL
 const originalUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN
+const originalDatabaseUrl = process.env.DATABASE_URL
+const originalRestrictedDatabaseUrl = process.env.DATABASE_RESTRICTED_URL
 
 vi.mock('@/lib/actions/chat', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/actions/chat')>()
@@ -34,6 +36,8 @@ describe('GET /api/search/stream/[messageId]', () => {
     delete process.env.BROK_CLOUD_DEPLOYMENT
     delete process.env.UPSTASH_REDIS_REST_URL
     delete process.env.UPSTASH_REDIS_REST_TOKEN
+    delete process.env.DATABASE_URL
+    delete process.env.DATABASE_RESTRICTED_URL
 
     mockPostSearchCompletion.mockReset()
     lastPayload = null
@@ -44,6 +48,8 @@ describe('GET /api/search/stream/[messageId]', () => {
     process.env.BROK_CLOUD_DEPLOYMENT = originalCloudDeployment
     process.env.UPSTASH_REDIS_REST_URL = originalUpstashUrl
     process.env.UPSTASH_REDIS_REST_TOKEN = originalUpstashToken
+    process.env.DATABASE_URL = originalDatabaseUrl
+    process.env.DATABASE_RESTRICTED_URL = originalRestrictedDatabaseUrl
   })
 
   it('returns 404 when stream request is missing', async () => {

@@ -1,5 +1,7 @@
 import { Redis } from '@upstash/redis'
+import { sql } from 'drizzle-orm'
 
+import { db } from '@/lib/db'
 import { generateId } from '@/lib/db/schema'
 
 export type SearchStreamMode = 'search' | 'deep' | 'quick'
@@ -33,6 +35,7 @@ const REGISTRY_KEY_PREFIX = 'search:stream:request:'
 type RegistryMap = Map<string, SearchStreamRequest>
 
 let redisClient: Redis | null | undefined
+let databaseRegistryReady = false
 
 const registry =
   (globalThis as { __brokSearchStreamRegistry?: RegistryMap })
@@ -74,12 +77,83 @@ function searchStreamRegistryKey(messageId: string) {
   return `${REGISTRY_KEY_PREFIX}${messageId}`
 }
 
-function requireDurableRegistryIfCloud() {
-  if (process.env.BROK_CLOUD_DEPLOYMENT === 'true' && !getRedisClient()) {
-    throw new Error(
-      'UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required for search streaming in cloud deployments.'
+function isPlaceholderDatabaseUrl(value: string | undefined) {
+  if (!value) return true
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return true
+  return /^\[\s*YOUR_[A-Z0-9_]+_URL\s*\]$/i.test(trimmed)
+}
+
+function canUseDatabaseRegistry() {
+  return (
+    !isPlaceholderDatabaseUrl(process.env.DATABASE_RESTRICTED_URL) ||
+    !isPlaceholderDatabaseUrl(process.env.DATABASE_URL)
+  )
+}
+
+async function ensureDatabaseRegistry() {
+  if (databaseRegistryReady) return
+
+  await db.execute(sql`
+    create table if not exists search_stream_requests (
+      message_id text primary key,
+      payload jsonb not null,
+      created_at timestamptz not null default now(),
+      expires_at timestamptz not null
     )
-  }
+  `)
+  databaseRegistryReady = true
+}
+
+async function pruneExpiredDatabaseRequests() {
+  await ensureDatabaseRegistry()
+  await db.execute(sql`
+    delete from search_stream_requests
+    where expires_at <= now()
+  `)
+}
+
+async function registerDatabaseSearchStreamRequest(
+  messageId: string,
+  request: SearchStreamRequest
+) {
+  await pruneExpiredDatabaseRequests()
+  await db.execute(sql`
+    insert into search_stream_requests (message_id, payload, expires_at)
+    values (
+      ${messageId},
+      ${JSON.stringify(request)}::jsonb,
+      now() + (${REGISTRY_TTL_SECONDS} * interval '1 second')
+    )
+    on conflict (message_id) do update
+    set payload = excluded.payload,
+        expires_at = excluded.expires_at
+  `)
+}
+
+async function getDatabaseSearchStreamRequest(messageId: string) {
+  await ensureDatabaseRegistry()
+  const rows = await db.execute<{ payload: SearchStreamRequest }>(sql`
+    select payload
+    from search_stream_requests
+    where message_id = ${messageId}
+      and expires_at > now()
+    limit 1
+  `)
+
+  return rows[0]?.payload ?? null
+}
+
+async function consumeDatabaseSearchStreamRequest(messageId: string) {
+  await ensureDatabaseRegistry()
+  const rows = await db.execute<{ payload: SearchStreamRequest }>(sql`
+    delete from search_stream_requests
+    where message_id = ${messageId}
+      and expires_at > now()
+    returning payload
+  `)
+
+  return rows[0]?.payload ?? null
 }
 
 export function makeSearchThreadId() {
@@ -96,12 +170,17 @@ export async function registerSearchStreamRequest(
   pruneExpired()
   const messageId = makeSearchMessageId()
   const redis = getRedisClient()
-  requireDurableRegistryIfCloud()
 
   if (redis) {
     await redis.set(searchStreamRegistryKey(messageId), request, {
       ex: REGISTRY_TTL_SECONDS
     })
+  } else if (canUseDatabaseRegistry()) {
+    await registerDatabaseSearchStreamRequest(messageId, request)
+  } else if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') {
+    throw new Error(
+      'DATABASE_URL or UPSTASH_REDIS_REST_URL is required for search streaming in cloud deployments.'
+    )
   }
 
   registry.set(messageId, request)
@@ -118,6 +197,11 @@ export async function getSearchStreamRequest(messageId: string) {
     if (request) return request
   }
 
+  if (canUseDatabaseRegistry()) {
+    const request = await getDatabaseSearchStreamRequest(messageId)
+    if (request) return request
+  }
+
   return registry.get(messageId) ?? null
 }
 
@@ -128,6 +212,14 @@ export async function consumeSearchStreamRequest(messageId: string) {
     const request = await redis.getdel<SearchStreamRequest>(
       searchStreamRegistryKey(messageId)
     )
+    if (request) {
+      registry.delete(messageId)
+      return request
+    }
+  }
+
+  if (canUseDatabaseRegistry()) {
+    const request = await consumeDatabaseSearchStreamRequest(messageId)
     if (request) {
       registry.delete(messageId)
       return request

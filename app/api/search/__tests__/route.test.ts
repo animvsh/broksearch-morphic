@@ -16,6 +16,8 @@ const { mockPostSearchCompletion, mockVerifyRequestAuth } = vi.hoisted(() => ({
 const originalCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT
 const originalUpstashUrl = process.env.UPSTASH_REDIS_REST_URL
 const originalUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN
+const originalDatabaseUrl = process.env.DATABASE_URL
+const originalRestrictedDatabaseUrl = process.env.DATABASE_RESTRICTED_URL
 
 vi.mock('@/lib/brok/auth', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/brok/auth')>()
@@ -79,6 +81,8 @@ describe('POST /api/search', () => {
     delete process.env.BROK_CLOUD_DEPLOYMENT
     delete process.env.UPSTASH_REDIS_REST_URL
     delete process.env.UPSTASH_REDIS_REST_TOKEN
+    delete process.env.DATABASE_URL
+    delete process.env.DATABASE_RESTRICTED_URL
 
     mockVerifyRequestAuth.mockReset()
     mockVerifyRequestAuth.mockResolvedValue(authSuccess())
@@ -97,6 +101,8 @@ describe('POST /api/search', () => {
     process.env.BROK_CLOUD_DEPLOYMENT = originalCloudDeployment
     process.env.UPSTASH_REDIS_REST_URL = originalUpstashUrl
     process.env.UPSTASH_REDIS_REST_TOKEN = originalUpstashToken
+    process.env.DATABASE_URL = originalDatabaseUrl
+    process.env.DATABASE_RESTRICTED_URL = originalRestrictedDatabaseUrl
   })
 
   it('returns 401 for missing authorization', async () => {
@@ -248,6 +254,8 @@ describe('POST /api/search', () => {
     process.env.BROK_CLOUD_DEPLOYMENT = 'true'
     delete process.env.UPSTASH_REDIS_REST_URL
     delete process.env.UPSTASH_REDIS_REST_TOKEN
+    delete process.env.DATABASE_URL
+    delete process.env.DATABASE_RESTRICTED_URL
 
     const response = await searchPost(
       makeRequest({ query: 'cloud stream needs durable storage', stream: true })
