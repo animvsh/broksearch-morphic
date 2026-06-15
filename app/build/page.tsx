@@ -5,7 +5,7 @@ import { BrokBuildEmptyState } from '@/components/build/empty-state'
 export const metadata = {
   title: 'Brok Build — Describe an app, get a hosted preview',
   description:
-    'Brok Build is a chat-first AI app creation platform. Describe an app idea and Brok plans it, builds it, wires the backend, and shows a live preview.'
+    'Brok Build is a chat-first app creation surface. Describe an app idea and Brok plans a starter scaffold, saves it into BrokCode, and shows a managed preview.'
 }
 
 export default function BrokBuildIndexPage() {

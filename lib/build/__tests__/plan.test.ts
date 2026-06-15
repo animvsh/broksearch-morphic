@@ -8,9 +8,9 @@ describe('buildInternalPlan', () => {
       'Build me an AI study app where I upload notes and it creates lessons'
     )
     expect(plan.project_type).toBe('rag_app')
-    expect(plan.coding_agent).toBe('OpenCode')
-    expect(plan.hosting).toBe('Railway')
-    expect(plan.backend).toBe('InsForge')
+    expect(plan.coding_agent).toBe('BrokCode starter scaffold')
+    expect(plan.hosting).toBe('BrokCode managed preview')
+    expect(plan.backend).toBe('BrokCode starter state')
     expect(plan.ai_features.length).toBeGreaterThan(0)
     expect(plan.database_tables).toContain('embeddings')
     expect(plan.storage_buckets).toContain('course_uploads')
@@ -50,10 +50,11 @@ describe('buildInternalPlan', () => {
     )
   })
 
-  it('always uses OpenCode as the coding agent and Railway for hosting', () => {
+  it('describes the starter scaffold and managed preview honestly', () => {
     const { plan } = buildInternalPlan('Build me anything')
-    expect(plan.coding_agent).toBe('OpenCode')
-    expect(plan.hosting).toBe('Railway')
+    expect(plan.coding_agent).toBe('BrokCode starter scaffold')
+    expect(plan.hosting).toBe('BrokCode managed preview')
+    expect(plan.backend).toBe('BrokCode starter state')
   })
 })
 
@@ -71,7 +72,8 @@ describe('buildUserVisiblePlan', () => {
     expect(userPlan.bullets.length).toBeGreaterThan(2)
     expect(userPlan.designDirection.length).toBeGreaterThan(0)
     expect(userPlan.audience.length).toBeGreaterThan(0)
-    expect(userPlan.backendSummary).toContain('InsForge')
+    expect(userPlan.backendSummary).toContain('BrokCode starter state')
+    expect(userPlan.backendSummary).toContain('BrokCode managed preview')
   })
 
   it('describes AI features for AI apps', () => {

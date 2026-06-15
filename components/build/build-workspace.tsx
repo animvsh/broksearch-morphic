@@ -257,17 +257,17 @@ function phaseLabel(phase: BrokBuildPhase) {
     case 'planning_core_modules':
       return 'Planning modules'
     case 'designing_backend_schema':
-      return 'Designing schema'
+      return 'Planning data model'
     case 'preparing_backend':
-      return 'Preparing backend'
+      return 'Preparing scaffold'
     case 'starting_opencode':
-      return 'Starting OpenCode'
+      return 'Creating BrokCode project'
     case 'generating_frontend':
       return 'Generating frontend'
     case 'wiring_backend':
-      return 'Wiring backend'
+      return 'Wiring interactions'
     case 'building_preview':
-      return 'Building preview'
+      return 'Publishing preview'
     case 'ready':
       return 'Ready'
     case 'failed':

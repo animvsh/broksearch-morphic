@@ -195,8 +195,18 @@ async function fetchTaskResult(taskInfo: SseTaskInfo) {
       }
 
       return {
-        runtime: projectResult.runtime,
-        model: projectResult.model,
+        runtime:
+          typeof projectResult.runtime === 'string'
+            ? projectResult.runtime
+            : noFallbackMode
+              ? 'pi'
+              : undefined,
+        model:
+          typeof projectResult.model === 'string'
+            ? projectResult.model
+            : noFallbackMode
+              ? 'Pi recovered task'
+              : undefined,
         content: 'Recovered from completed BrokCode durable task.',
         preview_url: previewUrl,
         generated_files: generatedFiles,
@@ -248,8 +258,8 @@ async function recoverBrokCodeResultFromProject(projectId: string) {
     : project.metadata?.previewResult
 
   return {
-    runtime: 'brok',
-    model: 'brok-lite',
+    runtime: noFallbackMode ? 'pi' : 'brok',
+    model: noFallbackMode ? 'Pi recovered project' : 'brok-lite',
     content: 'Recovered from durable BrokCode project metadata.',
     preview_url:
       typeof project.previewUrl === 'string' ? project.previewUrl : null,
@@ -474,9 +484,11 @@ async function readSseResult(response: Response, projectId?: string) {
   }
 
   if (!sawStatus) throw new Error('BrokCode stream did not emit status events.')
-  if (!sawDelta) throw new Error('BrokCode stream did not emit delta events.')
   if (!result && taskInfo) {
     result = await fetchTaskResultWithRecovery(taskInfo, projectId)
+  }
+  if (!sawDelta && !taskInfo) {
+    throw new Error('BrokCode stream did not emit delta events.')
   }
   if (!result) throw new Error('BrokCode stream did not emit a result event.')
 

@@ -40,8 +40,8 @@ describe('runBuildStream', () => {
     expect(result.userPlan.bullets.length).toBeGreaterThan(2)
     expect(result.events.some(e => e.kind === 'plan')).toBe(true)
     expect(result.events.some(e => e.kind === 'internal_plan')).toBe(true)
-    expect(result.events.some(e => e.kind === 'opencode_session')).toBe(true)
-    expect(result.events.some(e => e.kind === 'backend_status')).toBe(true)
+    expect(result.events.some(e => e.kind === 'opencode_session')).toBe(false)
+    expect(result.events.some(e => e.kind === 'backend_status')).toBe(false)
     expect(result.events.some(e => e.kind === 'files')).toBe(true)
     expect(result.events.some(e => e.kind === 'preview_url')).toBe(true)
     expect(result.events.some(e => e.kind === 'done')).toBe(true)
@@ -149,8 +149,36 @@ describe('runBuildStream', () => {
     if (filesEvent && filesEvent.kind === 'files') {
       const paths = filesEvent.files.map(f => f.path)
       expect(paths).toContain('app/page.tsx')
-      expect(paths.some(p => p.includes('lib/insforge'))).toBe(true)
+      expect(paths.some(p => p.includes('lib/brokcode'))).toBe(true)
     }
+  }, 15000)
+
+  it('does not claim live OpenCode, InsForge, or Railway work for starter scaffolds', async () => {
+    const result = await runBuildStream({
+      prompt: 'Build me a CRM with login, customers, notes, and tasks',
+      projectId: 'brok-test-honesty'
+    })
+    const visibleText = result.events
+      .flatMap(event => {
+        if (event.kind === 'phase') return [event.message]
+        if (event.kind === 'log') return [event.message]
+        if (event.kind === 'plan') return Object.values(event.plan)
+        if (event.kind === 'internal_plan') {
+          return [
+            event.internalPlan.backend,
+            event.internalPlan.hosting,
+            event.internalPlan.coding_agent
+          ]
+        }
+        return []
+      })
+      .join(' ')
+
+    expect(visibleText.replace(/BrokCode/g, '')).not.toMatch(/OpenCode/i)
+    expect(visibleText).not.toMatch(/InsForge/i)
+    expect(visibleText).not.toMatch(/Railway/i)
+    expect(visibleText).toMatch(/BrokCode/i)
+    expect(visibleText).toMatch(/starter/i)
   }, 15000)
 
   it('classifies non-AI prompts and still produces a build stream', async () => {

@@ -1,11 +1,11 @@
 // Brok Build stream event producer.
 // Generates the live "thinking" / build stream described in the PRD:
-// Understanding -> Planning core modules -> Designing backend schema ->
-// Preparing backend -> Starting OpenCode -> Generating frontend ->
-// Wiring backend -> Building preview.
+// Understanding -> Planning core modules -> Designing data shape ->
+// Preparing scaffold -> Creating BrokCode project -> Generating frontend ->
+// Wiring local state -> Building managed preview.
 //
 // We emit a structured event list that the workspace UI can render in
-// real time, plus a few synthetic file diffs so the right panel feels alive.
+// real time, plus starter file previews for signed-out/demo flows.
 
 import { classifyApp } from './app-types'
 import {
@@ -34,17 +34,17 @@ const PHASE_SEQUENCE = [
   },
   {
     phase: 'designing_backend_schema',
-    message: 'Designing backend schema...',
+    message: 'Planning starter data model...',
     percent: 36
   },
   {
     phase: 'preparing_backend',
-    message: 'Preparing InsForge backend resources...',
+    message: 'Preparing BrokCode starter scaffold...',
     percent: 50
   },
   {
     phase: 'starting_opencode',
-    message: 'Starting OpenCode build session...',
+    message: 'Creating managed BrokCode project...',
     percent: 62
   },
   {
@@ -54,12 +54,12 @@ const PHASE_SEQUENCE = [
   },
   {
     phase: 'wiring_backend',
-    message: 'Wiring backend...',
+    message: 'Wiring starter interactions...',
     percent: 90
   },
   {
     phase: 'building_preview',
-    message: 'Building preview...',
+    message: 'Publishing managed preview...',
     percent: 96
   }
 ] as const
@@ -123,20 +123,20 @@ function filePreviewForPlan(plan: InternalPlan): BrokBuildFilePreview[] {
     })
   }
   files.push({
-    path: 'lib/insforge/client.ts',
+    path: 'lib/brokcode/starter-state.ts',
     language: 'ts',
     size: 980,
-    preview: 'export const insforge = createClient({ ... })'
+    preview: 'export const starterState = { ... }'
   })
   files.push({
-    path: 'lib/insforge/schema.ts',
+    path: 'lib/brokcode/starter-schema.ts',
     language: 'ts',
     size: 1320,
-    preview: '// Generated tables: ' + plan.database_tables.join(', ')
+    preview: '// Starter data model: ' + plan.database_tables.join(', ')
   })
   if (plan.storage_buckets.length > 0) {
     files.push({
-      path: 'lib/insforge/storage.ts',
+      path: 'lib/brokcode/starter-assets.ts',
       language: 'ts',
       size: 410,
       preview:
@@ -147,7 +147,7 @@ function filePreviewForPlan(plan: InternalPlan): BrokBuildFilePreview[] {
   }
   if (plan.functions.length > 0) {
     files.push({
-      path: 'lib/insforge/functions.ts',
+      path: 'lib/brokcode/starter-actions.ts',
       language: 'ts',
       size: 540,
       preview: 'export const functions = ' + plan.functions.join(', ')
@@ -163,21 +163,21 @@ function friendlyLogFor(phase: string, plan: InternalPlan, prompt: string) {
     case 'planning_core_modules':
       return `Planned ${plan.pages.length} pages and ${plan.ai_features.length} AI features.`
     case 'designing_backend_schema':
-      return `Designed ${plan.database_tables.length} tables: ${plan.database_tables
+      return `Mapped ${plan.database_tables.length} starter data groups: ${plan.database_tables
         .slice(0, 4)
         .join(', ')}${
         plan.database_tables.length > 4 ? '...' : ''
       }.`
     case 'preparing_backend':
-      return `Provisioning ${plan.database_tables.length} tables, ${plan.storage_buckets.length} storage buckets via InsForge.`
+      return `Preparing starter scaffold for ${plan.database_tables.length} data groups and ${plan.storage_buckets.length} asset areas.`
     case 'starting_opencode':
-      return `Handing off to OpenCode on Railway with prompt: "${prompt.slice(0, 64)}${prompt.length > 64 ? '...' : ''}"`.replace(/\n/g, ' ')
+      return `Creating a BrokCode managed project for: "${prompt.slice(0, 64)}${prompt.length > 64 ? '...' : ''}"`.replace(/\n/g, ' ')
     case 'generating_frontend':
-      return `OpenCode generating ${plan.pages.length} React/Vite pages.`
+      return `Generating starter files for ${plan.pages.length} app screens.`
     case 'wiring_backend':
-      return `Connecting ${plan.pages.length} pages to InsForge client.`
+      return `Connecting ${plan.pages.length} screens to starter state and actions.`
     case 'building_preview':
-      return `Starting managed preview on Railway.`
+      return `Publishing the BrokCode managed preview.`
     default:
       return ''
   }
@@ -287,20 +287,6 @@ export async function runBuildStream(
     })
     emit({ kind: 'progress', phase: step.phase, percent: step.percent })
     events.push({ kind: 'progress', phase: step.phase, percent: step.percent })
-
-    if (step.phase === 'preparing_backend') {
-      emit({ kind: 'backend_status', status: 'provisioning' })
-      events.push({ kind: 'backend_status', status: 'provisioning' })
-    }
-    if (step.phase === 'wiring_backend') {
-      emit({ kind: 'backend_status', status: 'connected' })
-      events.push({ kind: 'backend_status', status: 'connected' })
-    }
-    if (step.phase === 'starting_opencode') {
-      const sessionId = `oc-${activeProjectId.slice(0, 8)}-${Date.now().toString(36)}`
-      emit({ kind: 'opencode_session', sessionId })
-      events.push({ kind: 'opencode_session', sessionId })
-    }
 
     await sleep(DELAY_PER_PHASE_MS, signal)
   }

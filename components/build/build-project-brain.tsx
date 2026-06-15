@@ -43,7 +43,6 @@ export function BuildProjectBrain({
   files,
   logs,
   backendStatus,
-  opencodeSessionId,
   events
 }: BrainProps) {
   const [tab, setTab] = useState('brain')
@@ -60,7 +59,7 @@ export function BuildProjectBrain({
           <TabsList className="h-7 bg-transparent p-0">
             <TabTrigger value="brain" icon={<ListChecks className="h-3 w-3" />} label="Brain" active={tab === 'brain'} />
             <TabTrigger value="files" icon={<FileCode2 className="h-3 w-3" />} label="Files" active={tab === 'files'} />
-            <TabTrigger value="backend" icon={<ServerCog className="h-3 w-3" />} label="Backend" active={tab === 'backend'} />
+            <TabTrigger value="backend" icon={<ServerCog className="h-3 w-3" />} label="Preview" active={tab === 'backend'} />
             <TabTrigger value="logs" icon={<TerminalSquare className="h-3 w-3" />} label="Logs" active={tab === 'logs'} />
           </TabsList>
         </div>
@@ -75,8 +74,6 @@ export function BuildProjectBrain({
             plan={plan}
             internalPlan={internalPlan}
             phase={phase}
-            backendStatus={backendStatus}
-            opencodeSessionId={opencodeSessionId}
           />
         </TabsContent>
 
@@ -136,15 +133,11 @@ function TabTrigger({
 function BrainTab({
   plan,
   internalPlan,
-  phase,
-  backendStatus,
-  opencodeSessionId
+  phase
 }: {
   plan: UserVisiblePlan | null
   internalPlan: InternalPlan | null
   phase: BrokBuildPhase
-  backendStatus: BrokBuildBackendStatus
-  opencodeSessionId: string | null
 }) {
   if (!plan || !internalPlan) {
     return (
@@ -209,13 +202,12 @@ function BrainTab({
             Phase: {PHASE_LABELS[phase] ?? phase}
           </li>
           <li className="flex items-center gap-2">
-            <StatusDot status={backendStatus === 'connected' ? 'active' : 'pending'} />
-            InsForge backend: {backendStatus}
+            <StatusDot status="active" />
+            Scaffold: planned starter files
           </li>
           <li className="flex items-center gap-2">
-            <StatusDot status={opencodeSessionId ? 'active' : 'pending'} />
-            OpenCode session:{' '}
-            {opencodeSessionId ? opencodeSessionId : 'starting...'}
+            <StatusDot status={phase === 'ready' ? 'active' : 'pending'} />
+            Managed preview: {phase === 'ready' ? 'ready' : 'pending'}
           </li>
         </ul>
       </Section>
@@ -296,13 +288,13 @@ function BackendTab({
   if (!internalPlan) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-        Waiting on Brok to design the backend...
+        Waiting on Brok to plan the starter scaffold...
       </div>
     )
   }
   return (
     <div className="flex flex-col gap-4 text-sm">
-      <Section title="Database">
+      <Section title="Starter data model">
         <ul className="space-y-1 text-xs text-foreground/80">
           {internalPlan.database_tables.map(table => (
             <li key={table} className="flex items-center gap-1.5">
@@ -352,21 +344,21 @@ function BackendTab({
         </Section>
       ) : null}
 
-      <Section title="Auth">
+      <Section title="Auth placeholder">
         <ul className="space-y-1 text-xs text-foreground/80">
           <li className="flex items-center gap-1.5">
             <Check />
-            email/password auth enabled
+            sign-in screen scaffolded for later wiring
           </li>
         </ul>
       </Section>
 
-      <Section title="Status">
+      <Section title="Preview status">
         <Badge
           variant={status === 'connected' ? 'default' : 'secondary'}
           className="text-[10px] uppercase tracking-[0.18em]"
         >
-          {status}
+          managed preview scaffold
         </Badge>
       </Section>
     </div>

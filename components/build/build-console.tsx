@@ -88,7 +88,7 @@ export function BuildConsole({
 
       <div className="flex min-h-0 flex-col">
         <div className="flex h-8 items-center justify-between border-b border-border/60 bg-background px-3 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          <span>Build console / OpenCode activity</span>
+          <span>Build console / BrokCode scaffold</span>
           <div className="flex items-center gap-2">
             {phase !== 'idle' && phase !== 'ready' && phase !== 'failed' ? (
               <Button
@@ -140,7 +140,7 @@ export function BuildConsole({
             type="text"
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
-            placeholder="Send a chat edit to OpenCode..."
+            placeholder="Send a scaffold edit..."
             className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/60"
           />
           <Button
@@ -172,7 +172,7 @@ function ConsoleLine({ event }: { event: BrokStreamEvent }) {
       <div className="flex gap-2 text-muted-foreground/80">
         <span>·</span>
         <span>
-          {event.phase} → {event.percent}%
+          {PHASE_LABELS[event.phase] ?? event.phase} → {event.percent}%
         </span>
       </div>
     )
@@ -204,7 +204,7 @@ function ConsoleLine({ event }: { event: BrokStreamEvent }) {
     return (
       <div className="flex gap-2 text-foreground/80">
         <span>#</span>
-        <span>opencode session {event.sessionId}</span>
+        <span>managed scaffold session {event.sessionId}</span>
       </div>
     )
   }
@@ -212,7 +212,7 @@ function ConsoleLine({ event }: { event: BrokStreamEvent }) {
     return (
       <div className="flex gap-2 text-foreground/80">
         <span>~</span>
-        <span>insforge → {event.status}</span>
+        <span>starter scaffold → {event.status}</span>
       </div>
     )
   }

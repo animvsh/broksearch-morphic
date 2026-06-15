@@ -213,9 +213,9 @@ export function buildInternalPlan(
   const plan: InternalPlan = {
     project_type: cls.appType,
     frontend: cls.suggestedFrontend ?? meta.frontend,
-    backend: cls.suggestedBackend ?? 'InsForge',
-    hosting: 'Railway',
-    coding_agent: 'OpenCode',
+    backend: 'BrokCode starter state',
+    hosting: 'BrokCode managed preview',
+    coding_agent: 'BrokCode starter scaffold',
     ai_features: uniq(aiFeatures),
     database_tables: uniq(tables),
     storage_buckets: uniq(storageBuckets),
@@ -248,12 +248,12 @@ export function buildUserVisiblePlan(
     bullets.push(`Builds the ${page} screen`)
   }
   if (internalPlan.storage_buckets.length > 0) {
-    bullets.push(`Provisions ${internalPlan.storage_buckets[0]} storage`)
+    bullets.push(`Includes a starter ${internalPlan.storage_buckets[0]} asset area`)
   }
-  bullets.push('Live app preview appears once the build finishes')
+  bullets.push('Managed preview appears once the scaffold is ready')
 
   const oneLiner = friendlyOneLiner(appType, prompt)
-  const backendSummary = `${internalPlan.backend} for ${internalPlan.database_tables.length} tables, ${internalPlan.storage_buckets.length} storage buckets, hosted on ${internalPlan.hosting}.`
+  const backendSummary = `${internalPlan.backend} for ${internalPlan.database_tables.length} starter data groups and ${internalPlan.storage_buckets.length} asset areas, published through ${internalPlan.hosting}.`
   const aiFeatures = internalPlan.ai_features.map(f => f.replace(/_/g, ' '))
 
   return {

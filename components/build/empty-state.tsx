@@ -106,8 +106,8 @@ export function BrokBuildEmptyState({ chips }: BrokBuildEmptyStateProps) {
           What do you want to build?
         </h1>
         <p className="mt-4 max-w-xl text-pretty text-base text-muted-foreground sm:text-lg">
-          Describe an app. Brok will plan it, build it, wire the backend, and
-          show you a live preview.
+          Describe an app. Brok will plan a starter scaffold, save it into
+          BrokCode, and show a managed preview you can keep editing.
         </p>
 
         <form

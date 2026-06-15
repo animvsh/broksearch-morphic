@@ -60,7 +60,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
       'photo_upload'
     ],
     frontend: 'Next.js + Tailwind (mobile-first PWA)',
-    backend: 'InsForge',
+    backend: 'BrokCode starter state',
     weight: 3
   },
   {
@@ -82,7 +82,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
       'rate_limits'
     ],
     frontend: 'React + Vite + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'ai_image_app',
@@ -104,7 +104,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
       'history'
     ],
     frontend: 'React + Vite + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'ai_voice_app',
@@ -125,7 +125,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
       'rate_limits'
     ],
     frontend: 'React + Vite + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'ai_search_app',
@@ -145,7 +145,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
       'user_auth'
     ],
     frontend: 'Next.js + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'rag_app',
@@ -169,7 +169,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
       'chat_interface'
     ],
     frontend: 'React + Vite + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'crm',
@@ -182,7 +182,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
     ],
     needs: ['auth', 'customers_table', 'notes_table', 'tasks_table'],
     frontend: 'React + Vite + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'tracker_app',
@@ -197,7 +197,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
     ],
     needs: ['auth', 'entries_table', 'history_view'],
     frontend: 'React + Vite + Tailwind (mobile-first)',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'learning_app',
@@ -213,7 +213,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
     ],
     needs: ['auth', 'courses_table', 'progress_table', 'quiz_attempts_table'],
     frontend: 'React + Vite + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'social_app',
@@ -228,7 +228,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
     ],
     needs: ['auth', 'posts_table', 'comments_table', 'realtime'],
     frontend: 'Next.js + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'admin_portal',
@@ -240,7 +240,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
     ],
     needs: ['auth', 'role_guards', 'audit_log', 'kpi_cards'],
     frontend: 'React + Vite + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'marketplace',
@@ -253,7 +253,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
     ],
     needs: ['auth', 'listings_table', 'orders_table', 'reviews_table'],
     frontend: 'Next.js + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'saas_app',
@@ -266,7 +266,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
     ],
     needs: ['auth', 'plans_table', 'subscriptions_table', 'billing'],
     frontend: 'Next.js + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'dashboard',
@@ -279,7 +279,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
     ],
     needs: ['auth', 'events_table', 'charts'],
     frontend: 'React + Vite + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'internal_tool',
@@ -291,7 +291,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
     ],
     needs: ['auth', 'approvals', 'audit_log'],
     frontend: 'React + Vite + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   },
   {
     appType: 'landing_page',
@@ -303,7 +303,7 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
     ],
     needs: ['hero', 'features', 'pricing', 'cta'],
     frontend: 'Next.js + Tailwind',
-    backend: 'InsForge (auth + waitlist)'
+    backend: 'BrokCode starter state'
   }
 ]
 
@@ -446,7 +446,7 @@ export function classifyApp(prompt: string): ClassifiedApp {
       confidence: 0.2,
       needs: ['hero', 'features', 'pricing', 'cta'],
       suggestedFrontend: 'Next.js + Tailwind',
-      suggestedBackend: 'InsForge'
+      suggestedBackend: 'BrokCode starter state'
     }
   }
 
@@ -491,7 +491,7 @@ export function describeAppType(appType: BrokBuildAppType) {
     label: appType.replace(/_/g, ' '),
     needs: [],
     frontend: 'Next.js + Tailwind',
-    backend: 'InsForge'
+    backend: 'BrokCode starter state'
   }
 }
 
