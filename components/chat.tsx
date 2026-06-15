@@ -105,7 +105,16 @@ export function Chat({
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [input, setInput] = useState('')
   const [pendingUserMessage, setPendingUserMessage] =
-    useState<UIMessage | null>(null)
+    useState<UIMessage | null>(() => {
+      const initialQuery = query?.trim()
+      if (!initialQuery || savedMessages.length > 0) return null
+
+      return {
+        id: generateId(),
+        role: 'user',
+        parts: [{ type: 'text', text: initialQuery }]
+      } as UIMessage
+    })
   const [errorModal, setErrorModal] = useState<{
     open: boolean
     type: 'rate-limit' | 'auth' | 'forbidden' | 'general'
@@ -649,6 +658,7 @@ export function Chat({
           status={status}
           chatId={chatId}
           isGuest={isGuest}
+          hasPendingSubmission={Boolean(pendingUserMessage)}
           onFollowUpSubmit={(text: string) => {
             sendMessage({
               role: 'user',

@@ -28,14 +28,17 @@ vi.mock('@/components/chat', () => ({
   Chat: ({
     id,
     query,
+    savedMessages,
     initialSearchMode
   }: {
     id: string
     query?: string
+    savedMessages?: Array<{ role: string; parts?: Array<{ text?: string }> }>
     initialSearchMode?: string
   }) => (
     <div data-testid="chat">
-      {id}:{query}:{initialSearchMode}
+      {id}:{query}:{initialSearchMode}:{savedMessages?.length ?? 0}:
+      {savedMessages?.[1]?.parts?.[0]?.text ?? ''}
     </div>
   )
 }))
@@ -111,15 +114,43 @@ describe('app/search/page', () => {
 
     render(
       await SearchPage({
-        searchParams: Promise.resolve({ q: 'hello', mode: 'unknown' })
+        searchParams: Promise.resolve({
+          q: 'latest ai funding',
+          mode: 'unknown'
+        })
       })
     )
 
     expect(mocks.requireFeatureAccess).toHaveBeenCalledWith(
-      '/search?q=hello&mode=quick',
+      '/search?q=latest+ai+funding&mode=quick',
       'search'
     )
-    expect(screen.getByTestId('chat')).toHaveTextContent('chat-id:hello:quick')
+    expect(screen.getByTestId('chat')).toHaveTextContent(
+      'chat-id:latest ai funding:quick'
+    )
+  })
+
+  it('server-seeds tiny utility answers instead of waiting for client auto-submit', async () => {
+    mocks.requireFeatureAccess.mockResolvedValue({})
+    mocks.generateUUID
+      .mockReturnValueOnce('chat-id')
+      .mockReturnValueOnce('user-id')
+      .mockReturnValueOnce('assistant-id')
+    mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
+
+    render(
+      await SearchPage({
+        searchParams: Promise.resolve({ q: 'jo', mode: 'quick' })
+      })
+    )
+
+    expect(mocks.requireFeatureAccess).toHaveBeenCalledWith(
+      '/search?q=jo&mode=quick',
+      'search'
+    )
+    expect(screen.getByTestId('chat')).toHaveTextContent(
+      'chat-id::quick:2:I need a little more to search well.'
+    )
   })
 
   it('preserves mode for bare search landing redirects', async () => {

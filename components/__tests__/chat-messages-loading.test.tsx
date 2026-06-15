@@ -67,4 +67,27 @@ describe('ChatMessages loading state', () => {
     expect(screen.queryByTestId('pending-answer')).not.toBeInTheDocument()
     expect(screen.getByText('Cursor is strongest for...')).toBeInTheDocument()
   })
+
+  it('shows pending answer for optimistic URL-query submissions before transport starts', () => {
+    render(
+      <ChatMessages
+        sections={[
+          {
+            id: 'section-1',
+            userMessage: {
+              id: 'user-1',
+              role: 'user',
+              parts: [{ type: 'text', text: 'jo' }]
+            },
+            assistantMessages: []
+          }
+        ]}
+        status="ready"
+        hasPendingSubmission
+        scrollContainerRef={createRef<HTMLDivElement>()}
+      />
+    )
+
+    expect(screen.getByTestId('pending-answer')).toBeInTheDocument()
+  })
 })

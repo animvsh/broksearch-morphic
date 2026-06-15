@@ -33,6 +33,7 @@ interface ChatMessagesProps {
   onUpdateMessage?: (messageId: string, newContent: string) => Promise<void>
   reload?: (messageId: string) => Promise<void | string | null | undefined>
   error?: Error | string | null | undefined
+  hasPendingSubmission?: boolean
 }
 
 export function ChatMessages({
@@ -45,7 +46,8 @@ export function ChatMessages({
   scrollContainerRef,
   onUpdateMessage,
   reload,
-  error
+  error,
+  hasPendingSubmission = false
 }: ChatMessagesProps) {
   // Track user-modified states (when user explicitly opens/closes)
   const [userModifiedStates, setUserModifiedStates] = useState<
@@ -53,7 +55,8 @@ export function ChatMessages({
   >({})
   // Cache tool counts for performance optimization
   const toolCountCacheRef = useRef<Map<string, number>>(new Map())
-  const isLoading = status === 'submitted' || status === 'streaming'
+  const isLoading =
+    status === 'submitted' || status === 'streaming' || hasPendingSubmission
 
   // Tool types definition - moved outside function for performance
   const toolTypes = [

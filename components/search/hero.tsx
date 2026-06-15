@@ -169,7 +169,7 @@ export function Hero({
               onChange={e => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              placeholder="Ask anything..."
+              placeholder='Ask anything, e.g. "What is the best way to learn React?"'
               rows={1}
               className={cn(
                 'block w-full resize-none bg-transparent px-4 pt-4 pb-2 text-base leading-relaxed text-foreground placeholder:text-muted-foreground/70',

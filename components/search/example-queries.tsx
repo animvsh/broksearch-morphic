@@ -42,6 +42,10 @@ export function ExampleQueries({
   const [seed, setSeed] = useState(0)
 
   const items = useMemo(() => {
+    if (seed === 0) {
+      return EXAMPLE_QUERIES.slice(0, count)
+    }
+
     const shuffled = [...EXAMPLE_QUERIES]
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = (seed * 7 + i * 13) % (i + 1)

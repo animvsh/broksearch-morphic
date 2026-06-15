@@ -21,13 +21,31 @@ describe('SearchLanding', () => {
   it('routes submitted searches through the chat creation route', () => {
     render(<SearchLanding />)
 
-    fireEvent.change(screen.getByPlaceholderText('Ask anything...'), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search query' }), {
       target: { value: 'best study plan for finals' }
     })
     fireEvent.click(screen.getByRole('button', { name: /send query/i }))
 
     expect(mocks.push).toHaveBeenCalledWith(
       '/search?q=best+study+plan+for+finals&mode=quick'
+    )
+  })
+
+  it('shows the MVP example prompts and lets users start from one', () => {
+    render(<SearchLanding />)
+
+    expect(
+      screen.getByText('What is the best way to learn React?')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Compare Cursor vs Windsurf')).toBeInTheDocument()
+    expect(screen.getByText('Summarize the latest AI news')).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Compare Cursor vs Windsurf/i })
+    )
+
+    expect(screen.getByRole('textbox', { name: 'Search query' })).toHaveValue(
+      'Compare Cursor vs Windsurf'
     )
   })
 })
