@@ -117,6 +117,7 @@ export function BrokBuildWorkspace({
           events={state.events}
           isBuilding={isBuilding}
           phase={phase}
+          previewUrl={state.previewUrl}
           onSendEdit={message => {
             void sendEdit(message)
           }}

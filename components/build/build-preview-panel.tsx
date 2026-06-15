@@ -165,6 +165,15 @@ function PreviewContent({ previewUrl, phase, files, reloadKey }: ContentProps) {
     )
   }
 
+  if (phase === 'ready') {
+    return (
+      <EmptyState
+        title="Project scaffold is ready."
+        subtitle="Sign in to create a managed preview you can open here."
+      />
+    )
+  }
+
   return (
     <BuildingPreview phase={phase} files={files} />
   )

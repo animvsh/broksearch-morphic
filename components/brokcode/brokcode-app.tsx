@@ -1281,13 +1281,46 @@ async function readBackgroundTaskEventStream(
 
 type BrokCodeAppProps = {
   initialPrompt?: string
+  initialProjectId?: string | null
   autoStart?: boolean
   connectGithub?: boolean
   accountEmail?: string
 }
 
+export function normalizeInitialBrokCodeProjectId(projectId?: string | null) {
+  const normalized = projectId?.trim()
+  return normalized ? normalized : ''
+}
+
+export function resolveBrokCodeActiveProjectId(params: {
+  currentProjectId: string
+  requestedProjectId?: string | null
+  projects: Pick<BrokCodeProject, 'id'>[]
+}) {
+  const { currentProjectId, requestedProjectId, projects } = params
+  const normalizedCurrent = normalizeInitialBrokCodeProjectId(currentProjectId)
+  if (
+    normalizedCurrent &&
+    projects.some(project => project.id === normalizedCurrent)
+  ) {
+    return normalizedCurrent
+  }
+
+  const normalizedRequested =
+    normalizeInitialBrokCodeProjectId(requestedProjectId)
+  if (
+    normalizedRequested &&
+    projects.some(project => project.id === normalizedRequested)
+  ) {
+    return normalizedRequested
+  }
+
+  return projects[0]?.id ?? ''
+}
+
 export function BrokCodeApp({
   initialPrompt = '',
+  initialProjectId = null,
   autoStart = false,
   connectGithub = false,
   accountEmail = 'Brok account'
@@ -1362,7 +1395,9 @@ export function BrokCodeApp({
   const [versions, setVersions] = useState<BrokCodeVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [projects, setProjects] = useState<BrokCodeProject[]>([])
-  const [activeProjectId, setActiveProjectId] = useState('')
+  const [activeProjectId, setActiveProjectId] = useState(() =>
+    normalizeInitialBrokCodeProjectId(initialProjectId)
+  )
   const [projectFiles, setProjectFiles] = useState<BrokCodeProjectFile[]>([])
   const [projectFilesLoading, setProjectFilesLoading] = useState(false)
   const [projectFilesError, setProjectFilesError] = useState<string | null>(
@@ -1873,9 +1908,11 @@ export function BrokCodeApp({
           : []
         setProjects(nextProjects)
         setActiveProjectId(current =>
-          current && nextProjects.some(project => project.id === current)
-            ? current
-            : (nextProjects[0]?.id ?? '')
+          resolveBrokCodeActiveProjectId({
+            currentProjectId: current,
+            requestedProjectId: initialProjectId,
+            projects: nextProjects
+          })
         )
       } catch (error) {
         setRuntimeError(
@@ -1883,7 +1920,7 @@ export function BrokCodeApp({
         )
       }
     },
-    [apiKey, getAuthHeaders]
+    [apiKey, getAuthHeaders, initialProjectId]
   )
 
   const refreshProjectRuntime = useCallback(

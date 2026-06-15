@@ -34,6 +34,7 @@ type ChatPanelProps = {
   events: BrokStreamEvent[]
   isBuilding: boolean
   phase: BrokBuildPhase
+  previewUrl: string | null
   onSendEdit: (message: string) => void
   planCard?: ReactNode
 }
@@ -66,6 +67,7 @@ export function BuildChatPanel({
   events,
   isBuilding,
   phase,
+  previewUrl,
   onSendEdit,
   planCard
 }: ChatPanelProps) {
@@ -152,7 +154,7 @@ export function BuildChatPanel({
           </Button>
         </div>
         <p className="mt-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          {phaseLabelFor(phase)}
+          {phaseLabelFor(phase, previewUrl)}
         </p>
       </div>
     </section>
@@ -203,12 +205,14 @@ function ChatItem({ message }: { message: ChatMessage }) {
   )
 }
 
-function phaseLabelFor(phase: BrokBuildPhase) {
+function phaseLabelFor(phase: BrokBuildPhase, previewUrl: string | null) {
   switch (phase) {
     case 'idle':
       return 'Ready when you are.'
     case 'ready':
-      return 'Preview ready — keep editing by chat.'
+      return previewUrl
+        ? 'Preview ready — keep editing by chat.'
+        : 'Project scaffold ready — sign in to open preview.'
     case 'failed':
       return 'Build failed. Try again or adjust the prompt.'
     case 'adjusting':

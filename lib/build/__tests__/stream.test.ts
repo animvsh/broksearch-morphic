@@ -47,7 +47,12 @@ describe('runBuildStream', () => {
     expect(result.events.some(e => e.kind === 'done')).toBe(true)
     expect(result.events).toContainEqual({
       kind: 'preview_url',
-      url: '/api/brokcode/previews/brok-test-1/index.html'
+      url: null
+    })
+    expect(result.events).toContainEqual({
+      kind: 'phase',
+      phase: 'ready',
+      message: 'Project scaffold ready. Sign in to open a managed preview.'
     })
   }, 15000)
 

@@ -309,20 +309,22 @@ export async function runBuildStream(
   emit({ kind: 'files', files: filePreview })
   events.push({ kind: 'files', files: filePreview })
 
-  const previewUrl =
-    persistedProject?.previewUrl ?? `/api/brokcode/previews/${options.projectId}/index.html`
+  const previewUrl = persistedProject?.previewUrl ?? null
   emit({ kind: 'preview_url', url: previewUrl })
   events.push({ kind: 'preview_url', url: previewUrl })
 
+  const completionMessage = previewUrl
+    ? 'Preview ready. You can keep editing by chat.'
+    : 'Project scaffold ready. Sign in to open a managed preview.'
   emit({
     kind: 'phase',
     phase: 'ready',
-    message: 'Preview ready. You can keep editing by chat.'
+    message: completionMessage
   })
   events.push({
     kind: 'phase',
     phase: 'ready',
-    message: 'Preview ready. You can keep editing by chat.'
+    message: completionMessage
   })
   emit({
     kind: 'done',

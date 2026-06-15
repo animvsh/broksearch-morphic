@@ -220,7 +220,11 @@ function ConsoleLine({ event }: { event: BrokStreamEvent }) {
     return (
       <div className="flex gap-2 text-foreground/80">
         <span>~</span>
-        <span>preview ready: {event.url ?? 'preparing...'}</span>
+        <span>
+          {event.url
+            ? `preview ready: ${event.url}`
+            : 'preview unavailable until a managed project is created'}
+        </span>
       </div>
     )
   }
