@@ -5,6 +5,8 @@ const NAVIGATION_TIMEOUT_MS = Math.max(
   30_000,
   Number(process.env.MOBILE_SMOKE_NAV_TIMEOUT_MS) || 60_000
 )
+const RETRYABLE_NAVIGATION_ERROR =
+  /ERR_NETWORK_|Execution context was destroyed|page crashed|Timeout|Load failed|ERR_|ECONN|chrome-error:\/\/chromewebdata|interrupted by another navigation|Target page, context or browser has been closed/i
 const MIN_TOUCH_TARGET = 44
 const routes = [
   '/',
@@ -40,12 +42,7 @@ async function checkRoute(page, path, attempt = 0) {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    if (
-      attempt < 2 &&
-      /ERR_NETWORK_|Execution context was destroyed|page crashed|Timeout|Load failed|ERR_|ECONN/i.test(
-        message
-      )
-    ) {
+    if (attempt < 2 && RETRYABLE_NAVIGATION_ERROR.test(message)) {
       await page.waitForTimeout(250)
       await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {})
       return checkRoute(page, path, attempt + 1)
