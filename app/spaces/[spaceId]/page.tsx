@@ -10,12 +10,7 @@ import {
   Lock,
   Mail,
   MessageCircle,
-  Plus,
   Search,
-  Settings,
-  Share2,
-  Shield,
-  UserPlus,
   Users
 } from 'lucide-react'
 
@@ -161,16 +156,6 @@ export default async function SpaceDetailPage({
                 </p>
               ) : null}
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button disabled variant="outline" className="gap-2">
-                <MessageCircle className="size-4" />
-                Space chat
-              </Button>
-              <Button disabled className="gap-2">
-                <Settings className="size-4" />
-                Settings
-              </Button>
-            </div>
           </div>
           <div className="grid border-t bg-muted/25 sm:grid-cols-4">
             <Metric
@@ -199,17 +184,13 @@ export default async function SpaceDetailPage({
         <section className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-4">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardHeader>
                 <div>
                   <CardTitle className="text-base">Projects</CardTitle>
                   <CardDescription>
                     Project-specific research folders within this space.
                   </CardDescription>
                 </div>
-                <Button disabled size="sm" className="gap-1.5">
-                  <Plus className="size-3.5" />
-                  New project
-                </Button>
               </CardHeader>
               <CardContent className="space-y-2 pt-0">
                 {data.projects.length === 0 ? (
@@ -307,7 +288,7 @@ export default async function SpaceDetailPage({
               <CardContent className="space-y-2 pt-0">
                 {data.members.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    No members yet. Invite teammates to collaborate.
+                    No members are recorded for this space yet.
                   </p>
                 ) : (
                   data.members.map(member => (
@@ -368,29 +349,27 @@ export default async function SpaceDetailPage({
                     </div>
                   ))
                 )}
-                <Button disabled variant="outline" size="sm" className="w-full">
-                  <UserPlus className="size-3.5" />
-                  Invite member
-                </Button>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Sharing</CardTitle>
+                <CardTitle className="text-sm">Visibility</CardTitle>
                 <CardDescription>
-                  Manage how this space is shared.
+                  Current access state for this space.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 pt-0">
-                <Button disabled variant="outline" size="sm" className="w-full">
-                  <Share2 className="size-3.5" />
-                  Share space
-                </Button>
-                <Button disabled variant="outline" size="sm" className="w-full">
-                  <Shield className="size-3.5" />
-                  Permissions
-                </Button>
+                <div className="rounded-md border bg-background p-2.5 text-xs text-muted-foreground">
+                  <Badge variant="outline" className="mb-2 gap-1 text-[10px]">
+                    <VisibilityIcon className="size-3" />
+                    {visibilityLabel(data.space.visibility)}
+                  </Badge>
+                  <p>
+                    Visibility changes and sharing links are not exposed as
+                    actions on this page.
+                  </p>
+                </div>
               </CardContent>
             </Card>
 

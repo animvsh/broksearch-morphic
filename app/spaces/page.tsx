@@ -9,7 +9,6 @@ import {
   Link2,
   Lock,
   PanelLeft,
-  Plus,
   Search,
   Shield,
   UserPlus,
@@ -105,16 +104,9 @@ export default async function SpacesPage() {
                 Shared research workspaces
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Spaces are collaborative folders for threads, projects, and
-                presentations. Invite teammates via email or share a link, set
-                permissions, and keep your research organized in one place.
+                Spaces organize threads, projects, and presentations with
+                member-aware visibility, roles, and activity summaries.
               </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button disabled className="gap-2">
-                <Plus className="size-4" />
-                New space
-              </Button>
             </div>
           </div>
           <div className="grid border-t bg-muted/25 sm:grid-cols-3">
@@ -162,30 +154,30 @@ export default async function SpacesPage() {
               <CardHeader>
                 <CardTitle className="text-base">How spaces work</CardTitle>
                 <CardDescription>
-                  Each space can hold threads, projects, and presentations, with
-                  member roles and presence.
+                  Each space can hold threads, projects, and presentations with
+                  clear access state.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 text-sm sm:grid-cols-3">
                 <div>
                   <p className="font-medium">Members & roles</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Owners manage members and settings. Editors contribute
-                    threads and projects. Viewers read and react.
+                    Owner, editor, and viewer roles are shown from the current
+                    space membership records.
                   </p>
                 </div>
                 <div>
-                  <p className="font-medium">Space-level chat</p>
+                  <p className="font-medium">Saved work</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Each space has its own chat channel in addition to
-                    per-project and per-thread discussions.
+                    Threads, chats, projects, and presentations attached to a
+                    space appear together for review.
                   </p>
                 </div>
                 <div>
-                  <p className="font-medium">Real-time presence</p>
+                  <p className="font-medium">Activity</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    See who is active in the space right now and jump into their
-                    current thread.
+                    Recent timestamps make it clear which spaces changed most
+                    recently.
                   </p>
                 </div>
               </CardContent>
@@ -193,32 +185,21 @@ export default async function SpacesPage() {
             <aside className="space-y-3">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-sm">Invite by link</CardTitle>
+                  <CardTitle className="text-sm">Visibility</CardTitle>
                   <CardDescription>
-                    Generate a one-time invite link with a chosen role.
+                    Space cards show whether a workspace is private,
+                    link-visible, or public.
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <Button disabled variant="outline" className="w-full gap-2">
-                    <Link2 className="size-4" />
-                    Create invite link
-                  </Button>
-                </CardContent>
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-sm">Public spaces</CardTitle>
+                  <CardTitle className="text-sm">Access records</CardTitle>
                   <CardDescription>
-                    Toggle visibility to public for read-only access via
-                    shareable URL.
+                    Member and pending-invite counts are read from the space
+                    data model.
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <Button disabled variant="outline" className="w-full gap-2">
-                    <Globe2 className="size-4" />
-                    View public spaces
-                  </Button>
-                </CardContent>
               </Card>
             </aside>
           </div>
@@ -336,13 +317,9 @@ function EmptySpaces() {
         <h2 className="text-lg font-semibold">Create your first space</h2>
         <p className="max-w-md text-sm text-muted-foreground">
           Spaces group related threads, projects, and presentations so you can
-          collaborate with teammates or keep research organized.
+          keep research organized.
         </p>
         <div className="flex flex-wrap justify-center gap-2">
-          <Button disabled>
-            <Plus className="mr-2 size-4" />
-            New space
-          </Button>
           <Button asChild variant="outline">
             <Link href="/">
               <KeyRound className="mr-2 size-4" />
