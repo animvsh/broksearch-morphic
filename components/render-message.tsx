@@ -28,6 +28,7 @@ interface RenderMessageProps {
   isGuest?: boolean
   status?: UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>['status']
   addToolResult?: (params: { toolCallId: string; result: any }) => void
+  onFollowUpSubmit?: (query: string) => void
   onUpdateMessage?: (messageId: string, newContent: string) => Promise<void>
   reload?: (messageId: string) => Promise<void | string | null | undefined>
   isLatestMessage?: boolean
@@ -43,6 +44,7 @@ export function RenderMessage({
   isGuest = false,
   status,
   addToolResult,
+  onFollowUpSubmit,
   onUpdateMessage,
   reload,
   isLatestMessage = false,
@@ -165,6 +167,7 @@ export function RenderMessage({
             reload={reload}
             status={status}
             citationMaps={citationMaps}
+            onFollowUpSubmit={onFollowUpSubmit}
           />
         ) : (
           <AnswerSection

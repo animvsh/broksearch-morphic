@@ -38,6 +38,7 @@ export interface SearchAnswerSectionProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
   chatId?: string
+  onFollowUpSubmit?: (query: string) => void
   showActions?: boolean
   messageId: string
   metadata?: UIMessageMetadata
@@ -199,6 +200,7 @@ export function SearchAnswerSection({
   status,
   reload,
   citationMaps,
+  onFollowUpSubmit,
   isGuest = false,
   showActions = true,
   className
@@ -273,6 +275,11 @@ export function SearchAnswerSection({
   }
 
   const handleFollowUp = (fu: FollowUp) => {
+    if (onFollowUpSubmit) {
+      onFollowUpSubmit(fu.query)
+      return
+    }
+
     if (typeof window === 'undefined') return
     const input = document.querySelector<HTMLTextAreaElement>(
       'textarea[name="input"]'

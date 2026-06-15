@@ -634,6 +634,12 @@ export function Chat({
           status={status}
           chatId={chatId}
           isGuest={isGuest}
+          onFollowUpSubmit={(text: string) => {
+            sendMessage({
+              role: 'user',
+              parts: [{ type: 'text', text }]
+            })
+          }}
           addToolResult={({
             toolCallId,
             result

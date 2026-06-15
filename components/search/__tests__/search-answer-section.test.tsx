@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react'
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { SearchResultItem } from '@/lib/types'
@@ -19,13 +19,21 @@ vi.mock('@/components/search/answer-toolbar', () => ({
 
 vi.mock('@/components/search/follow-up-suggestions', () => ({
   FollowUpSuggestions: ({
-    followUps
+    followUps,
+    onSelect
   }: {
-    followUps: Array<{ query: string }>
+    followUps: Array<{ id: string; query: string }>
+    onSelect: (followUp: { id: string; query: string }) => void
   }) => (
     <div data-testid="follow-up-suggestions">
       {followUps.map(followUp => (
-        <span key={followUp.query}>{followUp.query}</span>
+        <button
+          key={followUp.id}
+          type="button"
+          onClick={() => onSelect(followUp)}
+        >
+          {followUp.query}
+        </button>
       ))}
     </div>
   )
@@ -136,6 +144,30 @@ describe('SearchAnswerSection actions', () => {
     expect(screen.getByTestId('follow-up-suggestions')).toHaveTextContent(
       'Stored follow-up'
     )
+  })
+
+  it('submits durable metadata follow-ups directly when a submit handler is provided', () => {
+    const onFollowUpSubmit = vi.fn()
+
+    renderAnswer({
+      content: 'Answer text.',
+      onFollowUpSubmit,
+      metadata: {
+        answer: {
+          followUps: [
+            {
+              id: 'stored-fu-1',
+              label: 'Stored follow-up',
+              query: 'Stored follow-up'
+            }
+          ]
+        }
+      }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /stored follow-up/i }))
+
+    expect(onFollowUpSubmit).toHaveBeenCalledWith('Stored follow-up')
   })
 
   it('uses durable metadata sources when citation maps are unavailable', () => {
