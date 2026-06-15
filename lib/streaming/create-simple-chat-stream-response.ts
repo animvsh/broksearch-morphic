@@ -70,7 +70,7 @@ async function persistSimpleMessages({
 }
 
 export function createSimpleChatStreamResponse(config: SimpleChatStreamConfig) {
-  const persistPromise = persistSimpleMessages(config).catch(error => {
+  void persistSimpleMessages(config).catch(error => {
     console.error('Failed to persist simple chat response:', error)
   })
 
@@ -94,7 +94,6 @@ export function createSimpleChatStreamResponse(config: SimpleChatStreamConfig) {
       controller.enqueue(streamEvent({ type: 'finish-step' }))
       controller.enqueue(streamEvent({ type: 'finish', finishReason: 'stop' }))
       controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-      await persistPromise
       controller.close()
     }
   })

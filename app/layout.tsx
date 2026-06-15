@@ -5,6 +5,7 @@ import Script from 'next/script'
 import { Analytics } from '@vercel/analytics/next'
 
 import { requireAdminAccess } from '@/lib/auth/admin'
+import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
 import { UserProvider } from '@/lib/contexts/user-context'
 import { createClient } from '@/lib/supabase/server'
 import { cn } from '@/lib/utils'
@@ -83,7 +84,7 @@ export default async function RootLayout({
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (supabaseUrl && supabaseAnonKey) {
+  if (!isAnonymousAuthMode() && supabaseUrl && supabaseAnonKey) {
     const supabase = await createClient()
     const {
       data: { user: supabaseUser }

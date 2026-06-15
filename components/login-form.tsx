@@ -22,6 +22,18 @@ import { Label } from '@/components/ui/label'
 
 import { PasswordInput } from './ui/password-input'
 
+function getLoginErrorMessage(error: unknown) {
+  if (!(error instanceof Error)) {
+    return 'An error occurred'
+  }
+
+  if (error.message.toLowerCase() === 'failed to fetch') {
+    return 'Authentication service is unreachable. Please try again in a moment.'
+  }
+
+  return error.message
+}
+
 export function LoginForm({
   className,
   redirectTo,
@@ -54,7 +66,7 @@ export function LoginForm({
       router.replace(safeRedirectTo)
       router.refresh()
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : 'An error occurred')
+      setError(getLoginErrorMessage(error))
     } finally {
       setIsLoading(false)
     }
