@@ -412,7 +412,10 @@ export function FeaturesIndexPage() {
 function FeatureNav() {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-100 px-5 sm:px-7">
-      <Link href="/" className="inline-flex items-center gap-2">
+      <Link
+        href="/"
+        className="inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md px-2 clicky-control"
+      >
         <span className="inline-flex size-7 items-center justify-center rounded-md border border-zinc-200 bg-white shadow-sm">
           <IconBlinkingLogo animate className="size-3.5" />
         </span>

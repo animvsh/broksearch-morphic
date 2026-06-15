@@ -56,7 +56,7 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
     <main className="min-h-svh bg-[#dcdcdc] px-4 py-8 text-zinc-950 sm:px-6 lg:px-8">
       <section className="mx-auto flex min-h-[min(760px,calc(100svh-4rem))] w-full max-w-7xl flex-col overflow-hidden rounded-lg border border-white/80 bg-white shadow-[0_42px_90px_-58px_rgba(24,24,27,0.7)]">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-100 px-5 sm:px-7">
-          <Link href="/" className="inline-flex items-center gap-2">
+          <Link href="/" className="inline-flex min-h-11 items-center gap-2">
             <span className="inline-flex size-7 items-center justify-center rounded-md border border-zinc-200 bg-white shadow-sm">
               <IconBlinkingLogo animate className="size-3.5" />
             </span>
@@ -174,7 +174,7 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
           <span aria-hidden="true">&middot;</span>
           <Link
             href="/docs/quickstart"
-            className="inline-flex items-center gap-1 font-medium text-zinc-950 underline-offset-4 hover:underline"
+            className="inline-flex min-h-11 items-center gap-1 font-medium text-zinc-950 underline-offset-4 hover:underline"
           >
             Read the quickstart
             <ArrowRight className="size-3.5" />
@@ -184,14 +184,17 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
         <footer className="mt-5 flex flex-col items-center justify-between gap-2 text-sm text-zinc-600 sm:flex-row">
           <span>&copy; 2026 Brok</span>
           <nav className="flex items-center gap-5">
-            <Link href="/docs" className="hover:text-zinc-950 hover:underline">
+            <Link
+              href="/docs"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-zinc-950 hover:underline"
+            >
               Docs
             </Link>
             <a
               href={GITHUB_URL}
               target="_blank"
               rel="noreferrer"
-              className="hover:text-zinc-950 hover:underline"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-zinc-950 hover:underline"
             >
               GitHub
             </a>

@@ -794,8 +794,9 @@ async function deployProject(value) {
 }
 
 async function putProjectFile(args) {
-  const projectPath = args[1]
-  const localPath = args[2]
+  const commandOffset = args[1] === 'put' ? 2 : 1
+  const projectPath = args[commandOffset]
+  const localPath = args[commandOffset + 1]
   const projectFlagIndex = args.indexOf('--project')
   const projectRef =
     projectFlagIndex >= 0 && args[projectFlagIndex + 1]

@@ -120,7 +120,7 @@ export default async function AdminUsersPage() {
                       <td className="px-3 py-2">
                         <Link
                           href={`/admin/users/${user.id}`}
-                          className="block font-mono text-xs"
+                          className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 font-mono text-xs text-primary hover:underline"
                         >
                           {user.id.slice(0, 14)}…
                         </Link>
@@ -143,7 +143,7 @@ export default async function AdminUsersPage() {
                         {user.workspaceId ? (
                           <Link
                             href={`/admin/workspaces/${user.workspaceId}`}
-                            className="text-primary hover:underline"
+                            className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 text-primary hover:underline"
                           >
                             {user.workspaceName ?? 'Workspace'}
                           </Link>

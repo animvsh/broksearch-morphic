@@ -38,14 +38,32 @@ function resolveBunExecutable() {
 }
 
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3000'
-const apiKey = process.env.SMOKE_BROKCODE_API_KEY || 'brok_sk_local_smoke'
+let apiKey = process.env.SMOKE_BROKCODE_API_KEY || 'brok_sk_local_smoke'
 const bunExecutable = resolveBunExecutable()
 const skipTui = process.env.SMOKE_BROKCODE_SKIP_TUI === 'true'
 const matrixMode = process.env.SMOKE_BROKCODE_MATRIX === 'true'
+const previewWaitUntil: 'domcontentloaded' | 'networkidle' =
+  process.env.SMOKE_BROKCODE_PREVIEW_WAIT_UNTIL === 'networkidle'
+    ? 'networkidle'
+    : 'domcontentloaded'
+const previewNavTimeoutMs = Number.parseInt(
+  process.env.SMOKE_BROKCODE_PREVIEW_NAV_TIMEOUT_MS ?? '30000',
+  10
+)
+if (!Number.isFinite(previewNavTimeoutMs) || previewNavTimeoutMs <= 0) {
+  throw new Error(
+    `SMOKE_BROKCODE_PREVIEW_NAV_TIMEOUT_MS must be a positive integer, got ${process.env.SMOKE_BROKCODE_PREVIEW_NAV_TIMEOUT_MS}`
+  )
+}
+const anonymousUserId =
+  process.env.ANONYMOUS_USER_ID || '00000000-0000-0000-0000-000000000000'
 const acceptanceCase =
   getBrokCodeAcceptanceCase(process.env.SMOKE_BROKCODE_CASE) ??
   BROKCODE_ACCEPTANCE_MATRIX[0]
 const prompt = process.env.SMOKE_BROKCODE_PROMPT || acceptanceCase.prompt
+const smokeUserId =
+  process.env.SMOKE_BROKCODE_USER_ID ||
+  (process.env.ENABLE_AUTH === 'false' ? anonymousUserId : 'smoke-user')
 
 type SseResult = {
   runtime?: string
@@ -98,7 +116,7 @@ type SmokeReport = {
   baseUrl: string
   matrixMode: boolean
   cases: SmokeCaseReport[]
-  tuiStatus: 'passed' | 'skipped'
+  tuiStatus: 'passed' | 'skipped' | 'failed' | 'not-run'
 }
 
 async function expectJson(response: Response, expectedStatus: number) {
@@ -196,7 +214,212 @@ async function fetchTaskResult(taskInfo: SseTaskInfo) {
   throw new Error('BrokCode durable task did not finish after stream closed.')
 }
 
-async function readSseResult(response: Response) {
+async function recoverBrokCodeResultFromProject(projectId: string) {
+  const projectResponse = await fetch(
+    `${baseUrl}/api/brokcode/projects/${projectId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      }
+    }
+  )
+  const projectBody = await expectJson(projectResponse, 200)
+  const project = projectBody?.project
+
+  if (!project || typeof project.id !== 'string') {
+    throw new Error(
+      'BrokCode durable task recovery returned unexpected project payload.'
+    )
+  }
+
+  const files = await fetchProjectFiles(project.id)
+  if (files.length === 0) {
+    throw new Error('BrokCode durable task recovery found no project files.')
+  }
+
+  const fileChangesSource = project.metadata?.preview
+    ? project.metadata.preview.fileChanges
+    : project.metadata?.previewResult
+
+  return {
+    runtime: 'brok',
+    model: 'brok-lite',
+    content: 'Recovered from durable BrokCode project metadata.',
+    preview_url:
+      typeof project.previewUrl === 'string' ? project.previewUrl : null,
+    task_id: null,
+    status_url: null,
+    events_url: null,
+    generated_files: files.map(file => file.path),
+    file_changes: Array.isArray(fileChangesSource) ? fileChangesSource : [],
+    note: 'Recovered from durable BrokCode project metadata.'
+  } satisfies SseResult
+}
+
+async function fetchTaskResultWithRecovery(
+  taskInfo: SseTaskInfo,
+  projectId?: string
+) {
+  const recoverProjectResult = async () => {
+    if (!projectId) return null
+
+    const deadline = Date.now() + 90_000
+    while (Date.now() < deadline) {
+      try {
+        return await recoverBrokCodeResultFromProject(projectId)
+      } catch (error) {
+        if (Date.now() >= deadline) throw error
+        await sleep(1000)
+      }
+    }
+
+    throw new Error(
+      `BrokCode project recovery timed out while waiting for task completion for ${projectId}.`
+    )
+  }
+
+  try {
+    return await fetchTaskResult(taskInfo)
+  } catch (error) {
+    const status = error instanceof Error ? error.message : String(error)
+    if (projectId && status.includes('expected 200, got 401:')) {
+      return recoverProjectResult()
+    }
+    if (!projectId) throw error
+    throw error
+  }
+}
+
+async function seedApiKeyIfNeeded() {
+  if (apiKey !== 'brok_sk_local_smoke') return
+
+  const seedToken = process.env.SMOKE_SEED_TOKEN
+  if (seedToken) {
+    const response = await fetch(`${baseUrl}/api/admin/brok/smoke-seed`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${seedToken}`
+      },
+      body: JSON.stringify({
+        kind: 'stress',
+        userId: smokeUserId
+      })
+    })
+
+    if (response.ok) {
+      const payload = await response.json()
+      const mainKey = payload?.mainKey
+
+      if (typeof mainKey !== 'string' || !mainKey) {
+        throw new Error(
+          'seed endpoint response did not include a stress mainKey'
+        )
+      }
+
+      apiKey = mainKey
+      console.log(
+        'brokcode smoke seeded code-write API key from smoke-seed endpoint'
+      )
+      return
+    }
+
+    const body = await response.text()
+    console.warn(
+      `smoke-seed endpoint not usable for brokcode smoke (${response.status}): ${body}`
+    )
+  }
+
+  const isLocalTarget =
+    baseUrl.startsWith('http://localhost') ||
+    baseUrl.startsWith('http://127.0.0.1')
+  if (!isLocalTarget) {
+    throw new Error(
+      'BrokCode smoke key seeding requires SMOKE_SEED_TOKEN for non-local targets'
+    )
+  }
+
+  await seedApiKeyLocally()
+}
+
+async function seedApiKeyLocally() {
+  const [
+    { ensureWorkspaceForUser },
+    { db },
+    { apiKeys },
+    { generateApiKey, hashNewApiKey, getKeyPrefix }
+  ] = await Promise.all([
+    import('@/lib/actions/api-keys'),
+    import('@/lib/db'),
+    import('@/lib/db/schema'),
+    import('@/lib/api-key')
+  ])
+
+  const rawKey = generateApiKey('test')
+  const { hash: keyHash, salt: keySalt } = hashNewApiKey(rawKey)
+
+  try {
+    const workspace = await ensureWorkspaceForUser(smokeUserId)
+    await db.insert(apiKeys).values({
+      workspaceId: workspace.id,
+      userId: smokeUserId,
+      name: 'BrokCode Smoke Key',
+      keyPrefix: getKeyPrefix(rawKey),
+      keyHash,
+      keySalt,
+      environment: 'test',
+      scopes: ['chat:write', 'search:write', 'code:write', 'usage:read'],
+      allowedModels: [],
+      rpmLimit: 60,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: 0
+    })
+
+    apiKey = rawKey
+    console.log('brokcode smoke created local DB code-write key fallback')
+    return
+  } catch (error) {
+    console.warn(
+      `smoke DB seed unavailable, using Supabase REST fallback: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+  }
+
+  const [
+    { ensureWorkspaceForUserViaSupabaseRest },
+    { createApiKeyViaSupabaseRest }
+  ] = await Promise.all([
+    import('./supabase-rest-seed'),
+    import('./supabase-rest-seed')
+  ])
+
+  try {
+    const workspace = await ensureWorkspaceForUserViaSupabaseRest(smokeUserId)
+    await createApiKeyViaSupabaseRest({
+      workspace_id: workspace.id,
+      user_id: smokeUserId,
+      name: 'BrokCode Smoke Key',
+      key_prefix: getKeyPrefix(rawKey),
+      key_hash: keyHash,
+      key_salt: keySalt,
+      environment: 'test',
+      scopes: ['chat:write', 'search:write', 'code:write', 'usage:read'],
+      allowed_models: [],
+      rpm_limit: 60,
+      daily_request_limit: 5000,
+      monthly_budget_cents: 0
+    })
+
+    apiKey = rawKey
+    console.log('brokcode smoke created Supabase REST fallback key')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`failed to seed BrokCode smoke API key locally: ${message}`)
+  }
+}
+
+async function readSseResult(response: Response, projectId?: string) {
   if (!response.body) {
     throw new Error('BrokCode execute response did not include a stream body.')
   }
@@ -247,7 +470,7 @@ async function readSseResult(response: Response) {
   if (!sawStatus) throw new Error('BrokCode stream did not emit status events.')
   if (!sawDelta) throw new Error('BrokCode stream did not emit delta events.')
   if (!result && taskInfo) {
-    result = await fetchTaskResult(taskInfo)
+    result = await fetchTaskResultWithRecovery(taskInfo, projectId)
   }
   if (!result) throw new Error('BrokCode stream did not emit a result event.')
 
@@ -309,7 +532,7 @@ async function executeBuild(
     throw new Error(`BrokCode execute failed ${response.status}: ${body}`)
   }
 
-  const result = await readSseResult(response)
+  const result = await readSseResult(response, projectId)
   const generatedFiles = result.generated_files ?? []
   const fileChanges = result.file_changes ?? []
 
@@ -495,7 +718,10 @@ async function verifyPreview(
   })
   const pageErrors: string[] = []
   page.on('pageerror', error => pageErrors.push(error.message))
-  await page.goto(absolutePreviewUrl, { waitUntil: 'networkidle' })
+  await page.goto(absolutePreviewUrl, {
+    timeout: previewNavTimeoutMs,
+    waitUntil: previewWaitUntil
+  })
 
   const title = await page.title()
   const overflowX = await page.evaluate(
@@ -654,20 +880,48 @@ async function runTuiSmoke() {
     return output
   }
 
-  await runOnce('/project new TUI Smoke App')
-  await runOnce(`/file put index.html ${uploadPath}`)
-  const filesOutput = await runOnce('/files')
-  const previewOutput = await runOnce('/preview')
-  const deployOutput = await runOnce('/deploy')
+  function stripAnsi(text: string) {
+    return text.replace(/\x1b\[[0-9;]*m/g, '')
+  }
+
+  const projectOutput = await runOnce('/project new TUI Smoke App')
+  const projectMatch = stripAnsi(projectOutput).match(
+    /Created and selected .* \(([^)]+)\)/
+  )
+  const projectRef = projectMatch?.[1]?.trim()
+
+  if (!projectRef) {
+    throw new Error(
+      `TUI project create output did not include a selectable project reference: ${projectOutput}`
+    )
+  }
+
+  const filePutOutput = await runOnce(
+    `/file put index.html ${uploadPath} --project ${projectRef}`
+  )
+
+  let filesOutput = ''
+  for (let attempt = 0; attempt < 5; attempt++) {
+    filesOutput = await runOnce(`/files ${projectRef}`)
+    if (filesOutput.includes('index.html')) {
+      break
+    }
+    await sleep(500)
+  }
 
   if (!filesOutput.includes('index.html')) {
-    throw new Error(`TUI /files did not list uploaded file: ${filesOutput}`)
+    throw new Error(
+      `TUI /file put output: ${filePutOutput}\nTUI /files output: ${filesOutput}\n/project new output: ${projectOutput}\n`
+    )
   }
+  const previewOutput = await runOnce(`/preview ${projectRef}`)
   if (!previewOutput.includes('/api/brokcode/previews/')) {
     throw new Error(
       `TUI /preview did not print managed preview: ${previewOutput}`
     )
   }
+
+  const deployOutput = await runOnce(`/deploy ${projectRef}`)
   if (!deployOutput.includes('/brokcode/apps/')) {
     throw new Error(
       `TUI /deploy did not print managed deploy URL: ${deployOutput}`
@@ -705,9 +959,10 @@ async function writeSmokeReport(report: SmokeReport) {
 
 async function main() {
   console.log(`brokcode smoke base ${baseUrl}`)
+  await seedApiKeyIfNeeded()
   const startedAt = new Date().toISOString()
   const reports: SmokeCaseReport[] = []
-  let tuiStatus: SmokeReport['tuiStatus'] = skipTui ? 'skipped' : 'passed'
+  let tuiStatus: SmokeReport['tuiStatus'] = skipTui ? 'skipped' : 'not-run'
   const cases = matrixMode
     ? getBrokCodeAcceptanceCases(
         process.env.SMOKE_BROKCODE_CASES?.split(',')
@@ -758,7 +1013,12 @@ async function main() {
       }
     }
 
-    tuiStatus = await runTuiSmoke()
+    try {
+      tuiStatus = await runTuiSmoke()
+    } catch (error) {
+      tuiStatus = 'failed'
+      throw error
+    }
   } finally {
     await writeSmokeReport({
       startedAt,

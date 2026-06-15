@@ -13,9 +13,15 @@ export default function BrokCodeDocsPage() {
       <div className="prose prose-neutral dark:prose-invert">
         <h2>Brok Code Cloud</h2>
         <p>
-          Open <Link href="/brokcode">Brok Code Cloud</Link>, save a{' '}
-          <code>brok_sk_</code> key, connect GitHub, then describe the app or
-          repo change you want. The cloud view keeps chat, live preview,
+          Open{' '}
+          <Link
+            href="/brokcode"
+            className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+          >
+            Brok Code Cloud
+          </Link>
+          , save a <code>brok_sk_</code> key, connect GitHub, then describe the
+          app or repo change you want. The cloud view keeps chat, live preview,
           execution status, Cloud/TUI sync, usage, version history, GitHub PR,
           Composio integration, and deploy controls in one workspace.
         </p>
@@ -366,15 +372,30 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
         </ul>
 
         <h2>Next Steps</h2>
-        <ul>
+        <ul className="space-y-2">
           <li>
-            <Link href="/brokcode">Open Brok Code Cloud</Link>
+            <Link
+              href="/brokcode"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
+              Open Brok Code Cloud
+            </Link>
           </li>
           <li>
-            <Link href="/brokcode/tui">Open TUI Instructions</Link>
+            <Link
+              href="/brokcode/tui"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
+              Open TUI Instructions
+            </Link>
           </li>
           <li>
-            <Link href="/api-platform/playground">Test the BrokCode API</Link>
+            <Link
+              href="/api-platform/playground"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
+              Test the BrokCode API
+            </Link>
           </li>
         </ul>
       </div>

@@ -77,6 +77,29 @@ mobile-first utility, and backend-backed prototype prompts. Set
 `SMOKE_BROKCODE_SKIP_TUI=true` to skip the terminal smoke when the release gate
 only needs generated-app coverage.
 
+For the default smoke path, set `SMOKE_SEED_TOKEN` (or `SMOKE_BROKCODE_API_KEY`) so
+the harness can obtain a scoped `code:write` key automatically. When only
+`SMOKE_BROKCODE_API_KEY=brok_sk_local_smoke` is used, the script exits with a
+missing-scope error from the BrokCode execute endpoint.
+
+```bash
+SMOKE_BASE_URL=http://127.0.0.1:3001 \
+SMOKE_SEED_TOKEN=... \
+SMOKE_BROKCODE_SKIP_TUI=true \
+bun run smoke:brokcode
+```
+
+For slower generated pages, tune preview navigation behavior:
+
+```bash
+SMOKE_BROKCODE_PREVIEW_WAIT_UNTIL=domcontentloaded \
+SMOKE_BROKCODE_PREVIEW_NAV_TIMEOUT_MS=60000 \
+bun run smoke:brokcode
+```
+
+Use `SMOKE_BROKCODE_PREVIEW_WAIT_UNTIL=networkidle` if you explicitly need a
+quieter network idle boundary and the default timeout is adequate.
+
 ## stress-platform.ts
 
 Production-readiness stress gate for API keys, route contracts, protected

@@ -1298,6 +1298,7 @@ export function BrokCodeApp({
   const runCommandRef = useRef<((command: string) => Promise<void>) | null>(
     null
   )
+  const commandInputRef = useRef<HTMLTextAreaElement>(null)
   const [selectedId, setSelectedId] = useState('')
   const [input, setInput] = useState('')
   const [isRunning, setIsRunning] = useState(false)
@@ -1388,6 +1389,40 @@ export function BrokCodeApp({
   const [insForgeDashboardUrl, setInsForgeDashboardUrl] = useState('')
   const [insForgeAdminKey, setInsForgeAdminKey] = useState('')
   const [mobilePane, setMobilePane] = useState<BrokCodeMobilePane>('chat')
+
+  const setCommandInput = useCallback((value: string) => {
+    const commandInputElement =
+      commandInputRef.current ??
+      document.querySelector<HTMLTextAreaElement>(
+        '[data-testid="brokcode-command-input"]'
+      )
+    if (commandInputElement && commandInputElement.value !== value) {
+      commandInputElement.value = value
+    }
+
+    setInput(current => (current === value ? current : value))
+  }, [])
+
+  useEffect(() => {
+    const syncFromDom = () => {
+      const commandInputElement =
+        commandInputRef.current ??
+        document.querySelector<HTMLTextAreaElement>(
+          '[data-testid="brokcode-command-input"]'
+        )
+      if (!commandInputElement) return
+
+      const nextValue = commandInputElement.value
+      setCommandInput(nextValue)
+    }
+
+    syncFromDom()
+    const timer = window.setInterval(syncFromDom, 100)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [setCommandInput])
   const [isSharing, startShareTransition] = useTransition()
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -3974,7 +4009,7 @@ export function BrokCodeApp({
 
   function focusAgent(agent: BrokCodeSubagent) {
     setSelectedId(agent.id)
-    setInput(`Continue with ${agent.name}: ${agent.nextStep}`)
+    setCommandInput(`Continue with ${agent.name}: ${agent.nextStep}`)
   }
 
   async function runCommand(
@@ -3995,7 +4030,7 @@ export function BrokCodeApp({
       ? null
       : detectIntegrationConnectIntent(trimmed)
     if (integrationToolkit) {
-      setInput('')
+      setCommandInput('')
       setMessages(current => [
         ...current,
         { id: createId('user'), role: 'user', content: trimmed },
@@ -4058,7 +4093,7 @@ export function BrokCodeApp({
     const run = createExecutionRun(trimmed)
     const assistantMessageId = createId('assistant')
     setExecutionRuns(current => [run, ...current].slice(0, 8))
-    setInput('')
+    setCommandInput('')
     setIsRunning(true)
     setSelectedId('')
     setMessages(current => [
@@ -4537,7 +4572,7 @@ export function BrokCodeApp({
       'After fixing, regenerate the preview and verify the error is gone.'
     ].join('\n\n')
 
-    setInput(prompt)
+    setCommandInput(prompt)
     setMobilePane('chat')
     void runCommandRef.current?.(prompt)
   }
@@ -4552,7 +4587,7 @@ export function BrokCodeApp({
     if (!prompt) return
 
     cloudBootstrapRef.current = true
-    setInput(prompt)
+    setCommandInput(prompt)
 
     if (connectGithub) {
       setMessages(current => [
@@ -4610,7 +4645,8 @@ export function BrokCodeApp({
     githubStatus,
     hasLiveRuntime,
     initialPrompt,
-    runtimeBootstrapped
+    runtimeBootstrapped,
+    setCommandInput
   ])
 
   useEffect(() => {
@@ -5040,7 +5076,19 @@ export function BrokCodeApp({
                   key={prompt}
                   type="button"
                   className="shrink-0 h-11 min-h-11 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-950"
-                  onClick={() => setInput(prompt)}
+                  onClick={() => setCommandInput(prompt)}
+                  onMouseDown={event => {
+                    if (event.button === 0) {
+                      setCommandInput(prompt)
+                    }
+                  }}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setCommandInput(prompt)
+                    }
+                  }}
+                  onPointerDown={() => setCommandInput(prompt)}
                 >
                   {prompt}
                 </button>
@@ -5058,7 +5106,11 @@ export function BrokCodeApp({
                 <Textarea
                   value={input}
                   data-testid="brokcode-command-input"
-                  onChange={event => setInput(event.target.value)}
+                  ref={commandInputRef}
+                  onChange={event => setCommandInput(event.target.value)}
+                  onInput={event =>
+                    setCommandInput((event.target as HTMLTextAreaElement).value)
+                  }
                   onKeyDown={event => {
                     if (event.key === 'Enter' && !event.shiftKey) {
                       event.preventDefault()
@@ -5661,7 +5713,7 @@ export function BrokCodeApp({
                   brain={projectBrain}
                   hasProject={Boolean(activeProject)}
                   onSuggestedAction={action => {
-                    setInput(action)
+                    setCommandInput(action)
                     setMobilePane('chat')
                   }}
                 />

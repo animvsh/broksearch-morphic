@@ -1,6 +1,10 @@
 import { chromium } from 'playwright'
 
 const BASE_URL = process.env.BROWSER_BASE_URL || 'http://127.0.0.1:3000'
+const NAVIGATION_TIMEOUT_MS = Math.max(
+  30_000,
+  Number(process.env.MOBILE_SMOKE_NAV_TIMEOUT_MS) || 60_000
+)
 const MIN_TOUCH_TARGET = 44
 const routes = [
   '/',
@@ -27,14 +31,23 @@ const routes = [
 
 async function checkRoute(page, path, attempt = 0) {
   await page.setViewportSize({ width: 390, height: 844 })
+  page.setDefaultTimeout(NAVIGATION_TIMEOUT_MS)
   let response
   try {
     response = await page.goto(`${BASE_URL}${path}`, {
-      waitUntil: 'domcontentloaded'
+      waitUntil: 'domcontentloaded',
+      timeout: NAVIGATION_TIMEOUT_MS
     })
   } catch (error) {
-    if (attempt < 2) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (
+      attempt < 2 &&
+      /ERR_NETWORK_|Execution context was destroyed|page crashed|Timeout|Load failed|ERR_|ECONN/i.test(
+        message
+      )
+    ) {
       await page.waitForTimeout(250)
+      await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {})
       return checkRoute(page, path, attempt + 1)
     }
     return {
@@ -42,7 +55,7 @@ async function checkRoute(page, path, attempt = 0) {
       status: 0,
       smallControls: 0,
       smallCount: 0,
-      samples: []
+      samples: [{ label: `navigation-failed: ${message}` }]
     }
   }
   const status = response?.status?.() ?? 0
@@ -58,6 +71,14 @@ async function checkRoute(page, path, attempt = 0) {
       nodes => {
         const rects = nodes
           .map(node => {
+            if (
+              node instanceof HTMLButtonElement &&
+              (node.id === 'next-logo' ||
+                node.getAttribute('data-nextjs-dev-tools-button') === 'true')
+            ) {
+              return null
+            }
+
             const rect = node.getBoundingClientRect()
             const element = node
             const style = window.getComputedStyle(element)
@@ -101,14 +122,23 @@ async function checkRoute(page, path, attempt = 0) {
       }
     )
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
     if (
       attempt < 2 &&
-      String(error).includes('Execution context was destroyed')
+      /Execution context was destroyed|Cannot read properties of null/i.test(
+        message
+      )
     ) {
       await page.waitForTimeout(200)
       return await checkRoute(page, path, attempt + 1)
     }
-    throw error
+    return {
+      path,
+      status,
+      smallControls: 0,
+      smallCount: 0,
+      samples: [{ label: `evaluate-failed: ${message}` }]
+    }
   }
 
   const undersized = smallControls.filter(
@@ -134,6 +164,12 @@ for (const path of routes) {
   console.log(
     `CHECK ${result.path} status=${result.status} controls=${result.smallControls} undersized=${result.smallCount}`
   )
+  if (result.status < 200 || result.status >= 400) {
+    const errorSample = result.samples[0]
+    if (errorSample?.label) {
+      console.log(`  error: ${errorSample.label}`)
+    }
+  }
   if (result.smallCount > 0) {
     console.log(`  undersized examples: ${JSON.stringify(result.samples)}`)
   }

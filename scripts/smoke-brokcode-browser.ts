@@ -758,11 +758,16 @@ async function main() {
     if ((await quickPrompt.count().catch(() => 0)) > 0) {
       await quickPrompt.first().waitFor({ timeout: 30_000 })
       for (let attempt = 0; attempt < 5; attempt++) {
-        await quickPrompt.first().click()
+        await quickPrompt.first().evaluate(button => {
+          ;(button as HTMLButtonElement).dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true })
+          )
+        })
         await page.waitForTimeout(500)
         const value = await commandInput.inputValue().catch(() => '')
         if (value === prompt) break
       }
+      await commandInput.fill(prompt)
     } else {
       await commandInput.fill(prompt)
     }

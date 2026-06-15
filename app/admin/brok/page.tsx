@@ -235,37 +235,37 @@ export default async function BrokAdminPage() {
           <div className="flex flex-wrap gap-2">
             <Link
               href="/admin/health"
-              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
             >
               System health
             </Link>
             <Link
               href="/admin/audit-logs"
-              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
             >
               Audit logs
             </Link>
             <Link
               href="/admin/settings"
-              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
             >
               Settings
             </Link>
             <Link
               href="/admin/brok/logs?endpoint=code"
-              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
             >
               Code logs
             </Link>
             <Link
               href="/admin/brok/api-keys"
-              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
             >
               API keys
             </Link>
             <Link
               href="/admin/brok/providers"
-              className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
             >
               Providers
             </Link>
@@ -291,32 +291,32 @@ export default async function BrokAdminPage() {
               type="email"
               placeholder="founder@company.com"
               required
-              className="h-10"
+              className="h-11"
             />
             <Input
               name="note"
               placeholder="Invite note or account context"
-              className="h-10"
+              className="h-11"
             />
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap gap-2">
                 {APP_FEATURES.map(feature => (
                   <label
                     key={feature}
-                    className="inline-flex h-8 items-center gap-2 rounded-md border bg-background px-2.5 text-xs font-medium text-muted-foreground"
+                    className="inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md border bg-background px-2.5 text-xs font-medium text-muted-foreground"
                   >
                     <input
                       name="features"
                       type="checkbox"
                       value={feature}
                       defaultChecked
-                      className="size-3.5 accent-primary"
+                      className="size-11 accent-primary"
                     />
                     {FEATURE_LABELS[feature]}
                   </label>
                 ))}
               </div>
-              <Button type="submit" className="h-10 self-start">
+              <Button type="submit" className="h-11 self-start">
                 Allow Email
               </Button>
             </div>
@@ -373,14 +373,14 @@ export default async function BrokAdminPage() {
                             {APP_FEATURES.map(feature => (
                               <label
                                 key={feature}
-                                className="inline-flex h-8 items-center gap-2 rounded-md border bg-background px-2.5 text-xs font-medium text-muted-foreground"
+                                className="inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md border bg-background px-2.5 text-xs font-medium text-muted-foreground"
                               >
                                 <input
                                   name="features"
                                   type="checkbox"
                                   value={feature}
                                   defaultChecked={entryFeatures.has(feature)}
-                                  className="size-3.5 accent-primary"
+                                  className="size-11 accent-primary"
                                 />
                                 {FEATURE_LABELS[feature]}
                               </label>
@@ -389,7 +389,7 @@ export default async function BrokAdminPage() {
                               type="submit"
                               size="sm"
                               variant="outline"
-                              className="h-8"
+                              className="h-11"
                             >
                               Save
                             </Button>
@@ -408,6 +408,7 @@ export default async function BrokAdminPage() {
                               type="submit"
                               size="sm"
                               variant="outline"
+                              className="h-11"
                               disabled={entry.status !== 'active'}
                             >
                               Revoke

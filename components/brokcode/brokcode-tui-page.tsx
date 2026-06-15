@@ -191,11 +191,17 @@ export default function BrokCodeTuiPage() {
               }
             }}
           >
-            <TabsList className="h-8 rounded-md">
-              <TabsTrigger value="cloud" className="rounded-sm text-xs">
+            <TabsList className="h-11 rounded-md sm:h-8">
+              <TabsTrigger
+                value="cloud"
+                className="h-10 min-h-11 rounded-sm text-xs"
+              >
                 Cloud
               </TabsTrigger>
-              <TabsTrigger value="tui" className="rounded-sm text-xs">
+              <TabsTrigger
+                value="tui"
+                className="h-10 min-h-11 rounded-sm text-xs"
+              >
                 TUI
               </TabsTrigger>
             </TabsList>

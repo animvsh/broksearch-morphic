@@ -254,5 +254,11 @@ console.log("ok")
     expect(files.find(file => file.path === 'styles.css')?.content).toContain(
       'data-brokcode-preview-hygiene'
     )
+    expect(files.find(file => file.path === 'styles.css')?.content).toContain(
+      'body > * { max-width: 100%; }'
+    )
+    expect(files.find(file => file.path === 'styles.css')?.content).toContain(
+      'button, input, textarea, select { max-width: 100%; }'
+    )
   })
 })

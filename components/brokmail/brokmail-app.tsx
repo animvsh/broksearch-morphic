@@ -206,6 +206,35 @@ function readBrokMailApiMessage(
   return cleanIntegrationError(message, fallback)
 }
 
+function readBrokMailCallbackState() {
+  if (typeof window === 'undefined') {
+    return { gmail: false, gcal: false }
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  return {
+    gmail: params.get('gmail') === 'connected',
+    gcal: params.get('gcal') === 'connected'
+  }
+}
+
+function clearBrokMailCallbackUrl() {
+  if (typeof window === 'undefined') return
+
+  const url = new URL(window.location.href)
+  const hadHash = Boolean(url.hash)
+  const hadCallbackState =
+    url.searchParams.has('gmail') || url.searchParams.has('gcal')
+
+  url.searchParams.delete('gmail')
+  url.searchParams.delete('gcal')
+  url.hash = ''
+
+  if (hadCallbackState || hadHash) {
+    window.history.replaceState(null, '', `${url.pathname}${url.search}`)
+  }
+}
+
 function hasLabel(thread: MailThread, label: string) {
   const normalized = label.toLowerCase()
   return thread.labels.some(item => item.toLowerCase() === normalized)
@@ -422,6 +451,7 @@ async function pollConnectionStatus(
   timeoutMs: number = 120_000
 ) {
   const startedAt = Date.now()
+  let closedAt: number | null = null
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
@@ -433,11 +463,8 @@ async function pollConnectionStatus(
     } catch {}
 
     if (popup?.closed) {
-      try {
-        const response = await fetch(statusUrl)
-        const payload = await response.json().catch(() => null)
-        return Boolean(payload?.connected)
-      } catch {
+      closedAt ??= Date.now()
+      if (Date.now() - closedAt > 15_000) {
         return false
       }
     }
@@ -877,6 +904,8 @@ export function BrokMailApp() {
       )
       setThreads([])
       setSelectedThreadId(undefined)
+      setConnected(false)
+      setConnectionMode('none')
       setConnectionStatus(message)
       toast.error(message)
     } finally {
@@ -923,6 +952,9 @@ export function BrokMailApp() {
         'Could not load Google Calendar events through Composio.'
       )
       setCalendarEvents([])
+      setSelectedCalendarEventId(null)
+      setCalendarConnected(false)
+      setCalendarConnectionMode('none')
       setCalendarConnectionStatus(message)
       toast.error('Calendar sync paused', {
         description: message
@@ -978,12 +1010,14 @@ export function BrokMailApp() {
 
   async function bootstrapGmail() {
     window.localStorage.removeItem('brokmail_google_token')
-    if (window.location.hash) {
-      window.history.replaceState(
-        null,
-        '',
-        `${window.location.pathname}${window.location.search}`
-      )
+    const callbackState = readBrokMailCallbackState()
+
+    if (callbackState.gmail) {
+      setConnectionStatus('Confirming Gmail connection...')
+    }
+
+    if (callbackState.gcal) {
+      setCalendarConnectionStatus('Confirming Google Calendar connection...')
     }
 
     try {
@@ -1008,11 +1042,19 @@ export function BrokMailApp() {
         setConnected(true)
         setConnectionMode('composio')
         liveLoads.push(loadComposioGmailThreads())
+        if (callbackState.gmail) {
+          toast.success('Gmail connected through Composio')
+        }
       } else {
         setConnectionStatus(
           gmailStatus.message ||
             'Connect Gmail through Composio to load live inbox.'
         )
+        if (callbackState.gmail) {
+          toast.error(
+            'Gmail authorization returned, but the connection is not active yet.'
+          )
+        }
       }
 
       if (!gcalResponse.ok) {
@@ -1027,11 +1069,19 @@ export function BrokMailApp() {
         setCalendarConnected(true)
         setCalendarConnectionMode('composio')
         liveLoads.push(loadComposioCalendarEvents())
+        if (callbackState.gcal) {
+          toast.success('Google Calendar connected through Composio')
+        }
       } else {
         setCalendarConnectionStatus(
           gcalStatus.message ||
             'Connect Google Calendar through Composio to use live calendar actions.'
         )
+        if (callbackState.gcal) {
+          toast.error(
+            'Google Calendar authorization returned, but the connection is not active yet.'
+          )
+        }
       }
 
       await Promise.allSettled(liveLoads)
@@ -1040,6 +1090,8 @@ export function BrokMailApp() {
       setCalendarConnectionStatus(
         'Connect Google Calendar to load live events.'
       )
+    } finally {
+      clearBrokMailCallbackUrl()
     }
   }
 
@@ -1068,10 +1120,10 @@ export function BrokMailApp() {
         )
 
         if (!popup) {
-          const message =
-            'Popup blocked. Allow popups for Brok, then connect Gmail again.'
+          const message = 'Opening Gmail authorization in this tab.'
           setConnectionStatus(message)
-          toast.error(message)
+          toast.info(message)
+          window.location.href = body.connectionUrl
           return
         }
 
@@ -1145,10 +1197,10 @@ export function BrokMailApp() {
         )
 
         if (!popup) {
-          const message =
-            'Popup blocked. Allow popups for Brok, then connect Calendar again.'
+          const message = 'Opening Google Calendar authorization in this tab.'
           setCalendarConnectionStatus(message)
-          toast.error(message)
+          toast.info(message)
+          window.location.href = body.connectionUrl
           return
         }
 

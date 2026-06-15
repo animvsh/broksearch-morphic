@@ -111,11 +111,9 @@ export default async function SpacesPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button asChild className="gap-2">
-                <Link href="/spaces/new">
-                  <Plus className="size-4" />
-                  New space
-                </Link>
+              <Button disabled className="gap-2">
+                <Plus className="size-4" />
+                New space
               </Button>
             </div>
           </div>
@@ -201,11 +199,9 @@ export default async function SpacesPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button asChild variant="outline" className="w-full gap-2">
-                    <Link href="/spaces?invite=link">
-                      <Link2 className="size-4" />
-                      Create invite link
-                    </Link>
+                  <Button disabled variant="outline" className="w-full gap-2">
+                    <Link2 className="size-4" />
+                    Create invite link
                   </Button>
                 </CardContent>
               </Card>
@@ -218,11 +214,9 @@ export default async function SpacesPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button asChild variant="outline" className="w-full gap-2">
-                    <Link href="/spaces?visibility=public">
-                      <Globe2 className="size-4" />
-                      View public spaces
-                    </Link>
+                  <Button disabled variant="outline" className="w-full gap-2">
+                    <Globe2 className="size-4" />
+                    View public spaces
                   </Button>
                 </CardContent>
               </Card>
@@ -345,11 +339,9 @@ function EmptySpaces() {
           collaborate with teammates or keep research organized.
         </p>
         <div className="flex flex-wrap justify-center gap-2">
-          <Button asChild>
-            <Link href="/spaces/new">
-              <Plus className="mr-2 size-4" />
-              New space
-            </Link>
+          <Button disabled>
+            <Plus className="mr-2 size-4" />
+            New space
           </Button>
           <Button asChild variant="outline">
             <Link href="/">

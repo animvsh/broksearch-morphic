@@ -19,7 +19,7 @@ export type BrokCodeAcceptanceSuiteEvalInput = {
   completedAt: string
   baseUrl: string
   matrixMode: boolean
-  tuiStatus: 'passed' | 'skipped'
+  tuiStatus: 'passed' | 'skipped' | 'failed' | 'not-run'
   cases: BrokCodeAcceptanceCaseEval[]
 }
 
@@ -44,14 +44,16 @@ export function buildBrokCodeAcceptanceSuiteEval(
   const blockers = input.cases
     .filter(testCase => testCase.status === 'failed')
     .map(testCase => `${testCase.id}: ${testCase.error ?? 'failed'}`)
+  if (input.tuiStatus === 'failed' || input.tuiStatus === 'not-run') {
+    blockers.push(`tui: ${input.tuiStatus}`)
+  }
   const score =
     totalCount === 0 ? 0 : Math.round((passCount / totalCount) * 100)
 
   return {
     kind: 'brokcode_acceptance_eval',
     ...input,
-    status:
-      failCount === 0 && input.tuiStatus !== 'skipped' ? 'passed' : 'failed',
+    status: blockers.length === 0 ? 'passed' : 'failed',
     score,
     passCount,
     failCount,

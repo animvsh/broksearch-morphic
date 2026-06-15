@@ -131,14 +131,14 @@ export function UniversalAdminSearch({
           onFocus={() => setOpen(true)}
           placeholder={placeholder}
           aria-label="Universal admin search"
-          className="h-10 w-full rounded-md border bg-background pl-9 pr-20 text-sm shadow-sm outline-none ring-0 transition focus:border-foreground/40"
+          className="h-11 w-full rounded-md border bg-background pl-9 pr-20 text-sm shadow-sm outline-none ring-0 transition focus:border-foreground/40"
         />
         <div className="absolute right-2 flex items-center gap-1 text-xs text-muted-foreground">
           {query.length > 0 ? (
             <button
               type="button"
               onClick={clear}
-              className="inline-flex size-6 items-center justify-center rounded-md border bg-background hover:bg-muted"
+              className="inline-flex size-11 min-h-11 min-w-11 items-center justify-center rounded-md border bg-background hover:bg-muted"
               aria-label="Clear search"
             >
               <X className="size-3.5" />
@@ -173,7 +173,7 @@ export function UniversalAdminSearch({
                     <button
                       type="button"
                       onClick={() => navigate(result)}
-                      className="flex w-full items-start gap-3 rounded-md px-3 py-2 text-left transition hover:bg-muted"
+                      className="flex min-h-11 w-full items-start gap-3 rounded-md px-3 py-2 text-left transition hover:bg-muted"
                     >
                       <span
                         className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tone}`}

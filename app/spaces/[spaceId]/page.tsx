@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 
 import {
   ArrowLeft,
@@ -97,6 +97,10 @@ export default async function SpaceDetailPage({
   }
 
   const data = await getSpaceData(spaceId)
+  if (!data) {
+    notFound()
+  }
+
   const VisibilityIcon = VISIBILITY_ICON_MAP[data.space.visibility]
   const ownerCount = data.members.filter(
     member => member.role === 'owner'
@@ -158,17 +162,13 @@ export default async function SpaceDetailPage({
               ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button asChild variant="outline" className="gap-2">
-                <Link href={`/spaces/${spaceId}/chat`}>
-                  <MessageCircle className="size-4" />
-                  Space chat
-                </Link>
+              <Button disabled variant="outline" className="gap-2">
+                <MessageCircle className="size-4" />
+                Space chat
               </Button>
-              <Button asChild className="gap-2">
-                <Link href={`/spaces/${spaceId}/settings`}>
-                  <Settings className="size-4" />
-                  Settings
-                </Link>
+              <Button disabled className="gap-2">
+                <Settings className="size-4" />
+                Settings
               </Button>
             </div>
           </div>
@@ -206,11 +206,9 @@ export default async function SpaceDetailPage({
                     Project-specific research folders within this space.
                   </CardDescription>
                 </div>
-                <Button asChild size="sm" className="gap-1.5">
-                  <Link href={`/spaces/${spaceId}/projects/new`}>
-                    <Plus className="size-3.5" />
-                    New project
-                  </Link>
+                <Button disabled size="sm" className="gap-1.5">
+                  <Plus className="size-3.5" />
+                  New project
                 </Button>
               </CardHeader>
               <CardContent className="space-y-2 pt-0">
@@ -370,11 +368,9 @@ export default async function SpaceDetailPage({
                     </div>
                   ))
                 )}
-                <Button asChild variant="outline" size="sm" className="w-full">
-                  <Link href={`/spaces/${spaceId}/invite`}>
-                    <UserPlus className="size-3.5" />
-                    Invite member
-                  </Link>
+                <Button disabled variant="outline" size="sm" className="w-full">
+                  <UserPlus className="size-3.5" />
+                  Invite member
                 </Button>
               </CardContent>
             </Card>
@@ -387,17 +383,13 @@ export default async function SpaceDetailPage({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 pt-0">
-                <Button asChild variant="outline" size="sm" className="w-full">
-                  <Link href={`/spaces/${spaceId}/share`}>
-                    <Share2 className="size-3.5" />
-                    Share space
-                  </Link>
+                <Button disabled variant="outline" size="sm" className="w-full">
+                  <Share2 className="size-3.5" />
+                  Share space
                 </Button>
-                <Button asChild variant="outline" size="sm" className="w-full">
-                  <Link href={`/spaces/${spaceId}/settings`}>
-                    <Shield className="size-3.5" />
-                    Permissions
-                  </Link>
+                <Button disabled variant="outline" size="sm" className="w-full">
+                  <Shield className="size-3.5" />
+                  Permissions
                 </Button>
               </CardContent>
             </Card>

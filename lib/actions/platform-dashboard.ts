@@ -1124,39 +1124,6 @@ export type SpaceData = {
   }
 }
 
-const EMPTY_SPACE_TOTALS: SpaceData['totals'] = {
-  members: 0,
-  projects: 0,
-  invites: 0,
-  threads: 0
-}
-
-function emptySpaceData(spaceId: string): SpaceData {
-  return {
-    space: {
-      id: spaceId,
-      slug: 'space',
-      name: 'Untitled space',
-      description: null,
-      visibility: 'private',
-      iconColor: null,
-      role: 'owner',
-      memberCount: 1,
-      threadCount: 0,
-      projectCount: 0,
-      presentationCount: 0,
-      lastActivityAt: new Date(0),
-      createdAt: new Date(0),
-      updatedAt: new Date(0)
-    },
-    members: [],
-    projects: [],
-    invites: [],
-    recentThreads: [],
-    totals: { ...EMPTY_SPACE_TOTALS }
-  }
-}
-
 async function getSpaceSummaryRow(
   userId: string,
   spaceId: string
@@ -1171,7 +1138,10 @@ async function getSpaceSummaryRow(
           s.description,
           s.visibility,
           s.icon_color as "iconColor",
-          coalesce(sm.role, 'owner') as role,
+          case
+            when s.owner_user_id = ${userId} then 'owner'
+            else sm.role
+          end as role,
           s.member_count as "memberCount",
           s.thread_count as "threadCount",
           s.project_count as "projectCount",
@@ -1184,6 +1154,10 @@ async function getSpaceSummaryRow(
           on sm.space_id = s.id
           and sm.user_id = ${userId}
         where s.id = ${spaceId}::uuid
+          and (
+            s.owner_user_id = ${userId}
+            or sm.user_id = ${userId}
+          )
         limit 1
       `)
       const rows = result as unknown as SpaceSummary[]
@@ -1301,6 +1275,7 @@ async function getSpaceRecentThreads(
           li.last_used_at as "lastUsedAt"
         from library_items li
         where li.user_id = ${userId}
+          and li.metadata->>'spaceId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           and (li.metadata->>'spaceId')::uuid = ${spaceId}::uuid
           and li.status <> 'deleted'
         order by li.updated_at desc
@@ -1314,29 +1289,41 @@ async function getSpaceRecentThreads(
   }
 }
 
-export async function getSpaceData(spaceId: string): Promise<SpaceData> {
+export async function getSpaceData(spaceId: string): Promise<SpaceData | null> {
   const userId = await getCurrentUserId()
-  if (!userId) return emptySpaceData(spaceId)
+  if (!userId) return null
 
-  const [summary, members, projects, invites, recentThreads] =
-    await Promise.all([
-      getSpaceSummaryRow(userId, spaceId),
-      getSpaceMembersRows(userId, spaceId),
-      getSpaceProjectsRows(userId, spaceId),
-      getSpaceInvitesRows(userId, spaceId),
-      getSpaceRecentThreads(userId, spaceId)
-    ])
+  const summary = await getSpaceSummaryRow(userId, spaceId)
+  if (!summary) return null
 
-  if (!summary) return emptySpaceData(spaceId)
+  const [members, projects, invites, recentThreads] = await Promise.all([
+    getSpaceMembersRows(userId, spaceId),
+    getSpaceProjectsRows(userId, spaceId),
+    getSpaceInvitesRows(userId, spaceId),
+    getSpaceRecentThreads(userId, spaceId)
+  ])
+  const ownerMember: SpaceMember = {
+    id: `${summary.id}:owner`,
+    userId,
+    email: null,
+    displayName: 'Space owner',
+    role: 'owner',
+    lastActiveAt: summary.lastActivityAt,
+    invitedAt: summary.createdAt,
+    acceptedAt: summary.createdAt
+  }
+  const displayMembers = members.some(member => member.role === 'owner')
+    ? members
+    : [ownerMember, ...members]
 
   return {
     space: summary,
-    members,
+    members: displayMembers,
     projects,
     invites,
     recentThreads: recentThreads.map(row => ({ ...row, tags: [] })),
     totals: {
-      members: members.length,
+      members: displayMembers.length,
       projects: projects.length,
       invites: invites.length,
       threads: recentThreads.length
@@ -1528,10 +1515,10 @@ async function getTrendingTopicRows(): Promise<TrendingTopic[]> {
         label,
         category,
         velocity,
-        window,
+        "window",
         rank
       from trending_topics
-      where window = '24h'
+      where "window" = '24h'
       order by rank asc
       limit 24
     `)) as unknown as TrendingTopic[]

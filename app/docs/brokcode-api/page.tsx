@@ -90,13 +90,26 @@ export default function BrokCodeApiDocsPage() {
         <h2>Next steps</h2>
         <ul>
           <li>
-            <Link href="/docs/brokcode">Use BrokCode Cloud and TUI</Link>
+            <Link
+              href="/docs/brokcode"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
+              Use BrokCode Cloud and TUI
+            </Link>
           </li>
           <li>
-            <Link href="/docs/insforge">Configure InsForge</Link>
+            <Link
+              href="/docs/insforge"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
+              Configure InsForge
+            </Link>
           </li>
           <li>
-            <Link href="/api-platform/playground">
+            <Link
+              href="/api-platform/playground"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
               Open BrokCode API playground
             </Link>
           </li>

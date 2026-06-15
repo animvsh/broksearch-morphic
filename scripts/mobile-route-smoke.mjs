@@ -1,6 +1,10 @@
 import { chromium } from 'playwright'
 
 const BASE_URL = process.env.BROWSER_BASE_URL || 'http://127.0.0.1:3000'
+const NAVIGATION_TIMEOUT_MS = Math.max(
+  30_000,
+  Number(process.env.MOBILE_SMOKE_NAV_TIMEOUT_MS) || 60_000
+)
 const routes = [
   '/',
   '/search',
@@ -53,28 +57,40 @@ async function check(page, path, width, attempt = 0) {
     width,
     height: Math.max(700, Math.round(width * 2.2))
   })
-  let navigationError = ''
-  const response = await page
-    .goto(`${BASE_URL}${path}`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 60_000
-    })
-    .catch(async error => {
-      navigationError = error instanceof Error ? error.message : String(error)
-      if (attempt < 2) {
-        await page.waitForTimeout(500)
-      }
-      return null
-    })
 
-  if (!response && attempt < 2) {
-    return check(page, path, width, attempt + 1)
+  let response
+  let navigationError = ''
+  try {
+    response = await page.goto(`${BASE_URL}${path}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: NAVIGATION_TIMEOUT_MS
+    })
+  } catch (error) {
+    navigationError = error instanceof Error ? error.message : String(error)
+    if (
+      attempt < 3 &&
+      /ERR_NETWORK_|Execution context was destroyed|page crashed|Timeout|Load failed|ERR_|ECONN/i.test(
+        navigationError
+      )
+    ) {
+      await page.waitForTimeout(500 * attempt)
+      return check(page, path, width, attempt + 1)
+    }
+    return {
+      path,
+      status: 0,
+      title: '',
+      width,
+      overflow: 0,
+      error: navigationError
+    }
   }
 
   const status = response?.status?.() ?? 0
-  const title = await page.title().catch(() => '')
+  let title = ''
   let metrics
   try {
+    title = await page.title().catch(() => '')
     metrics = await page.evaluate(() => {
       const body = document.body
       const doc = document.documentElement
@@ -84,14 +100,24 @@ async function check(page, path, width, attempt = 0) {
       }
     })
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
     if (
       attempt < 2 &&
-      String(error).includes('Execution context was destroyed')
+      /Execution context was destroyed|Cannot read properties of null|Execution context is not available/i.test(
+        message
+      )
     ) {
       await page.waitForTimeout(250)
       return check(page, path, width, attempt + 1)
     }
-    throw error
+    return {
+      path,
+      status,
+      title,
+      width,
+      overflow: 0,
+      error: message
+    }
   }
 
   return {

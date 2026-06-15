@@ -1,6 +1,6 @@
 'use server'
 
-import { and, desc, eq, gte, lte, or, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, lte, or, sql } from 'drizzle-orm'
 
 import { requireAdminAccess } from '@/lib/auth/admin'
 import { db } from '@/lib/db'
@@ -524,7 +524,7 @@ async function loadCostsData(): Promise<CostsData> {
         .where(
           and(
             gte(usageEvents.createdAt, monthStart),
-            sql`${usageEvents.userId} = any(${userIds})`
+            inArray(usageEvents.userId, userIds)
           )
         )
         .groupBy(usageEvents.userId, usageEvents.surface)

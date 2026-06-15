@@ -54,7 +54,13 @@ export default function BrokMailDocsPage() {
 
         <p>
           For connection setup, see{' '}
-          <Link href="/docs/integrations">Integrations</Link>.
+          <Link
+            href="/docs/integrations"
+            className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+          >
+            Integrations
+          </Link>
+          .
         </p>
       </div>
     </div>

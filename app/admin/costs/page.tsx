@@ -158,7 +158,7 @@ function AlertCard({ alert }: { alert: ReturnType<typeof Object> | any }) {
       {alert.href ? (
         <Link
           href={alert.href}
-          className="mt-3 inline-flex items-center text-xs font-medium text-primary hover:underline"
+          className="mt-3 inline-flex min-h-11 min-w-11 items-center rounded-md px-2 text-xs font-medium text-primary hover:underline"
         >
           Investigate →
         </Link>
@@ -184,13 +184,13 @@ export default async function AdminCostsPage() {
         <div className="flex flex-wrap gap-2">
           <Link
             href="/admin/billing"
-            className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+            className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
           >
             Billing admin
           </Link>
           <Link
             href="/admin/brok"
-            className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+            className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
           >
             Brok API
           </Link>
@@ -470,7 +470,12 @@ export default async function AdminCostsPage() {
         )}
         <div className="flex justify-end">
           <Button variant="outline" asChild>
-            <Link href="/admin/brok/logs">Inspect detailed logs</Link>
+            <Link
+              href="/admin/brok/logs"
+              className="inline-flex min-h-11 min-w-11 items-center"
+            >
+              Inspect detailed logs
+            </Link>
           </Button>
         </div>
       </section>
