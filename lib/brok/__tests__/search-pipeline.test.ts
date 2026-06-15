@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildSearchQueries,
   classifyQuery,
+  clearSearchPipelineCache,
   generateFollowUps,
   rankAndDedupeSources,
   resolveQuery,
@@ -11,7 +12,9 @@ import {
 
 describe('Brok search pipeline helpers', () => {
   afterEach(() => {
+    clearSearchPipelineCache()
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 
   it('classifies and resolves comparison queries', () => {
@@ -113,6 +116,97 @@ describe('Brok search pipeline helpers', () => {
       url: 'https://capy.ad'
     })
     expect(result.answer).toContain('Capy')
+  })
+
+  it('serves repeated identical searches from a short in-memory cache', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+
+        if (url.startsWith('https://html.duckduckgo.com/html/')) {
+          return new Response(
+            '<html><body><div class="result"><h2 class="result__title"><a href="https://react.dev/learn">React Learn</a></h2><a class="result__snippet">The official React learning path.</a></div></body></html>',
+            {
+              status: 200,
+              headers: { 'content-type': 'text/html' }
+            }
+          )
+        }
+
+        return new Response('not found', { status: 404 })
+      })
+    )
+
+    const first = await runSearchPipeline({
+      query: 'best way to learn React',
+      depth: 'lite'
+    })
+    const second = await runSearchPipeline({
+      query: '  Best   way to learn react  ',
+      depth: 'lite'
+    })
+
+    expect(first.answer).toContain('React')
+    expect(second.answer).toEqual(first.answer)
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.filter(([input]) =>
+          String(input).startsWith('https://html.duckduckgo.com/html/')
+        )
+    ).toHaveLength(1)
+  })
+
+  it('dedupes concurrent identical searches while the first request is in flight', async () => {
+    let resolveSearch: ((response: Response) => void) | undefined
+    const searchResponse = new Promise<Response>(resolve => {
+      resolveSearch = resolve
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+
+        if (url.startsWith('https://html.duckduckgo.com/html/')) {
+          return searchResponse
+        }
+
+        return new Response('not found', { status: 404 })
+      })
+    )
+
+    const first = runSearchPipeline({
+      query: 'compare Cursor vs Windsurf',
+      depth: 'lite'
+    })
+    const second = runSearchPipeline({
+      query: 'Compare Cursor vs Windsurf',
+      depth: 'lite'
+    })
+
+    resolveSearch?.(
+      new Response(
+        '<html><body><div class="result"><h2 class="result__title"><a href="https://example.com/compare">Cursor vs Windsurf</a></h2><a class="result__snippet">A comparison of AI code editors.</a></div></body></html>',
+        {
+          status: 200,
+          headers: { 'content-type': 'text/html' }
+        }
+      )
+    )
+
+    const [firstResult, secondResult] = await Promise.all([first, second])
+
+    expect(firstResult.answer).toContain('Cursor')
+    expect(secondResult.answer).toEqual(firstResult.answer)
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.filter(([input]) =>
+          String(input).startsWith('https://html.duckduckgo.com/html/')
+        )
+    ).toHaveLength(1)
   })
 
   it('dedupes sources and ranks primary sources ahead of weak domains', () => {

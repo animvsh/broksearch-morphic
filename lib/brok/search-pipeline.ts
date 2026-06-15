@@ -62,6 +62,17 @@ const SEARCH_CONFIG = {
   deep: { sources: 20, maxTokens: 32000, queries: 5 }
 }
 
+const SEARCH_CACHE_MAX_ENTRIES = 100
+const DEFAULT_SEARCH_CACHE_TTL_MS = 120_000
+
+type SearchCacheEntry = {
+  expiresAt: number
+  response: SearchResponse
+}
+
+const searchResponseCache = new Map<string, SearchCacheEntry>()
+const inFlightSearches = new Map<string, Promise<SearchResponse>>()
+
 function getSearchFetchTimeoutMs() {
   const configured = Number.parseInt(
     process.env.BROK_SEARCH_TIMEOUT_MS || '',
@@ -79,6 +90,38 @@ function getAnswerSynthesisTimeoutMs() {
 }
 
 export async function runSearchPipeline(
+  request: SearchRequest
+): Promise<SearchResponse> {
+  const cacheKey = buildSearchCacheKey(request)
+  const cacheTtlMs = getSearchCacheTtlMs()
+
+  if (cacheTtlMs > 0) {
+    const cached = getCachedSearchResponse(cacheKey)
+    if (cached) return cached
+
+    const inFlight = inFlightSearches.get(cacheKey)
+    if (inFlight) {
+      return cloneSearchResponse(await inFlight)
+    }
+  }
+
+  const runPromise = runUncachedSearchPipeline(request)
+  if (cacheTtlMs > 0) {
+    inFlightSearches.set(cacheKey, runPromise)
+  }
+
+  try {
+    const response = await runPromise
+    if (cacheTtlMs > 0) {
+      setCachedSearchResponse(cacheKey, response, cacheTtlMs)
+    }
+    return cloneSearchResponse(response)
+  } finally {
+    inFlightSearches.delete(cacheKey)
+  }
+}
+
+async function runUncachedSearchPipeline(
   request: SearchRequest
 ): Promise<SearchResponse> {
   const config = SEARCH_CONFIG[request.depth]
@@ -129,6 +172,68 @@ export async function runSearchPipeline(
       )
     }
   }
+}
+
+function getSearchCacheTtlMs() {
+  const configured = Number.parseInt(
+    process.env.BROK_SEARCH_CACHE_TTL_MS || '',
+    10
+  )
+  if (Number.isFinite(configured) && configured >= 0) return configured
+  return DEFAULT_SEARCH_CACHE_TTL_MS
+}
+
+function buildSearchCacheKey(request: SearchRequest) {
+  const domains = [...(request.domains ?? [])]
+    .map(domain => domain.toLowerCase())
+    .sort()
+  return JSON.stringify({
+    query: request.query.trim().replace(/\s+/g, ' ').toLowerCase(),
+    depth: request.depth,
+    recencyDays: request.recencyDays ?? null,
+    domains,
+    maxSources: request.maxSources ?? null
+  })
+}
+
+function getCachedSearchResponse(cacheKey: string) {
+  const cached = searchResponseCache.get(cacheKey)
+  if (!cached) return null
+
+  if (cached.expiresAt <= Date.now()) {
+    searchResponseCache.delete(cacheKey)
+    return null
+  }
+
+  searchResponseCache.delete(cacheKey)
+  searchResponseCache.set(cacheKey, cached)
+  return cloneSearchResponse(cached.response)
+}
+
+function setCachedSearchResponse(
+  cacheKey: string,
+  response: SearchResponse,
+  ttlMs: number
+) {
+  searchResponseCache.set(cacheKey, {
+    expiresAt: Date.now() + ttlMs,
+    response: cloneSearchResponse(response)
+  })
+
+  while (searchResponseCache.size > SEARCH_CACHE_MAX_ENTRIES) {
+    const oldestKey = searchResponseCache.keys().next().value
+    if (!oldestKey) break
+    searchResponseCache.delete(oldestKey)
+  }
+}
+
+function cloneSearchResponse(response: SearchResponse): SearchResponse {
+  return JSON.parse(JSON.stringify(response)) as SearchResponse
+}
+
+export function clearSearchPipelineCache() {
+  searchResponseCache.clear()
+  inFlightSearches.clear()
 }
 
 function clampSourceCount(
