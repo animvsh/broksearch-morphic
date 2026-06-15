@@ -6,6 +6,7 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 
 import { requireAdminAccess } from '@/lib/auth/admin'
 import { db } from '@/lib/db'
+import { canUseDevDbFallback } from '@/lib/db/dev-db-fallback'
 import {
   brokCodeBuilds,
   brokCodeDeployments,
@@ -17,31 +18,6 @@ import {
   brokCodeVersions,
   workspaces
 } from '@/lib/db/schema'
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
-
-function canUseDevDbFallback(error: unknown): boolean {
-  if (process.env.BROK_DEV_DB_FALLBACK === 'false') {
-    return false
-  }
-
-  const message = getErrorMessage(error).toLowerCase()
-  return [
-    'enotfound',
-    'ehostunreach',
-    'econnrefused',
-    'etimedout',
-    'network',
-    'connect econn',
-    'getaddrinfo',
-    'failed query',
-    'connection terminated',
-    'unable to connect'
-  ].some(fragment => message.includes(fragment))
-}
 
 async function assertAdminAccess() {
   const access = await requireAdminAccess()
