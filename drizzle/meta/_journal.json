@@ -302,6 +302,13 @@
       "when": 1779001200000,
       "tag": "0042_api_key_prefix_lookup",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1781530200000,
+      "tag": "0043_app_access_requests",
+      "breakpoints": true
     }
   ]
 }

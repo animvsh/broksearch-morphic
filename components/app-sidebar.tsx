@@ -443,6 +443,24 @@ export default function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
+                  tooltip="Access"
+                  className={navButtonClass}
+                  isActive={isActive('/admin/access')}
+                >
+                  <Link
+                    href="/admin/access"
+                    className="flex items-center gap-2"
+                  >
+                    <span className={iconShellClass}>
+                      <KeyRound className="size-4" />
+                    </span>
+                    <span className="flex-1">Access</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
                   tooltip="Workspaces"
                   className={navButtonClass}
                   isActive={isActive('/admin/workspaces')}

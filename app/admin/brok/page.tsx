@@ -211,13 +211,15 @@ export default async function BrokAdminPage() {
   const {
     addAppAccessAllowlistEmail,
     getAppAccessAllowlist,
+    getAppAccessRequests,
     getBrokStats,
     revokeAppAccessAllowlistEmail,
     updateAppAccessAllowlistFeatures
   } = await import('@/lib/actions/admin-brok')
-  const [stats, allowlist] = await Promise.all([
+  const [stats, allowlist, accessRequests] = await Promise.all([
     getBrokStats(),
-    getAppAccessAllowlist()
+    getAppAccessAllowlist(),
+    getAppAccessRequests()
   ])
   const brokCode = stats.brokCode
 
@@ -250,6 +252,12 @@ export default async function BrokAdminPage() {
               className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
             >
               Settings
+            </Link>
+            <Link
+              href="/admin/access"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            >
+              Access
             </Link>
             <Link
               href="/admin/brok/logs?endpoint=code"
@@ -321,6 +329,52 @@ export default async function BrokAdminPage() {
               </Button>
             </div>
           </form>
+
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40 text-muted-foreground">
+                  <th className="px-3 py-2 text-left font-medium">
+                    Pending request
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium">Phone</th>
+                  <th className="px-3 py-2 text-left font-medium">Status</th>
+                  <th className="px-3 py-2 text-left font-medium">Source</th>
+                  <th className="px-3 py-2 text-left font-medium">Submitted</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accessRequests.length === 0 ? (
+                  <tr>
+                    <td
+                      className="px-3 py-6 text-center text-muted-foreground"
+                      colSpan={5}
+                    >
+                      No access requests yet.
+                    </td>
+                  </tr>
+                ) : (
+                  accessRequests.map(request => (
+                    <tr key={request.id} className="border-b last:border-0">
+                      <td className="px-3 py-2 font-medium">{request.email}</td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {request.phoneNumber}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Badge variant="secondary">{request.status}</Badge>
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {request.source || '-'}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {formatDateTime(request.createdAt)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full min-w-[980px] text-sm">

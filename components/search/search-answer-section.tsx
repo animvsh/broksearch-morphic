@@ -336,7 +336,7 @@ export function SearchAnswerSection({
         {!isStreaming && sources.length > 0 && (
           <SourcesPanel
             sources={sources}
-            defaultExpanded={true}
+            defaultExpanded={false}
             onOpenSource={setActiveSource}
           />
         )}

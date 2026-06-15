@@ -149,6 +149,32 @@ export const appAccessAllowlist = pgTable(
   })
 )
 
+export const appAccessRequests = pgTable(
+  'app_access_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: text('email').notNull(),
+    phoneNumber: text('phone_number').notNull(),
+    status: text('status').default('pending').notNull(),
+    userId: text('user_id'),
+    source: text('source'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    reviewedAt: timestamp('reviewed_at'),
+    reviewedBy: text('reviewed_by')
+  },
+  table => ({
+    emailUniqueIdx: uniqueIndex('app_access_requests_email_unique_idx').on(
+      table.email
+    ),
+    statusIdx: index('app_access_requests_status_idx').on(table.status),
+    createdAtIdx: index('app_access_requests_created_at_idx').on(
+      table.createdAt.desc()
+    )
+  })
+)
+
 // API Keys
 export const apiKeys = pgTable(
   'api_keys',

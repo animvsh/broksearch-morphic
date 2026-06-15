@@ -45,35 +45,34 @@ export function SourceSidePanel({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
-        <SheetHeader className="pr-8">
+        <SheetHeader className="space-y-1 pr-8">
           <SheetTitle className="text-base leading-snug">
             {source.title || host}
           </SheetTitle>
-          <SheetDescription>{host}</SheetDescription>
+          <SheetDescription className="truncate">{host}</SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-5">
+        <div className="mt-5 space-y-4">
           {excerpt && (
-            <section className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <section className="space-y-1.5">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 <Quote className="size-3.5" />
-                Relevant excerpt
+                Excerpt
               </div>
-              <p className="rounded-lg border border-border/70 bg-muted/30 p-3 text-sm leading-relaxed text-foreground/85">
+              <p className="max-h-52 overflow-y-auto rounded-lg border border-border/70 bg-muted/25 p-3 text-sm leading-6 text-foreground/85">
                 {excerpt}
               </p>
             </section>
           )}
 
-          <section className="space-y-2">
-            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <section className="rounded-lg border border-border/60 bg-card/60 p-3">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               <ShieldCheck className="size-3.5" />
-              Why Brok used this
+              Verification
             </div>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              This source was returned by the research pipeline and kept with
-              the cited answer so you can verify the claim against the original
-              page before opening it.
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Kept with this answer so you can compare the cited claim with the
+              original page.
             </p>
           </section>
 
@@ -81,7 +80,7 @@ export function SourceSidePanel({
             href={source.url}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium transition-colors hover:bg-muted"
           >
             Open original
             <ExternalLink className="size-3.5" />

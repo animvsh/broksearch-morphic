@@ -186,7 +186,9 @@ describe('SearchAnswerSection actions', () => {
     })
 
     expect(screen.getByText('Sources')).toBeInTheDocument()
-    expect(screen.getByText('Stored source')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /verify source 1: stored source/i })
+    ).toBeInTheDocument()
   })
 
   it('opens source cards in the verifier side panel', () => {
@@ -204,10 +206,36 @@ describe('SearchAnswerSection actions', () => {
       }
     })
 
+    fireEvent.click(screen.getByRole('button', { name: /show all/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Stored source' }))
 
-    expect(screen.getByText('Relevant excerpt')).toBeInTheDocument()
-    expect(screen.getByText('Why Brok used this')).toBeInTheDocument()
+    expect(screen.getByText('Excerpt')).toBeInTheDocument()
+    expect(screen.getByText('Verification')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /open original/i })
+    ).toHaveAttribute('href', 'https://stored.example/report')
+  })
+
+  it('keeps source verification reachable from compact source controls', () => {
+    renderAnswer({
+      content: 'Answer text.',
+      metadata: {
+        answer: {
+          sources: [
+            source({
+              title: 'Stored source',
+              url: 'https://stored.example/report'
+            })
+          ]
+        }
+      }
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /verify source 1: stored source/i })
+    )
+
+    expect(screen.getByText('Verification')).toBeInTheDocument()
   })
 })
 
