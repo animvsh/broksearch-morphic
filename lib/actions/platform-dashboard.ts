@@ -1068,6 +1068,7 @@ export type SpaceSummary = {
   slug: string
   name: string
   description: string | null
+  ownerUserId: string
   visibility: SpaceVisibility
   iconColor: string | null
   role: SpaceRole
@@ -1136,6 +1137,7 @@ async function getSpaceSummaryRow(
           s.slug,
           s.name,
           s.description,
+          s.owner_user_id as "ownerUserId",
           s.visibility,
           s.icon_color as "iconColor",
           case
@@ -1187,6 +1189,18 @@ async function getSpaceMembersRows(
           accepted_at as "acceptedAt"
         from space_members
         where space_id = ${spaceId}::uuid
+          and exists (
+            select 1
+            from spaces s
+            left join space_members requester
+              on requester.space_id = s.id
+              and requester.user_id = ${userId}
+            where s.id = ${spaceId}::uuid
+              and (
+                s.owner_user_id = ${userId}
+                or requester.user_id = ${userId}
+              )
+          )
         order by role asc, invited_at asc
       `)
       return result as unknown as SpaceMember[]
@@ -1214,6 +1228,18 @@ async function getSpaceProjectsRows(
           updated_at as "updatedAt"
         from space_projects
         where space_id = ${spaceId}::uuid
+          and exists (
+            select 1
+            from spaces s
+            left join space_members requester
+              on requester.space_id = s.id
+              and requester.user_id = ${userId}
+            where s.id = ${spaceId}::uuid
+              and (
+                s.owner_user_id = ${userId}
+                or requester.user_id = ${userId}
+              )
+          )
         order by updated_at desc
         limit 100
       `)
@@ -1242,6 +1268,18 @@ async function getSpaceInvitesRows(
         from space_invites
         where space_id = ${spaceId}::uuid
           and accepted_at is null
+          and exists (
+            select 1
+            from spaces s
+            left join space_members requester
+              on requester.space_id = s.id
+              and requester.user_id = ${userId}
+            where s.id = ${spaceId}::uuid
+              and (
+                s.owner_user_id = ${userId}
+                or requester.user_id = ${userId}
+              )
+          )
         order by created_at desc
         limit 100
       `)
@@ -1304,7 +1342,7 @@ export async function getSpaceData(spaceId: string): Promise<SpaceData | null> {
   ])
   const ownerMember: SpaceMember = {
     id: `${summary.id}:owner`,
-    userId,
+    userId: summary.ownerUserId,
     email: null,
     displayName: 'Space owner',
     role: 'owner',
@@ -1343,6 +1381,7 @@ export async function listSpaces(userId?: string): Promise<SpaceSummary[]> {
           s.slug,
           s.name,
           s.description,
+          s.owner_user_id as "ownerUserId",
           s.visibility,
           s.icon_color as "iconColor",
           coalesce(sm.role, 'owner') as role,
