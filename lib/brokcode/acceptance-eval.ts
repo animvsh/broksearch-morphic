@@ -6,6 +6,8 @@ export type BrokCodeAcceptanceCaseEval = {
   category: BrokCodeAcceptanceCase['category']
   status: 'passed' | 'failed'
   checks: string[]
+  runtime?: string
+  model?: string
   startedAt: string
   completedAt?: string
   projectId?: string
@@ -19,6 +21,7 @@ export type BrokCodeAcceptanceSuiteEvalInput = {
   completedAt: string
   baseUrl: string
   matrixMode: boolean
+  fallbackPolicy: 'allowed' | 'disallowed'
   tuiStatus: 'passed' | 'skipped' | 'failed' | 'not-run'
   cases: BrokCodeAcceptanceCaseEval[]
 }
@@ -72,6 +75,7 @@ export function formatBrokCodeAcceptanceAdminReview(
     `- Score: ${evalRecord.score}%`,
     `- Cases: ${evalRecord.passCount}/${evalRecord.totalCount} passed`,
     `- TUI: ${evalRecord.tuiStatus}`,
+    `- Fallback policy: ${evalRecord.fallbackPolicy}`,
     `- Base URL: ${evalRecord.baseUrl}`,
     `- Started: ${evalRecord.startedAt}`,
     `- Completed: ${evalRecord.completedAt}`,
@@ -87,6 +91,8 @@ export function formatBrokCodeAcceptanceAdminReview(
       `- Preview: ${testCase.previewUrl ?? 'not available'}`,
       `- Deploy: ${testCase.deploymentUrl ?? 'not available'}`,
       `- Checks: ${testCase.checks.join(', ') || 'none'}`,
+      `- Runtime: ${testCase.runtime ?? 'unknown'}`,
+      `- Model: ${testCase.model ?? 'unknown'}`,
       ...(testCase.error ? [`- Error: ${testCase.error}`] : []),
       ''
     ]),

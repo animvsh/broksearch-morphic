@@ -12,6 +12,7 @@ describe('BrokCode acceptance eval', () => {
       completedAt: '2026-05-25T00:01:00.000Z',
       baseUrl: 'https://brok.test',
       matrixMode: true,
+      fallbackPolicy: 'allowed',
       tuiStatus: 'passed',
       cases: [
         {
@@ -60,6 +61,7 @@ describe('BrokCode acceptance eval', () => {
       completedAt: '2026-05-25T00:01:00.000Z',
       baseUrl: 'https://brok.test',
       matrixMode: true,
+      fallbackPolicy: 'allowed',
       tuiStatus: 'skipped',
       cases: [
         {
@@ -83,6 +85,7 @@ describe('BrokCode acceptance eval', () => {
       completedAt: '2026-05-25T00:01:00.000Z',
       baseUrl: 'https://brok.test',
       matrixMode: true,
+      fallbackPolicy: 'allowed',
       tuiStatus: 'not-run',
       cases: [
         {

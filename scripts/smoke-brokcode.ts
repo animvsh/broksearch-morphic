@@ -42,6 +42,9 @@ let apiKey = process.env.SMOKE_BROKCODE_API_KEY || 'brok_sk_local_smoke'
 const bunExecutable = resolveBunExecutable()
 const skipTui = process.env.SMOKE_BROKCODE_SKIP_TUI === 'true'
 const matrixMode = process.env.SMOKE_BROKCODE_MATRIX === 'true'
+const noFallbackMode =
+  process.env.SMOKE_BROKCODE_NO_FALLBACK === 'true' ||
+  process.env.SMOKE_BROKCODE_ALLOW_FALLBACK === 'false'
 const previewWaitUntil: 'domcontentloaded' | 'networkidle' =
   process.env.SMOKE_BROKCODE_PREVIEW_WAIT_UNTIL === 'networkidle'
     ? 'networkidle'
@@ -102,6 +105,8 @@ type SmokeCaseReport = {
   category: BrokCodeAcceptanceCase['category']
   status: 'passed' | 'failed'
   checks: string[]
+  runtime?: string
+  model?: string
   startedAt: string
   completedAt?: string
   projectId?: string
@@ -115,6 +120,7 @@ type SmokeReport = {
   completedAt: string
   baseUrl: string
   matrixMode: boolean
+  fallbackPolicy: 'allowed' | 'disallowed'
   cases: SmokeCaseReport[]
   tuiStatus: 'passed' | 'skipped' | 'failed' | 'not-run'
 }
@@ -518,12 +524,12 @@ async function executeBuild(
           ? prompt
           : buildBrokCodeAcceptancePrompt(testCase),
       model: process.env.SMOKE_BROKCODE_MODEL || 'brok-lite',
-      source: 'api-smoke',
+      source: noFallbackMode ? 'browser' : 'api-smoke',
       session_id: `brokcode-smoke-${testCase.id}-${Date.now()}`,
       project_id: projectId,
       stream: true,
-      prefer_pi: false,
-      allow_brok_fallback: true
+      prefer_pi: noFallbackMode,
+      allow_brok_fallback: !noFallbackMode
     })
   })
 
@@ -535,6 +541,12 @@ async function executeBuild(
   const result = await readSseResult(response, projectId)
   const generatedFiles = result.generated_files ?? []
   const fileChanges = result.file_changes ?? []
+
+  if (noFallbackMode && result.runtime === 'brok') {
+    throw new Error(
+      'expected a Pi or OpenCode runtime result when no-fallback smoke mode is enabled'
+    )
+  }
 
   if (generatedFiles.length < testCase.minimumGeneratedFiles) {
     throw new Error(
@@ -959,6 +971,9 @@ async function writeSmokeReport(report: SmokeReport) {
 
 async function main() {
   console.log(`brokcode smoke base ${baseUrl}`)
+  console.log(
+    `brokcode smoke fallback-policy ${noFallbackMode ? 'disallowed' : 'allowed'}`
+  )
   await seedApiKeyIfNeeded()
   const startedAt = new Date().toISOString()
   const reports: SmokeCaseReport[] = []
@@ -989,8 +1004,13 @@ async function main() {
         caseReport.checks.push('project-created')
 
         const result = await executeBuild(project.id, testCase)
+        caseReport.runtime = result.runtime
+        caseReport.model = result.model
         caseReport.previewUrl = result.preview_url
         caseReport.checks.push('stream-result', 'file-changes')
+        if (noFallbackMode) {
+          caseReport.checks.push('runtime-no-fallback')
+        }
 
         await verifyFiles(project.id, testCase)
         caseReport.checks.push('files-saved')
@@ -1025,6 +1045,7 @@ async function main() {
       completedAt: new Date().toISOString(),
       baseUrl,
       matrixMode,
+      fallbackPolicy: noFallbackMode ? 'disallowed' : 'allowed',
       cases: reports,
       tuiStatus
     })
