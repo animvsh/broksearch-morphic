@@ -26,7 +26,12 @@ export const BROKCODE_ACCEPTANCE_MATRIX: BrokCodeAcceptanceCase[] = [
       'Return named files for index.html, styles.css, and app.js.',
       'Include a hero, menu cards, social proof, and a working newsletter form.'
     ].join(' '),
-    requiredFiles: ['index.html', 'styles.css', 'app.js'],
+    requiredFiles: [
+      'index.html',
+      'styles.css',
+      'app.js',
+      'api/mock-feedback.json'
+    ],
     requiredCapabilities: ['responsive-layout', 'newsletter-form'],
     minimumInteractions: 2,
     expectedTerms: ['bakery', 'menu', 'newsletter'],

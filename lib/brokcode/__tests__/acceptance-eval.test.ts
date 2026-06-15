@@ -55,7 +55,7 @@ describe('BrokCode acceptance eval', () => {
     )
   })
 
-  it('allows skipped TUI when generated-app checks pass', () => {
+  it('marks skipped TUI as partial even when generated-app checks pass', () => {
     const evalRecord = buildBrokCodeAcceptanceSuiteEval({
       startedAt: '2026-05-25T00:00:00.000Z',
       completedAt: '2026-05-25T00:01:00.000Z',
@@ -75,8 +75,12 @@ describe('BrokCode acceptance eval', () => {
       ]
     })
 
-    expect(evalRecord.status).toBe('passed')
+    expect(evalRecord.status).toBe('partial')
+    expect(evalRecord.launchGate).toBe(false)
     expect(evalRecord.score).toBe(100)
+    expect(formatBrokCodeAcceptanceAdminReview(evalRecord)).toContain(
+      'Launch gate: false'
+    )
   })
 
   it('fails the suite when the TUI smoke did not run', () => {

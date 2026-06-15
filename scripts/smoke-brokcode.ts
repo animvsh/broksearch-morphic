@@ -18,6 +18,7 @@ import {
   getBrokCodeAcceptanceCases,
   matchesBrokCodeAcceptanceTerms
 } from '../lib/brokcode/acceptance-matrix'
+import { verifyNamedCapabilities } from '../lib/brokcode/capability-checks'
 
 const execFileAsync = promisify(execFile)
 
@@ -614,9 +615,11 @@ async function verifyFiles(
     )
   }
 
+  const capabilityChecks = verifyNamedCapabilities(files, testCase)
   console.log(
     `brokcode ok saved files case=${testCase.id} ${filePaths.join(',')}`
   )
+  return capabilityChecks
 }
 
 async function fetchProjectFiles(projectId: string) {
@@ -998,6 +1001,7 @@ async function main() {
       )
     : [acceptanceCase]
 
+  let runError: Error | null = null
   try {
     for (const testCase of cases) {
       const caseReport: SmokeCaseReport = {
@@ -1024,8 +1028,8 @@ async function main() {
           caseReport.checks.push('runtime-no-fallback')
         }
 
-        await verifyFiles(project.id, testCase)
-        caseReport.checks.push('files-saved')
+        const capabilityChecks = await verifyFiles(project.id, testCase)
+        caseReport.checks.push('files-saved', ...capabilityChecks)
 
         await verifyPreview(result.preview_url, testCase)
         caseReport.checks.push('preview-desktop-mobile')
@@ -1039,17 +1043,26 @@ async function main() {
       } catch (error) {
         caseReport.error =
           error instanceof Error ? error.message : String(error)
-        throw error
+        if (!matrixMode) {
+          throw error
+        }
+        if (!runError) {
+          runError = error instanceof Error ? error : new Error(String(error))
+        }
       } finally {
         caseReport.completedAt = new Date().toISOString()
       }
     }
 
-    try {
-      tuiStatus = await runTuiSmoke()
-    } catch (error) {
-      tuiStatus = 'failed'
-      throw error
+    if (!runError || !matrixMode) {
+      try {
+        tuiStatus = await runTuiSmoke()
+      } catch (error) {
+        tuiStatus = 'failed'
+        throw error
+      }
+    } else if (!skipTui) {
+      tuiStatus = 'not-run'
     }
   } finally {
     await writeSmokeReport({
@@ -1063,12 +1076,26 @@ async function main() {
     })
   }
 
+  const failedCases = reports.filter(report => report.status === 'failed')
+  if (failedCases.length > 0) {
+    throw new Error(
+      `BrokCode smoke failed ${failedCases.length}/${reports.length} case(s): ${failedCases
+        .map(report => `${report.id}: ${report.error ?? 'failed'}`)
+        .join('; ')}`
+    )
+  }
+
   console.log(
     `brokcode smoke ok cases=${cases.map(testCase => testCase.id).join(',')}`
   )
 }
 
-main().catch(error => {
-  console.error(error instanceof Error ? error.message : error)
-  process.exit(1)
-})
+const invokedScript = process.argv[1] ? path.resolve(process.argv[1]) : ''
+const currentScript = path.resolve(process.cwd(), 'scripts/smoke-brokcode.ts')
+
+if (invokedScript === currentScript) {
+  main().catch(error => {
+    console.error(error instanceof Error ? error.message : error)
+    process.exit(1)
+  })
+}

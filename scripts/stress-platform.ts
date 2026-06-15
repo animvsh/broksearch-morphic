@@ -517,7 +517,7 @@ async function runSearch(baseKey: string) {
   }
 }
 
-async function runBrokCode(baseKey: string) {
+async function runBrokCodeSecurityScan(baseKey: string) {
   const response = await fetch(`${baseUrl}/api/brokcode/execute`, {
     method: 'POST',
     headers: {
@@ -547,8 +547,8 @@ async function runApiStress(
   await runSearch(keys.mainKey)
   console.log('stress api ok search success')
 
-  await runBrokCode(keys.mainKey)
-  console.log('stress api ok brokcode execution success')
+  await runBrokCodeSecurityScan(keys.mainKey)
+  console.log('stress api ok brokcode security-scan route success')
 
   const usageResponse = await fetch(`${baseUrl}/api/v1/usage`, {
     headers: {

@@ -63,7 +63,8 @@ reading terminal logs.
 # Fast single-case builder smoke
 bun run smoke:brokcode
 
-# Full generated-app acceptance matrix
+# Generated-app acceptance matrix. This can be a partial release gate when TUI
+# is explicitly out of scope.
 bun run smoke:brokcode:matrix
 
 # Run a subset of matrix cases
@@ -73,9 +74,17 @@ bun run smoke:brokcode
 ```
 
 The matrix covers landing page, dashboard, CRUD app, form workflow,
-mobile-first utility, and backend-backed prototype prompts. Set
-`SMOKE_BROKCODE_SKIP_TUI=true` to skip the terminal smoke when the release gate
-only needs generated-app coverage.
+mobile-first utility, and backend-backed prototype prompts.
+
+There are two distinct BrokCode gates:
+
+1. Generated-app acceptance matrix: `SMOKE_BROKCODE_MATRIX=true`. This may set
+   `SMOKE_BROKCODE_SKIP_TUI=true` only when the release explicitly excludes TUI
+   readiness. Reports are marked `Status: partial` and `Launch gate: false`
+   when TUI is skipped.
+2. Full BrokCode launch acceptance: matrix plus TUI sync/preview/deploy smoke.
+   This is the only path that can report `Status: passed` with
+   `Launch gate: passed`.
 
 For the default smoke path, set `SMOKE_SEED_TOKEN` (or `SMOKE_BROKCODE_API_KEY`) so
 the harness can obtain a scoped `code:write` key automatically. When only

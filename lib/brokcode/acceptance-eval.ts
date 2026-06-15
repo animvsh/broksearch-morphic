@@ -28,7 +28,8 @@ export type BrokCodeAcceptanceSuiteEvalInput = {
 
 export type BrokCodeAcceptanceSuiteEval = BrokCodeAcceptanceSuiteEvalInput & {
   kind: 'brokcode_acceptance_eval'
-  status: 'passed' | 'failed'
+  status: 'passed' | 'partial' | 'failed'
+  launchGate: boolean
   score: number
   passCount: number
   failCount: number
@@ -50,13 +51,16 @@ export function buildBrokCodeAcceptanceSuiteEval(
   if (input.tuiStatus === 'failed' || input.tuiStatus === 'not-run') {
     blockers.push(`tui: ${input.tuiStatus}`)
   }
+  const launchGate =
+    input.matrixMode && input.tuiStatus === 'passed' && blockers.length === 0
   const score =
     totalCount === 0 ? 0 : Math.round((passCount / totalCount) * 100)
 
   return {
     kind: 'brokcode_acceptance_eval',
     ...input,
-    status: blockers.length === 0 ? 'passed' : 'failed',
+    status: blockers.length > 0 ? 'failed' : launchGate ? 'passed' : 'partial',
+    launchGate,
     score,
     passCount,
     failCount,
@@ -72,6 +76,7 @@ export function formatBrokCodeAcceptanceAdminReview(
     '# BrokCode Acceptance Admin Review',
     '',
     `- Status: ${evalRecord.status}`,
+    `- Launch gate: ${evalRecord.launchGate ? 'passed' : 'false'}`,
     `- Score: ${evalRecord.score}%`,
     `- Cases: ${evalRecord.passCount}/${evalRecord.totalCount} passed`,
     `- TUI: ${evalRecord.tuiStatus}`,
