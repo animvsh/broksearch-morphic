@@ -3562,7 +3562,7 @@ export function BrokCodeApp({
 
   async function deployBrokCodeCloud() {
     if (!hasLiveRuntime) {
-      setRuntimeError('Sign in before deploying from BrokCode Cloud.')
+      setRuntimeError('Sign in before publishing from BrokCode Cloud.')
       return
     }
 
@@ -3602,7 +3602,7 @@ export function BrokCodeApp({
       const loadedPreviewUrl = loadPreviewUrlIfAllowed(previewCandidate)
       const message = loadedPreviewUrl
         ? strategy === 'managed_live_preview'
-          ? 'App is live on its managed URL.'
+          ? 'App is published on its managed URL.'
           : 'Deployment preview is live.'
         : typeof body?.message === 'string'
           ? body.message
@@ -3645,7 +3645,7 @@ export function BrokCodeApp({
         }
       ])
       void persistVersionSnapshot({
-        command: '1-click deploy',
+        command: 'Publish managed app',
         summary: `${message} Strategy: ${strategy}`,
         runtime: activeRuntime === 'not_connected' ? 'brok' : activeRuntime,
         status: 'done',
@@ -3658,8 +3658,8 @@ export function BrokCodeApp({
       }
       toast.success(
         loadedPreviewUrl
-          ? 'Deployment triggered and preview loaded'
-          : 'Deployment triggered'
+          ? 'Publish triggered and preview loaded'
+          : 'Publish triggered'
       )
     } catch (error) {
       const message =
@@ -4874,7 +4874,7 @@ export function BrokCodeApp({
                   }}
                 >
                   <Rocket className="size-4" />
-                  {isDeploying ? 'Deploying...' : '1-click deploy'}
+                  {isDeploying ? 'Publishing...' : 'Publish managed app'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
@@ -5237,7 +5237,7 @@ export function BrokCodeApp({
                   ) : (
                     <Rocket className="size-4" />
                   )}
-                  Deploy
+                  Publish
                 </Button>
                 <Button
                   asChild
@@ -5896,7 +5896,7 @@ function DeployReadinessPanel({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium text-zinc-950">Deploy readiness</p>
+            <p className="font-medium text-zinc-950">Publish readiness</p>
             <Badge
               variant={summary.tone === 'ready' ? 'default' : 'outline'}
               className={cn(
