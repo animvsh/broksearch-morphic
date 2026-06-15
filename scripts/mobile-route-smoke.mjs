@@ -87,6 +87,7 @@ async function check(page, path, width, attempt = 0) {
   let title = ''
   let metrics
   try {
+    await page.waitForTimeout(300)
     title = await page.title().catch(() => '')
     metrics = await page.evaluate(() => {
       const body = document.body

@@ -232,7 +232,7 @@ export default function SearchCompletionsPage() {
         </p>
 
         <h2>Endpoint</h2>
-        <pre className="bg-muted p-4 rounded-lg">
+        <pre className="max-w-full overflow-x-auto rounded-lg bg-muted p-4">
           <code>POST https://api.brok.ai/v1/search/completions</code>
         </pre>
 
@@ -311,7 +311,7 @@ export default function SearchCompletionsPage() {
 
         <h2>Citation Format</h2>
         <p>Citations are included in the response with:</p>
-        <pre className="bg-muted p-4 rounded-lg">
+        <pre className="max-w-full overflow-x-auto rounded-lg bg-muted p-4">
           <code>{`{
   "citations": [
     {
@@ -327,7 +327,7 @@ export default function SearchCompletionsPage() {
         </pre>
 
         <h2>Request Example</h2>
-        <pre className="bg-muted p-4 rounded-lg">
+        <pre className="max-w-full overflow-x-auto rounded-lg bg-muted p-4">
           <code>{`curl https://api.brok.ai/v1/search/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
@@ -339,7 +339,7 @@ export default function SearchCompletionsPage() {
         </pre>
 
         <h2>Response</h2>
-        <pre className="bg-muted p-4 rounded-lg">
+        <pre className="max-w-full overflow-x-auto rounded-lg bg-muted p-4">
           <code>{`{
   "id": "src_abc123",
   "object": "search.completion",
@@ -378,7 +378,7 @@ export default function SearchCompletionsPage() {
 
         <h2>Streaming</h2>
         <p>Search completions also support streaming:</p>
-        <pre className="bg-muted p-4 rounded-lg">
+        <pre className="max-w-full overflow-x-auto rounded-lg bg-muted p-4">
           <code>{`curl https://api.brok.ai/v1/search/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
@@ -478,7 +478,7 @@ export default function SearchCompletionsPage() {
             </tbody>
           </table>
         </div>
-        <pre className="bg-muted p-4 rounded-lg">
+        <pre className="max-w-full overflow-x-auto rounded-lg bg-muted p-4">
           <code>{`event: status
 data: {"message":"Understanding your question"}
 

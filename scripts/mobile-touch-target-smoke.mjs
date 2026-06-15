@@ -63,6 +63,7 @@ async function checkRoute(page, path, attempt = 0) {
 
   let smallControls = []
   try {
+    await page.waitForTimeout(300)
     smallControls = await page.$$eval(
       'a[href], button, [role="button"], input:not([type="hidden"]), select, textarea',
       nodes => {
