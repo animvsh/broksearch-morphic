@@ -315,6 +315,113 @@ describe('verifyRequestAuth', () => {
     expect(mockSelect).toHaveBeenCalledTimes(4)
   })
 
+  it('updates last-used metadata after a successful API key authentication', async () => {
+    const rawKey = 'brok_sk_live_lastused'
+    const keyRecord = {
+      id: 'key-last-used',
+      workspaceId: 'workspace-1',
+      userId: 'user-1',
+      name: 'Last used key',
+      keyPrefix: getKeyPrefix(rawKey),
+      keyHash: hashApiKey(rawKey),
+      keySalt: null,
+      environment: 'live',
+      status: 'active',
+      scopes: ['chat:write'],
+      allowedModels: [],
+      rpmLimit: 60,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: 1000,
+      lastUsedAt: null,
+      createdAt: new Date(),
+      revokedAt: null
+    }
+    const workspace = {
+      id: 'workspace-1',
+      name: 'Workspace',
+      ownerUserId: 'user-1',
+      plan: 'starter',
+      status: 'active',
+      monthlyBudgetCents: 1000,
+      createdAt: new Date()
+    }
+
+    mockSelect
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([keyRecord])
+          })
+        })
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([workspace])
+          })
+        })
+      })
+
+    const mockRequest = {
+      headers: {
+        get: (name: string) =>
+          name === 'authorization' ? `Bearer ${rawKey}` : null
+      }
+    } as unknown as Request
+
+    const result = await verifyRequestAuth(mockRequest)
+
+    expect(result.success).toBe(true)
+    expect(mockUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects revoked API keys before mutating last-used metadata', async () => {
+    const rawKey = 'brok_sk_live_revoked'
+    const keyRecord = {
+      id: 'key-revoked',
+      workspaceId: 'workspace-1',
+      userId: 'user-1',
+      name: 'Revoked key',
+      keyPrefix: getKeyPrefix(rawKey),
+      keyHash: hashApiKey(rawKey),
+      keySalt: null,
+      environment: 'live',
+      status: 'revoked',
+      scopes: ['chat:write'],
+      allowedModels: [],
+      rpmLimit: 60,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: 1000,
+      lastUsedAt: null,
+      createdAt: new Date(),
+      revokedAt: new Date()
+    }
+
+    mockSelect.mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          limit: vi.fn().mockResolvedValue([keyRecord])
+        })
+      })
+    })
+
+    const mockRequest = {
+      headers: {
+        get: (name: string) =>
+          name === 'authorization' ? `Bearer ${rawKey}` : null
+      }
+    } as unknown as Request
+
+    const result = await verifyRequestAuth(mockRequest)
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error).toBe('inactive_key')
+      expect(result.status).toBe(403)
+    }
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
   it('does not allow the local fallback key in cloud deployments', async () => {
     process.env.BROK_CLOUD_DEPLOYMENT = 'true'
     mockSelect.mockImplementationOnce(() => {
