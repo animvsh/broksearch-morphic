@@ -68,7 +68,11 @@ export default async function SearchPage(props: {
       }
 
       return (
-        <BrokSearchClient searchId={id} persistToServer={!!effectiveUser} />
+        <BrokSearchClient
+          searchId={id}
+          persistToServer={!!effectiveUser}
+          modelSelectorData={modelSelectorData}
+        />
       )
     }
 
