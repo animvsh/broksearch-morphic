@@ -222,7 +222,13 @@ export function Chat({
             isNewChat:
               trigger === 'submit-message' &&
               messages.length === 1 &&
-              savedMessages.length === 0
+              savedMessages.length === 0,
+            ...(trigger === 'submit-message' &&
+            messages.length === 1 &&
+            savedMessages.length === 0 &&
+            initialSearchMode
+              ? { mode: initialSearchMode }
+              : {})
           }
         }
       }

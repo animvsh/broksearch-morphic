@@ -275,6 +275,12 @@ export function ChatPanel({
     }
   }, [isGuest, isLoading, loadRecentTasks])
 
+  useEffect(() => {
+    if (initialSearchMode) {
+      setCookie('searchMode', initialSearchMode)
+    }
+  }, [initialSearchMode])
+
   const getActiveToolLabel = () => {
     if (!messages.length) return null
 
