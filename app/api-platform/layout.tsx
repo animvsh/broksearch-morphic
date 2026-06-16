@@ -3,7 +3,13 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-import { Activity, FlaskConical, KeyRound, ScrollText } from 'lucide-react'
+import {
+  Activity,
+  FlaskConical,
+  History,
+  KeyRound,
+  ScrollText
+} from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -20,6 +26,12 @@ const tabs = [
     value: 'logs',
     label: 'Logs',
     icon: ScrollText
+  },
+  {
+    href: '/api-platform/audit',
+    value: 'audit',
+    label: 'Audit',
+    icon: History
   },
   {
     href: '/api-platform/playground',

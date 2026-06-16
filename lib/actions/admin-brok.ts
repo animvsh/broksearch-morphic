@@ -11,9 +11,14 @@ import {
   normalizeAppFeatures
 } from '@/lib/auth/app-access'
 import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
+import {
+  type ApiKeyAuditRequestContext,
+  recordApiKeyAuditEvent
+} from '@/lib/brok/api-key-audit'
 import { BROK_MODELS } from '@/lib/brok/models'
 import { db } from '@/lib/db'
 import {
+  apiKeyAuditEvents,
   apiKeys,
   appAccessAllowlist,
   appAccessRequests,
@@ -222,7 +227,29 @@ function revalidateAdminPaths() {
   revalidatePath('/admin/brok/api-keys')
   revalidatePath('/admin/brok/logs')
   revalidatePath('/admin/brok/providers')
+  revalidatePath('/api-platform/audit')
   revalidatePath('/api-keys')
+}
+
+async function getApiKeyAuditRequestContext(): Promise<ApiKeyAuditRequestContext> {
+  try {
+    const { headers } = await import('next/headers')
+    const headerList = await headers()
+    const forwardedFor = headerList.get('x-forwarded-for')
+    const ipAddress =
+      forwardedFor?.split(',')[0]?.trim() ||
+      headerList.get('x-real-ip') ||
+      headerList.get('cf-connecting-ip')
+
+    return {
+      requestId:
+        headerList.get('x-request-id') || headerList.get('x-vercel-id') || null,
+      ipAddress,
+      userAgent: headerList.get('user-agent')
+    }
+  } catch {
+    return {}
+  }
 }
 
 async function assertAdminAccess() {
@@ -849,6 +876,65 @@ export async function getAllApiKeysForAdmin(): Promise<
   }
 }
 
+export async function getApiKeyLifecycleAuditForAdmin(limit = 100): Promise<
+  Array<{
+    id: string
+    workspaceId: string
+    workspaceName: string
+    apiKeyId: string | null
+    apiKeyName: string
+    actorUserId: string | null
+    actorType: string
+    eventType: string
+    keyPrefix: string
+    requestId: string | null
+    ipAddress: string | null
+    userAgent: string | null
+    metadata: Record<string, unknown> | null
+    createdAt: Date
+  }>
+> {
+  await assertAdminAccess()
+
+  try {
+    const rows = await db
+      .select({
+        id: apiKeyAuditEvents.id,
+        workspaceId: apiKeyAuditEvents.workspaceId,
+        workspaceName: workspaces.name,
+        apiKeyId: apiKeyAuditEvents.apiKeyId,
+        apiKeyName: apiKeys.name,
+        actorUserId: apiKeyAuditEvents.actorUserId,
+        actorType: apiKeyAuditEvents.actorType,
+        eventType: apiKeyAuditEvents.eventType,
+        keyPrefix: apiKeyAuditEvents.keyPrefix,
+        requestId: apiKeyAuditEvents.requestId,
+        ipAddress: apiKeyAuditEvents.ipAddress,
+        userAgent: apiKeyAuditEvents.userAgent,
+        metadata: apiKeyAuditEvents.metadata,
+        createdAt: apiKeyAuditEvents.createdAt
+      })
+      .from(apiKeyAuditEvents)
+      .leftJoin(workspaces, eq(apiKeyAuditEvents.workspaceId, workspaces.id))
+      .leftJoin(apiKeys, eq(apiKeyAuditEvents.apiKeyId, apiKeys.id))
+      .orderBy(desc(apiKeyAuditEvents.createdAt))
+      .limit(Math.min(Math.max(limit, 1), 200))
+
+    return rows.map(row => ({
+      ...row,
+      workspaceName: row.workspaceName ?? 'Unknown workspace',
+      apiKeyName: row.apiKeyName ?? 'Unknown key',
+      metadata: row.metadata ?? null
+    }))
+  } catch (error) {
+    if (canUseDevDbFallback(error)) {
+      return []
+    }
+
+    throw error
+  }
+}
+
 export async function getUsageForAdmin(filters: {
   dateFrom?: Date
   dateTo?: Date
@@ -1099,13 +1185,40 @@ export async function saveProviderRoute(formData: FormData) {
 }
 
 export async function pauseAdminApiKey(keyId: string) {
-  await assertAdminAccess()
+  const actorId = await getAdminActorId()
 
   try {
+    const [key] = await db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.id, keyId))
+      .limit(1)
+
+    if (!key) {
+      throw new Error('API key not found.')
+    }
+
+    const requestContext = await getApiKeyAuditRequestContext()
+
     await db
       .update(apiKeys)
       .set({ status: 'paused' })
       .where(eq(apiKeys.id, keyId))
+
+    await recordApiKeyAuditEvent({
+      workspaceId: key.workspaceId,
+      apiKeyId: key.id,
+      actorUserId: actorId,
+      actorType: 'admin',
+      eventType: 'paused',
+      keyPrefix: key.keyPrefix,
+      ...requestContext,
+      metadata: {
+        previousStatus: key.status,
+        newStatus: 'paused',
+        targetUserId: key.userId
+      }
+    })
   } catch (error) {
     if (!canUseDevDbFallback(error)) {
       throw error
@@ -1116,13 +1229,40 @@ export async function pauseAdminApiKey(keyId: string) {
 }
 
 export async function resumeAdminApiKey(keyId: string) {
-  await assertAdminAccess()
+  const actorId = await getAdminActorId()
 
   try {
+    const [key] = await db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.id, keyId))
+      .limit(1)
+
+    if (!key) {
+      throw new Error('API key not found.')
+    }
+
+    const requestContext = await getApiKeyAuditRequestContext()
+
     await db
       .update(apiKeys)
       .set({ status: 'active' })
       .where(eq(apiKeys.id, keyId))
+
+    await recordApiKeyAuditEvent({
+      workspaceId: key.workspaceId,
+      apiKeyId: key.id,
+      actorUserId: actorId,
+      actorType: 'admin',
+      eventType: 'resumed',
+      keyPrefix: key.keyPrefix,
+      ...requestContext,
+      metadata: {
+        previousStatus: key.status,
+        newStatus: 'active',
+        targetUserId: key.userId
+      }
+    })
   } catch (error) {
     if (!canUseDevDbFallback(error)) {
       throw error
@@ -1133,9 +1273,21 @@ export async function resumeAdminApiKey(keyId: string) {
 }
 
 export async function revokeAdminApiKey(keyId: string) {
-  await assertAdminAccess()
+  const actorId = await getAdminActorId()
 
   try {
+    const [key] = await db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.id, keyId))
+      .limit(1)
+
+    if (!key) {
+      throw new Error('API key not found.')
+    }
+
+    const requestContext = await getApiKeyAuditRequestContext()
+
     await db
       .update(apiKeys)
       .set({
@@ -1143,6 +1295,21 @@ export async function revokeAdminApiKey(keyId: string) {
         revokedAt: new Date()
       })
       .where(eq(apiKeys.id, keyId))
+
+    await recordApiKeyAuditEvent({
+      workspaceId: key.workspaceId,
+      apiKeyId: key.id,
+      actorUserId: actorId,
+      actorType: 'admin',
+      eventType: 'revoked',
+      keyPrefix: key.keyPrefix,
+      ...requestContext,
+      metadata: {
+        previousStatus: key.status,
+        newStatus: 'revoked',
+        targetUserId: key.userId
+      }
+    })
   } catch (error) {
     if (!canUseDevDbFallback(error)) {
       throw error

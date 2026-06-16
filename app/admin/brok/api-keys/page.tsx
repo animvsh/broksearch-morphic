@@ -8,13 +8,17 @@ export const dynamic = 'force-dynamic'
 export default async function AdminApiKeysPage() {
   await requirePageAuth('/admin/brok/api-keys')
   const {
+    getApiKeyLifecycleAuditForAdmin,
     getAllApiKeysForAdmin,
     pauseAdminApiKey,
     resumeAdminApiKey,
     revokeAdminApiKey
   } = await import('@/lib/actions/admin-brok')
 
-  const keys = await getAllApiKeysForAdmin()
+  const [keys, auditEvents] = await Promise.all([
+    getAllApiKeysForAdmin(),
+    getApiKeyLifecycleAuditForAdmin(50)
+  ])
 
   return (
     <div className="space-y-6">
@@ -133,6 +137,74 @@ export default async function AdminApiKeysPage() {
                           </Button>
                         </form>
                       </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-card">
+        <div className="border-b p-4">
+          <h2 className="text-lg font-semibold">Recent lifecycle events</h2>
+          <p className="text-sm text-muted-foreground">
+            Persistent API key audit events across all workspaces.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="text-left p-4 font-medium">Time</th>
+                <th className="text-left p-4 font-medium">Event</th>
+                <th className="text-left p-4 font-medium">Workspace</th>
+                <th className="text-left p-4 font-medium">Key</th>
+                <th className="text-left p-4 font-medium">Actor</th>
+                <th className="text-left p-4 font-medium">Request</th>
+                <th className="text-left p-4 font-medium">IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {auditEvents.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="p-4 text-center text-muted-foreground"
+                  >
+                    No lifecycle audit events found
+                  </td>
+                </tr>
+              ) : (
+                auditEvents.map(event => (
+                  <tr key={event.id} className="border-b">
+                    <td className="p-4">
+                      {new Date(event.createdAt).toLocaleString()}
+                    </td>
+                    <td className="p-4">
+                      <Badge variant="outline">
+                        {event.eventType.replaceAll('_', ' ')}
+                      </Badge>
+                    </td>
+                    <td className="p-4">{event.workspaceName}</td>
+                    <td className="p-4">
+                      <div className="font-medium">{event.apiKeyName}</div>
+                      <div className="font-mono text-xs text-muted-foreground">
+                        {event.keyPrefix}••••
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <div>{event.actorType}</div>
+                      <div className="max-w-48 truncate text-xs text-muted-foreground">
+                        {event.actorUserId ?? 'system'}
+                      </div>
+                    </td>
+                    <td className="p-4 font-mono text-xs text-muted-foreground">
+                      {event.requestId ?? '—'}
+                    </td>
+                    <td className="p-4 text-sm text-muted-foreground">
+                      {event.ipAddress ?? '—'}
                     </td>
                   </tr>
                 ))

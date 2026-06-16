@@ -102,6 +102,29 @@ export default function ApiKeysPage() {
           then evaluates scopes, models, limits, and usage reservations.
         </p>
 
+        <h2>Lifecycle Audit Events</h2>
+        <p>
+          Brok persists API key lifecycle audit events for user and admin
+          operations. The current audit log records key creation, the one-time
+          create-response reveal, pause, resume, revoke, playground session
+          expiry updates, and system revocation of expired or rotated playground
+          backing keys. Event types are reserved for future key rotation,
+          explicit secret acknowledgement, and denied expired-key usage when
+          those lifecycle paths are available.
+        </p>
+        <p>
+          Audit events include actor type, actor user ID when available, API key
+          ID, key prefix, event type, timestamp, request ID, IP address, user
+          agent, and safe metadata. Full API secrets, hashes, salts,
+          authorization headers, and token-like metadata are redacted before
+          persistence.
+        </p>
+        <p>
+          Users can inspect recent events from{' '}
+          <Link href="/api-platform/audit">API Manager Audit</Link>. Admins can
+          inspect recent lifecycle events from the Brok API Keys admin view.
+        </p>
+
         <h2>Scopes</h2>
         <p>
           Scopes are enforced route by route. Grant only the permissions a
@@ -201,6 +224,10 @@ OPENAI_MODEL="brok-code"`}</code>
             The raw user-created API key after the one-time create response.
           </li>
           <li>Full API secrets in dashboard list views or admin logs.</li>
+          <li>
+            Full API secrets, hashes, salts, or authorization headers in
+            lifecycle audit events.
+          </li>
           <li>Browser-local copies of hosted playground session keys.</li>
           <li>Raw secret values from deployment checks or secret scans.</li>
         </ul>
