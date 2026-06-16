@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server'
 
+import {
+  enforceBrokCodeAccountOwnership,
+  resolveBrokCodeRequestAuth
+} from '@/lib/brokcode/account-guard'
 import { getBrokCodeRuntimeProcess } from '@/lib/brokcode/runtime/process-manager'
-import { getBrokCodeRuntimeSandboxById } from '@/lib/brokcode/runtime/store'
+import {
+  type BrokCodeRuntimeSandbox,
+  getBrokCodeRuntimeSandboxById
+} from '@/lib/brokcode/runtime/store'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -74,15 +81,51 @@ function injectConsoleBridge(html: string, runtimeId: string) {
   return `${html}${script}`
 }
 
+async function authorizeRuntime(request: Request, runtimeId: string) {
+  const { authResult } = await resolveBrokCodeRequestAuth(request, {
+    allowBrowserSession: true
+  })
+  if (!authResult.success) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { error: authResult.error },
+        { status: authResult.status }
+      )
+    }
+  }
+
+  const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
+  if (accountMismatch) {
+    return { ok: false as const, response: accountMismatch }
+  }
+
+  const runtime = await getBrokCodeRuntimeSandboxById({ id: runtimeId })
+  if (
+    !runtime ||
+    runtime.workspaceId !== authResult.workspace.id ||
+    runtime.userId !== authResult.apiKey.userId
+  ) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { error: 'Runtime not found' },
+        { status: 404 }
+      )
+    }
+  }
+
+  return { ok: true as const, runtime }
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string; path?: string[] }> }
 ) {
   const { id, path } = await params
-  const runtime = await getBrokCodeRuntimeSandboxById({ id })
-  if (!runtime) {
-    return NextResponse.json({ error: 'Runtime not found' }, { status: 404 })
-  }
+  const access = await authorizeRuntime(request, id)
+  if (!access.ok) return access.response
+  const runtime: BrokCodeRuntimeSandbox = access.runtime
 
   const processEntry = getBrokCodeRuntimeProcess(runtime.id)
   if (!processEntry || processEntry.status !== 'ready') {
@@ -105,8 +148,6 @@ export async function GET(
   })
   const headers = new Headers(response.headers)
   headers.set('Cache-Control', 'no-store')
-  headers.delete('content-security-policy')
-  headers.delete('x-frame-options')
   headers.delete('content-length')
 
   const contentType = headers.get('content-type') ?? ''
