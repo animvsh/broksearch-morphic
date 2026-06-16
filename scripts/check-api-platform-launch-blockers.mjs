@@ -44,7 +44,47 @@ const checks = [
   fileContains('docs/api-platform-launch-blockers.md', 'BRO-163'),
   fileContains('docs/api-platform-launch-blockers.md', 'BRO-165'),
   fileContains('docs/api-platform-launch-blockers.md', 'BRO-168'),
-  fileContains('docs/api-platform-launch-blockers.md', 'BRO-182')
+  fileContains('docs/api-platform-launch-blockers.md', 'BRO-182'),
+  fileNotContains(
+    'components/playground/chat-playground.tsx',
+    'apiKey:',
+    'hosted playground does not send browser-supplied API keys'
+  ),
+  fileNotContains(
+    'components/playground/chat-playground.tsx',
+    'brok_sk_',
+    'hosted playground does not render API key placeholders'
+  ),
+  fileNotContains(
+    'components/playground/chat-playground.tsx',
+    'localStorage.setItem',
+    'hosted playground does not persist API keys'
+  ),
+  fileNotContains(
+    'components/playground/chat-playground.tsx',
+    'sessionStorage',
+    'hosted playground does not persist API keys in session storage'
+  ),
+  fileNotContains(
+    'components/brokcode/brokcode-app.tsx',
+    'apiKeyInput',
+    'BrokCode browser UI does not collect API keys'
+  ),
+  fileNotContains(
+    'components/brokcode/brokcode-app.tsx',
+    'localStorage.getItem(BROK_KEY_STORAGE)',
+    'BrokCode browser UI does not read legacy stored API keys'
+  ),
+  fileNotContains(
+    'components/brokcode/brokcode-app.tsx',
+    'localStorage.setItem(BROK_KEY_STORAGE',
+    'BrokCode browser UI does not persist API keys'
+  ),
+  fileNotContains(
+    'components/brokcode/brokcode-app.tsx',
+    'SavedBrokCodeKey',
+    'BrokCode browser UI does not hold saved API-key metadata state'
+  )
 ]
 
 if (requireExternal) {
@@ -87,6 +127,20 @@ function fileContains(path, expected) {
 
   return {
     name: `file contains "${expected}": ${path}`,
+    ok
+  }
+}
+
+function fileNotContains(path, forbidden, label) {
+  let ok = false
+  try {
+    ok = !readFileSync(path, 'utf8').includes(forbidden)
+  } catch {
+    ok = false
+  }
+
+  return {
+    name: `${label}: ${path}`,
     ok
   }
 }

@@ -15,6 +15,16 @@ describe('api platform launch blocker checker', () => {
     )
     expect(output).toContain('PASS package script exists: scan:secrets')
     expect(output).toContain('PASS file contains "BRO-182"')
+    expect(output).toContain(
+      'PASS hosted playground does not send browser-supplied API keys'
+    )
+    expect(output).toContain('PASS hosted playground does not persist API keys')
+    expect(output).toContain(
+      'PASS BrokCode browser UI does not collect API keys'
+    )
+    expect(output).toContain(
+      'PASS BrokCode browser UI does not read legacy stored API keys'
+    )
   })
 
   it('fails external mode without printing secret values', () => {
