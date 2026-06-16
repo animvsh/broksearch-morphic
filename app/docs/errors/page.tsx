@@ -113,7 +113,7 @@ All errors follow a consistent format:
 \`\`\`javascript
 async function makeBrokRequest(payload) {
   try {
-    const response = await fetch('https://api.brok.ai/v1/chat/completions', {
+    const response = await fetch('https://www.brok.fyi/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': \`Bearer \${process.env.BROK_API_KEY}\`,
@@ -496,7 +496,7 @@ export default function ErrorsPage() {
         <pre className="bg-muted p-4 rounded-lg">
           <code>{`async function makeBrokRequest(payload) {
   try {
-    const response = await fetch('https://api.brok.ai/v1/chat/completions', {
+    const response = await fetch('https://www.brok.fyi/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': \`Bearer \${process.env.BROK_API_KEY}\`,

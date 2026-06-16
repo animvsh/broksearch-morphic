@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
 
 export default function ApiPage() {
-  redirect('/api-platform/keys')
+  redirect('/api-platform/playground')
 }

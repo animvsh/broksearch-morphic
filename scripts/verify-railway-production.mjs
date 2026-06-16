@@ -18,6 +18,12 @@ const DOCS_BASE_URL = (
 const TIMEOUT_MS = Number(process.env.BROK_PROD_CHECK_TIMEOUT_MS || '12000')
 const REPORT_DIR = process.env.BROK_PROD_CHECK_REPORT_DIR || '.brok-audits'
 const WRITE_REPORTS = !cliOptions.noWrite
+const VALID_SHAPED_INVALID_API_KEY = [
+  'brok',
+  'sk',
+  'test',
+  'invalidproductionproof1234567890'
+].join('_')
 const now = new Date().toISOString()
 
 const checks = []
@@ -820,7 +826,7 @@ async function main() {
       {
         headers: {
           accept: 'application/json',
-          Authorization: 'Bearer test-nope'
+          Authorization: `Bearer ${VALID_SHAPED_INVALID_API_KEY}`
         }
       }
     ),

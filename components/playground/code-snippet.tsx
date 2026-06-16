@@ -44,12 +44,12 @@ export function CodeSnippet({
         }
   const payloadJson = JSON.stringify(payload, null, 2)
 
-  const curl = `curl https://api.brok.ai${endpoint} \\
+  const curl = `curl https://www.brok.fyi/api${endpoint} \\
   -H "Authorization: Bearer $BROK_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '${payloadJson}'`
 
-  const javascript = `const response = await fetch("https://api.brok.ai${endpoint}", {
+  const javascript = `const response = await fetch("https://www.brok.fyi/api${endpoint}", {
   method: "POST",
   headers: {
     "Authorization": \`Bearer \${process.env.BROK_API_KEY}\`,
@@ -66,7 +66,7 @@ import os
 import requests
 
 response = requests.post(
-    "https://api.brok.ai${endpoint}",
+    "https://www.brok.fyi/api${endpoint}",
     headers={
         "Authorization": f"Bearer {os.environ['BROK_API_KEY']}",
         "Content-Type": "application/json"
@@ -78,14 +78,14 @@ print(response.json())`
 
   const codex = `# Codex / OpenAI-compatible coding tools
 export OPENAI_API_KEY="$BROK_API_KEY"
-export OPENAI_BASE_URL="https://api.brok.ai/v1"
+export OPENAI_BASE_URL="https://www.brok.fyi/api/v1"
 export OPENAI_MODEL="${model}"
 
 # Use model "${model}" in your coding tool config.`
 
   const claude = `# Claude-style tools that support Anthropic-compatible endpoints
 export ANTHROPIC_API_KEY="$BROK_API_KEY"
-export ANTHROPIC_BASE_URL="https://api.brok.ai"
+export ANTHROPIC_BASE_URL="https://www.brok.fyi/api"
 export ANTHROPIC_MODEL="${model}"
 
 # Brok also supports POST /v1/messages with x-api-key.`

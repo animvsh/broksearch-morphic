@@ -127,8 +127,8 @@ export default function ModelsPage() {
             </h3>
             <p className="mt-1">
               Set <code>OPENAI_BASE_URL</code> to{' '}
-              <code>https://api.brok.ai/v1</code>, pass a <code>brok_sk_</code>{' '}
-              key, and choose any Brok alias above.
+              <code>https://www.brok.fyi/api/v1</code>, pass a{' '}
+              <code>brok_sk_</code> key, and choose any Brok alias above.
             </p>
           </div>
           <div>

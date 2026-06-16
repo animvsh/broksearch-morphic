@@ -21,6 +21,11 @@ export type AuthResult =
       status: number
     }
 
+type AuthApiKeyRecord = Omit<
+  typeof apiKeys.$inferSelect,
+  'rotatedFromKeyId' | 'rotatedToKeyId' | 'rotatedAt'
+>
+
 export function apiKeyHasScope(
   apiKey: typeof apiKeys.$inferSelect,
   requiredScope: string
@@ -67,6 +72,60 @@ async function getAuthDependencies() {
   }
 }
 
+function getAuthApiKeyColumns(apiKeyTable: typeof apiKeys) {
+  return {
+    id: apiKeyTable.id,
+    workspaceId: apiKeyTable.workspaceId,
+    userId: apiKeyTable.userId,
+    name: apiKeyTable.name,
+    keyPrefix: apiKeyTable.keyPrefix,
+    keyHash: apiKeyTable.keyHash,
+    keySalt: apiKeyTable.keySalt,
+    environment: apiKeyTable.environment,
+    status: apiKeyTable.status,
+    scopes: apiKeyTable.scopes,
+    allowedModels: apiKeyTable.allowedModels,
+    rpmLimit: apiKeyTable.rpmLimit,
+    dailyRequestLimit: apiKeyTable.dailyRequestLimit,
+    monthlyBudgetCents: apiKeyTable.monthlyBudgetCents,
+    lastUsedAt: apiKeyTable.lastUsedAt,
+    expiresAt: apiKeyTable.expiresAt,
+    createdAt: apiKeyTable.createdAt,
+    revokedAt: apiKeyTable.revokedAt
+  }
+}
+
+function normalizeAuthApiKeyRecord(
+  record: AuthApiKeyRecord
+): typeof apiKeys.$inferSelect {
+  return {
+    ...record,
+    rotatedFromKeyId: null,
+    rotatedToKeyId: null,
+    rotatedAt: null
+  } as typeof apiKeys.$inferSelect
+}
+
+function logAuthStorageError(stage: string, error: unknown) {
+  console.error('[brok-auth] API key storage lookup failed', {
+    stage,
+    error:
+      error instanceof Error
+        ? {
+            name: error.name,
+            message: error.message,
+            cause:
+              error.cause instanceof Error
+                ? {
+                    name: error.cause.name,
+                    message: error.cause.message
+                  }
+                : undefined
+          }
+        : { message: String(error) }
+  })
+}
+
 export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   const authHeader = request.headers.get('authorization')
   const apiKeyHeader = request.headers.get('x-api-key')
@@ -108,6 +167,7 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   try {
     const { eq, inArray, getKeyPrefix, hashApiKey, verifyApiKey, db, apiKeys } =
       await getAuthDependencies()
+    const authApiKeyColumns = getAuthApiKeyColumns(apiKeys)
     // Two-stage lookup:
     //   1. Exact hash lookup for legacy global-salt keys.
     //   2. Prefix-indexed candidate lookup for per-key salted keys. We cannot
@@ -115,16 +175,19 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
     //      prefix must be selective enough to avoid scanning active keys.
     const legacyHash = hashApiKey(key, null)
 
-    ;[keyRecord] = await db
-      .select()
+    const [legacyCandidate] = await db
+      .select(authApiKeyColumns)
       .from(apiKeys)
       .where(eq(apiKeys.keyHash, legacyHash))
       .limit(1)
+    keyRecord = legacyCandidate
+      ? normalizeAuthApiKeyRecord(legacyCandidate)
+      : undefined
 
     if (!keyRecord) {
       const primaryPrefix = getKeyPrefix(key)
       const exactPrefixCandidates = await db
-        .select()
+        .select(authApiKeyColumns)
         .from(apiKeys)
         .where(eq(apiKeys.keyPrefix, primaryPrefix))
         .limit(1)
@@ -132,14 +195,14 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
       for (const candidate of exactPrefixCandidates) {
         if (candidate.keySalt) {
           if (verifyApiKey(key, candidate.keyHash, candidate.keySalt)) {
-            keyRecord = candidate
+            keyRecord = normalizeAuthApiKeyRecord(candidate)
             break
           }
           continue
         }
 
         if (verifyApiKey(key, candidate.keyHash, null)) {
-          keyRecord = candidate
+          keyRecord = normalizeAuthApiKeyRecord(candidate)
           break
         }
       }
@@ -148,7 +211,7 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
         // No per-key-salt match with the full prefix; keep compatibility fallback.
         const fallbackPrefixes = getApiKeyLookupPrefixes(key, getKeyPrefix)
         const candidates = await db
-          .select()
+          .select(authApiKeyColumns)
           .from(apiKeys)
           .where(inArray(apiKeys.keyPrefix, fallbackPrefixes))
           .limit(100)
@@ -156,7 +219,7 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
         for (const candidate of candidates) {
           if (candidate.keySalt) {
             if (verifyApiKey(key, candidate.keyHash, candidate.keySalt)) {
-              keyRecord = candidate
+              keyRecord = normalizeAuthApiKeyRecord(candidate)
               break
             }
             continue
@@ -165,13 +228,14 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
           // Fallback support for pre-migration legacy rows that still use the
           // global salt path but may have an older key prefix layout.
           if (verifyApiKey(key, candidate.keyHash, null)) {
-            keyRecord = candidate
+            keyRecord = normalizeAuthApiKeyRecord(candidate)
             break
           }
         }
       }
     }
-  } catch {
+  } catch (error) {
+    logAuthStorageError('api_key_lookup', error)
     if (fallbackAuth) {
       return fallbackAuth
     }
@@ -202,7 +266,8 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
       .from(workspaces)
       .where(eq(workspaces.id, keyRecord.workspaceId))
       .limit(1)
-  } catch {
+  } catch (error) {
+    logAuthStorageError('workspace_lookup', error)
     if (fallbackAuth) {
       return fallbackAuth
     }

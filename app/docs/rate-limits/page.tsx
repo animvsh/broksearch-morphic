@@ -44,7 +44,7 @@ Retry-After: 32
 
 \`\`\`javascript
 async function makeRequest() {
-  const response = await fetch('https://api.brok.ai/v1/chat/completions', {
+  const response = await fetch('https://www.brok.fyi/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer brok_sk_live_your_key',
@@ -233,7 +233,7 @@ Retry-After: 32`}</code>
         <h2>Checking Your Rate Limit</h2>
         <pre className="bg-muted p-4 rounded-lg">
           <code>{`async function makeRequest() {
-  const response = await fetch('https://api.brok.ai/v1/chat/completions', {
+  const response = await fetch('https://www.brok.fyi/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer brok_sk_live_your_key',
