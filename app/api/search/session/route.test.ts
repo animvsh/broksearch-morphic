@@ -10,7 +10,13 @@ const mocks = vi.hoisted(() => ({
   getCachedSearchPipelineResponse: vi.fn(),
   runSearchPipeline: vi.fn(),
   checkAndEnforceOverallChatLimit: vi.fn(),
-  checkAndEnforceGuestLimit: vi.fn()
+  checkAndEnforceGuestLimit: vi.fn(),
+  cookies: vi.fn(),
+  selectModel: vi.fn()
+}))
+
+vi.mock('next/headers', () => ({
+  cookies: mocks.cookies
 }))
 
 vi.mock('@/lib/auth/app-access', () => ({
@@ -44,6 +50,10 @@ vi.mock('@/lib/rate-limit/chat-limits', () => ({
 
 vi.mock('@/lib/rate-limit/guest-limit', () => ({
   checkAndEnforceGuestLimit: mocks.checkAndEnforceGuestLimit
+}))
+
+vi.mock('@/lib/utils/model-selection', () => ({
+  selectModel: mocks.selectModel
 }))
 
 import { POST } from './route'
@@ -109,6 +119,14 @@ describe('POST /api/search/session', () => {
     mocks.getCachedSearchPipelineResponse.mockReturnValue(null)
     mocks.checkAndEnforceOverallChatLimit.mockResolvedValue(null)
     mocks.checkAndEnforceGuestLimit.mockResolvedValue(null)
+    mocks.cookies.mockResolvedValue({
+      get: vi.fn()
+    })
+    mocks.selectModel.mockResolvedValue({
+      id: 'brok-m2-7-highspeed',
+      name: 'Brok Fast',
+      providerId: 'openai-compatible'
+    })
     mocks.runSearchPipeline.mockResolvedValue(result())
   })
 
@@ -151,10 +169,42 @@ describe('POST /api/search/session', () => {
     expect(mocks.runSearchPipeline).toHaveBeenCalledWith(
       expect.objectContaining({
         query: 'What is Brok search?',
-        depth: 'standard'
+        depth: 'standard',
+        synthesisModel: 'brok-m2-7-highspeed'
       })
     )
     expect(mocks.checkAndEnforceOverallChatLimit).toHaveBeenCalledWith('user_1')
+  })
+
+  it('streams the selected search answer model and uses it in the pipeline', async () => {
+    mocks.selectModel.mockResolvedValueOnce({
+      id: 'brok-m2-5-highspeed',
+      name: 'Brok 2.5 Fast',
+      providerId: 'openai-compatible'
+    })
+
+    const response = await POST(
+      makeRequest({
+        query: 'What is Brok search?',
+        mode: 'search'
+      })
+    )
+    const stream = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(mocks.getCachedSearchPipelineResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        synthesisModel: 'brok-m2-5-highspeed'
+      })
+    )
+    expect(mocks.runSearchPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        synthesisModel: 'brok-m2-5-highspeed'
+      })
+    )
+    expect(stream).toContain('"answer_model"')
+    expect(stream).toContain('"id":"brok-m2-5-highspeed"')
+    expect(stream).toContain('"name":"Brok 2.5 Fast"')
   })
 
   it('streams answer deltas as the pipeline writes them', async () => {
