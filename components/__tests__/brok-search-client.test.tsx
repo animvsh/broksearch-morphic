@@ -58,6 +58,35 @@ function streamResponse(events: Array<{ event: string; data: unknown }>) {
   )
 }
 
+function deferredStreamResponse(
+  events: Array<{ event: string; data: unknown }>
+) {
+  const encoder = new TextEncoder()
+  let flush: (() => void) | undefined
+  const response = new Response(
+    new ReadableStream({
+      start(controller) {
+        flush = () => {
+          const body = events
+            .map(
+              event =>
+                `event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`
+            )
+            .join('')
+          controller.enqueue(encoder.encode(body))
+          controller.close()
+        }
+      }
+    }),
+    {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' }
+    }
+  )
+
+  return { response, flush: () => flush?.() }
+}
+
 describe('BrokSearchClient', () => {
   const storage = new Map<string, string>()
 
@@ -192,6 +221,65 @@ describe('BrokSearchClient', () => {
       url: 'https://docs.example.com/search',
       content: 'Brok search docs.'
     })
+  })
+
+  it('shows an answer skeleton immediately while the stream is pending', async () => {
+    const deferred = deferredStreamResponse([
+      {
+        event: 'answer_delta',
+        data: { delta: 'Brok answers with sources.' }
+      },
+      {
+        event: 'done',
+        data: {}
+      }
+    ])
+    const fetchMock = vi.fn(async () => deferred.response)
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="What is Brok?"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-answer-loading-card')).toBeVisible()
+
+    deferred.flush()
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Brok answers with sources.'
+    )
+  })
+
+  it('labels source-free answers as model knowledge', async () => {
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        {
+          event: 'answer_delta',
+          data: { delta: 'Brok can answer from model knowledge.' }
+        },
+        {
+          event: 'done',
+          data: {}
+        }
+      ])
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="What is Brok?"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(
+      await screen.findByTestId('brok-no-sources-notice')
+    ).toHaveTextContent('No web sources were attached')
   })
 
   it('asks follow-ups in the same durable search thread', async () => {

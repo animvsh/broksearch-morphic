@@ -7,6 +7,7 @@ import {
   ArrowUp,
   ExternalLink,
   Globe2,
+  Info,
   Loader2,
   Sparkles
 } from 'lucide-react'
@@ -575,6 +576,8 @@ export function BrokSearchClient({
           <SourceList sources={progress.sources} />
         )}
 
+        {isLoading && !answer && <AnswerLoadingCard />}
+
         {answer && (
           <article
             className="flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-5 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.28)]"
@@ -593,6 +596,9 @@ export function BrokSearchClient({
               <VoiceOutputButton text={answer} />
             </div>
             <MarkdownMessage message={answer} />
+            {progress.status === 'done' && progress.sources.length === 0 && (
+              <NoSourcesNotice />
+            )}
           </article>
         )}
 
@@ -645,6 +651,41 @@ export function BrokSearchClient({
         onSelect={handleFollowUp}
         isLoading={isLoading}
       />
+    </div>
+  )
+}
+
+function AnswerLoadingCard() {
+  return (
+    <article
+      className="rounded-2xl border border-zinc-200 bg-white/85 p-5 shadow-[0_18px_54px_-42px_rgba(15,23,42,0.26)]"
+      aria-label="Preparing answer"
+      data-testid="brok-answer-loading-card"
+    >
+      <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
+        <Loader2 className="size-3.5 animate-spin" />
+        <span>Preparing answer</span>
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="h-3 w-11/12 animate-pulse rounded-full bg-zinc-100" />
+        <div className="h-3 w-10/12 animate-pulse rounded-full bg-zinc-100" />
+        <div className="h-3 w-7/12 animate-pulse rounded-full bg-zinc-100" />
+      </div>
+    </article>
+  )
+}
+
+function NoSourcesNotice() {
+  return (
+    <div
+      className="mt-3 flex items-start gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-3 py-2 text-xs leading-5 text-zinc-600"
+      data-testid="brok-no-sources-notice"
+    >
+      <Info className="mt-0.5 size-3.5 shrink-0 text-zinc-500" />
+      <span>
+        No web sources were attached to this answer. Treat it as model knowledge
+        and verify important details before relying on it.
+      </span>
     </div>
   )
 }
