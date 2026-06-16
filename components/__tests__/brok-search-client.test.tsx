@@ -293,8 +293,8 @@ describe('BrokSearchClient', () => {
     expect(screen.queryByTestId('brok-source-strip')).not.toBeInTheDocument()
     expect(
       screen
-        .getByTestId('brok-search-answer')
-        .compareDocumentPosition(screen.getByTestId('brok-search-sources')) &
+        .getByTestId('brok-search-sources')
+        .compareDocumentPosition(screen.getByTestId('brok-search-answer')) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent(
@@ -304,7 +304,9 @@ describe('BrokSearchClient', () => {
       'How does Brok cite sources?'
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /\[1\] Brok docs/i }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /Verify source 1: Brok docs/i })
+    )
     expect(screen.getByTestId('source-side-panel')).toHaveTextContent(
       'Brok docs'
     )
@@ -738,7 +740,7 @@ describe('BrokSearchClient', () => {
       })
     })
 
-    expect(screen.getByTestId('brok-source-strip')).toHaveTextContent(
+    expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
       'docs.example.com'
     )
 
