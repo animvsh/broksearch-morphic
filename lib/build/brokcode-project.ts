@@ -74,6 +74,70 @@ function cloneExecutionHeaders(request: PersistBrokBuildProjectOptions['request'
   return headers
 }
 
+async function readBrokCodeExecutionStream(response: Response) {
+  if (!response.body) {
+    throw new Error('BrokCode execution stream did not include a response body.')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let result: {
+    preview_url?: unknown
+    generated_files?: unknown
+    file_changes?: unknown
+    runtime?: unknown
+    note?: unknown
+  } | null = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const events = buffer.split(/\n\n/)
+    buffer = events.pop() ?? ''
+
+    for (const eventBlock of events) {
+      const lines = eventBlock.split(/\r?\n/)
+      const event = lines
+        .find(line => line.startsWith('event:'))
+        ?.slice(6)
+        .trim()
+      const data = lines
+        .find(line => line.startsWith('data:'))
+        ?.slice(5)
+        .trim()
+      if (!event || !data) continue
+
+      const payload = JSON.parse(data) as {
+        message?: unknown
+        preview_url?: unknown
+        generated_files?: unknown
+        file_changes?: unknown
+        runtime?: unknown
+        note?: unknown
+      }
+      if (event === 'error') {
+        throw new Error(
+          typeof payload.message === 'string'
+            ? payload.message
+            : 'BrokCode execution stream failed.'
+        )
+      }
+      if (event === 'result') {
+        result = payload
+      }
+    }
+  }
+
+  if (!result) {
+    throw new Error('BrokCode execution stream completed without a result.')
+  }
+
+  return result
+}
+
 async function runBrokCodeExecutionForBuild({
   prompt,
   userPlan,
@@ -119,12 +183,16 @@ async function runBrokCodeExecutionForBuild({
       source: 'browser',
       session_id: `build-${projectId}`,
       command_type: 'build',
+      stream: true,
+      prefer_pi: true,
+      pi_no_tools: 'all',
+      pi_scratch_cwd: true,
       allow_brok_fallback: false
     })
   })
-  const payload = await response.json().catch(() => null)
 
   if (!response.ok) {
+    const payload = await response.json().catch(() => null)
     const message =
       typeof payload?.error?.message === 'string'
         ? payload.error.message
@@ -132,13 +200,7 @@ async function runBrokCodeExecutionForBuild({
     throw new Error(message)
   }
 
-  return payload as {
-    preview_url?: unknown
-    generated_files?: unknown
-    file_changes?: unknown
-    runtime?: unknown
-    note?: unknown
-  }
+  return readBrokCodeExecutionStream(response)
 }
 
 function buildBrokCodeExecutionPrompt({
@@ -158,30 +220,30 @@ function buildBrokCodeExecutionPrompt({
     backendPlan?.functions.map(fn => fn.slug).filter(Boolean) ?? []
 
   return [
-    'Build a production-quality static BrokCode managed preview for this app.',
+    `Create a polished ${userPlan.title} app prototype.`,
+    'Return named files for index.html, styles.css, and app.js.',
     '',
     `Original user request: ${prompt}`,
-    `App title: ${userPlan.title}`,
-    `One-liner: ${userPlan.oneLiner}`,
-    `Audience: ${userPlan.audience}`,
-    `Design direction: ${userPlan.designDirection}`,
+    `Use this positioning: ${userPlan.oneLiner}`,
+    `Audience: ${userPlan.audience}.`,
+    `Visual direction: ${userPlan.designDirection}`,
     '',
-    'Required product bullets:',
+    'Acceptance requirements for this generated app:',
+    '- Save these files: index.html, styles.css, app.js.',
+    '- The page must be responsive, nonblank, and interactive without external services.',
+    '- Include realistic sample data and visible UI states for the planned backend resources.',
+    '- Do not install packages, start servers, use shell commands, or create framework scaffolds.',
+    '- Write the complete file contents in your final answer with clear filename headings.',
+    '- Keep the implementation concise enough to finish in one BrokCode run.',
+    '',
+    'Required visible product features:',
     ...userPlan.bullets.slice(0, 10).map(bullet => `- ${bullet}`),
     '',
-    'Backend plan to reflect in UI state and copy:',
+    'Backend resources to reflect in UI labels, sample data, and copy:',
     `- Provider: ${backendPlan?.provider ?? 'insforge'}`,
     `- Tables: ${tables.length ? tables.join(', ') : 'none'}`,
     `- Storage buckets: ${buckets.length ? buckets.join(', ') : 'none'}`,
-    `- Functions: ${functions.length ? functions.join(', ') : 'none'}`,
-    '',
-    'Output requirements:',
-    '- Create exactly these app files unless one tiny extra asset is essential: index.html, styles.css, app.js.',
-    '- Make the preview self-contained, responsive, nonblank, and interactive.',
-    '- Include realistic sample data for the planned tables and states.',
-    '- Do not install packages, start servers, or create framework scaffolds.',
-    '- Do not call external services or require real backend credentials.',
-    '- Keep the implementation concise enough to finish in one BrokCode run.'
+    `- Functions: ${functions.length ? functions.join(', ') : 'none'}`
   ].join('\n')
 }
 

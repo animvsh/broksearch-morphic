@@ -75,6 +75,13 @@ describe('classifyApp', () => {
     expect(result.appType).toBe('landing_page')
   })
 
+  it('does not confuse social proof landing copy with a social app', () => {
+    const result = classifyApp(
+      'Create a polished single-page bakery landing page with a hero, menu cards, social proof, and a working newsletter form.'
+    )
+    expect(result.appType).toBe('landing_page')
+  })
+
   it('falls back to landing_page for unrelated prompts', () => {
     const result = classifyApp('hello world')
     expect(result.appType).toBe('landing_page')

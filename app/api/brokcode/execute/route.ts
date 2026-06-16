@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import {
@@ -977,6 +980,36 @@ function getPiTools() {
   return tools
 }
 
+async function runBrokCodePiPrompt({
+  messages,
+  piNoTools,
+  piScratchCwd
+}: {
+  messages: OpenAiMessage[]
+  piNoTools?: 'all' | 'builtin'
+  piScratchCwd?: boolean
+}) {
+  const cwd = piScratchCwd
+    ? await mkdtemp(path.join(tmpdir(), 'brokcode-pi-'))
+    : undefined
+
+  try {
+    return await runPiAgentPrompt({
+      mode: 'brokcode',
+      prompt: buildPiPrompt(messages),
+      cwd,
+      tools: getPiTools(),
+      noTools: piNoTools
+    })
+  } finally {
+    if (cwd) {
+      await rm(cwd, { recursive: true, force: true }).catch(error => {
+        console.error('Failed to remove BrokCode Pi scratch directory:', error)
+      })
+    }
+  }
+}
+
 function createExecutionStream({
   auth,
   requestId,
@@ -991,6 +1024,8 @@ function createExecutionStream({
   requireOpenCode,
   preferPi,
   requirePi,
+  piNoTools,
+  piScratchCwd,
   allowBrokFallback,
   taskId,
   workerLeaseId,
@@ -1010,6 +1045,8 @@ function createExecutionStream({
   requireOpenCode: boolean
   preferPi: boolean
   requirePi: boolean
+  piNoTools?: 'all' | 'builtin'
+  piScratchCwd?: boolean
   allowBrokFallback: boolean
   taskId?: string
   workerLeaseId?: string
@@ -1098,10 +1135,10 @@ function createExecutionStream({
               send('status', {
                 message: 'Building with the coding agent.'
               })
-              const result = await runPiAgentPrompt({
-                mode: 'brokcode',
-                prompt: buildPiPrompt(messages),
-                tools: getPiTools()
+              const result = await runBrokCodePiPrompt({
+                messages,
+                piNoTools,
+                piScratchCwd
               })
               const persisted = await persistGeneratedProjectOutput({
                 auth,
@@ -2097,6 +2134,11 @@ export async function POST(request: NextRequest) {
       body?.prefer_pi !== false && process.env.BROKCODE_PREFER_PI !== 'false'
     const requirePi =
       body?.require_pi === true || process.env.BROKCODE_REQUIRE_PI === 'true'
+    const piNoTools =
+      body?.pi_no_tools === 'all' || body?.pi_no_tools === 'builtin'
+        ? body.pi_no_tools
+        : undefined
+    const piScratchCwd = body?.pi_scratch_cwd === true
     const requireOpenCode =
       !preferPi &&
       !selfBrokApiEndpoint &&
@@ -2260,6 +2302,8 @@ export async function POST(request: NextRequest) {
         requireOpenCode,
         preferPi,
         requirePi,
+        piNoTools,
+        piScratchCwd,
         allowBrokFallback: body?.allow_brok_fallback === true,
         taskId: task?.id,
         requestOrigin: publicOrigin,
@@ -2277,10 +2321,10 @@ export async function POST(request: NextRequest) {
 
     if (preferPi || requirePi) {
       try {
-        const result = await runPiAgentPrompt({
-          mode: 'brokcode',
-          prompt: buildPiPrompt(messages),
-          tools: getPiTools()
+        const result = await runBrokCodePiPrompt({
+          messages,
+          piNoTools,
+          piScratchCwd
         })
         const persisted = await persistGeneratedProjectOutput({
           auth: authResult,

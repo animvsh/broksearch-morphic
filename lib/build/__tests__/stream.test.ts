@@ -122,9 +122,13 @@ describe('runBuildStream', () => {
         degraded: false
       })
       expect(executionPrompt).toContain(
-        'Build a production-quality static BrokCode managed preview'
+        'Return named files for index.html, styles.css, and app.js.'
       )
-      expect(executionPrompt).toContain('App title: CRM Login Customers Notes')
+      expect(executionPrompt).toContain('Do not install packages')
+      expect(executionPrompt).toContain('Write the complete file contents')
+      expect(executionPrompt).toContain(
+        'Create a polished CRM Login Customers Notes Tasks app prototype.'
+      )
       expect(executionPrompt).toContain('Tables: users, customers, notes, tasks')
       expect(result.projectId).not.toBe('brok-test-persist')
       expect(result.projectId).toBeTruthy()
