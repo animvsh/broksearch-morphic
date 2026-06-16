@@ -65,7 +65,7 @@ describe('createSearchTool', () => {
     process.env = { ...originalEnv }
   })
 
-  it('returns a completed unavailable result when the provider fails', async () => {
+  it('returns an honest model-knowledge fallback when the default provider fails', async () => {
     fallbackProviderSearch.mockRejectedValueOnce(new Error('missing api key'))
 
     const tool = createSearchTool('openai:gpt-4o-mini')
@@ -95,11 +95,23 @@ describe('createSearchTool', () => {
     expect(chunks.at(-1)).toMatchObject({
       state: 'complete',
       query: 'campus housing deadlines',
-      results: [],
+      results: [
+        {
+          title: 'Model knowledge fallback',
+          url: 'https://www.brok.fyi/docs/search-completions#model-knowledge-fallback',
+          publisher: 'Brok'
+        }
+      ],
       images: [],
-      number_of_results: 0,
+      number_of_results: 1,
       toolCallId: 'search-call-1',
-      error: expect.stringContaining('Search is temporarily unavailable')
+      citationMap: {
+        1: {
+          title: 'Model knowledge fallback',
+          url: 'https://www.brok.fyi/docs/search-completions#model-knowledge-fallback'
+        }
+      },
+      error: expect.stringContaining('Live search sources were unavailable')
     })
     expect(mockCreateSearchProvider).toHaveBeenCalledTimes(1)
     expect(mockCreateSearchProvider).toHaveBeenCalledWith('brok')
@@ -411,5 +423,50 @@ describe('createSearchTool', () => {
     expect(mockCreateSearchProvider).toHaveBeenCalledTimes(1)
     expect(mockCreateSearchProvider).toHaveBeenCalledWith('brok')
     expect(fallbackProviderSearch).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns the model-knowledge fallback when both primary and fallback providers fail', async () => {
+    process.env.SEARCH_API = 'tavily'
+    primaryProviderSearch.mockRejectedValueOnce(new Error('Tavily unavailable'))
+    fallbackProviderSearch.mockRejectedValueOnce(new Error('Brok unavailable'))
+
+    const tool = createSearchTool('openai:gpt-4o-mini')
+    const result = tool.execute?.(
+      {
+        query: 'what is the best way to learn react',
+        type: 'optimized',
+        content_types: ['web'],
+        max_results: 10,
+        search_depth: 'basic',
+        include_domains: [],
+        exclude_domains: []
+      },
+      {
+        toolCallId: 'search-call-double-failure',
+        messages: []
+      }
+    )
+
+    const chunks = await collectSearchChunks(await result!)
+
+    expect(primaryProviderSearch).toHaveBeenCalledTimes(1)
+    expect(fallbackProviderSearch).toHaveBeenCalledTimes(1)
+    expect(chunks.at(-1)).toMatchObject({
+      state: 'complete',
+      toolCallId: 'search-call-double-failure',
+      results: [
+        {
+          title: 'Model knowledge fallback',
+          publisher: 'Brok',
+          content: expect.stringContaining('No live web search source')
+        }
+      ],
+      citationMap: {
+        1: {
+          title: 'Model knowledge fallback'
+        }
+      },
+      error: expect.stringContaining('Live search sources were unavailable')
+    })
   })
 })

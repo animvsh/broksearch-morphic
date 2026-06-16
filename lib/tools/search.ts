@@ -14,8 +14,8 @@ import {
   SearchProviderType
 } from './search/providers'
 
-const SEARCH_UNAVAILABLE_MESSAGE =
-  'Search is temporarily unavailable for this request. Try again in a moment, or narrow the query to a specific source or domain.'
+const MODEL_KNOWLEDGE_FALLBACK_URL =
+  'https://www.brok.fyi/docs/search-completions#model-knowledge-fallback'
 
 const DEFAULT_SEARCH_PROVIDER_TIMEOUT_MS = 8_000
 
@@ -134,6 +134,27 @@ async function runSearchProvider({
 function fallbackSearchProvider(searchAPI: SearchProviderType) {
   return searchAPI === DEFAULT_PROVIDER ? null : DEFAULT_PROVIDER
 }
+
+function createModelKnowledgeFallbackResult(query: string): SearchResults {
+  return {
+    results: [
+      {
+        title: 'Model knowledge fallback',
+        url: MODEL_KNOWLEDGE_FALLBACK_URL,
+        publisher: 'Brok',
+        content: [
+          `No live web search source was available for "${query}".`,
+          'Answer from model knowledge, say that live sources were unavailable, and avoid claiming that this fallback is a current web citation.'
+        ].join(' ')
+      }
+    ],
+    images: [],
+    query,
+    number_of_results: 1,
+    error:
+      'Live search sources were unavailable. Brok returned a local fallback so the answer can continue with clear uncertainty.'
+  }
+}
 /**
  * Creates a search tool with the appropriate schema for the given model.
  */
@@ -244,22 +265,10 @@ export function createSearchTool(fullModel: string) {
               `${fallbackProvider} search API error:`,
               fallbackError
             )
-            searchResult = {
-              results: [],
-              images: [],
-              query: filledQuery,
-              number_of_results: 0,
-              error: SEARCH_UNAVAILABLE_MESSAGE
-            }
+            searchResult = createModelKnowledgeFallbackResult(filledQuery)
           }
         } else {
-          searchResult = {
-            results: [],
-            images: [],
-            query: filledQuery,
-            number_of_results: 0,
-            error: SEARCH_UNAVAILABLE_MESSAGE
-          }
+          searchResult = createModelKnowledgeFallbackResult(filledQuery)
         }
       }
 
