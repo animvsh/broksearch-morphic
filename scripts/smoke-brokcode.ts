@@ -43,6 +43,7 @@ let apiKey = process.env.SMOKE_BROKCODE_API_KEY || 'brok_sk_local_smoke'
 const bunExecutable = resolveBunExecutable()
 const skipTui = process.env.SMOKE_BROKCODE_SKIP_TUI === 'true'
 const matrixMode = process.env.SMOKE_BROKCODE_MATRIX === 'true'
+const seedMonthlyBudgetCents = 100
 const noFallbackMode =
   process.env.SMOKE_BROKCODE_NO_FALLBACK === 'true' ||
   process.env.SMOKE_BROKCODE_ALLOW_FALLBACK === 'false'
@@ -361,11 +362,13 @@ async function seedApiKeyIfNeeded() {
 
 async function seedApiKeyLocally() {
   const [
+    { eq },
     { ensureWorkspaceForUser },
     { db },
-    { apiKeys },
+    { apiKeys, workspaces },
     { generateApiKey, hashNewApiKey, getKeyPrefix }
   ] = await Promise.all([
+    import('drizzle-orm'),
     import('@/lib/actions/api-keys'),
     import('@/lib/db'),
     import('@/lib/db/schema'),
@@ -377,6 +380,10 @@ async function seedApiKeyLocally() {
 
   try {
     const workspace = await ensureWorkspaceForUser(smokeUserId)
+    await db
+      .update(workspaces)
+      .set({ monthlyBudgetCents: seedMonthlyBudgetCents })
+      .where(eq(workspaces.id, workspace.id))
     await db.insert(apiKeys).values({
       workspaceId: workspace.id,
       userId: smokeUserId,
@@ -389,7 +396,7 @@ async function seedApiKeyLocally() {
       allowedModels: [],
       rpmLimit: 60,
       dailyRequestLimit: 5000,
-      monthlyBudgetCents: 0
+      monthlyBudgetCents: seedMonthlyBudgetCents
     })
 
     apiKey = rawKey
@@ -405,7 +412,7 @@ async function seedApiKeyLocally() {
 
   const [
     { ensureWorkspaceForUserViaSupabaseRest },
-    { createApiKeyViaSupabaseRest }
+    { createApiKeyViaSupabaseRest, updateWorkspaceMonthlyBudgetViaSupabaseRest }
   ] = await Promise.all([
     import('./supabase-rest-seed'),
     import('./supabase-rest-seed')
@@ -413,6 +420,10 @@ async function seedApiKeyLocally() {
 
   try {
     const workspace = await ensureWorkspaceForUserViaSupabaseRest(smokeUserId)
+    await updateWorkspaceMonthlyBudgetViaSupabaseRest(
+      workspace.id,
+      seedMonthlyBudgetCents
+    )
     await createApiKeyViaSupabaseRest({
       workspace_id: workspace.id,
       user_id: smokeUserId,
@@ -425,7 +436,7 @@ async function seedApiKeyLocally() {
       allowed_models: [],
       rpm_limit: 60,
       daily_request_limit: 5000,
-      monthly_budget_cents: 0
+      monthly_budget_cents: seedMonthlyBudgetCents
     })
 
     apiKey = rawKey

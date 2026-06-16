@@ -6,6 +6,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 type SeedKind = 'smoke' | 'stress' | 'share' | 'share-cleanup'
+const seedMonthlyBudgetCents = 100
 
 function isAuthorized(request: NextRequest) {
   const token = process.env.SMOKE_SEED_TOKEN
@@ -60,7 +61,7 @@ async function ensureSeedWorkspaceBudget(workspaceId: string) {
 
   await db
     .update(workspaces)
-    .set({ monthlyBudgetCents: 100 })
+    .set({ monthlyBudgetCents: seedMonthlyBudgetCents })
     .where(eq(workspaces.id, workspaceId))
 }
 
@@ -115,7 +116,7 @@ async function seedSmoke(userId: string) {
     allowedModels: [],
     rpmLimit: 60,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 100
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   return {
@@ -138,7 +139,7 @@ async function seedStress(userId: string) {
     allowedModels: [],
     rpmLimit: 5,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 100
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   const lowRpmKey = await createKey(workspace.id, userId, {
@@ -148,7 +149,7 @@ async function seedStress(userId: string) {
     allowedModels: ['brok-lite'],
     rpmLimit: 1,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   const dailyLimitedKey = await createKey(workspace.id, userId, {
