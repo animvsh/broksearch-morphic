@@ -50,6 +50,9 @@ export type BrokStreamEvent =
       previewUrl: string | null
       deploymentUrl: string | null
       fileCount: number
+      source?: 'brokcode_execute' | 'degraded_fallback'
+      degraded?: boolean
+      message?: string
     }
   | { kind: 'files'; files: BrokBuildFilePreview[] }
   | { kind: 'log'; level: 'info' | 'warn' | 'error'; message: string }

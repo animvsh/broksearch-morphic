@@ -235,14 +235,19 @@ export async function runBuildStream(
         projectId: persistedProject.projectId,
         previewUrl: persistedProject.previewUrl,
         deploymentUrl: persistedProject.deploymentUrl,
-        fileCount: persistedProject.fileCount
+        fileCount: persistedProject.fileCount,
+        source: persistedProject.source,
+        degraded: persistedProject.degraded,
+        message: persistedProject.message
       }
       emit(projectEvent)
       events.push(projectEvent)
       const logEvent: BrokStreamEvent = {
         kind: 'log',
-        level: 'info',
-        message: `Created BrokCode project ${persistedProject.projectId} with ${persistedProject.fileCount} managed preview files.`
+        level: persistedProject.degraded ? 'warn' : 'info',
+        message: persistedProject.degraded
+          ? `Created degraded BrokCode fallback project ${persistedProject.projectId}: ${persistedProject.message}`
+          : `Created BrokCode project ${persistedProject.projectId} through the execution runtime with ${persistedProject.fileCount} files.`
       }
       emit(logEvent)
       events.push(logEvent)

@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest'
 import {
   getBrokCodeProject,
   listBrokCodeProjectDeployments,
-  listBrokCodeProjectFiles
+  listBrokCodeProjectFiles,
+  upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
 import { classifyApp } from '@/lib/build/app-types'
 import { runBuildStream } from '@/lib/build/stream'
@@ -56,7 +57,7 @@ describe('runBuildStream', () => {
     })
   }, 15000)
 
-  it('persists an authenticated build as a BrokCode managed preview project', async () => {
+  it('persists an authenticated build through BrokCode execution when available', async () => {
     const syncDir = await mkdtemp(path.join(tmpdir(), 'brok-build-project-'))
     const previousStorage = process.env.BROKCODE_PROJECT_STORAGE
     const previousSyncDir = process.env.BROKCODE_SYNC_DIR
@@ -73,6 +74,29 @@ describe('runBuildStream', () => {
           request: {
             headers: new Headers({ host: 'localhost:3000' }),
             url: 'http://localhost:3000/api/build/stream'
+          },
+          executeBrokCodeBuild: async ({ projectId, workspaceId }) => {
+            await upsertBrokCodeProjectFile({
+              projectId,
+              workspaceId,
+              path: 'index.html',
+              content:
+                '<!doctype html><html><body><main><h1>CRM</h1></main></body></html>',
+              language: 'html'
+            })
+            await upsertBrokCodeProjectFile({
+              projectId,
+              workspaceId,
+              path: 'styles.css',
+              content: 'body { font-family: system-ui; }',
+              language: 'css'
+            })
+            return {
+              preview_url: `http://localhost:3000/api/brokcode/previews/${projectId}`,
+              generated_files: ['index.html', 'styles.css'],
+              runtime: 'pi',
+              note: 'Built with BrokCode Cloud.'
+            }
           }
         }
       })
@@ -83,8 +107,10 @@ describe('runBuildStream', () => {
       expect(projectEvent).toMatchObject({
         kind: 'brokcode_project',
         previewUrl: expect.stringContaining('/api/brokcode/previews/'),
-        deploymentUrl: expect.stringContaining('/brokcode/apps/'),
-        fileCount: 3
+        deploymentUrl: null,
+        fileCount: 2,
+        source: 'brokcode_execute',
+        degraded: false
       })
       expect(result.projectId).not.toBe('brok-test-persist')
       expect(result.events).toContainEqual({
@@ -99,9 +125,9 @@ describe('runBuildStream', () => {
       })
       expect(project).toMatchObject({
         id: result.projectId,
-        status: 'deployed',
+        status: 'preview_ready',
         previewUrl: expect.stringContaining('/api/brokcode/previews/'),
-        deploymentUrl: expect.stringContaining('/brokcode/apps/')
+        deploymentUrl: null
       })
 
       const files = await listBrokCodeProjectFiles({
@@ -109,7 +135,6 @@ describe('runBuildStream', () => {
         workspaceId: '00000000-0000-0000-0000-000000000003'
       })
       expect(files.map(file => file.path).sort()).toEqual([
-        'app.js',
         'index.html',
         'styles.css'
       ])
@@ -119,11 +144,85 @@ describe('runBuildStream', () => {
         workspaceId: '00000000-0000-0000-0000-000000000003',
         userId: 'user_test'
       })
-      expect(deployments).toHaveLength(1)
-      expect(deployments[0]).toMatchObject({
-        provider: 'managed_preview',
-        status: 'deployed'
+      expect(deployments).toHaveLength(0)
+    } finally {
+      if (previousStorage === undefined) {
+        delete process.env.BROKCODE_PROJECT_STORAGE
+      } else {
+        process.env.BROKCODE_PROJECT_STORAGE = previousStorage
+      }
+      if (previousSyncDir === undefined) {
+        delete process.env.BROKCODE_SYNC_DIR
+      } else {
+        process.env.BROKCODE_SYNC_DIR = previousSyncDir
+      }
+      await rm(syncDir, { recursive: true, force: true })
+    }
+  }, 15000)
+
+  it('marks fallback builds as degraded and does not record a deployment', async () => {
+    const syncDir = await mkdtemp(path.join(tmpdir(), 'brok-build-fallback-'))
+    const previousStorage = process.env.BROKCODE_PROJECT_STORAGE
+    const previousSyncDir = process.env.BROKCODE_SYNC_DIR
+    process.env.BROKCODE_PROJECT_STORAGE = 'file'
+    process.env.BROKCODE_SYNC_DIR = syncDir
+
+    try {
+      const result = await runBuildStream({
+        prompt: 'Build me a CRM with login, customers, notes, and tasks',
+        projectId: 'brok-test-fallback',
+        brokCodeProject: {
+          workspaceId: '00000000-0000-0000-0000-000000000003',
+          userId: 'user_test',
+          request: {
+            headers: new Headers({ host: 'localhost:3000' }),
+            url: 'http://localhost:3000/api/build/stream'
+          },
+          executeBrokCodeBuild: async () => {
+            throw new Error('BrokCode Cloud runtime is required.')
+          }
+        }
       })
+
+      const projectEvent = result.events.find(
+        event => event.kind === 'brokcode_project'
+      )
+      expect(projectEvent).toMatchObject({
+        kind: 'brokcode_project',
+        source: 'degraded_fallback',
+        degraded: true,
+        deploymentUrl: null,
+        fileCount: 3
+      })
+      expect(
+        result.events.some(
+          event =>
+            event.kind === 'log' &&
+            event.level === 'warn' &&
+            event.message.includes('degraded')
+        )
+      ).toBe(true)
+
+      const project = await getBrokCodeProject({
+        id: result.projectId,
+        workspaceId: '00000000-0000-0000-0000-000000000003',
+        userId: 'user_test'
+      })
+      expect(project?.status).toBe('preview_ready')
+      expect(project?.deploymentUrl).toBeNull()
+      expect(project?.metadata?.preview).toMatchObject({
+        mode: 'degraded_fallback',
+        source: 'brok_build_degraded_fallback',
+        degraded: true,
+        executionError: 'BrokCode Cloud runtime is required.'
+      })
+
+      const deployments = await listBrokCodeProjectDeployments({
+        projectId: result.projectId,
+        workspaceId: '00000000-0000-0000-0000-000000000003',
+        userId: 'user_test'
+      })
+      expect(deployments).toHaveLength(0)
     } finally {
       if (previousStorage === undefined) {
         delete process.env.BROKCODE_PROJECT_STORAGE
