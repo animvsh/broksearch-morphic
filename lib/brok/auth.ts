@@ -335,7 +335,10 @@ async function createLocalFallbackAuth(
       lastUsedAt: now,
       expiresAt: null,
       createdAt: now,
-      revokedAt: null
+      revokedAt: null,
+      rotatedFromKeyId: null,
+      rotatedToKeyId: null,
+      rotatedAt: null
     },
     workspace: {
       id: '00000000-0000-0000-0000-000000000000',

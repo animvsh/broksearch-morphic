@@ -57,6 +57,25 @@ export type ValidatedCreateApiKeyInput = Omit<
   expiresAt: Date | null
 }
 
+export interface RotateApiKeyInput {
+  name?: string
+  scopes?: string[]
+  allowedModels?: string[]
+  rpmLimit?: number | null
+  dailyRequestLimit?: number | null
+  monthlyBudgetCents?: number | null
+}
+
+export interface ApiKeyRotationDefaults {
+  name: string
+  environment: ApiKeyEnvironment
+  scopes: unknown
+  allowedModels: unknown
+  rpmLimit: number | null
+  dailyRequestLimit: number | null
+  monthlyBudgetCents: number | null
+}
+
 const apiKeyEnvironmentSet = new Set<string>(API_KEY_ENVIRONMENTS)
 const apiKeyScopeSet = new Set<string>(API_KEY_SCOPE_IDS)
 const brokApiModelSet = new Set<string>(BROK_API_MODEL_IDS)
@@ -204,6 +223,49 @@ export function validateCreateApiKeyInput(
     ),
     expiresAt: validateApiKeyExpiresAt(input.expiresAt)
   }
+}
+
+function defaultRotatedKeyName(name: string) {
+  const replacementName = `${name.trim() || 'API key'} replacement`
+  return replacementName.slice(0, API_KEY_LIMITS.nameMaxLength)
+}
+
+function inheritedIntegerLimit(
+  override: number | null | undefined,
+  inherited: number | null,
+  fallback: number
+) {
+  if (override !== undefined && override !== null) return override
+  return inherited ?? fallback
+}
+
+export function buildRotatedApiKeyInput(
+  source: ApiKeyRotationDefaults,
+  input: RotateApiKeyInput = {}
+): CreateApiKeyInput {
+  return validateCreateApiKeyInput({
+    name: input.name ?? defaultRotatedKeyName(source.name),
+    environment: source.environment,
+    scopes:
+      input.scopes ??
+      (Array.isArray(source.scopes) ? (source.scopes as string[]) : []),
+    allowedModels:
+      input.allowedModels ??
+      (Array.isArray(source.allowedModels)
+        ? (source.allowedModels as string[])
+        : []),
+    rpmLimit: inheritedIntegerLimit(input.rpmLimit, source.rpmLimit, 60),
+    dailyRequestLimit: inheritedIntegerLimit(
+      input.dailyRequestLimit,
+      source.dailyRequestLimit,
+      5000
+    ),
+    monthlyBudgetCents: inheritedIntegerLimit(
+      input.monthlyBudgetCents,
+      source.monthlyBudgetCents,
+      0
+    )
+  })
 }
 
 export function validateApiKeyStatusTransition(

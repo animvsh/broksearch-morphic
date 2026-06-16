@@ -152,7 +152,43 @@ export default function ApiKeysPage() {
           </table>
         </div>
 
-        <h2>Expiration, Revocation, And Rotation</h2>
+        <h2>Zero-Downtime Rotation</h2>
+        <p>
+          Rotate from the API key table when a production app needs a fresh
+          credential. Brok creates a replacement key with the source key&apos;s
+          environment, scopes, model allowlist, RPM limit, daily request limit,
+          and monthly budget unless you edit them before generation.
+        </p>
+        <ol>
+          <li>Click Rotate on the active key you want to replace.</li>
+          <li>
+            Review the inherited settings, narrow anything that should change,
+            then generate the replacement.
+          </li>
+          <li>
+            Copy the new secret immediately. Rotation preserves the same
+            one-time reveal rule as key creation.
+          </li>
+          <li>
+            Deploy the replacement through your server-side secret store while
+            leaving the old key active.
+          </li>
+          <li>
+            Send a low-risk request with the replacement and save the returned
+            request ID.
+          </li>
+          <li>
+            Move traffic, monitor usage for the replacement key, then revoke the
+            source key from the same table.
+          </li>
+        </ol>
+        <p>
+          The key table shows which key replaces which credential using names,
+          prefixes, statuses, and timestamps only. Brok never stores or displays
+          either raw secret after its one-time reveal.
+        </p>
+
+        <h2>Expiration And Revocation</h2>
         <p>
           User-created keys support no expiration or a future expiration time.
           Expired keys are rejected before scope checks, rate limits, usage
@@ -161,12 +197,6 @@ export default function ApiKeysPage() {
           Revocation is final: revoked keys cannot be resumed, so create a
           replacement key before cutting over production traffic.
         </p>
-        <ol>
-          <li>Create a new key with the same or narrower scopes.</li>
-          <li>Deploy it through your server-side secret store.</li>
-          <li>Send a test request and record the returned request ID.</li>
-          <li>Move traffic, monitor usage, then revoke the old key.</li>
-        </ol>
 
         <h2>Server-Side Storage</h2>
         <p>

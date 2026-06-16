@@ -65,7 +65,10 @@ function createBrowserSessionAuth({
       lastUsedAt: null,
       expiresAt: null,
       createdAt: new Date(),
-      revokedAt: null
+      revokedAt: null,
+      rotatedFromKeyId: null,
+      rotatedToKeyId: null,
+      rotatedAt: null
     } satisfies typeof apiKeys.$inferSelect,
     workspace
   }

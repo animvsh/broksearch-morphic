@@ -1,5 +1,6 @@
 import { relations } from 'drizzle-orm'
 import {
+  AnyPgColumn,
   boolean,
   decimal,
   index,
@@ -214,13 +215,24 @@ export const apiKeys = pgTable(
     lastUsedAt: timestamp('last_used_at'),
     expiresAt: timestamp('expires_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-    revokedAt: timestamp('revoked_at')
+    revokedAt: timestamp('revoked_at'),
+    rotatedFromKeyId: uuid('rotated_from_key_id').references(
+      (): AnyPgColumn => apiKeys.id
+    ),
+    rotatedToKeyId: uuid('rotated_to_key_id').references(
+      (): AnyPgColumn => apiKeys.id
+    ),
+    rotatedAt: timestamp('rotated_at')
   },
   table => ({
     workspaceIdx: index('api_keys_workspace_idx').on(table.workspaceId),
     keyPrefixIdx: index('api_keys_key_prefix_idx').on(table.keyPrefix),
     expiresAtIdx: index('api_keys_expires_at_idx').on(table.expiresAt),
-    keyHashIdx: index('api_keys_key_hash_idx').on(table.keyHash)
+    keyHashIdx: index('api_keys_key_hash_idx').on(table.keyHash),
+    rotatedFromIdx: index('api_keys_rotated_from_idx').on(
+      table.rotatedFromKeyId
+    ),
+    rotatedToIdx: index('api_keys_rotated_to_idx').on(table.rotatedToKeyId)
   })
 )
 
@@ -807,6 +819,16 @@ export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
     references: [workspaces.id]
   }),
   auditEvents: many(apiKeyAuditEvents),
+  rotatedFrom: one(apiKeys, {
+    fields: [apiKeys.rotatedFromKeyId],
+    references: [apiKeys.id],
+    relationName: 'api_key_rotated_from'
+  }),
+  rotatedTo: one(apiKeys, {
+    fields: [apiKeys.rotatedToKeyId],
+    references: [apiKeys.id],
+    relationName: 'api_key_rotated_to'
+  }),
   usageEvents: many(usageEvents)
 }))
 
