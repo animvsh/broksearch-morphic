@@ -75,11 +75,20 @@ describe('classifyBrokIntent', () => {
 })
 
 describe('resolveSearchModeForIntent', () => {
-  it('demotes simple factual prompts from deep to quick', () => {
+  it('routes factual prompts into source-backed search mode', () => {
     expect(
       resolveSearchModeForIntent({
         intent: 'quick_search',
         requestedSearchMode: 'deep'
+      })
+    ).toBe('search')
+  })
+
+  it('keeps utility prompts in quick mode', () => {
+    expect(
+      resolveSearchModeForIntent({
+        intent: 'utility',
+        requestedSearchMode: 'search'
       })
     ).toBe('quick')
   })

@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -42,7 +42,20 @@ vi.mock('@/hooks/use-file-dropzone', () => ({
 }))
 
 vi.mock('@/components/chat-messages', () => ({
-  ChatMessages: () => <div data-testid="chat-messages" />
+  ChatMessages: ({
+    onFollowUpSubmit
+  }: {
+    onFollowUpSubmit?: (query: string) => void
+  }) => (
+    <div data-testid="chat-messages">
+      <button
+        type="button"
+        onClick={() => onFollowUpSubmit?.('Compare the strongest sources')}
+      >
+        Follow up
+      </button>
+    </div>
+  )
 }))
 
 vi.mock('@/components/chat-panel', () => ({
@@ -96,5 +109,40 @@ describe('Chat query-backed URL behavior', () => {
 
     expect(window.location.pathname).toBe('/search/chat-from-query')
     expect(window.location.search).toBe('')
+  })
+
+  it('routes follow-up chips through the normal submit path', async () => {
+    mocks.useChat.mockReturnValue({
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'initial question' }]
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'initial answer' }]
+        }
+      ],
+      status: 'ready',
+      setMessages: vi.fn(),
+      stop: vi.fn(),
+      sendMessage: mocks.sendMessage,
+      regenerate: vi.fn(),
+      addToolResult: vi.fn(),
+      error: null
+    })
+
+    render(<Chat initialSearchMode="search" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Follow up' }))
+
+    expect(mocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'user',
+        parts: [{ type: 'text', text: 'Compare the strongest sources' }]
+      })
+    )
   })
 })

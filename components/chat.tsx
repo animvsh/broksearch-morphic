@@ -719,12 +719,7 @@ export function Chat({
           chatId={chatId}
           isGuest={isGuest}
           hasPendingSubmission={Boolean(pendingUserMessage)}
-          onFollowUpSubmit={(text: string) => {
-            sendMessage({
-              role: 'user',
-              parts: [{ type: 'text', text }]
-            })
-          }}
+          onFollowUpSubmit={(text: string) => submitToSearch(text)}
           addToolResult={({
             toolCallId,
             result
