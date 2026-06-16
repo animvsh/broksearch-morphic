@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('next/navigation', () => ({
@@ -191,6 +191,113 @@ describe('BrokSearchClient', () => {
       title: 'Brok docs',
       url: 'https://docs.example.com/search',
       content: 'Brok search docs.'
+    })
+  })
+
+  it('asks follow-ups in the same durable search thread', async () => {
+    const fetchMock = vi.fn(async (_url, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { query: string }
+      if (body.query === 'What is Brok?') {
+        return streamResponse([
+          {
+            event: 'source_found',
+            data: {
+              source: {
+                id: 'src_1',
+                title: 'Brok docs',
+                url: 'https://docs.example.com/search',
+                publisher: 'docs.example.com',
+                snippet: 'Brok search docs.',
+                retrievedAt: '2026-06-16T00:00:00.000Z',
+                qualityScore: 91
+              }
+            }
+          },
+          {
+            event: 'answer_delta',
+            data: { delta: 'Brok answers with sources. [1]' }
+          },
+          {
+            event: 'done',
+            data: {}
+          }
+        ])
+      }
+
+      return streamResponse([
+        {
+          event: 'source_found',
+          data: {
+            source: {
+              id: 'src_2',
+              title: 'Citation guide',
+              url: 'https://docs.example.com/citations',
+              publisher: 'docs.example.com',
+              snippet: 'Brok cites source cards.',
+              retrievedAt: '2026-06-16T00:00:00.000Z',
+              qualityScore: 88
+            }
+          }
+        },
+        {
+          event: 'answer_delta',
+          data: { delta: 'Brok cites each answer with source cards. [1]' }
+        },
+        {
+          event: 'done',
+          data: {}
+        }
+      ])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="What is Brok?"
+        initialMode="search"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Brok answers with sources. [1]'
+    )
+
+    fireEvent.change(screen.getByLabelText('Ask a follow-up'), {
+      target: { value: 'How does Brok cite sources?' }
+    })
+    fireEvent.submit(screen.getByTestId('brok-follow-up-form'))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+    expect(
+      await screen.findByTestId('completed-search-turn')
+    ).toHaveTextContent('Brok answers with sources. [1]')
+    expect(screen.getByTestId('brok-search-answer')).toHaveTextContent(
+      'Brok cites each answer with source cards. [1]'
+    )
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem('brok:guest-chat:search_test') ?? '[]'
+    )
+    expect(persisted).toHaveLength(4)
+    expect(persisted[2]).toMatchObject({
+      id: 'search_test_user_2',
+      role: 'user',
+      parts: [{ type: 'text', text: 'How does Brok cite sources?' }]
+    })
+    expect(persisted[3]).toMatchObject({
+      id: 'search_test_assistant_2',
+      role: 'assistant',
+      parts: [
+        { type: 'text', text: 'Brok cites each answer with source cards. [1]' }
+      ],
+      metadata: {
+        answer: {
+          citationCount: 1
+        }
+      }
     })
   })
 })

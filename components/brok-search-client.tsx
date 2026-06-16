@@ -1,10 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 
 import {
   AlertCircle,
+  ArrowUp,
   ExternalLink,
   Globe2,
   Loader2,
@@ -47,6 +47,14 @@ interface SearchProgress {
   message?: string
 }
 
+interface SearchTurn {
+  id: string
+  query: string
+  answer: string
+  sources: Source[]
+  followUps: FollowUpItem[]
+}
+
 interface BrokSearchClientProps {
   initialQuery?: string
   initialMode?: SearchMode
@@ -74,13 +82,22 @@ function toSearchResultItem(source: Source): SearchResultItem {
   }
 }
 
-function toDurableMessages({
+function getTurnMessageIds(searchId: string, turnIndex: number) {
+  const suffix = turnIndex === 1 ? '' : `_${turnIndex}`
+  return {
+    userId: `${searchId}_user${suffix}`,
+    assistantId: `${searchId}_assistant${suffix}`
+  }
+}
+
+function toDurableMessagePair({
   answer,
   followUps,
   mode,
   query,
   searchId,
-  sources
+  sources,
+  turnIndex
 }: {
   answer: string
   followUps: FollowUpItem[]
@@ -88,15 +105,17 @@ function toDurableMessages({
   query: string
   searchId: string
   sources: Source[]
+  turnIndex: number
 }): UIMessage[] {
+  const ids = getTurnMessageIds(searchId, turnIndex)
   return [
     {
-      id: `${searchId}_user`,
+      id: ids.userId,
       role: 'user',
       parts: [{ type: 'text', text: query }]
     },
     {
-      id: `${searchId}_assistant`,
+      id: ids.assistantId,
       role: 'assistant',
       parts: [{ type: 'text', text: answer }],
       metadata: {
@@ -152,8 +171,10 @@ export function BrokSearchClient({
   apiBase,
   onFollowUpSelect
 }: BrokSearchClientProps) {
-  const router = useRouter()
   const [query, setQuery] = useState(initialQuery ?? '')
+  const [followUpInput, setFollowUpInput] = useState('')
+  const [activeQuestion, setActiveQuestion] = useState(initialQuery ?? '')
+  const [completedTurns, setCompletedTurns] = useState<SearchTurn[]>([])
   const [pendingQuery, setPendingQuery] = useState<string | null>(null)
   const [answer, setAnswer] = useState('')
   const [followUps, setFollowUps] = useState<FollowUpItem[]>([])
@@ -164,8 +185,28 @@ export function BrokSearchClient({
   })
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const durableMessagesRef = useRef<UIMessage[]>([])
+  const activeTurnRef = useRef<SearchTurn | null>(null)
 
   const endpoint = useMemo(() => apiBase ?? DEFAULT_API_BASE, [apiBase])
+
+  useEffect(() => {
+    if (!activeQuestion.trim()) {
+      activeTurnRef.current = null
+      return
+    }
+
+    activeTurnRef.current = {
+      id: `${searchId ?? 'search_session'}_turn_${Math.max(
+        1,
+        Math.ceil(durableMessagesRef.current.length / 2)
+      )}`,
+      query: activeQuestion,
+      answer,
+      sources: progress.sources,
+      followUps
+    }
+  }, [activeQuestion, answer, followUps, progress.sources, searchId])
 
   const runSearch = useCallback(
     async (q: string) => {
@@ -177,6 +218,20 @@ export function BrokSearchClient({
       abortRef.current = controller
       commitDurableSearchUrl(searchId)
 
+      const previousTurn = activeTurnRef.current
+      if (previousTurn?.answer.trim()) {
+        setCompletedTurns(prev =>
+          prev.some(turn => turn.id === previousTurn.id)
+            ? prev
+            : [...prev, previousTurn]
+        )
+      }
+
+      const durableSearchId = searchId ?? 'search_session'
+      const turnIndex = Math.floor(durableMessagesRef.current.length / 2) + 1
+      const turnId = `${durableSearchId}_turn_${turnIndex}`
+
+      setActiveQuestion(trimmed)
       setPendingQuery(trimmed)
       setAnswer('')
       setFollowUps([])
@@ -187,17 +242,45 @@ export function BrokSearchClient({
         status: 'planning',
         message: 'Planning search query...'
       })
-      persistDurableMessages(
-        searchId,
-        toDurableMessages({
-          answer: '',
-          followUps: [],
+
+      const writeDurableTurn = ({
+        durableAnswer,
+        durableFollowUps,
+        durableSources
+      }: {
+        durableAnswer: string
+        durableFollowUps: FollowUpItem[]
+        durableSources: Source[]
+      }) => {
+        const pair = toDurableMessagePair({
+          answer: durableAnswer,
+          followUps: durableFollowUps,
           mode: initialMode,
           query: trimmed,
-          searchId: searchId ?? 'search_session',
-          sources: []
+          searchId: durableSearchId,
+          sources: durableSources,
+          turnIndex
         })
-      )
+        const nextMessages = [...durableMessagesRef.current]
+        const baseIndex = (turnIndex - 1) * 2
+        nextMessages[baseIndex] = pair[0]
+        nextMessages[baseIndex + 1] = pair[1]
+        durableMessagesRef.current = nextMessages
+        persistDurableMessages(searchId, nextMessages)
+      }
+
+      writeDurableTurn({
+        durableAnswer: '',
+        durableFollowUps: [],
+        durableSources: []
+      })
+      activeTurnRef.current = {
+        id: turnId,
+        query: trimmed,
+        answer: '',
+        sources: [],
+        followUps: []
+      }
 
       try {
         let streamedAnswer = ''
@@ -205,18 +288,11 @@ export function BrokSearchClient({
         let streamedFollowUps: FollowUpItem[] = []
 
         const persistSnapshot = () => {
-          if (!searchId) return
-          persistDurableMessages(
-            searchId,
-            toDurableMessages({
-              answer: streamedAnswer,
-              followUps: streamedFollowUps,
-              mode: initialMode,
-              query: trimmed,
-              searchId,
-              sources: streamedSources
-            })
-          )
+          writeDurableTurn({
+            durableAnswer: streamedAnswer,
+            durableFollowUps: streamedFollowUps,
+            durableSources: streamedSources
+          })
         }
 
         const response = await fetch(endpoint, {
@@ -408,6 +484,18 @@ export function BrokSearchClient({
     [onFollowUpSelect, runSearch]
   )
 
+  const submitFollowUp = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      const trimmed = followUpInput.trim()
+      if (!trimmed) return
+      setFollowUpInput('')
+      setQuery(trimmed)
+      handleFollowUp(trimmed)
+    },
+    [followUpInput, handleFollowUp]
+  )
+
   const handleVoiceTranscript = useCallback((text: string) => {
     setQuery(text)
   }, [])
@@ -468,6 +556,19 @@ export function BrokSearchClient({
           </div>
         )}
 
+        {completedTurns.map(turn => (
+          <CompletedTurn key={turn.id} turn={turn} />
+        ))}
+
+        {activeQuestion && (
+          <div
+            className="ml-auto max-w-[85%] rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-[0_14px_40px_-34px_rgba(15,23,42,0.35)]"
+            data-testid="brok-search-question"
+          >
+            {activeQuestion}
+          </div>
+        )}
+
         {isLoading && <SearchProgressIndicator progress={progress} />}
 
         {progress.sources.length > 0 && (
@@ -509,6 +610,34 @@ export function BrokSearchClient({
             Searching for: {pendingQuery}
           </p>
         )}
+
+        {(answer || completedTurns.length > 0 || isLoading) && (
+          <form
+            className="sticky bottom-3 mt-2 flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-2 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.35)] backdrop-blur"
+            data-testid="brok-follow-up-form"
+            onSubmit={submitFollowUp}
+          >
+            <input
+              value={followUpInput}
+              onChange={event => setFollowUpInput(event.target.value)}
+              placeholder="Ask a follow-up..."
+              className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none"
+              aria-label="Ask a follow-up"
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !followUpInput.trim()}
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Send follow-up"
+            >
+              {isLoading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ArrowUp className="size-4" />
+              )}
+            </button>
+          </form>
+        )}
       </section>
 
       <RelatedQuestionsPanel
@@ -517,6 +646,40 @@ export function BrokSearchClient({
         isLoading={isLoading}
       />
     </div>
+  )
+}
+
+function CompletedTurn({ turn }: { turn: SearchTurn }) {
+  return (
+    <section
+      className="flex flex-col gap-3 border-b border-zinc-200/70 pb-5"
+      data-testid="completed-search-turn"
+    >
+      <div className="ml-auto max-w-[85%] rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900">
+        {turn.query}
+      </div>
+      {turn.sources.length > 0 && (
+        <div className="flex flex-wrap gap-1.5" aria-label="Previous sources">
+          {turn.sources.slice(0, 4).map((source, index) => (
+            <a
+              key={`${turn.id}-${source.id}`}
+              href={source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex max-w-[12rem] items-center gap-1 rounded-full border border-zinc-200 bg-white/80 px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-950"
+            >
+              <span className="shrink-0">[{index + 1}]</span>
+              <span className="truncate">
+                {source.publisher ?? safeHostname(source.url)}
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
+      <article className="rounded-2xl border border-zinc-200 bg-white/80 p-4 text-sm text-zinc-900">
+        <MarkdownMessage message={turn.answer} />
+      </article>
+    </section>
   )
 }
 
