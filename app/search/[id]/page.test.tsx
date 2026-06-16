@@ -49,14 +49,17 @@ vi.mock('@/components/chat', () => ({
 
 vi.mock('@/components/brok-search-client', () => ({
   BrokSearchClient: ({
+    modelSelectorData,
     persistToServer,
     searchId
   }: {
+    modelSelectorData?: { hasAvailableModels?: boolean }
     persistToServer?: boolean
     searchId?: string
   }) => (
     <div data-testid="brok-search-client">
-      {searchId}:{String(persistToServer)}
+      {searchId}:{String(persistToServer)}:
+      {String(modelSelectorData?.hasAvailableModels)}
     </div>
   )
 }))
@@ -107,7 +110,7 @@ describe('app/search/[id]/page', () => {
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(mocks.redirect).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      'search_local_guest_answer'
+      'search_local_guest_answer:false:true'
     )
   })
 
@@ -128,7 +131,7 @@ describe('app/search/[id]/page', () => {
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(mocks.redirect).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      'search_local_anonymous_answer'
+      'search_local_anonymous_answer:false:true'
     )
   })
 
@@ -147,7 +150,7 @@ describe('app/search/[id]/page', () => {
     )
     expect(mocks.redirect).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      'search_signed_in_answer:true'
+      'search_signed_in_answer:true:true'
     )
   })
 
