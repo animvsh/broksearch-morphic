@@ -17,6 +17,12 @@ describe('BrokLanding', () => {
         .getAllByRole('link', { name: /request invite/i })
         .map(link => link.getAttribute('href'))
     ).toEqual(['/auth/login', '/auth/login'])
+    expect(screen.getByRole('search')).toHaveAttribute('action', '/search')
+    expect(screen.getByRole('textbox', { name: /ask brok/i })).toHaveAttribute(
+      'name',
+      'q'
+    )
+    expect(screen.getByDisplayValue('quick')).toHaveAttribute('name', 'mode')
     expect(screen.getByText(/only \$7\/month/i)).toBeInTheDocument()
   })
 

@@ -149,7 +149,31 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
               Only $7/month
             </div>
 
-            <div className="mt-7">
+            <form
+              action="/search"
+              className="mt-7 w-full max-w-2xl rounded-lg border border-zinc-200 bg-white p-2 shadow-[0_24px_60px_-42px_rgba(24,24,27,0.45)]"
+              role="search"
+            >
+              <input type="hidden" name="mode" value="quick" />
+              <div className="flex min-h-12 items-center gap-2">
+                <Search className="ml-2 size-4 shrink-0 text-zinc-400" />
+                <input
+                  name="q"
+                  aria-label="Ask Brok"
+                  placeholder="Ask anything, like “Compare Cursor vs Windsurf”"
+                  className="min-w-0 flex-1 bg-transparent px-1 text-sm text-zinc-950 outline-none placeholder:text-zinc-400 sm:text-base"
+                />
+                <button
+                  type="submit"
+                  className="inline-flex size-11 shrink-0 items-center justify-center rounded-md bg-zinc-950 text-white transition-colors hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2"
+                  aria-label="Search Brok"
+                >
+                  <ArrowRight className="size-4" />
+                </button>
+              </div>
+            </form>
+
+            <div className="mt-4">
               <Button asChild size="lg" className="group h-11 rounded-md px-6">
                 <Link href={primaryHref}>
                   Request invite
