@@ -737,11 +737,11 @@ export function ChatPanel({
                   'size-8 rounded-xl md:size-10'
                 )}
                 disabled={
-                  (!isLoading &&
-                    input.trim().length === 0 &&
-                    !hasUploadedFiles) ||
-                  hasUploadingFiles ||
-                  (!hasAvailableModels && !canSubmitWithoutModel)
+                  isLoading
+                    ? false
+                    : (input.trim().length === 0 && !hasUploadedFiles) ||
+                      hasUploadingFiles ||
+                      (!hasAvailableModels && !canSubmitWithoutModel)
                 }
                 onClick={isLoading ? stop : undefined}
                 aria-label={isLoading ? 'Stop response' : 'Send message'}

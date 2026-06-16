@@ -60,14 +60,20 @@ describe('ChatPanel mobile loading controls', () => {
   })
 
   it('keeps only essential composer controls visible while streaming', () => {
-    renderPanel({ status: 'streaming' })
+    const stop = vi.fn()
+    renderPanel({
+      status: 'streaming',
+      stop,
+      modelSelectorData: { models: [], hasAvailableModels: false }
+    })
 
     expect(screen.getByRole('status')).toHaveTextContent('Composing answer')
     expect(screen.getByRole('textbox')).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByRole('button', { name: 'Quick' })).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Stop response' })
-    ).toBeInTheDocument()
+    const stopButton = screen.getByRole('button', { name: 'Stop response' })
+    expect(stopButton).toBeEnabled()
+    fireEvent.click(stopButton)
+    expect(stop).toHaveBeenCalledTimes(1)
     expect(screen.queryByText('Upload files')).not.toBeInTheDocument()
     expect(screen.queryByText('Brok Fast')).not.toBeInTheDocument()
     expect(
@@ -104,11 +110,15 @@ describe('ChatPanel mobile loading controls', () => {
 function renderPanel({
   status,
   input = '',
-  handleSubmit = vi.fn()
+  handleSubmit = vi.fn(),
+  stop = vi.fn(),
+  modelSelectorData = { models: [], hasAvailableModels: true } as any
 }: {
   status: 'ready' | 'submitted' | 'streaming'
   input?: string
   handleSubmit?: (event: React.FormEvent<HTMLFormElement>) => void
+  stop?: () => void
+  modelSelectorData?: any
 }) {
   return render(
     <ChatPanel
@@ -125,7 +135,7 @@ function renderPanel({
       ]}
       setMessages={vi.fn()}
       chatId="chat-1"
-      stop={vi.fn()}
+      stop={stop}
       append={vi.fn()}
       showScrollToBottomButton={false}
       scrollContainerRef={{ current: null }}
@@ -134,7 +144,7 @@ function renderPanel({
       onFilesSelected={vi.fn()}
       onNewChat={vi.fn()}
       isGuest
-      modelSelectorData={{ models: [], hasAvailableModels: true } as any}
+      modelSelectorData={modelSelectorData}
       sections={[
         {
           id: 'user-1',
