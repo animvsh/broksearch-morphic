@@ -625,6 +625,18 @@ async function main() {
       `${APP_BASE_URL}/docs/brokcode-api`,
       'POST /api/brokcode/execute'
     ),
+    checkHtmlRoute(
+      'API quickstart docs route',
+      `${APP_BASE_URL}/docs/quickstart`,
+      ['Idempotency-Key', '/api/v1/chat/completions']
+    ),
+    checkRouteContract('OpenAPI JSON route', `${APP_BASE_URL}/api/openapi`, {
+      expectedStatus: 200,
+      expectedAnyText: [
+        '/api/v1/chat/completions',
+        '/api/v1/search/completions'
+      ]
+    }),
     checkHtmlRoute('BrokMail docs route', `${APP_BASE_URL}/docs/brokmail`, [
       '/api/brokmail/gcal/events',
       '/api/brokmail/calendar/events'
@@ -729,6 +741,62 @@ async function main() {
         return null
       },
       [401]
+    ),
+    checkRouteContract(
+      'Chat completions API auth contract',
+      `${APP_BASE_URL}/api/v1/chat/completions`,
+      {
+        expectedStatus: 401,
+        expectedErrorText: 'missing_authorization',
+        requestInit: {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            accept: 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'brok-mini',
+            messages: [{ role: 'user', content: 'production contract check' }]
+          })
+        }
+      }
+    ),
+    checkRouteContract(
+      'Messages API auth contract',
+      `${APP_BASE_URL}/api/v1/messages`,
+      {
+        expectedStatus: 401,
+        expectedErrorText: 'missing_authorization',
+        requestInit: {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            accept: 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'brok-mini',
+            messages: [{ role: 'user', content: 'production contract check' }]
+          })
+        }
+      }
+    ),
+    checkRouteContract(
+      'Search completions API auth contract',
+      `${APP_BASE_URL}/api/v1/search/completions`,
+      {
+        expectedStatus: 401,
+        expectedErrorText: 'missing_authorization',
+        requestInit: {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            accept: 'application/json'
+          },
+          body: JSON.stringify({
+            query: 'production contract check'
+          })
+        }
+      }
     ),
     checkJsonApi(
       'Invalid API key rejection',
