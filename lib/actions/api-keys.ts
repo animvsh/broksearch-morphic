@@ -48,6 +48,11 @@ async function getApiKeyCrypto() {
   return { generateApiKey, getKeyPrefix, hashNewApiKey, maskApiKey }
 }
 
+function revalidateApiKeyPages() {
+  revalidatePath('/api-keys')
+  revalidatePath('/api-platform/keys')
+}
+
 export async function ensureWorkspaceForUser(userId: string) {
   try {
     const { asc, eq, db, workspaces } = await getApiKeyDependencies()
@@ -204,7 +209,8 @@ export async function listApiKeys(workspaceId: string) {
     dailyRequestLimit: key.dailyRequestLimit,
     monthlyBudgetCents: key.monthlyBudgetCents,
     lastUsedAt: key.lastUsedAt,
-    createdAt: key.createdAt
+    createdAt: key.createdAt,
+    revokedAt: key.revokedAt
   }))
 }
 
@@ -247,7 +253,7 @@ export async function revokeApiKey(keyId: string) {
     .set({ status: 'revoked', revokedAt: new Date() })
     .where(eq(apiKeys.id, keyId))
 
-  revalidatePath('/api-keys')
+  revalidateApiKeyPages()
 }
 
 export async function pauseApiKey(keyId: string) {
@@ -260,7 +266,7 @@ export async function pauseApiKey(keyId: string) {
     .set({ status: 'paused' })
     .where(eq(apiKeys.id, keyId))
 
-  revalidatePath('/api-keys')
+  revalidateApiKeyPages()
 }
 
 export async function resumeApiKey(keyId: string) {
@@ -273,5 +279,5 @@ export async function resumeApiKey(keyId: string) {
     .set({ status: 'active', revokedAt: null })
     .where(eq(apiKeys.id, keyId))
 
-  revalidatePath('/api-keys')
+  revalidateApiKeyPages()
 }

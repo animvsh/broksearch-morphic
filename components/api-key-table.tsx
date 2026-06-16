@@ -39,6 +39,7 @@ interface ApiKey {
   monthlyBudgetCents: number | null
   lastUsedAt: Date | null
   createdAt: Date
+  revokedAt: Date | null
 }
 
 function formatDate(value: Date | null) {
@@ -54,6 +55,18 @@ function formatLimit(value: number | null, suffix: string) {
   if (!value) return 'Unlimited'
   if (!suffix) return value.toLocaleString()
   return `${value.toLocaleString()} ${suffix}`
+}
+
+function getLifecycleDetail(key: ApiKey) {
+  if (key.status === 'revoked') {
+    return key.revokedAt ? `Revoked ${formatDate(key.revokedAt)}` : 'Revoked'
+  }
+
+  if (key.status === 'paused') {
+    return 'Paused until resumed'
+  }
+
+  return key.lastUsedAt ? `Used ${formatDate(key.lastUsedAt)}` : 'Never used'
 }
 
 export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
@@ -132,7 +145,7 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
                 <TableCell className="text-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5">
                     <Clock3 className="size-3.5" />
-                    {formatDate(key.lastUsedAt)}
+                    {getLifecycleDetail(key)}
                   </span>
                 </TableCell>
                 <TableCell>
@@ -174,10 +187,7 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
                 label="Daily"
                 value={formatLimit(key.dailyRequestLimit, '')}
               />
-              <MobileFact
-                label="Last used"
-                value={formatDate(key.lastUsedAt)}
-              />
+              <MobileFact label="Last used" value={getLifecycleDetail(key)} />
             </div>
 
             <div className="flex flex-wrap gap-2">
