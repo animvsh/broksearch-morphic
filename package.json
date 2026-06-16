@@ -33,6 +33,7 @@
     "stress:platform": "bun run --env-file=.env.local scripts/stress-platform.ts",
     "reconcile:usage-reservations": "bun run --env-file=.env.local scripts/reconcile-usage-reservations.ts",
     "check:deploy-env": "bun run scripts/check-deploy-env.mjs",
+    "check:openapi": "bun run scripts/check-openapi-spec.mjs",
     "check:api-platform-launch": "bun run scripts/check-api-platform-launch-blockers.mjs",
     "check:railway-production": "bun run scripts/verify-railway-production.mjs"
   },

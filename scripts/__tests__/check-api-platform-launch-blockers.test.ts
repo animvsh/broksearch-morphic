@@ -14,7 +14,12 @@ describe('api platform launch blocker checker', () => {
       'PASS file exists: docs/api-platform-launch-blockers.md'
     )
     expect(output).toContain('PASS package script exists: scan:secrets')
+    expect(output).toContain('PASS package script exists: check:openapi')
+    expect(output).toContain(
+      'PASS file exists: docs/openapi/brok-v1.openapi.json'
+    )
     expect(output).toContain('PASS file contains "BRO-182"')
+    expect(output).toContain('PASS file contains "BRO-156"')
     expect(output).toContain(
       'PASS hosted playground does not send browser-supplied API keys'
     )

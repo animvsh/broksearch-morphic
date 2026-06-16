@@ -25,11 +25,14 @@ const checks = [
   fileExists('scripts/scan-secrets.ts'),
   fileExists('scripts/secret-scan-core.ts'),
   fileExists('scripts/reconcile-usage-reservations.ts'),
+  fileExists('docs/openapi/brok-v1.openapi.json'),
+  fileExists('scripts/check-openapi-spec.mjs'),
   fileExists('drizzle/0044_usage_events_request_id_idx.sql'),
   fileExists('drizzle/0045_playground_session_keys.sql'),
   packageScriptExists('scan:secrets'),
   packageScriptExists('scan:secrets:local'),
   packageScriptExists('check:deploy-env'),
+  packageScriptExists('check:openapi'),
   packageScriptExists('reconcile:usage-reservations'),
   packageScriptExists('smoke:platform'),
   packageScriptExists('stress:platform'),
@@ -45,6 +48,13 @@ const checks = [
   fileContains('docs/api-platform-launch-blockers.md', 'BRO-165'),
   fileContains('docs/api-platform-launch-blockers.md', 'BRO-168'),
   fileContains('docs/api-platform-launch-blockers.md', 'BRO-182'),
+  fileContains('docs/api-platform-launch-blockers.md', 'BRO-156'),
+  fileContains('docs/openapi/brok-v1.openapi.json', '/api/v1/chat/completions'),
+  fileContains(
+    'docs/openapi/brok-v1.openapi.json',
+    '/api/v1/search/completions'
+  ),
+  fileContains('docs/openapi/brok-v1.openapi.json', 'x-brok-sse-events'),
   fileNotContains(
     'components/playground/chat-playground.tsx',
     'apiKey:',

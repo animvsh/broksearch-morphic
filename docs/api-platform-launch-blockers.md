@@ -17,6 +17,7 @@ do not paste them into Linear, docs, commits, terminal output, or chat.
 
 | Linear  | Repo-side status | Evidence                                                                                                                                                                                                                                                                                                |
 | ------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRO-156 | Implemented      | `docs/openapi/brok-v1.openapi.json` publishes the public v1 contract, `/api/openapi` serves it, and `bun run check:openapi` verifies expected public paths, bearer auth, request IDs, reusable errors, response schemas, and SSE extensions.                                                            |
 | BRO-163 | Implemented      | `scripts/scan-secrets.ts` and `scripts/secret-scan-core.ts` scan committed/staged/local env surfaces without printing secret values; CI runs `bun run scan:secrets -- --tracked`; this checklist documents the rotation incident response and prohibits copying secret values into issue trackers/docs. |
 | BRO-164 | Implemented      | `components/playground/chat-playground.tsx` no longer accepts browser-supplied API keys, `/api/playground/run` resolves an account-owned server session key, and `bun run check:api-platform-launch` now guards against playground key placeholders, `apiKey:` request bodies, and storage writes.      |
 | BRO-165 | Implemented      | `.env.local.example`, `docs/CONFIGURATION.md`, and `docs/deployment/railway-to-brok-fyi.md` document required env names; `bun run check:deploy-env -- --provider local --env-file .env.local.example` passes; CI includes the Deploy Env Names gate.                                                    |
@@ -123,6 +124,7 @@ execute. Do not treat that as proof that lint/typecheck/tests ran and failed.
 ## Done Criteria
 
 - `bun run scan:secrets` passes for committed surfaces.
+- `bun run check:openapi` passes for the public v1 API contract.
 - `bun run check:api-platform-launch` passes for repo-side blocker artifacts.
 - `bun run check:api-platform-launch -- --require-external` passes after
   production secret setup.
