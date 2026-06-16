@@ -317,6 +317,123 @@ describe('verifyRequestAuth', () => {
     expect(mockSelect).toHaveBeenCalledTimes(4)
   })
 
+  it('authenticates both rotated source and replacement keys while both are active', async () => {
+    const oldRawKey = 'brok_sk_live_oldrotation'
+    const newRawKey = 'brok_sk_live_newrotation'
+    const oldHash = hashNewApiKey(oldRawKey)
+    const newHash = hashNewApiKey(newRawKey)
+    const workspace = {
+      id: 'workspace-1',
+      name: 'Workspace',
+      ownerUserId: 'user-1',
+      plan: 'starter',
+      status: 'active',
+      monthlyBudgetCents: 1000,
+      createdAt: new Date()
+    }
+    const oldKeyRecord = {
+      id: 'old-key',
+      workspaceId: 'workspace-1',
+      userId: 'user-1',
+      name: 'Production app',
+      keyPrefix: getKeyPrefix(oldRawKey),
+      keyHash: oldHash.hash,
+      keySalt: oldHash.salt,
+      environment: 'live',
+      status: 'active',
+      scopes: ['chat:write'],
+      allowedModels: [],
+      rpmLimit: 60,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: 1000,
+      lastUsedAt: null,
+      createdAt: new Date(),
+      revokedAt: null,
+      rotatedFromKeyId: null,
+      rotatedToKeyId: 'new-key',
+      rotatedAt: new Date()
+    }
+    const newKeyRecord = {
+      ...oldKeyRecord,
+      id: 'new-key',
+      name: 'Production app replacement',
+      keyPrefix: getKeyPrefix(newRawKey),
+      keyHash: newHash.hash,
+      keySalt: newHash.salt,
+      rotatedFromKeyId: 'old-key',
+      rotatedToKeyId: null
+    }
+
+    mockSelect
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([])
+          })
+        })
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([oldKeyRecord])
+          })
+        })
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([workspace])
+          })
+        })
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([])
+          })
+        })
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([newKeyRecord])
+          })
+        })
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([workspace])
+          })
+        })
+      })
+
+    const oldRequest = {
+      headers: {
+        get: (name: string) =>
+          name === 'authorization' ? `Bearer ${oldRawKey}` : null
+      }
+    } as unknown as Request
+    const newRequest = {
+      headers: {
+        get: (name: string) =>
+          name === 'authorization' ? `Bearer ${newRawKey}` : null
+      }
+    } as unknown as Request
+
+    const oldResult = await verifyRequestAuth(oldRequest)
+    const newResult = await verifyRequestAuth(newRequest)
+
+    expect(oldResult.success).toBe(true)
+    expect(newResult.success).toBe(true)
+    if (oldResult.success) {
+      expect(oldResult.apiKey.id).toBe('old-key')
+    }
+    if (newResult.success) {
+      expect(newResult.apiKey.id).toBe('new-key')
+    }
+  })
+
   it('updates last-used metadata after a successful API key authentication', async () => {
     const rawKey = 'brok_sk_live_lastused'
     const keyRecord = {
@@ -378,7 +495,7 @@ describe('verifyRequestAuth', () => {
     expect(mockUpdate).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects revoked API keys before mutating last-used metadata', async () => {
+  it('rejects a revoked source key after rotation before mutating last-used metadata', async () => {
     const rawKey = 'brok_sk_live_revoked'
     const keyRecord = {
       id: 'key-revoked',
@@ -398,7 +515,10 @@ describe('verifyRequestAuth', () => {
       lastUsedAt: null,
       expiresAt: null,
       createdAt: new Date(),
-      revokedAt: new Date()
+      revokedAt: new Date(),
+      rotatedFromKeyId: null,
+      rotatedToKeyId: 'replacement-key',
+      rotatedAt: new Date()
     }
 
     mockSelect.mockReturnValueOnce({

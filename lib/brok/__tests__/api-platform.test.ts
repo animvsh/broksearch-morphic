@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildRotatedApiKeyInput,
   validateAnthropicMessages,
   validateAnthropicSystem,
   validateApiKeyStatusTransition,
@@ -92,6 +93,53 @@ describe('validateCreateApiKeyInput', () => {
     expect(() =>
       validateCreateApiKeyInput({ ...validInput, monthlyBudgetCents: -1 })
     ).toThrow('Monthly budget must be an integer between 0 and 10000000.')
+  })
+})
+
+describe('buildRotatedApiKeyInput', () => {
+  const sourceKey = {
+    name: 'Production app',
+    environment: 'live' as const,
+    scopes: ['chat:write', 'usage:read'],
+    allowedModels: ['brok-fast'],
+    rpmLimit: 120,
+    dailyRequestLimit: 10000,
+    monthlyBudgetCents: 2500
+  }
+
+  it('inherits source key access and budgets by default', () => {
+    expect(buildRotatedApiKeyInput(sourceKey)).toEqual({
+      name: 'Production app replacement',
+      environment: 'live',
+      scopes: ['chat:write', 'usage:read'],
+      allowedModels: ['brok-fast'],
+      rpmLimit: 120,
+      dailyRequestLimit: 10000,
+      monthlyBudgetCents: 2500,
+      expiresAt: null
+    })
+  })
+
+  it('allows editable replacement metadata without changing environment', () => {
+    expect(
+      buildRotatedApiKeyInput(sourceKey, {
+        name: 'Narrow replacement',
+        scopes: ['chat:write'],
+        allowedModels: [],
+        rpmLimit: 60,
+        dailyRequestLimit: 5000,
+        monthlyBudgetCents: 0
+      })
+    ).toEqual({
+      name: 'Narrow replacement',
+      environment: 'live',
+      scopes: ['chat:write'],
+      allowedModels: [],
+      rpmLimit: 60,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: 0,
+      expiresAt: null
+    })
   })
 })
 

@@ -71,13 +71,23 @@ bun run scan:secrets:local
 The scanner reports file, line, and rule names only. If a real value appears in
 a local checkout, treat it as exposed and rotate it at the provider.
 
-## Rotation And Revocation
+## Zero-Downtime Rotation
 
-1. Create a new key with the same or narrower scopes.
-2. Deploy the new key through your server-side secret store.
-3. Verify it with a low-risk request and save the returned request ID.
-4. Move traffic and monitor usage.
-5. Revoke the old key.
+1. Rotate from the active key row in the API key table.
+2. Review the inherited scopes, model allowlist, RPM, daily limit, and monthly
+   budget, then narrow anything that should change.
+3. Copy the replacement secret immediately. Brok reveals it once.
+4. Deploy the replacement through your server-side secret store while the source
+   key stays active.
+5. Verify it with a low-risk request and save the returned request ID.
+6. Move traffic and monitor usage.
+7. Revoke the source key.
+
+The dashboard shows rotation relationships with names, prefixes, statuses, and
+timestamps only. Raw source and replacement secrets are never displayed after
+their one-time reveal.
+
+## Revocation
 
 Pause is for temporary shutdowns. Revocation is final. User-created keys do not
 yet have general persistent expiration; playground session keys are server-side
@@ -240,16 +250,30 @@ bun run scan:secrets:local`}</code>
           provider.
         </p>
 
-        <h2>Rotation And Revocation</h2>
+        <h2>Zero-Downtime Rotation</h2>
         <ol>
-          <li>Create a new key with the same or narrower scopes.</li>
+          <li>Rotate from the active key row in the API key table.</li>
+          <li>
+            Review the inherited scopes, model allowlist, RPM, daily limit, and
+            monthly budget, then narrow anything that should change.
+          </li>
+          <li>
+            Copy the replacement secret immediately. Brok reveals it once.
+          </li>
           <li>Deploy the new key through your server-side secret store.</li>
           <li>
             Verify it with a low-risk request and save the returned request ID.
           </li>
           <li>Move traffic and monitor usage.</li>
-          <li>Revoke the old key.</li>
+          <li>Revoke the source key.</li>
         </ol>
+        <p>
+          The dashboard shows rotation relationships with names, prefixes,
+          statuses, and timestamps only. Raw source and replacement secrets are
+          never displayed after their one-time reveal.
+        </p>
+
+        <h2>Revocation</h2>
         <p>
           Pause is for temporary shutdowns. Revocation is final. User-created
           keys do not yet have general persistent expiration; playground session
