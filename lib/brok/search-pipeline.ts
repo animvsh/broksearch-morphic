@@ -182,11 +182,13 @@ async function runUncachedSearchPipeline(
         primaryError: error,
         fallbackError
       })
-      return buildUnavailableSearchResponse(
+      const response = buildLocalFallbackSearchResponse(
         resolvedQuery,
         classification,
         searchQueryList
       )
+      await emitSourcePreview(request, response.citations)
+      return response
     }
   }
 }
@@ -256,8 +258,8 @@ function setCachedSearchResponse(
 
 function isUnavailableSearchResponse(response: SearchResponse) {
   return (
-    response.citations.length === 0 &&
-    response.answer.startsWith('Search is temporarily unavailable')
+    response.answer.startsWith('Live web search was unavailable') ||
+    response.citations.some(citation => citation.id === 'fallback_local_1')
   )
 }
 
@@ -293,28 +295,74 @@ function clampSourceCount(
   return rounded
 }
 
-function buildUnavailableSearchResponse(
+function buildLocalFallbackSearchResponse(
   resolvedQuery: string,
   classification: QueryClassification,
   searchQueryList: string[]
 ): SearchResponse {
-  const answer =
-    'Search is temporarily unavailable for this request. Try again in a moment, or narrow the query to a specific source or domain.'
+  const fallbackSource: SearchResult = {
+    id: 'fallback_local_1',
+    title: 'Brok local fallback knowledge',
+    url: 'https://www.brok.fyi/search#local-fallback',
+    publisher: 'Brok local fallback',
+    snippet:
+      'Generated locally because live search providers were unavailable. Treat this as model knowledge, not verified web evidence.',
+    retrievedAt: new Date().toISOString(),
+    qualityScore: 15
+  }
+  const answer = buildLocalFallbackAnswer(resolvedQuery, classification)
 
   return {
     answer,
-    citations: [],
+    citations: [fallbackSource],
     searchQueries: searchQueryList.length,
     searchQueryList,
-    tokensUsed: Math.round((resolvedQuery.length + answer.length) / 4),
+    tokensUsed: Math.round(
+      (resolvedQuery.length + answer.length + fallbackSource.snippet.length) / 4
+    ),
     resolvedQuery,
     classification,
     followUps: [
       {
-        label: 'Try the same search again',
-        query: resolvedQuery
+        label: 'Retry with live sources',
+        query: `Search the web again for ${resolvedQuery}`
+      },
+      {
+        label: 'Limit to primary sources',
+        query: `Find primary sources for ${resolvedQuery}`
+      },
+      {
+        label: 'Make a verification checklist',
+        query: `What should I verify before trusting an answer about ${resolvedQuery}?`
       }
     ]
+  }
+}
+
+function buildLocalFallbackAnswer(
+  resolvedQuery: string,
+  classification: QueryClassification
+) {
+  const prefix =
+    'Live web search was unavailable, so this is a fast local fallback based on model knowledge rather than verified web results [1].'
+
+  switch (classification.type) {
+    case 'fresh/current':
+    case 'news':
+    case 'shopping-ish':
+    case 'local':
+      return `${prefix}\n\nFor "${resolvedQuery}", I should not invent current facts. The useful next move is to check primary sources, official pages, recent announcements, pricing pages, or local listings once search is back. If you rerun this in a moment or add a specific domain, Brok can replace this fallback with sourced results.`
+    case 'comparison':
+      return `${prefix}\n\nFor "${resolvedQuery}", compare the options on: purpose, core features, reliability, pricing, integration effort, switching costs, and the risks that matter to your use case. Treat any time-sensitive claims like current price, availability, benchmark results, or policy changes as unverified until live sources return.`
+    case 'technical':
+    case 'code':
+      return `${prefix}\n\nFor "${resolvedQuery}", start by isolating the expected behavior, the failing behavior, the smallest repro, logs/errors, and the boundary between client, server, and external services. Then make one narrow fix, add a regression test around the failure mode, and verify the real user path.`
+    case 'recommendation':
+      return `${prefix}\n\nFor "${resolvedQuery}", define the decision criteria first: must-haves, budget/time constraints, integration needs, durability, and failure cost. Then shortlist options against those criteria and verify recent reviews, docs, and pricing with live sources before deciding.`
+    case 'academic':
+      return `${prefix}\n\nFor "${resolvedQuery}", use this only as a starting frame: define the key terms, look for primary papers or canonical references, compare claims across sources, and note where evidence is weak or contested before treating the answer as reliable.`
+    default:
+      return `${prefix}\n\nFor "${resolvedQuery}", the safest general answer is to clarify the core question, separate stable background from facts that may have changed, and verify any names, dates, numbers, prices, or policies with live sources when search is available again.`
   }
 }
 

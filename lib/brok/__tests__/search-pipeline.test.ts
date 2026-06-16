@@ -264,7 +264,7 @@ describe('Brok search pipeline helpers', () => {
     ).toHaveLength(1)
   })
 
-  it('does not cache unavailable fallback responses', async () => {
+  it('returns an honest local fallback without caching provider outages', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -281,8 +281,34 @@ describe('Brok search pipeline helpers', () => {
       depth: 'lite'
     })
 
-    expect(first.answer).toContain('Search is temporarily unavailable')
-    expect(second.answer).toContain('Search is temporarily unavailable')
+    expect(first.answer).toContain('Live web search was unavailable')
+    expect(first.answer).toContain('model knowledge')
+    expect(first.answer).toContain('[1]')
+    expect(first.citations[0]).toMatchObject({
+      id: 'fallback_local_1',
+      title: 'Brok local fallback knowledge',
+      publisher: 'Brok local fallback',
+      qualityScore: 15
+    })
+    expect(first.citations[0]?.snippet).toContain('not verified web evidence')
+    expect(first.followUps).toEqual([
+      {
+        label: 'Retry with live sources',
+        query:
+          'Search the web again for latest impossible provider outage check'
+      },
+      {
+        label: 'Limit to primary sources',
+        query:
+          'Find primary sources for latest impossible provider outage check'
+      },
+      {
+        label: 'Make a verification checklist',
+        query:
+          'What should I verify before trusting an answer about latest impossible provider outage check?'
+      }
+    ])
+    expect(second.answer).toContain('Live web search was unavailable')
     expect(
       vi
         .mocked(fetch)
