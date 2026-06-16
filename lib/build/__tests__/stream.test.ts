@@ -56,6 +56,12 @@ describe('runBuildStream', () => {
       phase: 'ready',
       message: 'Project scaffold ready. Sign in to open a managed preview.'
     })
+    expect(result.events).toContainEqual({
+      kind: 'done',
+      projectId: null,
+      previewUrl: null
+    })
+    expect(result.projectId).toBeNull()
   }, 15000)
 
   it('persists an authenticated build through BrokCode execution when available', async () => {
@@ -114,18 +120,23 @@ describe('runBuildStream', () => {
         degraded: false
       })
       expect(result.projectId).not.toBe('brok-test-persist')
+      expect(result.projectId).toBeTruthy()
+      const persistedProjectId = result.projectId
+      if (!persistedProjectId) {
+        throw new Error('Expected a persisted BrokCode project id.')
+      }
       expect(result.events).toContainEqual({
         kind: 'preview_url',
         url: expect.stringContaining('/api/brokcode/previews/')
       })
 
       const project = await getBrokCodeProject({
-        id: result.projectId,
+        id: persistedProjectId,
         workspaceId: '00000000-0000-0000-0000-000000000003',
         userId: 'user_test'
       })
       expect(project).toMatchObject({
-        id: result.projectId,
+        id: persistedProjectId,
         status: 'preview_ready',
         previewUrl: expect.stringContaining('/api/brokcode/previews/'),
         deploymentUrl: null
@@ -145,7 +156,7 @@ describe('runBuildStream', () => {
       expect(previewMetadata?.backendPlanStatus).toBe('planned')
 
       const files = await listBrokCodeProjectFiles({
-        projectId: result.projectId,
+        projectId: persistedProjectId,
         workspaceId: '00000000-0000-0000-0000-000000000003'
       })
       expect(files.map(file => file.path).sort()).toEqual([
@@ -154,7 +165,7 @@ describe('runBuildStream', () => {
       ])
 
       const deployments = await listBrokCodeProjectDeployments({
-        projectId: result.projectId,
+        projectId: persistedProjectId,
         workspaceId: '00000000-0000-0000-0000-000000000003',
         userId: 'user_test'
       })
@@ -216,9 +227,14 @@ describe('runBuildStream', () => {
             event.message.includes('degraded')
         )
       ).toBe(true)
+      expect(result.projectId).toBeTruthy()
+      const persistedProjectId = result.projectId
+      if (!persistedProjectId) {
+        throw new Error('Expected a degraded fallback project id.')
+      }
 
       const project = await getBrokCodeProject({
-        id: result.projectId,
+        id: persistedProjectId,
         workspaceId: '00000000-0000-0000-0000-000000000003',
         userId: 'user_test'
       })
@@ -236,7 +252,7 @@ describe('runBuildStream', () => {
       })
 
       const deployments = await listBrokCodeProjectDeployments({
-        projectId: result.projectId,
+        projectId: persistedProjectId,
         workspaceId: '00000000-0000-0000-0000-000000000003',
         userId: 'user_test'
       })

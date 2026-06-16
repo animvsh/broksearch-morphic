@@ -4,6 +4,35 @@ import { describe, expect, it, vi } from 'vitest'
 import { WorkspaceHeader } from '../build-workspace'
 
 describe('WorkspaceHeader', () => {
+  it('keeps deploy and export disabled until a persisted project exists', () => {
+    const onDeploy = vi.fn()
+
+    render(
+      <WorkspaceHeader
+        projectName="Anonymous Scaffold"
+        phase="ready"
+        progress={100}
+        previewUrl={null}
+        deploymentUrl={null}
+        deployStatus="idle"
+        deployMessage={null}
+        projectId={null}
+        onDeploy={onDeploy}
+        onRestart={() => undefined}
+      />
+    )
+
+    const deployButton = screen.getByRole('button', { name: 'Deploy' })
+    fireEvent.click(deployButton)
+
+    expect(deployButton).toBeDisabled()
+    expect(onDeploy).not.toHaveBeenCalled()
+    expect(screen.getByRole('link', { name: 'Export' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    )
+  })
+
   it('triggers deploy as an action instead of opening the preview link', () => {
     const onDeploy = vi.fn()
 

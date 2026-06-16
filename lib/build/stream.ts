@@ -188,7 +188,7 @@ export type BuildStreamResult = {
   classification: ReturnType<typeof classifyApp>
   internalPlan: InternalPlan
   userPlan: UserVisiblePlan
-  projectId: string
+  projectId: string | null
   events: BrokStreamEvent[]
 }
 
@@ -208,7 +208,7 @@ export async function runBuildStream(
     internalPlan,
     userPlan.title
   )
-  let activeProjectId = options.projectId
+  let activeProjectId: string | null = null
   let persistedProject: PersistedBrokBuildProject | null = null
 
   const events: BrokStreamEvent[] = []

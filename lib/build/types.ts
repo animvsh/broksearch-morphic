@@ -60,7 +60,7 @@ export type BrokStreamEvent =
   | { kind: 'opencode_session'; sessionId: string }
   | { kind: 'backend_status'; status: BrokBuildBackendStatus }
   | { kind: 'backend_plan'; plan: BrokBuildBackendResourcePlan }
-  | { kind: 'done'; projectId: string; previewUrl: string | null }
+  | { kind: 'done'; projectId: string | null; previewUrl: string | null }
   | { kind: 'error'; message: string }
 
 export type BrokBuildBackendStatus =
