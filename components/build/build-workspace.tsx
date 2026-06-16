@@ -39,6 +39,10 @@ export function BrokBuildWorkspace({
     url: string | null
     message: string | null
   }>({ status: 'idle', url: null, message: null })
+  const [backendProvision, setBackendProvision] = useState<{
+    status: 'idle' | 'provisioning' | 'ready' | 'failed'
+    message: string | null
+  }>({ status: 'idle', message: null })
   const startedRef = useRef(false)
 
   const { state, start, stop, sendEdit, send } = useBrokBuildStream()
@@ -158,6 +162,55 @@ export function BrokBuildWorkspace({
     }
   }, [deployState.status, state.projectId])
 
+  const handleProvisionBackend = useCallback(async () => {
+    if (!state.projectId || backendProvision.status === 'provisioning') return
+    setBackendProvision({
+      status: 'provisioning',
+      message: 'Provisioning InsForge...'
+    })
+
+    try {
+      const response = await fetch('/api/brokcode/projects/insforge/provision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: state.projectId,
+          projectName
+        })
+      })
+      const body = (await response.json().catch(() => null)) as {
+        backend?: { status?: unknown; health?: unknown }
+        message?: unknown
+        error?: unknown
+      } | null
+      if (!response.ok) {
+        throw new Error(
+          typeof body?.error === 'string'
+            ? body.error
+            : `Backend provision failed (${response.status}).`
+        )
+      }
+
+      const ready =
+        body?.backend?.status === 'ready' || body?.backend?.health === 'online'
+      setBackendProvision({
+        status: ready ? 'ready' : 'provisioning',
+        message:
+          typeof body?.message === 'string'
+            ? body.message
+            : ready
+              ? 'InsForge backend connected.'
+              : 'InsForge backend is warming up.'
+      })
+    } catch (error) {
+      setBackendProvision({
+        status: 'failed',
+        message:
+          error instanceof Error ? error.message : 'Backend provision failed.'
+      })
+    }
+  }, [backendProvision.status, projectName, state.projectId])
+
   return (
     <div className="grid h-full grid-rows-[auto_minmax(0,1fr)_auto] bg-background">
       <WorkspaceHeader
@@ -177,6 +230,12 @@ export function BrokBuildWorkspace({
           setAutoStarted(false)
           setShowPlanCard(true)
           setDeployState({ status: 'idle', url: null, message: null })
+          setBackendProvision({ status: 'idle', message: null })
+        }}
+        backendStatus={backendProvision.status}
+        backendMessage={backendProvision.message}
+        onProvisionBackend={() => {
+          void handleProvisionBackend()
         }}
       />
 
@@ -252,8 +311,11 @@ type HeaderProps = {
   deploymentUrl: string | null
   deployStatus: 'idle' | 'publishing' | 'live' | 'failed'
   deployMessage: string | null
+  backendStatus: 'idle' | 'provisioning' | 'ready' | 'failed'
+  backendMessage: string | null
   projectId: string | null
   onDeploy: () => void
+  onProvisionBackend: () => void
   onRestart: () => void
 }
 
@@ -265,8 +327,11 @@ export function WorkspaceHeader({
   deploymentUrl,
   deployStatus,
   deployMessage,
+  backendStatus,
+  backendMessage,
   projectId,
   onDeploy,
+  onProvisionBackend,
   onRestart
 }: HeaderProps) {
   const brokCodeProjectUrl = projectId
@@ -296,6 +361,34 @@ export function WorkspaceHeader({
         >
           Preview
         </a>
+        <button
+          type="button"
+          onClick={onProvisionBackend}
+          disabled={!projectId || backendStatus === 'provisioning'}
+          title={backendMessage ?? 'Provision an InsForge backend'}
+          className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        >
+          {backendStatus === 'provisioning'
+            ? 'Provisioning...'
+            : backendStatus === 'ready'
+              ? 'Backend ready'
+              : backendStatus === 'failed'
+                ? 'Retry backend'
+                : 'Backend'}
+        </button>
+        {backendMessage ? (
+          <span
+            role={backendStatus === 'failed' ? 'alert' : 'status'}
+            className={cn(
+              'max-w-[220px] truncate text-[11px]',
+              backendStatus === 'failed'
+                ? 'text-rose-600 dark:text-rose-400'
+                : 'text-muted-foreground'
+            )}
+          >
+            {backendMessage}
+          </span>
+        ) : null}
         <button
           type="button"
           onClick={onDeploy}

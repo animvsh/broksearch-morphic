@@ -16,8 +16,11 @@ describe('WorkspaceHeader', () => {
         deploymentUrl={null}
         deployStatus="idle"
         deployMessage={null}
+        backendStatus="idle"
+        backendMessage={null}
         projectId={null}
         onDeploy={onDeploy}
+        onProvisionBackend={() => undefined}
         onRestart={() => undefined}
       />
     )
@@ -27,6 +30,7 @@ describe('WorkspaceHeader', () => {
 
     expect(deployButton).toBeDisabled()
     expect(onDeploy).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Backend' })).toBeDisabled()
     expect(screen.getByRole('link', { name: 'Export' })).toHaveAttribute(
       'aria-disabled',
       'true'
@@ -45,8 +49,11 @@ describe('WorkspaceHeader', () => {
         deploymentUrl={null}
         deployStatus="idle"
         deployMessage={null}
+        backendStatus="idle"
+        backendMessage={null}
         projectId="project-1"
         onDeploy={onDeploy}
+        onProvisionBackend={() => undefined}
         onRestart={() => undefined}
       />
     )
@@ -68,8 +75,11 @@ describe('WorkspaceHeader', () => {
         deploymentUrl="/brokcode/apps/project-1/"
         deployStatus="live"
         deployMessage="Published"
+        backendStatus="ready"
+        backendMessage="InsForge backend connected."
         projectId="project-1"
         onDeploy={() => undefined}
+        onProvisionBackend={() => undefined}
         onRestart={() => undefined}
       />
     )
@@ -91,8 +101,11 @@ describe('WorkspaceHeader', () => {
         deploymentUrl={null}
         deployStatus="failed"
         deployMessage="Project files are missing."
+        backendStatus="idle"
+        backendMessage={null}
         projectId="project-1"
         onDeploy={() => undefined}
+        onProvisionBackend={() => undefined}
         onRestart={() => undefined}
       />
     )
@@ -101,5 +114,31 @@ describe('WorkspaceHeader', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Project files are missing.'
     )
+  })
+
+  it('triggers backend provisioning from a persisted project', () => {
+    const onProvisionBackend = vi.fn()
+
+    render(
+      <WorkspaceHeader
+        projectName="CRM Builder"
+        phase="ready"
+        progress={100}
+        previewUrl="/api/brokcode/previews/project-1"
+        deploymentUrl={null}
+        deployStatus="idle"
+        deployMessage={null}
+        backendStatus="idle"
+        backendMessage={null}
+        projectId="project-1"
+        onDeploy={() => undefined}
+        onProvisionBackend={onProvisionBackend}
+        onRestart={() => undefined}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Backend' }))
+
+    expect(onProvisionBackend).toHaveBeenCalledTimes(1)
   })
 })
