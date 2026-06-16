@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import {
   apiKeyHasScope,
@@ -33,6 +37,7 @@ import {
   createBrokCodeWorkerMetadata,
   getBrokCodeJobRegistry
 } from '@/lib/brokcode/durable-job'
+import { canUseGenericBrokFallback } from '@/lib/brokcode/fallback-policy'
 import {
   applyBrokCodeFileOperations,
   BrokCodeFileOperation,
@@ -262,25 +267,6 @@ function classifyCommandType(command: string) {
   if (/\b(test|check|lint|typecheck)\b/.test(lower)) return 'verify'
   if (/\b(fix|bug|error|broken)\b/.test(lower)) return 'fix'
   return 'build'
-}
-
-function canUseGenericBrokFallback({
-  source,
-  commandType,
-  allowBrokFallback
-}: {
-  source?: string
-  commandType?: string
-  allowBrokFallback?: boolean
-}) {
-  if (allowBrokFallback) return true
-  if (source?.toLowerCase() !== 'browser') return true
-
-  const normalizedCommandType = commandType?.toLowerCase()
-  return (
-    normalizedCommandType === 'verify' ||
-    normalizedCommandType === 'security_scan'
-  )
 }
 
 function formatBrokCodeRuntimeError(error: unknown) {
@@ -995,6 +981,72 @@ function getPiTools() {
   return tools
 }
 
+async function readScratchGeneratedFileFences(cwd: string) {
+  const candidates = [
+    { path: 'index.html', language: 'html' },
+    { path: 'styles.css', language: 'css' },
+    { path: 'app.js', language: 'js' }
+  ]
+  const fences: string[] = []
+
+  for (const candidate of candidates) {
+    const content = await readFile(
+      path.join(cwd, candidate.path),
+      'utf8'
+    ).catch(() => null)
+    if (!content?.trim()) continue
+
+    fences.push(
+      [
+        `\`\`\`${candidate.language} path=${candidate.path}`,
+        content.trim(),
+        '```'
+      ].join('\n')
+    )
+  }
+
+  return fences
+}
+
+async function runBrokCodePiPrompt({
+  messages,
+  piNoTools,
+  piScratchCwd
+}: {
+  messages: OpenAiMessage[]
+  piNoTools?: 'all' | 'builtin'
+  piScratchCwd?: boolean
+}) {
+  const cwd = piScratchCwd
+    ? await mkdtemp(path.join(tmpdir(), 'brokcode-pi-'))
+    : undefined
+
+  try {
+    const result = await runPiAgentPrompt({
+      mode: 'brokcode',
+      prompt: buildPiPrompt(messages),
+      cwd,
+      tools: getPiTools(),
+      noTools: piNoTools
+    })
+    if (!cwd) return result
+
+    const scratchFileFences = await readScratchGeneratedFileFences(cwd)
+    if (scratchFileFences.length === 0) return result
+
+    return {
+      ...result,
+      content: [result.content, ...scratchFileFences].join('\n\n')
+    }
+  } finally {
+    if (cwd) {
+      await rm(cwd, { recursive: true, force: true }).catch(error => {
+        console.error('Failed to remove BrokCode Pi scratch directory:', error)
+      })
+    }
+  }
+}
+
 function createExecutionStream({
   auth,
   requestId,
@@ -1009,6 +1061,8 @@ function createExecutionStream({
   requireOpenCode,
   preferPi,
   requirePi,
+  piNoTools,
+  piScratchCwd,
   allowBrokFallback,
   taskId,
   workerLeaseId,
@@ -1028,6 +1082,8 @@ function createExecutionStream({
   requireOpenCode: boolean
   preferPi: boolean
   requirePi: boolean
+  piNoTools?: 'all' | 'builtin'
+  piScratchCwd?: boolean
   allowBrokFallback: boolean
   taskId?: string
   workerLeaseId?: string
@@ -1116,10 +1172,10 @@ function createExecutionStream({
               send('status', {
                 message: 'Building with the coding agent.'
               })
-              const result = await runPiAgentPrompt({
-                mode: 'brokcode',
-                prompt: buildPiPrompt(messages),
-                tools: getPiTools()
+              const result = await runBrokCodePiPrompt({
+                messages,
+                piNoTools,
+                piScratchCwd
               })
               const persisted = await persistGeneratedProjectOutput({
                 auth,
@@ -2115,6 +2171,11 @@ export async function POST(request: NextRequest) {
       body?.prefer_pi !== false && process.env.BROKCODE_PREFER_PI !== 'false'
     const requirePi =
       body?.require_pi === true || process.env.BROKCODE_REQUIRE_PI === 'true'
+    const piNoTools =
+      body?.pi_no_tools === 'all' || body?.pi_no_tools === 'builtin'
+        ? body.pi_no_tools
+        : undefined
+    const piScratchCwd = body?.pi_scratch_cwd === true
     const requireOpenCode =
       !preferPi &&
       !selfBrokApiEndpoint &&
@@ -2278,6 +2339,8 @@ export async function POST(request: NextRequest) {
         requireOpenCode,
         preferPi,
         requirePi,
+        piNoTools,
+        piScratchCwd,
         allowBrokFallback: body?.allow_brok_fallback === true,
         taskId: task?.id,
         requestOrigin: publicOrigin,
@@ -2295,10 +2358,10 @@ export async function POST(request: NextRequest) {
 
     if (preferPi || requirePi) {
       try {
-        const result = await runPiAgentPrompt({
-          mode: 'brokcode',
-          prompt: buildPiPrompt(messages),
-          tools: getPiTools()
+        const result = await runBrokCodePiPrompt({
+          messages,
+          piNoTools,
+          piScratchCwd
         })
         const persisted = await persistGeneratedProjectOutput({
           auth: authResult,
@@ -2517,6 +2580,12 @@ export async function POST(request: NextRequest) {
         allowBrokFallback: body?.allow_brok_fallback === true
       })
     ) {
+      const runtimeFailureDetails = [piFailure, opencodeFailure]
+        .filter(Boolean)
+        .join(' ')
+      const runtimeUnavailableMessage = runtimeFailureDetails
+        ? `${runtimeFailureDetails} BrokCode Cloud runtime is required for browser build/edit runs.`
+        : 'BrokCode Cloud runtime is required for browser build/edit runs.'
       await recordCodeExecutionUsage({
         ...codeUsageContext,
         auth: authResult,
@@ -2533,8 +2602,7 @@ export async function POST(request: NextRequest) {
           error: {
             type: 'runtime_error',
             code: 'runtime_unavailable',
-            message:
-              'BrokCode Cloud runtime is required for browser build/edit runs.'
+            message: runtimeUnavailableMessage
           }
         },
         { status: 503 }

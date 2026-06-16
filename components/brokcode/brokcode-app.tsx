@@ -5733,8 +5733,7 @@ function DeployReadinessPanel({
   })
   const readiness = state?.readiness ?? null
   const latestDeployment = state?.latestDeployment ?? null
-  const deploymentUrl =
-    latestDeployment?.url ?? state?.deploymentUrl ?? readiness?.deploymentUrl
+  const deploymentUrl = latestDeployment?.url ?? state?.deploymentUrl ?? null
   const previewUrl = state?.previewUrl ?? readiness?.previewUrl
   const blockedIssues = readiness?.quality?.issues ?? []
   const missingFiles = readiness?.requiredFiles ?? []
@@ -5798,7 +5797,7 @@ function DeployReadinessPanel({
             >
               <a href={deploymentUrl} target="_blank" rel="noreferrer">
                 <ExternalLink className="size-3.5" />
-                Live URL
+                Published app
               </a>
             </Button>
           ) : null}

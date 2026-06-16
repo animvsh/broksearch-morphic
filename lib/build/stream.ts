@@ -8,6 +8,7 @@
 // real time, plus starter file previews for signed-out/demo flows.
 
 import { classifyApp } from './app-types'
+import { buildInsForgeBackendResourcePlan } from './backend-plan'
 import {
   persistBrokBuildProject,
   type PersistBrokBuildProjectOptions,
@@ -187,7 +188,7 @@ export type BuildStreamResult = {
   classification: ReturnType<typeof classifyApp>
   internalPlan: InternalPlan
   userPlan: UserVisiblePlan
-  projectId: string
+  projectId: string | null
   events: BrokStreamEvent[]
 }
 
@@ -203,7 +204,11 @@ export async function runBuildStream(
     classification
   )
   const userPlan = buildUserVisiblePlan(options.prompt, internalPlan)
-  let activeProjectId = options.projectId
+  const backendPlan = buildInsForgeBackendResourcePlan(
+    internalPlan,
+    userPlan.title
+  )
+  let activeProjectId: string | null = null
   let persistedProject: PersistedBrokBuildProject | null = null
 
   const events: BrokStreamEvent[] = []
@@ -222,12 +227,16 @@ export async function runBuildStream(
   emit({ kind: 'internal_plan', internalPlan })
   events.push({ kind: 'internal_plan', internalPlan })
 
+  emit({ kind: 'backend_plan', plan: backendPlan })
+  events.push({ kind: 'backend_plan', plan: backendPlan })
+
   if (options.brokCodeProject) {
     try {
       persistedProject = await persistBrokBuildProject({
         ...options.brokCodeProject,
         prompt: options.prompt,
-        userPlan
+        userPlan,
+        backendPlan
       })
       activeProjectId = persistedProject.projectId
       const projectEvent: BrokStreamEvent = {
@@ -235,14 +244,19 @@ export async function runBuildStream(
         projectId: persistedProject.projectId,
         previewUrl: persistedProject.previewUrl,
         deploymentUrl: persistedProject.deploymentUrl,
-        fileCount: persistedProject.fileCount
+        fileCount: persistedProject.fileCount,
+        source: persistedProject.source,
+        degraded: persistedProject.degraded,
+        message: persistedProject.message
       }
       emit(projectEvent)
       events.push(projectEvent)
       const logEvent: BrokStreamEvent = {
         kind: 'log',
-        level: 'info',
-        message: `Created BrokCode project ${persistedProject.projectId} with ${persistedProject.fileCount} managed preview files.`
+        level: persistedProject.degraded ? 'warn' : 'info',
+        message: persistedProject.degraded
+          ? `Created degraded BrokCode fallback project ${persistedProject.projectId}: ${persistedProject.message}`
+          : `Created BrokCode project ${persistedProject.projectId} through the execution runtime with ${persistedProject.fileCount} files.`
       }
       emit(logEvent)
       events.push(logEvent)
@@ -251,6 +265,23 @@ export async function runBuildStream(
         error instanceof Error
           ? error.message
           : 'BrokCode project persistence failed.'
+      if (options.brokCodeProject.requireBrokCodeExecution) {
+        const errorEvent: BrokStreamEvent = {
+          kind: 'error',
+          message
+        }
+        emit(errorEvent)
+        events.push(errorEvent)
+
+        return {
+          classification,
+          internalPlan,
+          userPlan,
+          projectId: null,
+          events
+        }
+      }
+
       const warnEvent: BrokStreamEvent = {
         kind: 'log',
         level: 'warn',

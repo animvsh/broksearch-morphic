@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 
 import type {
+  BrokBuildBackendResourcePlan,
   BrokBuildBackendStatus,
   BrokBuildFilePreview,
   BrokBuildPhase,
@@ -29,6 +30,7 @@ type BrainProps = {
   phase: BrokBuildPhase
   plan: UserVisiblePlan | null
   internalPlan: InternalPlan | null
+  backendPlan: BrokBuildBackendResourcePlan | null
   files: BrokBuildFilePreview[]
   logs: Array<{ time: string; level: 'info' | 'warn' | 'error'; message: string }>
   backendStatus: BrokBuildBackendStatus
@@ -40,6 +42,7 @@ export function BuildProjectBrain({
   phase,
   plan,
   internalPlan,
+  backendPlan,
   files,
   logs,
   backendStatus,
@@ -90,7 +93,11 @@ export function BuildProjectBrain({
           className="mt-0 flex-1 min-h-0 overflow-y-auto p-3"
           hidden={tab !== 'backend'}
         >
-          <BackendTab internalPlan={internalPlan} status={backendStatus} />
+          <BackendTab
+            internalPlan={internalPlan}
+            backendPlan={backendPlan}
+            status={backendStatus}
+          />
         </TabsContent>
 
         <TabsContent
@@ -280,9 +287,11 @@ function FilesTab({ files }: { files: BrokBuildFilePreview[] }) {
 
 function BackendTab({
   internalPlan,
+  backendPlan,
   status
 }: {
   internalPlan: InternalPlan | null
+  backendPlan: BrokBuildBackendResourcePlan | null
   status: BrokBuildBackendStatus
 }) {
   if (!internalPlan) {
@@ -294,42 +303,125 @@ function BackendTab({
   }
   return (
     <div className="flex flex-col gap-4 text-sm">
-      <Section title="Starter data model">
-        <ul className="space-y-1 text-xs text-foreground/80">
-          {internalPlan.database_tables.map(table => (
-            <li key={table} className="flex items-center gap-1.5">
-              <Check />
-              {table}
-            </li>
-          ))}
-        </ul>
-      </Section>
+      {backendPlan ? (
+        <>
+          <Section title="InsForge plan">
+            <div className="grid grid-cols-3 gap-1.5 text-xs">
+              <Stack label="Tables" value={String(backendPlan.tables.length)} />
+              <Stack
+                label="Storage"
+                value={String(backendPlan.storageBuckets.length)}
+              />
+              <Stack
+                label="Functions"
+                value={String(backendPlan.functions.length)}
+              />
+            </div>
+          </Section>
 
-      {internalPlan.storage_buckets.length > 0 ? (
-        <Section title="Storage">
-          <ul className="space-y-1 text-xs text-foreground/80">
-            {internalPlan.storage_buckets.map(bucket => (
-              <li key={bucket} className="flex items-center gap-1.5">
-                <Boxes className="h-3 w-3 text-muted-foreground" />
-                {bucket}
-              </li>
-            ))}
-          </ul>
-        </Section>
-      ) : null}
+          <Section title="Tables">
+            <ul className="space-y-1 text-xs text-foreground/80">
+              {backendPlan.tables.map(table => (
+                <li key={table.name} className="flex items-center gap-1.5">
+                  <Check />
+                  <span className="font-mono">{table.name}</span>
+                  <span className="text-muted-foreground">
+                    {table.columns.length} cols
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Section>
 
-      {internalPlan.functions.length > 0 ? (
-        <Section title="Functions">
-          <ul className="space-y-1 text-xs text-foreground/80">
-            {internalPlan.functions.map(fn => (
-              <li key={fn} className="flex items-center gap-1.5">
-                <Check />
-                {fn}
-              </li>
-            ))}
-          </ul>
-        </Section>
-      ) : null}
+          {backendPlan.storageBuckets.length > 0 ? (
+            <Section title="Storage">
+              <ul className="space-y-1 text-xs text-foreground/80">
+                {backendPlan.storageBuckets.map(bucket => (
+                  <li key={bucket.name} className="flex items-center gap-1.5">
+                    <Boxes className="h-3 w-3 text-muted-foreground" />
+                    <span className="font-mono">{bucket.name}</span>
+                    <span className="text-muted-foreground">
+                      {bucket.visibility}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          ) : null}
+
+          {backendPlan.functions.length > 0 ? (
+            <Section title="Functions">
+              <ul className="space-y-1 text-xs text-foreground/80">
+                {backendPlan.functions.map(fn => (
+                  <li key={fn.slug} className="flex items-center gap-1.5">
+                    <Check />
+                    <span className="font-mono">{fn.slug}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          ) : null}
+
+          <Section title="Env">
+            <div className="flex flex-wrap gap-1">
+              {[...backendPlan.publicEnv, ...backendPlan.privateEnv].map(env => (
+                <Badge
+                  key={env}
+                  variant="secondary"
+                  className="font-mono text-[10px]"
+                >
+                  {env}
+                </Badge>
+              ))}
+            </div>
+          </Section>
+
+          <Section title="Migration">
+            <p className="font-mono text-[11px] text-foreground/80">
+              {backendPlan.migrationSql.split('\n').length} SQL lines
+            </p>
+          </Section>
+        </>
+      ) : (
+        <>
+          <Section title="Starter data model">
+            <ul className="space-y-1 text-xs text-foreground/80">
+              {internalPlan.database_tables.map(table => (
+                <li key={table} className="flex items-center gap-1.5">
+                  <Check />
+                  {table}
+                </li>
+              ))}
+            </ul>
+          </Section>
+
+          {internalPlan.storage_buckets.length > 0 ? (
+            <Section title="Storage">
+              <ul className="space-y-1 text-xs text-foreground/80">
+                {internalPlan.storage_buckets.map(bucket => (
+                  <li key={bucket} className="flex items-center gap-1.5">
+                    <Boxes className="h-3 w-3 text-muted-foreground" />
+                    {bucket}
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          ) : null}
+
+          {internalPlan.functions.length > 0 ? (
+            <Section title="Functions">
+              <ul className="space-y-1 text-xs text-foreground/80">
+                {internalPlan.functions.map(fn => (
+                  <li key={fn} className="flex items-center gap-1.5">
+                    <Check />
+                    {fn}
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          ) : null}
+        </>
+      )}
 
       {internalPlan.models.length > 0 ? (
         <Section title="Models">

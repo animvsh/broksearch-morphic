@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest'
 import {
   getBrokCodeProject,
   listBrokCodeProjectDeployments,
-  listBrokCodeProjectFiles
+  listBrokCodeProjectFiles,
+  upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
 import { classifyApp } from '@/lib/build/app-types'
 import { runBuildStream } from '@/lib/build/stream'
@@ -40,6 +41,7 @@ describe('runBuildStream', () => {
     expect(result.userPlan.bullets.length).toBeGreaterThan(2)
     expect(result.events.some(e => e.kind === 'plan')).toBe(true)
     expect(result.events.some(e => e.kind === 'internal_plan')).toBe(true)
+    expect(result.events.some(e => e.kind === 'backend_plan')).toBe(true)
     expect(result.events.some(e => e.kind === 'opencode_session')).toBe(false)
     expect(result.events.some(e => e.kind === 'backend_status')).toBe(false)
     expect(result.events.some(e => e.kind === 'files')).toBe(true)
@@ -54,14 +56,21 @@ describe('runBuildStream', () => {
       phase: 'ready',
       message: 'Project scaffold ready. Sign in to open a managed preview.'
     })
+    expect(result.events).toContainEqual({
+      kind: 'done',
+      projectId: null,
+      previewUrl: null
+    })
+    expect(result.projectId).toBeNull()
   }, 15000)
 
-  it('persists an authenticated build as a BrokCode managed preview project', async () => {
+  it('persists an authenticated build through BrokCode execution when available', async () => {
     const syncDir = await mkdtemp(path.join(tmpdir(), 'brok-build-project-'))
     const previousStorage = process.env.BROKCODE_PROJECT_STORAGE
     const previousSyncDir = process.env.BROKCODE_SYNC_DIR
     process.env.BROKCODE_PROJECT_STORAGE = 'file'
     process.env.BROKCODE_SYNC_DIR = syncDir
+    let executionPrompt = ''
 
     try {
       const result = await runBuildStream({
@@ -73,6 +82,30 @@ describe('runBuildStream', () => {
           request: {
             headers: new Headers({ host: 'localhost:3000' }),
             url: 'http://localhost:3000/api/build/stream'
+          },
+          executeBrokCodeBuild: async ({ prompt, projectId, workspaceId }) => {
+            executionPrompt = prompt
+            await upsertBrokCodeProjectFile({
+              projectId,
+              workspaceId,
+              path: 'index.html',
+              content:
+                '<!doctype html><html><body><main><h1>CRM</h1></main></body></html>',
+              language: 'html'
+            })
+            await upsertBrokCodeProjectFile({
+              projectId,
+              workspaceId,
+              path: 'styles.css',
+              content: 'body { font-family: system-ui; }',
+              language: 'css'
+            })
+            return {
+              preview_url: `http://localhost:3000/api/brokcode/previews/${projectId}`,
+              generated_files: ['index.html', 'styles.css'],
+              runtime: 'pi',
+              note: 'Built with BrokCode Cloud.'
+            }
           }
         }
       })
@@ -83,47 +116,216 @@ describe('runBuildStream', () => {
       expect(projectEvent).toMatchObject({
         kind: 'brokcode_project',
         previewUrl: expect.stringContaining('/api/brokcode/previews/'),
-        deploymentUrl: expect.stringContaining('/brokcode/apps/'),
-        fileCount: 3
+        deploymentUrl: null,
+        fileCount: 2,
+        source: 'brokcode_execute',
+        degraded: false
       })
+      expect(executionPrompt).toContain(
+        'Return named files for index.html, styles.css, and app.js.'
+      )
+      expect(executionPrompt).toContain('Do not install packages')
+      expect(executionPrompt).toContain('Write the complete file contents')
+      expect(executionPrompt).toContain(
+        'Create a compact CRM Login Customers Notes Tasks app prototype.'
+      )
+      expect(executionPrompt).toContain(
+        'Build one responsive dashboard-style app screen'
+      )
+      expect(executionPrompt).toContain('mock account/status panel')
+      expect(executionPrompt).toContain('attachment/file list UI')
+      expect(executionPrompt).toContain('Tables: users, customers, notes, tasks')
       expect(result.projectId).not.toBe('brok-test-persist')
+      expect(result.projectId).toBeTruthy()
+      const persistedProjectId = result.projectId
+      if (!persistedProjectId) {
+        throw new Error('Expected a persisted BrokCode project id.')
+      }
       expect(result.events).toContainEqual({
         kind: 'preview_url',
         url: expect.stringContaining('/api/brokcode/previews/')
       })
 
       const project = await getBrokCodeProject({
-        id: result.projectId,
+        id: persistedProjectId,
         workspaceId: '00000000-0000-0000-0000-000000000003',
         userId: 'user_test'
       })
       expect(project).toMatchObject({
-        id: result.projectId,
-        status: 'deployed',
+        id: persistedProjectId,
+        status: 'preview_ready',
         previewUrl: expect.stringContaining('/api/brokcode/previews/'),
-        deploymentUrl: expect.stringContaining('/brokcode/apps/')
+        deploymentUrl: null
       })
+      const previewMetadata = project?.metadata?.preview as
+        | Record<string, unknown>
+        | undefined
+      expect(previewMetadata?.backendPlan).toMatchObject({
+        provider: 'insforge',
+        status: 'planned',
+        tables: expect.arrayContaining([
+          expect.objectContaining({ name: 'customers' }),
+          expect.objectContaining({ name: 'notes' }),
+          expect.objectContaining({ name: 'tasks' })
+        ])
+      })
+      expect(previewMetadata?.backendPlanStatus).toBe('planned')
 
       const files = await listBrokCodeProjectFiles({
-        projectId: result.projectId,
+        projectId: persistedProjectId,
         workspaceId: '00000000-0000-0000-0000-000000000003'
       })
       expect(files.map(file => file.path).sort()).toEqual([
-        'app.js',
         'index.html',
         'styles.css'
       ])
 
       const deployments = await listBrokCodeProjectDeployments({
-        projectId: result.projectId,
+        projectId: persistedProjectId,
         workspaceId: '00000000-0000-0000-0000-000000000003',
         userId: 'user_test'
       })
-      expect(deployments).toHaveLength(1)
-      expect(deployments[0]).toMatchObject({
-        provider: 'managed_preview',
-        status: 'deployed'
+      expect(deployments).toHaveLength(0)
+    } finally {
+      if (previousStorage === undefined) {
+        delete process.env.BROKCODE_PROJECT_STORAGE
+      } else {
+        process.env.BROKCODE_PROJECT_STORAGE = previousStorage
+      }
+      if (previousSyncDir === undefined) {
+        delete process.env.BROKCODE_SYNC_DIR
+      } else {
+        process.env.BROKCODE_SYNC_DIR = previousSyncDir
+      }
+      await rm(syncDir, { recursive: true, force: true })
+    }
+  }, 15000)
+
+  it('marks fallback builds as degraded and does not record a deployment', async () => {
+    const syncDir = await mkdtemp(path.join(tmpdir(), 'brok-build-fallback-'))
+    const previousStorage = process.env.BROKCODE_PROJECT_STORAGE
+    const previousSyncDir = process.env.BROKCODE_SYNC_DIR
+    process.env.BROKCODE_PROJECT_STORAGE = 'file'
+    process.env.BROKCODE_SYNC_DIR = syncDir
+
+    try {
+      const result = await runBuildStream({
+        prompt: 'Build me a CRM with login, customers, notes, and tasks',
+        projectId: 'brok-test-fallback',
+        brokCodeProject: {
+          workspaceId: '00000000-0000-0000-0000-000000000003',
+          userId: 'user_test',
+          request: {
+            headers: new Headers({ host: 'localhost:3000' }),
+            url: 'http://localhost:3000/api/build/stream'
+          },
+          executeBrokCodeBuild: async () => {
+            throw new Error('BrokCode Cloud runtime is required.')
+          }
+        }
       })
+
+      const projectEvent = result.events.find(
+        event => event.kind === 'brokcode_project'
+      )
+      expect(projectEvent).toMatchObject({
+        kind: 'brokcode_project',
+        source: 'degraded_fallback',
+        degraded: true,
+        deploymentUrl: null,
+        fileCount: 3
+      })
+      expect(
+        result.events.some(
+          event =>
+            event.kind === 'log' &&
+            event.level === 'warn' &&
+            event.message.includes('degraded')
+        )
+      ).toBe(true)
+      expect(result.projectId).toBeTruthy()
+      const persistedProjectId = result.projectId
+      if (!persistedProjectId) {
+        throw new Error('Expected a degraded fallback project id.')
+      }
+
+      const project = await getBrokCodeProject({
+        id: persistedProjectId,
+        workspaceId: '00000000-0000-0000-0000-000000000003',
+        userId: 'user_test'
+      })
+      expect(project?.status).toBe('preview_ready')
+      expect(project?.deploymentUrl).toBeNull()
+      expect(project?.metadata?.preview).toMatchObject({
+        mode: 'degraded_fallback',
+        source: 'brok_build_degraded_fallback',
+        degraded: true,
+        executionError: 'BrokCode Cloud runtime is required.',
+        backendPlan: expect.objectContaining({
+          provider: 'insforge',
+          status: 'planned'
+        })
+      })
+
+      const deployments = await listBrokCodeProjectDeployments({
+        projectId: persistedProjectId,
+        workspaceId: '00000000-0000-0000-0000-000000000003',
+        userId: 'user_test'
+      })
+      expect(deployments).toHaveLength(0)
+    } finally {
+      if (previousStorage === undefined) {
+        delete process.env.BROKCODE_PROJECT_STORAGE
+      } else {
+        process.env.BROKCODE_PROJECT_STORAGE = previousStorage
+      }
+      if (previousSyncDir === undefined) {
+        delete process.env.BROKCODE_SYNC_DIR
+      } else {
+        process.env.BROKCODE_SYNC_DIR = previousSyncDir
+      }
+      await rm(syncDir, { recursive: true, force: true })
+    }
+  }, 15000)
+
+  it('fails closed when BrokCode execution is required for build proof', async () => {
+    const syncDir = await mkdtemp(path.join(tmpdir(), 'brok-build-required-'))
+    const previousStorage = process.env.BROKCODE_PROJECT_STORAGE
+    const previousSyncDir = process.env.BROKCODE_SYNC_DIR
+    process.env.BROKCODE_PROJECT_STORAGE = 'file'
+    process.env.BROKCODE_SYNC_DIR = syncDir
+
+    try {
+      const result = await runBuildStream({
+        prompt: 'Build me a CRM with login, customers, notes, and tasks',
+        projectId: 'brok-test-required',
+        brokCodeProject: {
+          workspaceId: '00000000-0000-0000-0000-000000000003',
+          userId: 'user_test',
+          request: {
+            headers: new Headers({ host: 'localhost:3000' }),
+            url: 'http://localhost:3000/api/build/stream'
+          },
+          requireBrokCodeExecution: true,
+          executeBrokCodeBuild: async () => {
+            throw new Error('The operation timed out.')
+          }
+        }
+      })
+
+      expect(
+        result.events.some(event => event.kind === 'brokcode_project')
+      ).toBe(false)
+      expect(result.events).toContainEqual({
+        kind: 'error',
+        message:
+          'BrokCode execution required for Brok Build but failed: The operation timed out.'
+      })
+      expect(result.events.some(event => event.kind === 'files')).toBe(false)
+      expect(
+        result.events.some(event => event.kind === 'phase' && event.phase === 'ready')
+      ).toBe(false)
+      expect(result.projectId).toBeNull()
     } finally {
       if (previousStorage === undefined) {
         delete process.env.BROKCODE_PROJECT_STORAGE
@@ -170,15 +372,23 @@ describe('runBuildStream', () => {
             event.internalPlan.coding_agent
           ]
         }
+        if (event.kind === 'backend_plan') {
+          return [
+            event.plan.provider,
+            event.plan.status,
+            ...event.plan.applySteps
+          ]
+        }
         return []
       })
       .join(' ')
 
     expect(visibleText.replace(/BrokCode/g, '')).not.toMatch(/OpenCode/i)
-    expect(visibleText).not.toMatch(/InsForge/i)
     expect(visibleText).not.toMatch(/Railway/i)
     expect(visibleText).toMatch(/BrokCode/i)
-    expect(visibleText).toMatch(/starter/i)
+    expect(visibleText).toMatch(/insforge/i)
+    expect(visibleText).toMatch(/planned/i)
+    expect(visibleText).not.toMatch(/connected|provisioned|deployed/i)
   }, 15000)
 
   it('classifies non-AI prompts and still produces a build stream', async () => {

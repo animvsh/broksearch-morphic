@@ -50,13 +50,17 @@ export type BrokStreamEvent =
       previewUrl: string | null
       deploymentUrl: string | null
       fileCount: number
+      source?: 'brokcode_execute' | 'degraded_fallback'
+      degraded?: boolean
+      message?: string
     }
   | { kind: 'files'; files: BrokBuildFilePreview[] }
   | { kind: 'log'; level: 'info' | 'warn' | 'error'; message: string }
   | { kind: 'preview_url'; url: string | null }
   | { kind: 'opencode_session'; sessionId: string }
   | { kind: 'backend_status'; status: BrokBuildBackendStatus }
-  | { kind: 'done'; projectId: string; previewUrl: string | null }
+  | { kind: 'backend_plan'; plan: BrokBuildBackendResourcePlan }
+  | { kind: 'done'; projectId: string | null; previewUrl: string | null }
   | { kind: 'error'; message: string }
 
 export type BrokBuildBackendStatus =
@@ -70,6 +74,34 @@ export type BrokBuildFilePreview = {
   language?: string | null
   size: number
   preview?: string | null
+}
+
+export type BrokBuildBackendResourcePlan = {
+  provider: 'insforge'
+  status: 'planned'
+  tables: Array<{
+    name: string
+    columns: Array<{
+      name: string
+      type: string
+      nullable: boolean
+      primaryKey?: boolean
+    }>
+    rls: string[]
+  }>
+  storageBuckets: Array<{
+    name: string
+    visibility: 'public' | 'private'
+    policies: string[]
+  }>
+  functions: Array<{
+    slug: string
+    purpose: string
+  }>
+  publicEnv: string[]
+  privateEnv: string[]
+  applySteps: string[]
+  migrationSql: string
 }
 
 export type UserVisiblePlan = {

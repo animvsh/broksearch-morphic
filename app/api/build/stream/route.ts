@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { newBrokBuildProjectId, startBrokBuild } from '@/lib/actions/build'
+import { startBrokBuild } from '@/lib/actions/build'
 import {
   enforceBrokCodeAccountOwnership,
   resolveBrokCodeRequestAuth
@@ -22,7 +22,11 @@ function encode(event: BrokStreamEvent) {
 }
 
 export async function POST(request: Request) {
-  let body: { prompt?: unknown; projectId?: unknown } = {}
+  let body: {
+    prompt?: unknown
+    projectId?: unknown
+    require_brokcode_execution?: unknown
+  } = {}
   try {
     body = await request.json()
   } catch {
@@ -46,10 +50,6 @@ export async function POST(request: Request) {
     )
   }
 
-  const projectId =
-    typeof body.projectId === 'string' && body.projectId.length > 0
-      ? body.projectId
-      : await newBrokBuildProjectId()
   const { authResult } = await resolveBrokCodeRequestAuth(request, {
     allowBrowserSession: true
   })
@@ -61,7 +61,8 @@ export async function POST(request: Request) {
       ? {
           workspaceId: authResult.workspace.id,
           userId: authResult.apiKey.userId,
-          request
+          request,
+          requireBrokCodeExecution: body.require_brokcode_execution === true
         }
       : undefined
 
@@ -71,7 +72,10 @@ export async function POST(request: Request) {
       try {
         await startBrokBuild({
           prompt,
-          projectId,
+          projectId:
+            typeof body.projectId === 'string' && body.projectId.length > 0
+              ? body.projectId
+              : undefined,
           emit: event => {
             controller.enqueue(encoder.encode(encode(event)))
           },

@@ -297,13 +297,19 @@ const CLASSIFIER_RULES: ClassifierRule[] = [
     appType: 'landing_page',
     aiSubType: null,
     patterns: [
+      /\bhero\b/i,
+      /\bnewsletter\b/i,
+      /\bmenu cards?\b/i,
+      /\bbakery\b/i,
       /\blanding (page|site)\b/i,
+      /\bsingle[- ]page\b/i,
       /\bmarketing site\b/i,
       /\bhomepage\b/i
     ],
     needs: ['hero', 'features', 'pricing', 'cta'],
     frontend: 'Next.js + Tailwind',
-    backend: 'BrokCode starter state'
+    backend: 'BrokCode starter state',
+    weight: 2
   }
 ]
 

@@ -216,6 +216,18 @@ function ConsoleLine({ event }: { event: BrokStreamEvent }) {
       </div>
     )
   }
+  if (event.kind === 'backend_plan') {
+    return (
+      <div className="flex gap-2 text-foreground/80">
+        <span>~</span>
+        <span>
+          InsForge plan: {event.plan.tables.length} tables,{' '}
+          {event.plan.storageBuckets.length} buckets,{' '}
+          {event.plan.functions.length} functions
+        </span>
+      </div>
+    )
+  }
   if (event.kind === 'preview_url') {
     return (
       <div className="flex gap-2 text-foreground/80">

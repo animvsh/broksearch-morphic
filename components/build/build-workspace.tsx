@@ -8,6 +8,7 @@ import type {
   InternalPlan,
   UserVisiblePlan
 } from '@/lib/build/types'
+import { cn } from '@/lib/utils'
 
 import { BuildChatPanel } from './build-chat-panel'
 import { BuildConsole } from './build-console'
@@ -33,6 +34,15 @@ export function BrokBuildWorkspace({
   const [internalPlan, setInternalPlan] = useState<InternalPlan | null>(null)
   const [showPlanCard, setShowPlanCard] = useState(true)
   const [autoStarted, setAutoStarted] = useState(false)
+  const [deployState, setDeployState] = useState<{
+    status: 'idle' | 'publishing' | 'live' | 'failed'
+    url: string | null
+    message: string | null
+  }>({ status: 'idle', url: null, message: null })
+  const [backendProvision, setBackendProvision] = useState<{
+    status: 'idle' | 'provisioning' | 'ready' | 'failed'
+    message: string | null
+  }>({ status: 'idle', message: null })
   const startedRef = useRef(false)
 
   const { state, start, stop, sendEdit, send } = useBrokBuildStream()
@@ -95,6 +105,112 @@ export function BrokBuildWorkspace({
     )
   }, [phase])
 
+  const handleDeploy = useCallback(async () => {
+    if (!state.projectId || deployState.status === 'publishing') return
+    setDeployState({
+      status: 'publishing',
+      url: null,
+      message: 'Publishing Brok-managed app...'
+    })
+
+    try {
+      const response = await fetch('/api/brokcode/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: state.projectId,
+          source: 'browser'
+        })
+      })
+      const body = (await response.json().catch(() => null)) as {
+        deploymentUrl?: unknown
+        deploymentPreviewUrl?: unknown
+        previewUrl?: unknown
+        message?: unknown
+        error?: { message?: unknown }
+      } | null
+      if (!response.ok) {
+        throw new Error(
+          typeof body?.error?.message === 'string'
+            ? body.error.message
+            : `Deploy failed (${response.status}).`
+        )
+      }
+
+      const url =
+        typeof body?.deploymentUrl === 'string'
+          ? body.deploymentUrl
+          : typeof body?.deploymentPreviewUrl === 'string'
+            ? body.deploymentPreviewUrl
+          : typeof body?.previewUrl === 'string'
+              ? body.previewUrl
+              : null
+      setDeployState({
+        status: 'live',
+        url,
+        message:
+          typeof body?.message === 'string'
+            ? body.message
+            : 'Brok-managed app published.'
+      })
+    } catch (error) {
+      setDeployState({
+        status: 'failed',
+        url: null,
+        message: error instanceof Error ? error.message : 'Deploy failed.'
+      })
+    }
+  }, [deployState.status, state.projectId])
+
+  const handleProvisionBackend = useCallback(async () => {
+    if (!state.projectId || backendProvision.status === 'provisioning') return
+    setBackendProvision({
+      status: 'provisioning',
+      message: 'Provisioning InsForge...'
+    })
+
+    try {
+      const response = await fetch('/api/brokcode/projects/insforge/provision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: state.projectId,
+          projectName
+        })
+      })
+      const body = (await response.json().catch(() => null)) as {
+        backend?: { status?: unknown; health?: unknown }
+        message?: unknown
+        error?: unknown
+      } | null
+      if (!response.ok) {
+        throw new Error(
+          typeof body?.error === 'string'
+            ? body.error
+            : `Backend provision failed (${response.status}).`
+        )
+      }
+
+      const ready =
+        body?.backend?.status === 'ready' || body?.backend?.health === 'online'
+      setBackendProvision({
+        status: ready ? 'ready' : 'provisioning',
+        message:
+          typeof body?.message === 'string'
+            ? body.message
+            : ready
+              ? 'InsForge backend connected.'
+              : 'InsForge backend is warming up.'
+      })
+    } catch (error) {
+      setBackendProvision({
+        status: 'failed',
+        message:
+          error instanceof Error ? error.message : 'Backend provision failed.'
+      })
+    }
+  }, [backendProvision.status, projectName, state.projectId])
+
   return (
     <div className="grid h-full grid-rows-[auto_minmax(0,1fr)_auto] bg-background">
       <WorkspaceHeader
@@ -102,12 +218,24 @@ export function BrokBuildWorkspace({
         phase={phase}
         progress={state.progress}
         previewUrl={state.previewUrl}
-        deploymentUrl={state.deploymentUrl}
+        deploymentUrl={deployState.url ?? state.deploymentUrl}
+        deployStatus={deployState.status}
+        deployMessage={deployState.message}
         projectId={state.projectId}
+        onDeploy={() => {
+          void handleDeploy()
+        }}
         onRestart={() => {
           startedRef.current = false
           setAutoStarted(false)
           setShowPlanCard(true)
+          setDeployState({ status: 'idle', url: null, message: null })
+          setBackendProvision({ status: 'idle', message: null })
+        }}
+        backendStatus={backendProvision.status}
+        backendMessage={backendProvision.message}
+        onProvisionBackend={() => {
+          void handleProvisionBackend()
         }}
       />
 
@@ -146,6 +274,7 @@ export function BrokBuildWorkspace({
           phase={phase}
           plan={plan}
           internalPlan={internalPlan}
+          backendPlan={state.backendPlan}
           files={state.files}
           logs={state.logs}
           backendStatus={state.backendStatus}
@@ -180,17 +309,29 @@ type HeaderProps = {
   progress: number
   previewUrl: string | null
   deploymentUrl: string | null
+  deployStatus: 'idle' | 'publishing' | 'live' | 'failed'
+  deployMessage: string | null
+  backendStatus: 'idle' | 'provisioning' | 'ready' | 'failed'
+  backendMessage: string | null
   projectId: string | null
+  onDeploy: () => void
+  onProvisionBackend: () => void
   onRestart: () => void
 }
 
-function WorkspaceHeader({
+export function WorkspaceHeader({
   projectName,
   phase,
   progress,
   previewUrl,
   deploymentUrl,
+  deployStatus,
+  deployMessage,
+  backendStatus,
+  backendMessage,
   projectId,
+  onDeploy,
+  onProvisionBackend,
   onRestart
 }: HeaderProps) {
   const brokCodeProjectUrl = projectId
@@ -220,15 +361,72 @@ function WorkspaceHeader({
         >
           Preview
         </a>
-        <a
-          href={deploymentUrl ?? previewUrl ?? '#'}
-          target="_blank"
-          rel="noreferrer"
-          aria-disabled={!deploymentUrl && !previewUrl}
-          className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground aria-disabled:pointer-events-none aria-disabled:opacity-50"
+        <button
+          type="button"
+          onClick={onProvisionBackend}
+          disabled={!projectId || backendStatus === 'provisioning'}
+          title={backendMessage ?? 'Provision an InsForge backend'}
+          className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
         >
-          Deploy
-        </a>
+          {backendStatus === 'provisioning'
+            ? 'Provisioning...'
+            : backendStatus === 'ready'
+              ? 'Backend ready'
+              : backendStatus === 'failed'
+                ? 'Retry backend'
+                : 'Backend'}
+        </button>
+        {backendMessage ? (
+          <span
+            role={backendStatus === 'failed' ? 'alert' : 'status'}
+            className={cn(
+              'max-w-[220px] truncate text-[11px]',
+              backendStatus === 'failed'
+                ? 'text-rose-600 dark:text-rose-400'
+                : 'text-muted-foreground'
+            )}
+          >
+            {backendMessage}
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={onDeploy}
+          disabled={!projectId || deployStatus === 'publishing'}
+          title={deployMessage ?? 'Publish the current managed app'}
+          className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        >
+          {deployStatus === 'publishing'
+            ? 'Publishing...'
+            : deployStatus === 'live'
+              ? 'Published'
+              : deployStatus === 'failed'
+                ? 'Retry publish'
+                : 'Publish'}
+        </button>
+        {deploymentUrl ? (
+          <a
+            href={deploymentUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground"
+          >
+            Published app
+          </a>
+        ) : null}
+        {deployMessage ? (
+          <span
+            role={deployStatus === 'failed' ? 'alert' : 'status'}
+            className={cn(
+              'max-w-[220px] truncate text-[11px]',
+              deployStatus === 'failed'
+                ? 'text-rose-600 dark:text-rose-400'
+                : 'text-muted-foreground'
+            )}
+          >
+            {deployMessage}
+          </span>
+        ) : null}
         <a
           href={brokCodeProjectUrl ?? '#'}
           aria-disabled={!brokCodeProjectUrl}

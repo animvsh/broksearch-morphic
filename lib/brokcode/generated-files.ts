@@ -603,6 +603,46 @@ function buildDefaultGeneratedAppScript() {
 })`
 }
 
+function buildCrmFallbackGeneratedAppScript() {
+  return `document.addEventListener('DOMContentLoaded', () => {
+  const search = document.querySelector('#customerSearch')
+  const status = document.querySelector('#statusFilter')
+  const cards = [...document.querySelectorAll('.customer-card')]
+
+  function applyFilters() {
+    const query = (search?.value || '').toLowerCase()
+    const selected = status?.value || 'all'
+    cards.forEach(card => {
+      const matchesQuery = card.textContent.toLowerCase().includes(query)
+      const matchesStatus = selected === 'all' || card.dataset.status === selected
+      card.hidden = !(matchesQuery && matchesStatus)
+    })
+  }
+
+  search?.addEventListener('input', applyFilters)
+  status?.addEventListener('change', applyFilters)
+
+  document.querySelector('#activityForm')?.addEventListener('submit', event => {
+    event.preventDefault()
+    const form = event.currentTarget
+    const result = document.querySelector('#formResult')
+    const customer = new FormData(form).get('customer') || 'customer'
+    if (result) {
+      result.textContent = \`Saved update for \${customer}. Next-action suggestion refreshed.\`
+    }
+  })
+
+  document.querySelectorAll('a[href^="#"]').forEach(link => {
+    link.addEventListener('click', event => {
+      const target = document.querySelector(link.getAttribute('href'))
+      if (!target) return
+      event.preventDefault()
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  })
+})`
+}
+
 export function prepareGeneratedBrokCodeFiles(
   files: GeneratedBrokCodeFile[],
   options: { fallbackTitle?: string } = {}
@@ -698,6 +738,10 @@ export function buildFallbackGeneratedAppFiles({
   const title = fallbackTitle || domainTitleFromCommand(command)
   const prompt = (command ?? 'Build a useful product').trim()
 
+  if (/\bcrm\b|\bcustomers?\b|\bcontacts?\b/i.test(prompt)) {
+    return buildCrmFallbackGeneratedAppFiles({ title, prompt })
+  }
+
   return [
     {
       path: 'index.html',
@@ -781,6 +825,111 @@ export function buildFallbackGeneratedAppFiles({
       path: 'app.js',
       language: 'js',
       content: buildDefaultGeneratedAppScript()
+    }
+  ]
+}
+
+function buildCrmFallbackGeneratedAppFiles({
+  title,
+  prompt
+}: {
+  title: string
+  prompt: string
+}): GeneratedBrokCodeFile[] {
+  return [
+    {
+      path: 'index.html',
+      language: 'html',
+      content: `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="container header-inner">
+        <a class="logo" href="#">${title}</a>
+        <nav aria-label="CRM navigation">
+          <ul>
+            <li><a href="#pipeline">Pipeline</a></li>
+            <li><a href="#customers">Customers</a></li>
+            <li><a href="#activity">Activity</a></li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+    <main>
+      <section class="hero">
+        <div class="container hero-content">
+          <p class="eyebrow">Brok Build CRM preview</p>
+          <h1>${title}</h1>
+          <p>${escapeGeneratedHtml(prompt)}. Manage customers, notes, tasks, attachments, and admin reporting from one responsive preview.</p>
+          <div class="hero-actions">
+            <a class="btn" href="#customers">Review customers</a>
+            <a class="btn btn-secondary" href="#activity">Log activity</a>
+          </div>
+        </div>
+      </section>
+      <section id="pipeline">
+        <div class="container metrics">
+          <article class="card"><span class="metric">24</span><h3>Active customers</h3><p>Health scores, owners, next actions, and recent notes are visible at a glance.</p></article>
+          <article class="card"><span class="metric">$184k</span><h3>Open pipeline</h3><p>Admin reporting highlights expected value and stale follow-ups.</p></article>
+          <article class="card"><span class="metric">9</span><h3>Tasks due</h3><p>Task chips keep the team focused on the next best action.</p></article>
+        </div>
+      </section>
+      <section id="customers">
+        <div class="container">
+          <div class="section-header">
+            <h2>Customer workspace</h2>
+            <p>Search sample accounts, inspect notes and attachments, then update the mock login/status panel.</p>
+          </div>
+          <div class="toolbar">
+            <label>Search customers <input id="customerSearch" placeholder="Search Acme, Northstar, Renewal" /></label>
+            <label>Status <select id="statusFilter"><option value="all">All</option><option>Healthy</option><option>Needs follow-up</option><option>At risk</option></select></label>
+          </div>
+          <div class="grid customer-grid" id="customerGrid">
+            <article class="card customer-card" data-status="Healthy"><h3>Acme Supply</h3><p>Health score 92. Renewal call scheduled Friday.</p><ul><li>Note: CFO asked for admin reporting.</li><li>Task: Send revised rollout plan.</li><li>Attachment: acme-contract.pdf</li></ul></article>
+            <article class="card customer-card" data-status="Needs follow-up"><h3>Northstar Labs</h3><p>Health score 74. Waiting on security answers.</p><ul><li>Note: Legal review in progress.</li><li>Task: Upload SOC2 packet.</li><li>Attachment: security-checklist.xlsx</li></ul></article>
+            <article class="card customer-card" data-status="At risk"><h3>Brightline Retail</h3><p>Health score 51. Support escalation open.</p><ul><li>Note: Needs implementation help.</li><li>Task: Book success session.</li><li>Attachment: support-history.csv</li></ul></article>
+          </div>
+        </div>
+      </section>
+      <section id="activity">
+        <div class="container split">
+          <form class="card" id="activityForm" aria-label="Log CRM activity">
+            <h2>Log activity</h2>
+            <label>Customer <input name="customer" value="Acme Supply" /></label>
+            <label>Note <textarea name="note">Confirmed stakeholders for renewal.</textarea></label>
+            <label>Next task <input name="task" value="Send follow-up deck" /></label>
+            <button type="submit">Save CRM update</button>
+            <p id="formResult" role="status"></p>
+          </form>
+          <aside class="card">
+            <h2>Mock login and admin status</h2>
+            <p><strong>Signed in:</strong> Revenue Ops Admin</p>
+            <p><strong>Backend plan:</strong> users, customers, notes, tasks, activities, and private attachments.</p>
+            <p><strong>Next action model:</strong> Suggests follow-up tasks from recent activity.</p>
+          </aside>
+        </div>
+      </section>
+    </main>
+    <footer><div class="container">Generated by BrokCode. Ready for CRM edits.</div></footer>
+    <script src="app.js"></script>
+  </body>
+</html>`
+    },
+    {
+      path: 'styles.css',
+      language: 'css',
+      content: buildDefaultGeneratedAppStyles()
+    },
+    {
+      path: 'app.js',
+      language: 'js',
+      content: buildCrmFallbackGeneratedAppScript()
     }
   ]
 }
