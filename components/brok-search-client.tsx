@@ -50,7 +50,7 @@ interface BrokSearchClientProps {
   onFollowUpSelect?: (query: string) => void
 }
 
-const DEFAULT_API_BASE = '/api/v1/search/completions'
+const DEFAULT_API_BASE = '/api/search/session'
 
 /**
  * Client for the Brok Search SSE endpoint. Renders the streaming answer,
@@ -123,6 +123,22 @@ export function BrokSearchClient({
 
         const dispatch = (event: string, data: any) => {
           switch (event) {
+            case 'status':
+              setProgress(prev => ({
+                ...prev,
+                message: data.message ?? prev.message
+              }))
+              return
+            case 'query':
+              setProgress(prev => ({
+                ...prev,
+                resolvedQuery: data.resolved_query ?? data.query,
+                classification: data.classification?.type,
+                searchQueries: data.search_queries ?? prev.searchQueries,
+                status: prev.status === 'planning' ? 'searching' : prev.status,
+                message: prev.message ?? 'Searching sources...'
+              }))
+              return
             case 'query_resolved':
               setProgress(prev => ({
                 ...prev,
@@ -171,6 +187,9 @@ export function BrokSearchClient({
               return
             case 'follow_ups_generated':
               setFollowUps(data.follow_ups ?? [])
+              return
+            case 'follow_ups':
+              setFollowUps(data.items ?? data.follow_ups ?? [])
               return
             case 'done':
               setProgress(prev => ({
