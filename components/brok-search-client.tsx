@@ -811,27 +811,28 @@ export function BrokSearchClient({
     [onFollowUpSelect, runSearch]
   )
 
+  const isLoading =
+    progress.status === 'planning' ||
+    progress.status === 'searching' ||
+    progress.status === 'reading' ||
+    progress.status === 'answering'
+
   const submitFollowUp = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
+      if (isLoading) return
       const trimmed = followUpInput.trim()
       if (!trimmed) return
       setFollowUpInput('')
       setQuery(trimmed)
       handleFollowUp(trimmed)
     },
-    [followUpInput, handleFollowUp]
+    [followUpInput, handleFollowUp, isLoading]
   )
 
   const handleVoiceTranscript = useCallback((text: string) => {
     setQuery(text)
   }, [])
-
-  const isLoading =
-    progress.status === 'planning' ||
-    progress.status === 'searching' ||
-    progress.status === 'reading' ||
-    progress.status === 'answering'
 
   return (
     <div className="flex w-full gap-6">
@@ -972,9 +973,12 @@ export function BrokSearchClient({
             <input
               value={followUpInput}
               onChange={event => setFollowUpInput(event.target.value)}
-              placeholder="Ask a follow-up..."
+              placeholder={
+                isLoading ? 'Waiting for this answer...' : 'Ask a follow-up...'
+              }
               className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none"
               aria-label="Ask a follow-up"
+              disabled={isLoading}
             />
             <button
               type={isLoading ? 'button' : 'submit'}

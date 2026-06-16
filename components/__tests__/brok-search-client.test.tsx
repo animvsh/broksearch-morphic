@@ -535,6 +535,39 @@ describe('BrokSearchClient', () => {
     })
   })
 
+  it('blocks follow-up submits while the current answer is still loading', async () => {
+    const stream = controllableStreamResponse()
+    const fetchMock = vi.fn(async () => stream.response)
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="React hooks"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    const followUpInput = screen.getByLabelText('Ask a follow-up')
+    expect(followUpInput).toBeDisabled()
+    expect(followUpInput).toHaveAttribute(
+      'placeholder',
+      'Waiting for this answer...'
+    )
+
+    fireEvent.submit(screen.getByTestId('brok-follow-up-form'))
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      stream.close()
+    })
+  })
+
   it('ignores late chunks from an older search stream', async () => {
     const firstStream = controllableStreamResponse()
     const secondStream = controllableStreamResponse()
