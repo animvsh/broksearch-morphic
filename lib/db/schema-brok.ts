@@ -53,6 +53,22 @@ export const keyStatusEnum = pgEnum('key_status', [
   'revoked'
 ])
 export const environmentEnum = pgEnum('environment', ['test', 'live'])
+export const apiKeyAuditActorTypeEnum = pgEnum('api_key_audit_actor_type', [
+  'user',
+  'admin',
+  'system'
+])
+export const apiKeyAuditEventTypeEnum = pgEnum('api_key_audit_event_type', [
+  'created',
+  'secret_revealed_once',
+  'secret_acknowledged',
+  'paused',
+  'resumed',
+  'revoked',
+  'rotated',
+  'expiry_updated',
+  'denied_expired_key_usage'
+])
 export const endpointEnum = pgEnum('endpoint', [
   'chat',
   'search',
@@ -203,6 +219,41 @@ export const apiKeys = pgTable(
     workspaceIdx: index('api_keys_workspace_idx').on(table.workspaceId),
     keyPrefixIdx: index('api_keys_key_prefix_idx').on(table.keyPrefix),
     keyHashIdx: index('api_keys_key_hash_idx').on(table.keyHash)
+  })
+)
+
+export const apiKeyAuditEvents = pgTable(
+  'api_key_audit_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    apiKeyId: uuid('api_key_id').references(() => apiKeys.id),
+    actorUserId: text('actor_user_id'),
+    actorType: apiKeyAuditActorTypeEnum('actor_type').default('user').notNull(),
+    eventType: apiKeyAuditEventTypeEnum('event_type').notNull(),
+    keyPrefix: text('key_prefix').notNull(),
+    requestId: text('request_id'),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => ({
+    workspaceCreatedIdx: index('api_key_audit_events_workspace_created_idx').on(
+      table.workspaceId,
+      table.createdAt.desc()
+    ),
+    apiKeyCreatedIdx: index('api_key_audit_events_api_key_created_idx').on(
+      table.apiKeyId,
+      table.createdAt.desc()
+    ),
+    actorCreatedIdx: index('api_key_audit_events_actor_created_idx').on(
+      table.actorUserId,
+      table.createdAt.desc()
+    ),
+    eventTypeIdx: index('api_key_audit_events_type_idx').on(table.eventType)
   })
 )
 
@@ -735,6 +786,7 @@ export const connectorActionEvents = pgTable(
 // Relations
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
   apiKeys: many(apiKeys),
+  apiKeyAuditEvents: many(apiKeyAuditEvents),
   usageEvents: many(usageEvents),
   brokCodeRuntimeKeys: many(brokCodeRuntimeKeys),
   brokCodeSessions: many(brokCodeSessions),
@@ -752,8 +804,23 @@ export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
     fields: [apiKeys.workspaceId],
     references: [workspaces.id]
   }),
+  auditEvents: many(apiKeyAuditEvents),
   usageEvents: many(usageEvents)
 }))
+
+export const apiKeyAuditEventsRelations = relations(
+  apiKeyAuditEvents,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [apiKeyAuditEvents.workspaceId],
+      references: [workspaces.id]
+    }),
+    apiKey: one(apiKeys, {
+      fields: [apiKeyAuditEvents.apiKeyId],
+      references: [apiKeys.id]
+    })
+  })
+)
 
 export const connectorActionRunsRelations = relations(
   connectorActionRuns,
