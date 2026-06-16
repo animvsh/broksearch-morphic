@@ -132,7 +132,7 @@ describe('app/search/[id]/page', () => {
     )
   })
 
-  it('redirects signed-in query-backed search pages when server chat is missing', async () => {
+  it('hydrates signed-in query-backed search pages when server chat is missing', async () => {
     mocks.loadChat.mockResolvedValue(null)
 
     render(
@@ -145,8 +145,10 @@ describe('app/search/[id]/page', () => {
       'search_signed_in_answer',
       'user-1'
     )
-    expect(mocks.redirect).toHaveBeenCalledWith('/search')
-    expect(screen.queryByTestId('brok-search-client')).not.toBeInTheDocument()
+    expect(mocks.redirect).not.toHaveBeenCalled()
+    expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
+      'search_signed_in_answer:true'
+    )
   })
 
   it('redirects unknown non-search guest routes', async () => {

@@ -80,7 +80,7 @@ export function SourceSidePanel({
             href={source.url}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium transition-colors hover:bg-muted"
+            className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-muted"
           >
             Open original
             <ExternalLink className="size-3.5" />

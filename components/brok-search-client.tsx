@@ -913,7 +913,7 @@ export function BrokSearchClient({
                 <button
                   type={isLoading ? 'button' : 'submit'}
                   disabled={!isLoading && !query.trim()}
-                  className="inline-flex size-10 min-h-10 min-w-10 items-center justify-center rounded-xl bg-zinc-950 text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex size-11 min-h-11 min-w-11 items-center justify-center rounded-xl bg-zinc-950 text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label={isLoading ? 'Stop search' : 'Search'}
                   onClick={event => {
                     if (!isLoading) return
@@ -1019,7 +1019,7 @@ export function BrokSearchClient({
 
         {(answer || completedTurns.length > 0 || isLoading) && (
           <form
-            className="sticky bottom-3 mt-2 flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-2 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.35)] backdrop-blur"
+            className="sticky bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] mt-2 flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-2 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.35)] backdrop-blur"
             data-testid="brok-follow-up-form"
             onSubmit={submitFollowUp}
           >
@@ -1036,7 +1036,7 @@ export function BrokSearchClient({
             <button
               type={isLoading ? 'button' : 'submit'}
               disabled={!isLoading && !followUpInput.trim()}
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
               aria-label={isLoading ? 'Stop search' : 'Send follow-up'}
               onClick={event => {
                 if (!isLoading) return
@@ -1116,7 +1116,7 @@ function SourceStrip({
 
   return (
     <section
-      className="flex items-center gap-2 overflow-x-auto pb-1"
+      className="mobile-chip-row flex items-center gap-2 overflow-x-auto pb-1"
       aria-label="Sources found"
       data-testid="brok-source-strip"
     >
@@ -1125,7 +1125,7 @@ function SourceStrip({
           key={getSourceIdentity(source)}
           type="button"
           onClick={() => onOpenSource(source)}
-          className="inline-flex h-8 max-w-[12rem] shrink-0 items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/85 px-2.5 text-xs font-medium text-zinc-700 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.2)] transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+          className="inline-flex h-11 max-w-[12rem] shrink-0 items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/85 px-3 text-xs font-medium text-zinc-700 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.2)] transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
           aria-label={`Verify source ${index + 1}: ${source.title}`}
           data-testid={`brok-source-chip-${index}`}
         >
@@ -1165,14 +1165,17 @@ function CompletedTurn({ turn }: { turn: SearchTurn }) {
         {turn.query}
       </div>
       {turn.sources.length > 0 && (
-        <div className="flex flex-wrap gap-1.5" aria-label="Previous sources">
+        <div
+          className="mobile-chip-row flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0"
+          aria-label="Previous sources"
+        >
           {turn.sources.slice(0, 4).map((source, index) => (
             <a
               key={`${turn.id}-${source.id}`}
               href={source.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex max-w-[12rem] items-center gap-1 rounded-full border border-zinc-200 bg-white/80 px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-950"
+              className="inline-flex h-11 max-w-[12rem] shrink-0 items-center gap-1 rounded-full border border-zinc-200 bg-white/80 px-3 text-[11px] font-medium text-zinc-600 hover:text-zinc-950"
             >
               <span className="shrink-0">[{index + 1}]</span>
               <span className="truncate">
@@ -1275,7 +1278,7 @@ function SourceList({
               <button
                 type="button"
                 onClick={() => onOpenSource(source)}
-                className="line-clamp-1 min-w-0 text-left text-xs font-semibold text-zinc-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+                className="line-clamp-2 min-h-11 min-w-0 flex-1 rounded-md py-1 text-left text-xs font-semibold text-zinc-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
               >
                 [{index + 1}] {source.title}
               </button>
@@ -1283,7 +1286,7 @@ function SourceList({
                 href={source.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
                 aria-label={`Open ${source.title}`}
               >
                 <ExternalLink className="size-3.5" />

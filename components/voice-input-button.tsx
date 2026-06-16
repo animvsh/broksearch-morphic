@@ -159,7 +159,7 @@ export function VoiceInputButton({
       aria-label={isRecording ? 'Stop voice input' : 'Start voice input'}
       aria-pressed={isRecording}
       className={cn(
-        'inline-flex size-8 items-center justify-center rounded-xl border border-zinc-200/80 bg-white/70 text-zinc-600 shadow-none transition-colors hover:bg-white hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 disabled:cursor-not-allowed disabled:opacity-60 md:size-10',
+        'inline-flex size-11 items-center justify-center rounded-xl border border-zinc-200/80 bg-white/70 text-zinc-600 shadow-none transition-colors hover:bg-white hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 disabled:cursor-not-allowed disabled:opacity-60',
         isRecording &&
           'border-red-200 bg-red-50/80 text-red-600 hover:bg-red-50/90',
         className

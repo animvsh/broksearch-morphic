@@ -68,7 +68,7 @@ export function SourceCard({
                 type="button"
                 onClick={() => onOpen(source)}
                 className={cn(
-                  'inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors',
+                  'inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors',
                   'hover:bg-foreground/5 hover:text-foreground',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
                 )}
@@ -83,7 +83,7 @@ export function SourceCard({
               target="_blank"
               rel="noreferrer noopener"
               className={cn(
-                'inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors',
+                'inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors',
                 'hover:bg-foreground/5 hover:text-foreground',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
               )}

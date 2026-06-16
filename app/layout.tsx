@@ -85,14 +85,30 @@ export default async function RootLayout({
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!isAnonymousAuthMode() && supabaseUrl && supabaseAnonKey) {
-    const supabase = await createClient()
-    const {
-      data: { user: supabaseUser }
-    } = await supabase.auth.getUser()
-    user = supabaseUser
+    try {
+      const supabase = await createClient()
+      const {
+        data: { user: supabaseUser }
+      } = await supabase.auth.getUser()
+      user = supabaseUser
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Supabase auth lookup failed in root layout.', error)
+      }
+      user = null
+    }
   }
 
-  const adminAccess = await requireAdminAccess()
+  const adminAccess = await requireAdminAccess().catch(error => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Admin lookup failed in root layout.', error)
+    }
+    return {
+      ok: false as const,
+      status: 401 as const,
+      error: 'Authentication unavailable'
+    }
+  })
 
   const publicEnvScript =
     supabaseUrl && supabaseAnonKey

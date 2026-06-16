@@ -59,12 +59,9 @@ export default async function SearchPage(props: {
         return null
       }
 
-      if (effectiveUser) {
-        redirect('/search')
-        return null
-      }
-
-      return <BrokSearchClient searchId={id} persistToServer={false} />
+      return (
+        <BrokSearchClient searchId={id} persistToServer={!!effectiveUser} />
+      )
     }
 
     redirect('/')
