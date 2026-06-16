@@ -40,16 +40,19 @@ export function MobileAppNav() {
             <Link
               key={item.href}
               href={item.href}
+              aria-label={item.label}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'clicky-control inline-flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[10px] font-medium text-zinc-500 transition-colors duration-150',
+                'clicky-control inline-flex min-w-0 min-h-[3rem] flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1 text-[10px] font-medium text-zinc-500 transition-colors duration-150 sm:text-xs',
                 active
                   ? 'bg-zinc-950 text-white shadow-[0_10px_26px_-18px_rgba(9,9,11,0.8)]'
                   : 'hover:bg-zinc-100 hover:text-zinc-950'
               )}
             >
-              <Icon className="size-4" />
-              <span className="truncate">{item.label}</span>
+              <Icon className="size-4.5" />
+              <span className="max-w-full truncate leading-none">
+                {item.label}
+              </span>
             </Link>
           )
         })}

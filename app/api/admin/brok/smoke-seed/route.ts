@@ -1,19 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { and, eq } from 'drizzle-orm'
 import { timingSafeEqual } from 'node:crypto'
-
-import { ensureWorkspaceForUser } from '@/lib/actions/api-keys'
-import { generateApiKey, getKeyPrefix, hashApiKey } from '@/lib/api-key'
-import { db } from '@/lib/db'
-import {
-  apiKeys,
-  chats,
-  generateId,
-  messages,
-  parts,
-  usageEvents
-} from '@/lib/db/schema'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -35,6 +22,48 @@ function isAuthorized(request: NextRequest) {
   )
 }
 
+async function getSeedDependencies() {
+  const [
+    { and, eq },
+    { ensureWorkspaceForUser },
+    { generateApiKey, getKeyPrefix, hashNewApiKey },
+    { db },
+    { apiKeys, chats, generateId, messages, parts, usageEvents, workspaces }
+  ] = await Promise.all([
+    import('drizzle-orm'),
+    import('@/lib/actions/api-keys'),
+    import('@/lib/api-key'),
+    import('@/lib/db'),
+    import('@/lib/db/schema')
+  ])
+
+  return {
+    and,
+    eq,
+    ensureWorkspaceForUser,
+    generateApiKey,
+    getKeyPrefix,
+    hashNewApiKey,
+    db,
+    apiKeys,
+    chats,
+    generateId,
+    messages,
+    parts,
+    usageEvents,
+    workspaces
+  }
+}
+
+async function ensureSeedWorkspaceBudget(workspaceId: string) {
+  const { db, eq, workspaces } = await getSeedDependencies()
+
+  await db
+    .update(workspaces)
+    .set({ monthlyBudgetCents: 100 })
+    .where(eq(workspaces.id, workspaceId))
+}
+
 async function createKey(
   workspaceId: string,
   userId: string,
@@ -48,7 +77,10 @@ async function createKey(
     monthlyBudgetCents: number
   }
 ) {
+  const { apiKeys, db, generateApiKey, getKeyPrefix, hashNewApiKey } =
+    await getSeedDependencies()
   const rawKey = generateApiKey(input.environment)
+  const { hash: keyHash, salt: keySalt } = hashNewApiKey(rawKey)
   const [created] = await db
     .insert(apiKeys)
     .values({
@@ -56,7 +88,8 @@ async function createKey(
       userId,
       name: input.name,
       keyPrefix: getKeyPrefix(rawKey),
-      keyHash: hashApiKey(rawKey),
+      keyHash,
+      keySalt,
       environment: input.environment,
       scopes: input.scopes,
       allowedModels: input.allowedModels,
@@ -70,7 +103,9 @@ async function createKey(
 }
 
 async function seedSmoke(userId: string) {
+  const { ensureWorkspaceForUser } = await getSeedDependencies()
   const workspace = await ensureWorkspaceForUser(userId)
+  await ensureSeedWorkspaceBudget(workspace.id)
   const key = await createKey(workspace.id, userId, {
     name: 'Smoke Test Key',
     environment: 'test',
@@ -78,7 +113,7 @@ async function seedSmoke(userId: string) {
     allowedModels: [],
     rpmLimit: 60,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: 100
   })
 
   return {
@@ -89,7 +124,10 @@ async function seedSmoke(userId: string) {
 }
 
 async function seedStress(userId: string) {
+  const { apiKeys, db, ensureWorkspaceForUser, eq, usageEvents } =
+    await getSeedDependencies()
   const workspace = await ensureWorkspaceForUser(userId)
+  await ensureSeedWorkspaceBudget(workspace.id)
 
   const mainKey = await createKey(workspace.id, userId, {
     name: 'Stress Main Key',
@@ -98,7 +136,7 @@ async function seedStress(userId: string) {
     allowedModels: [],
     rpmLimit: 5,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: 100
   })
 
   const lowRpmKey = await createKey(workspace.id, userId, {
@@ -132,6 +170,31 @@ async function seedStress(userId: string) {
     outputTokens: 1,
     providerCostUsd: '0',
     billedUsd: '0',
+    latencyMs: 1,
+    status: 'success'
+  })
+
+  const monthlyBudgetKey = await createKey(workspace.id, userId, {
+    name: 'Stress Monthly Budget Key',
+    environment: 'test',
+    scopes: ['chat:write'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 1
+  })
+  await db.insert(usageEvents).values({
+    requestId: `stress_budget_${Date.now()}`,
+    workspaceId: workspace.id,
+    userId,
+    apiKeyId: monthlyBudgetKey.id,
+    endpoint: 'chat',
+    model: 'brok-lite',
+    provider: 'Brok',
+    inputTokens: 1,
+    outputTokens: 1,
+    providerCostUsd: '0.01',
+    billedUsd: '0.01',
     latencyMs: 1,
     status: 'success'
   })
@@ -170,6 +233,7 @@ async function seedStress(userId: string) {
     mainKey: mainKey.key,
     lowRpmKey: lowRpmKey.key,
     dailyLimitedKey: dailyLimitedKey.key,
+    monthlyBudgetKey: monthlyBudgetKey.key,
     pausedKey: pausedKey.key,
     revokedKey: revokedKey.key
   }
@@ -183,6 +247,7 @@ async function seedShare(
     assistantText?: string
   }
 ) {
+  const { chats, db, generateId, messages, parts } = await getSeedDependencies()
   const chatId = generateId()
   const userMessageId = generateId()
   const assistantMessageId = generateId()
@@ -239,6 +304,7 @@ async function seedShare(
 }
 
 async function cleanupShare(userId: string, chatId: string) {
+  const { and, chats, db, eq } = await getSeedDependencies()
   const deleted = await db
     .delete(chats)
     .where(and(eq(chats.id, chatId), eq(chats.userId, userId)))

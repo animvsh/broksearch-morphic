@@ -122,7 +122,6 @@ describe('BrokCode project file store', () => {
       })
     ).resolves.toEqual([])
   })
-
   it('keeps local fallback workspace projects in file storage even when DATABASE_URL is set', async () => {
     const previousStorage = process.env.BROKCODE_PROJECT_STORAGE
     const previousDatabaseUrl = process.env.DATABASE_URL

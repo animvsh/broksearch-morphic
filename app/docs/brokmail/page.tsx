@@ -45,16 +45,22 @@ export default function BrokMailDocsPage() {
             <code>/api/brokmail/gmail/threads</code> fetches Gmail threads.
           </li>
           <li>
-            <code>/api/brokmail/calendar/events</code> fetches Calendar events.
+            <code>/api/brokmail/gcal/events</code> fetches Calendar events.
           </li>
           <li>
-            <code>/api/brokmail/agent</code> runs the Pi assistant.
+            <code>/api/brokmail/pi-agent</code> runs the Pi assistant.
           </li>
         </ul>
 
         <p>
           For connection setup, see{' '}
-          <Link href="/docs/integrations">Integrations</Link>.
+          <Link
+            href="/docs/integrations"
+            className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+          >
+            Integrations
+          </Link>
+          .
         </p>
       </div>
     </div>

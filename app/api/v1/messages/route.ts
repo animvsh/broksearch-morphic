@@ -31,7 +31,8 @@ import {
   checkUsageLimits,
   generateRequestId,
   recordUsage,
-  usageLimitResponse
+  usageLimitResponse,
+  UsageRecordError
 } from '@/lib/brok/usage-tracker'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
@@ -369,6 +370,25 @@ export async function POST(request: NextRequest) {
       }
     )
   } catch (error) {
+    if (error instanceof UsageRecordError) {
+      return NextResponse.json(
+        {
+          type: 'error',
+          error: {
+            type: 'api_error',
+            message:
+              'Usage ledger storage is temporarily unavailable. Please retry shortly.'
+          }
+        },
+        {
+          status: 503,
+          headers: {
+            'X-Brok-Request-Id': requestId
+          }
+        }
+      )
+    }
+
     const latencyMs = Date.now() - startTime
 
     await recordUsage({
@@ -531,6 +551,9 @@ function createAnthropicStream(
         let emittedDelta = false
         for (const line of lines) {
           usageAccumulator.trackSseLine(line)
+          if (emitProviderLine(line, controller, encoder)) {
+            emittedDelta = true
+          }
           if (emitProviderLine(line, controller, encoder)) {
             emittedDelta = true
           }

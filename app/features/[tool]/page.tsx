@@ -1,9 +1,8 @@
 import type { Metadata } from 'next'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 
 import {
   getToolFeature,
-  resolveFeatureSlug,
   TOOL_FEATURES,
   ToolFeaturePage
 } from '@/components/brok/tool-feature-page'
@@ -20,10 +19,6 @@ export async function generateMetadata({
   params
 }: ToolFeaturePageProps): Promise<Metadata> {
   const { tool } = await params
-  const canonicalTool = resolveFeatureSlug(tool)
-  if (canonicalTool !== tool) {
-    redirect(`/features/${canonicalTool}`)
-  }
   const feature = getToolFeature(tool)
 
   if (!feature) return { title: 'Feature not found' }
@@ -38,10 +33,6 @@ export default async function FeatureToolPage({
   params
 }: ToolFeaturePageProps) {
   const { tool } = await params
-  const canonicalTool = resolveFeatureSlug(tool)
-  if (canonicalTool !== tool) {
-    redirect(`/features/${canonicalTool}`)
-  }
   const feature = getToolFeature(tool)
 
   if (!feature) notFound()

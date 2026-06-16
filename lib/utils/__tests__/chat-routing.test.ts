@@ -46,6 +46,29 @@ describe('chat routing', () => {
         parts: [{ type: 'text', text: 'can you see this?' }]
       })
     ).toBe('Yep, I can see this.')
+
+    expect(
+      getSimpleUtilityReplyForMessage({
+        role: 'user',
+        parts: [{ type: 'text', text: 'hi' }]
+      })
+    ).toBe('Hey, I am here.')
+  })
+
+  it('answers tiny lowercase fragments without running a full model turn', () => {
+    expect(
+      shouldUseQuickReplyForMessage({
+        role: 'user',
+        parts: [{ type: 'text', text: 'jo' }]
+      })
+    ).toBe(true)
+
+    expect(
+      getSimpleUtilityReplyForMessage({
+        role: 'user',
+        parts: [{ type: 'text', text: 'jo' }]
+      })
+    ).toBe('I need a little more to search well. Try a full question or topic.')
   })
 
   it('keeps real research prompts in their selected mode', () => {

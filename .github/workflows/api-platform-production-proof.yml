@@ -1,0 +1,48 @@
+name: API Platform Production Proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Production base URL to verify
+        required: true
+        default: https://www.brok.fyi
+  schedule:
+    - cron: '17 9 * * *'
+
+jobs:
+  production-proof:
+    runs-on: ubuntu-latest
+    name: Seeded Production Proof
+
+    env:
+      SMOKE_BASE_URL: ${{ github.event.inputs.base_url || 'https://www.brok.fyi' }}
+      SMOKE_SEED_TOKEN: ${{ secrets.SMOKE_SEED_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.12
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run public contract stress
+        run: STRESS_PLATFORM_CONTRACTS_ONLY=true bun run stress:platform
+
+      - name: Require seeded smoke token
+        run: |
+          if [ -z "$SMOKE_SEED_TOKEN" ]; then
+            echo "::error::SMOKE_SEED_TOKEN repository secret is required for seeded production proof."
+            exit 1
+          fi
+
+      - name: Run seeded platform smoke
+        run: bun run smoke:platform
+
+      - name: Run seeded platform stress
+        run: bun run stress:platform

@@ -86,7 +86,7 @@ Let a user describe an app, watch BrokCode build it in the cloud, preview it liv
 
 ### TUI
 
-- `npm run brokcode` launches the local TUI.
+- `bun run brokcode` launches the local TUI.
 - The TUI supports `/help`, `/usage`, `/worktree`, `/direct`, `/github`, `/compat`, `/skills`, `/model`, and `/exit`.
 - TUI sessions must sync with cloud when `BROKCODE_SESSION_ID` and base URL are configured.
 - TUI must accept Brok API keys only and validate `brok_sk_` prefix.

@@ -10,11 +10,13 @@ import {
   AppFeature,
   normalizeAppFeatures
 } from '@/lib/auth/app-access'
+import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
 import { BROK_MODELS } from '@/lib/brok/models'
 import { db } from '@/lib/db'
 import {
   apiKeys,
   appAccessAllowlist,
+  appAccessRequests,
   providerRoutes,
   rateLimitEvents,
   usageEvents,
@@ -245,7 +247,12 @@ function normalizeEmailForAllowlist(email: string) {
   return email.trim().toLowerCase()
 }
 
-function parseAllowlistFeatures(formData: FormData): AppFeature[] {
+function parseAllowlistFeatures(formData: FormData): AppFeature[] | null {
+  const scope = String(formData.get('featureScope') ?? '').trim()
+  if (scope === 'all') {
+    return null
+  }
+
   const selected = formData
     .getAll('features')
     .map(value => String(value))
@@ -253,26 +260,79 @@ function parseAllowlistFeatures(formData: FormData): AppFeature[] {
       APP_FEATURES.includes(value as AppFeature)
     )
 
-  return normalizeAppFeatures(selected)
+  const features = normalizeAppFeatures(selected)
+
+  if (features.length === APP_FEATURES.length) {
+    return null
+  }
+
+  if (features.length === 0) {
+    throw new Error('Choose at least one feature or select all tools')
+  }
+
+  return features
 }
 
 export async function getAppAccessAllowlist() {
   await assertAdminAccess()
 
-  return db
-    .select({
-      id: appAccessAllowlist.id,
-      email: appAccessAllowlist.email,
-      status: appAccessAllowlist.status,
-      features: appAccessAllowlist.features,
-      note: appAccessAllowlist.note,
-      createdBy: appAccessAllowlist.createdBy,
-      createdAt: appAccessAllowlist.createdAt,
-      updatedAt: appAccessAllowlist.updatedAt,
-      revokedAt: appAccessAllowlist.revokedAt
-    })
-    .from(appAccessAllowlist)
-    .orderBy(asc(appAccessAllowlist.email))
+  if (isAnonymousAuthMode()) {
+    return []
+  }
+
+  try {
+    return await db
+      .select({
+        id: appAccessAllowlist.id,
+        email: appAccessAllowlist.email,
+        status: appAccessAllowlist.status,
+        features: appAccessAllowlist.features,
+        note: appAccessAllowlist.note,
+        createdBy: appAccessAllowlist.createdBy,
+        createdAt: appAccessAllowlist.createdAt,
+        updatedAt: appAccessAllowlist.updatedAt,
+        revokedAt: appAccessAllowlist.revokedAt
+      })
+      .from(appAccessAllowlist)
+      .orderBy(asc(appAccessAllowlist.email))
+  } catch (error) {
+    if (canUseDevDbFallback(error)) {
+      return []
+    }
+
+    throw error
+  }
+}
+
+export async function getAppAccessRequests() {
+  await assertAdminAccess()
+
+  if (isAnonymousAuthMode()) {
+    return []
+  }
+
+  try {
+    return await db
+      .select({
+        id: appAccessRequests.id,
+        email: appAccessRequests.email,
+        phoneNumber: appAccessRequests.phoneNumber,
+        status: appAccessRequests.status,
+        userId: appAccessRequests.userId,
+        source: appAccessRequests.source,
+        createdAt: appAccessRequests.createdAt,
+        updatedAt: appAccessRequests.updatedAt
+      })
+      .from(appAccessRequests)
+      .orderBy(desc(appAccessRequests.createdAt))
+      .limit(25)
+  } catch (error) {
+    if (canUseDevDbFallback(error)) {
+      return []
+    }
+
+    throw error
+  }
 }
 
 export async function addAppAccessAllowlistEmail(formData: FormData) {

@@ -25,12 +25,16 @@ export type IntegrationRow = {
   featured?: boolean
   authConfigCount: number
   connectedCount: number
+  accountConnected?: boolean
+  executionReady?: boolean
   status: 'connected' | 'ready' | 'unavailable'
 }
 
 type StatusPayload = {
   configured?: boolean
   connected?: boolean
+  accountConnected?: boolean
+  executionReady?: boolean
   status?: IntegrationRow['status']
   toolkit?: string
   connectedCount?: number
@@ -179,6 +183,11 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
               row.connectedCount,
               payload.connectedCount || (payload.connected ? 1 : 0)
             ),
+            accountConnected:
+              payload.accountConnected ??
+              payload.connected ??
+              row.accountConnected,
+            executionReady: payload.executionReady ?? row.executionReady,
             status:
               payload.status ||
               (payload.connected
@@ -377,6 +386,10 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
   function renderStatus(row: IntegrationRow) {
     const meta = STATUS_META[row.status]
     const Icon = meta.icon
+    const detail =
+      row.accountConnected && !row.executionReady
+        ? 'Account connected, actions need backend key'
+        : meta.detail
 
     return (
       <div className="flex min-w-0 flex-col gap-1">
@@ -384,7 +397,7 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
           <Icon className="size-3" />
           {meta.label}
         </Badge>
-        <span className={cn('text-xs', meta.className)}>{meta.detail}</span>
+        <span className={cn('text-xs', meta.className)}>{detail}</span>
       </div>
     )
   }
@@ -480,7 +493,11 @@ export function IntegrationRowsClient({ rows }: IntegrationRowsClientProps) {
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
                 <span className="font-mono">{current.slug}</span>
                 <span>{current.authConfigCount} configs</span>
-                <span>{current.connectedCount} accounts</span>
+                <span>
+                  {current.connectedCount}{' '}
+                  {current.executionReady ? 'action-ready' : 'connected'}{' '}
+                  accounts
+                </span>
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">

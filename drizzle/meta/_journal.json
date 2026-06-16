@@ -274,6 +274,55 @@
       "when": 1778935200000,
       "tag": "0038_presentation_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1779000000000,
+      "tag": "0039_admin_appbuilder_presentations",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1778938800000,
+      "tag": "0040_admin_audit_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1778940000000,
+      "tag": "0041_brok_library_spaces_discover",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1779001200000,
+      "tag": "0042_api_key_prefix_lookup",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1781530200000,
+      "tag": "0043_app_access_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1781579160000,
+      "tag": "0044_usage_events_request_id_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1781582760000,
+      "tag": "0045_playground_session_keys",
+      "breakpoints": true
     }
   ]
 }

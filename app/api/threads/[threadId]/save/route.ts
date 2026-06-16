@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { saveThreadToLibrary } from '@/lib/actions/library'
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
-import { updateChatVisibility } from '@/lib/db/actions'
 
 export const runtime = 'nodejs'
 
@@ -46,8 +46,12 @@ export async function POST(
   const visibility = normalizeVisibility(body?.visibility)
 
   try {
-    const thread = await updateChatVisibility(threadId, userId, visibility)
-    if (!thread) {
+    const saved = await saveThreadToLibrary({
+      threadId,
+      userId,
+      visibility
+    })
+    if (!saved) {
       return NextResponse.json(
         {
           error: {
@@ -61,9 +65,10 @@ export async function POST(
     }
 
     return NextResponse.json({
-      thread_id: thread.id,
+      thread_id: saved.thread.id,
       saved: true,
-      visibility: thread.visibility
+      visibility: saved.thread.visibility,
+      library_item_id: saved.libraryItemId
     })
   } catch {
     return NextResponse.json(

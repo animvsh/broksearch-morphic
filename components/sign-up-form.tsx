@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/card'
 import { IconLogo } from '@/components/ui/icons'
 
+import { AccessRequestForm } from './access-request-form'
+
 export function SignUpForm({
   className,
   redirectTo,
@@ -44,16 +46,25 @@ export function SignUpForm({
         <CardContent className="space-y-4">
           <div className="rounded-lg border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
             <ShieldCheck className="mb-3 size-5 text-foreground" />
-            Ask an admin to add your email to the private app allowlist. If your
-            email is already approved, sign in with that account.
+            Submit your email and phone number for admin review. If your email
+            is already approved, sign in with that account.
           </div>
+          <AccessRequestForm compact />
           <Button asChild className="w-full">
-            <Link href={signInHref}>Sign in</Link>
+            <Link
+              href={signInHref}
+              className="inline-flex h-11 w-full items-center justify-center"
+            >
+              Sign in
+            </Link>
           </Button>
         </CardContent>
       </Card>
       <div className="text-center text-xs text-muted-foreground">
-        <Link href="/" className="hover:underline">
+        <Link
+          href="/"
+          className="inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-md px-2 hover:underline"
+        >
           &larr; Back to Home
         </Link>
       </div>

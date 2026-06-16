@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { eq } from 'drizzle-orm'
-
-import { hashApiKey, verifyApiKey } from '@/lib/api-key'
-import { db } from '@/lib/db'
-import { apiKeys, workspaces } from '@/lib/db/schema'
+import type { apiKeys, workspaces } from '@/lib/db/schema'
 
 export type AuthResult =
   | {
@@ -45,6 +41,31 @@ export function forbiddenScopeResponse(requiredScope: string) {
   )
 }
 
+async function getAuthDependencies() {
+  const [
+    { eq, inArray },
+    { getKeyPrefix, hashApiKey, verifyApiKey },
+    { db },
+    { apiKeys, workspaces }
+  ] = await Promise.all([
+    import('drizzle-orm'),
+    import('@/lib/api-key'),
+    import('@/lib/db'),
+    import('@/lib/db/schema')
+  ])
+
+  return {
+    eq,
+    inArray,
+    getKeyPrefix,
+    hashApiKey,
+    verifyApiKey,
+    db,
+    apiKeys,
+    workspaces
+  }
+}
+
 export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   const authHeader = request.headers.get('authorization')
   const apiKeyHeader = request.headers.get('x-api-key')
@@ -71,64 +92,79 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
     }
   }
 
-  const fallbackAuth = createLocalFallbackAuth(key)
+  if (!key.startsWith('brok_sk_')) {
+    return { success: false, error: 'invalid_api_key', status: 401 }
+  }
+
+  if (shouldRejectMalformedCloudKey(key)) {
+    return { success: false, error: 'invalid_api_key', status: 401 }
+  }
+
+  const fallbackAuth = await createLocalFallbackAuth(key)
 
   let keyRecord: typeof apiKeys.$inferSelect | undefined
 
   try {
+    const { eq, inArray, getKeyPrefix, hashApiKey, verifyApiKey, db, apiKeys } =
+      await getAuthDependencies()
     // Two-stage lookup:
-    //   1. Hash with the legacy global-salt path. Catches all keys issued
-    //      before the per-key salt migration.
-    //   2. Newer keys carry a per-key salt; we look up by hashing with the
-    //      global salt + a sentinel, which won't match legacy rows, then
-    //      we re-hash on the DB-looked-up row using its stored salt.
-    //
-    // We do the lookup by trying the global-salt hash first, which is the
-    // common case. Rows with a per-key salt will still match because the
-    // sha256(key + perKeySalt + global) is unique per key, but the
-    // stored keyHash is computed that way too, so the lookup will only
-    // hit by exact match. To keep the query cheap, we read the row by
-    // an index on a prefix-based lookup is not feasible (we don't have
-    // the salt until we've read the row), so we fall back to a
-    // candidate-set scan.
+    //   1. Exact hash lookup for legacy global-salt keys.
+    //   2. Prefix-indexed candidate lookup for per-key salted keys. We cannot
+    //      compute a salted hash until we read the row salt, so the visible key
+    //      prefix must be selective enough to avoid scanning active keys.
     const legacyHash = hashApiKey(key, null)
-    const candidateHashes = new Set<string>([legacyHash])
 
     ;[keyRecord] = await db
       .select()
       .from(apiKeys)
-      .where(
-        // or() is the right shape; we need to match either hash.
-        eq(apiKeys.keyHash, legacyHash)
-      )
+      .where(eq(apiKeys.keyHash, legacyHash))
       .limit(1)
 
     if (!keyRecord) {
-      // Try the new-style: read recent active keys and re-hash with their
-      // stored salt. Capped at 100 rows to bound the scan; production should
-      // add a dedicated index on (key_salt) or migrate to a wider index.
-      const candidates = await db
-        .select({
-          id: apiKeys.id,
-          keyHash: apiKeys.keyHash,
-          keySalt: apiKeys.keySalt
-        })
+      const primaryPrefix = getKeyPrefix(key)
+      const exactPrefixCandidates = await db
+        .select()
         .from(apiKeys)
-        .where(eq(apiKeys.status, 'active'))
-        .limit(100)
+        .where(eq(apiKeys.keyPrefix, primaryPrefix))
+        .limit(1)
 
-      for (const candidate of candidates) {
-        if (!candidate.keySalt) continue
-        const candidateHash = hashApiKey(key, candidate.keySalt)
-        if (candidateHash === candidate.keyHash) {
-          candidateHashes.add(candidateHash)
-          const [matched] = await db
-            .select()
-            .from(apiKeys)
-            .where(eq(apiKeys.keyHash, candidateHash))
-            .limit(1)
-          if (matched && verifyApiKey(key, matched.keyHash, matched.keySalt)) {
-            keyRecord = matched
+      for (const candidate of exactPrefixCandidates) {
+        if (candidate.keySalt) {
+          if (verifyApiKey(key, candidate.keyHash, candidate.keySalt)) {
+            keyRecord = candidate
+            break
+          }
+          continue
+        }
+
+        if (verifyApiKey(key, candidate.keyHash, null)) {
+          keyRecord = candidate
+          break
+        }
+      }
+
+      if (!keyRecord) {
+        // No per-key-salt match with the full prefix; keep compatibility fallback.
+        const fallbackPrefixes = getApiKeyLookupPrefixes(key, getKeyPrefix)
+        const candidates = await db
+          .select()
+          .from(apiKeys)
+          .where(inArray(apiKeys.keyPrefix, fallbackPrefixes))
+          .limit(100)
+
+        for (const candidate of candidates) {
+          if (candidate.keySalt) {
+            if (verifyApiKey(key, candidate.keyHash, candidate.keySalt)) {
+              keyRecord = candidate
+              break
+            }
+            continue
+          }
+
+          // Fallback support for pre-migration legacy rows that still use the
+          // global salt path but may have an older key prefix layout.
+          if (verifyApiKey(key, candidate.keyHash, null)) {
+            keyRecord = candidate
             break
           }
         }
@@ -155,6 +191,7 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   let workspace: typeof workspaces.$inferSelect | undefined
 
   try {
+    const { eq, db, workspaces } = await getAuthDependencies()
     ;[workspace] = await db
       .select()
       .from(workspaces)
@@ -176,6 +213,30 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
   return { success: true, apiKey: keyRecord, workspace }
 }
 
+function getApiKeyLookupPrefixes(
+  key: string,
+  getKeyPrefix: (key: string) => string
+): string[] {
+  const prefixes = new Set<string>([getKeyPrefix(key)])
+  if (key.length >= 12) {
+    prefixes.add(key.slice(0, 12))
+  }
+  return Array.from(prefixes)
+}
+
+function hasBrokApiKeyShape(key: string) {
+  return /^brok_sk_(live|test)_[A-Za-z0-9_-]{16,}$/.test(key)
+}
+
+function shouldRejectMalformedCloudKey(key: string) {
+  return (
+    process.env.BROK_CLOUD_DEPLOYMENT === 'true' &&
+    key !== process.env.BROK_SMOKE_API_KEY &&
+    !key.startsWith('brok_sk_local_') &&
+    !hasBrokApiKeyShape(key)
+  )
+}
+
 // Throttle lastUsedAt writes to once per 5 minutes per key.
 // The throttle is module-level, so it survives across requests within
 // a single server process but resets when the process restarts.
@@ -190,6 +251,7 @@ async function updateApiKeyLastUsedAt(apiKeyId: string) {
   }
   lastUsedWrites.set(apiKeyId, now)
   try {
+    const { eq, db, apiKeys } = await getAuthDependencies()
     await db
       .update(apiKeys)
       .set({ lastUsedAt: new Date() })
@@ -214,7 +276,9 @@ function canUseLocalAuthFallback() {
   return false
 }
 
-function createLocalFallbackAuth(key: string): AuthResult | null {
+async function createLocalFallbackAuth(
+  key: string
+): Promise<AuthResult | null> {
   if (!canUseLocalAuthFallback()) {
     return null
   }
@@ -232,6 +296,7 @@ function createLocalFallbackAuth(key: string): AuthResult | null {
     return null
   }
 
+  const { hashApiKey } = await import('@/lib/api-key')
   const now = new Date()
   const keyHash = hashApiKey(key)
   const keyPrefix = key.slice(0, 20)

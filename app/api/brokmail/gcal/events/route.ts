@@ -4,6 +4,7 @@ import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { BrokCalendarEvent } from '@/lib/brokmail/google-calendar-client'
 import { summarizeBrokMailIntegrationError } from '@/lib/brokmail/integration-errors'
 import {
+  canExecuteComposioTools,
   executeComposioTool,
   isComposioConfigured,
   listConnectedAccounts
@@ -157,6 +158,16 @@ export async function GET() {
   if (!isComposioConfigured()) {
     return NextResponse.json(
       { error: 'Composio is not configured for Google Calendar.' },
+      { status: 503 }
+    )
+  }
+
+  if (!canExecuteComposioTools()) {
+    return NextResponse.json(
+      {
+        error:
+          'BrokMail Calendar sync requires a backend COMPOSIO_API_KEY before it can load events. Composio Connect can create links, but cannot execute Calendar reads.'
+      },
       { status: 503 }
     )
   }

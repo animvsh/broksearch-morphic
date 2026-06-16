@@ -4,12 +4,16 @@ const {
   mockGetCurrentUserId,
   mockLoadChatWithMessages,
   mockPostChat,
-  mockUpdateChatVisibility
+  mockSaveThreadToLibrary
 } = vi.hoisted(() => ({
   mockGetCurrentUserId: vi.fn(),
   mockLoadChatWithMessages: vi.fn(),
   mockPostChat: vi.fn(),
-  mockUpdateChatVisibility: vi.fn()
+  mockSaveThreadToLibrary: vi.fn()
+}))
+
+vi.mock('@/lib/actions/library', () => ({
+  saveThreadToLibrary: mockSaveThreadToLibrary
 }))
 
 vi.mock('@/lib/auth/get-current-user', () => ({
@@ -17,8 +21,7 @@ vi.mock('@/lib/auth/get-current-user', () => ({
 }))
 
 vi.mock('@/lib/db/actions', () => ({
-  loadChatWithMessages: mockLoadChatWithMessages,
-  updateChatVisibility: mockUpdateChatVisibility
+  loadChatWithMessages: mockLoadChatWithMessages
 }))
 
 vi.mock('@/app/api/chat/route', () => ({
@@ -126,9 +129,12 @@ describe('thread API routes', () => {
   })
 
   test('save defaults to private visibility', async () => {
-    mockUpdateChatVisibility.mockResolvedValue({
-      id: 'thread_1',
-      visibility: 'private'
+    mockSaveThreadToLibrary.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        visibility: 'private'
+      },
+      libraryItemId: 'library_1'
     })
 
     const response = await saveThread(
@@ -138,22 +144,26 @@ describe('thread API routes', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(mockUpdateChatVisibility).toHaveBeenCalledWith(
-      'thread_1',
-      'user_1',
-      'private'
-    )
+    expect(mockSaveThreadToLibrary).toHaveBeenCalledWith({
+      threadId: 'thread_1',
+      userId: 'user_1',
+      visibility: 'private'
+    })
     expect(body).toEqual({
       thread_id: 'thread_1',
       saved: true,
-      visibility: 'private'
+      visibility: 'private',
+      library_item_id: 'library_1'
     })
   })
 
   test('save marks a thread as saved and returns visibility', async () => {
-    mockUpdateChatVisibility.mockResolvedValue({
-      id: 'thread_1',
-      visibility: 'public'
+    mockSaveThreadToLibrary.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        visibility: 'public'
+      },
+      libraryItemId: 'library_1'
     })
 
     const response = await saveThread(
@@ -165,15 +175,16 @@ describe('thread API routes', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(mockUpdateChatVisibility).toHaveBeenCalledWith(
-      'thread_1',
-      'user_1',
-      'public'
-    )
+    expect(mockSaveThreadToLibrary).toHaveBeenCalledWith({
+      threadId: 'thread_1',
+      userId: 'user_1',
+      visibility: 'public'
+    })
     expect(body).toEqual({
       thread_id: 'thread_1',
       saved: true,
-      visibility: 'public'
+      visibility: 'public',
+      library_item_id: 'library_1'
     })
   })
 
@@ -188,11 +199,11 @@ describe('thread API routes', () => {
 
     expect(response.status).toBe(401)
     expect(body.error.code).toBe('authentication_required')
-    expect(mockUpdateChatVisibility).not.toHaveBeenCalled()
+    expect(mockSaveThreadToLibrary).not.toHaveBeenCalled()
   })
 
   test('save returns 404 when the thread is unavailable to the user', async () => {
-    mockUpdateChatVisibility.mockResolvedValue(null)
+    mockSaveThreadToLibrary.mockResolvedValue(null)
 
     const response = await saveThread(
       jsonRequest('http://localhost/api/threads/thread_1/save', {}),
