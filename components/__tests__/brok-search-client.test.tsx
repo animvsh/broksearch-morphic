@@ -282,9 +282,7 @@ describe('BrokSearchClient', () => {
       'data-citation-title',
       'Brok docs'
     )
-    expect(screen.getByTestId('brok-source-strip')).toHaveTextContent(
-      'docs.example.com'
-    )
+    expect(screen.queryByTestId('brok-source-strip')).not.toBeInTheDocument()
     expect(
       screen
         .getByTestId('brok-search-answer')
@@ -295,7 +293,7 @@ describe('BrokSearchClient', () => {
       'How does Brok cite sources?'
     )
 
-    fireEvent.click(screen.getByTestId('brok-source-chip-0'))
+    fireEvent.click(screen.getByRole('button', { name: /\[1\] Brok docs/i }))
     expect(screen.getByTestId('source-side-panel')).toHaveTextContent(
       'Brok docs'
     )
@@ -696,6 +694,56 @@ describe('BrokSearchClient', () => {
     await act(async () => {
       stream.close()
     })
+  })
+
+  it('keeps the compact source strip only while the answer has not started', async () => {
+    const stream = controllableStreamResponse()
+    const fetchMock = vi.fn(async () => stream.response)
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="React hooks"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    await act(async () => {
+      stream.send('source_found', {
+        source: {
+          id: 'src_1',
+          title: 'Brok docs',
+          url: 'https://docs.example.com/search',
+          publisher: 'docs.example.com',
+          snippet: 'Brok search docs.',
+          retrievedAt: '2026-06-16T00:00:00.000Z',
+          qualityScore: 91
+        }
+      })
+    })
+
+    expect(screen.getByTestId('brok-source-strip')).toHaveTextContent(
+      'docs.example.com'
+    )
+
+    await act(async () => {
+      stream.send('answer_delta', { delta: 'Answer started. [1]' })
+      stream.send('done', {})
+      stream.close()
+    })
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Answer started. [1](#brok-session-search:1)'
+    )
+    expect(screen.queryByTestId('brok-source-strip')).not.toBeInTheDocument()
+    expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
+      'Brok docs'
+    )
   })
 
   it('ignores late chunks from an older search stream', async () => {

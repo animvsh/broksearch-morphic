@@ -958,7 +958,7 @@ export function BrokSearchClient({
 
         {isLoading && <SearchProgressIndicator progress={progress} />}
 
-        {progress.sources.length > 0 && (
+        {progress.sources.length > 0 && !answer && (
           <SourceStrip
             sources={progress.sources}
             onOpenSource={source => setActiveSource(toSearchResultItem(source))}
