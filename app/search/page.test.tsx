@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   redirect: vi.fn(),
@@ -40,17 +40,20 @@ vi.mock('@/components/chat', () => ({
     query,
     savedMessages,
     initialQueryMessageId,
-    initialSearchMode
+    initialSearchMode,
+    isGuest
   }: {
     id: string
     query?: string
     savedMessages?: Array<{ role: string; parts?: Array<{ text?: string }> }>
     initialQueryMessageId?: string
     initialSearchMode?: string
+    isGuest?: boolean
   }) => (
     <div data-testid="chat">
       {id}:{query}:{initialQueryMessageId}:{initialSearchMode}:
-      {savedMessages?.length ?? 0}:{savedMessages?.[1]?.parts?.[0]?.text ?? ''}
+      {savedMessages?.length ?? 0}:{String(isGuest)}:
+      {savedMessages?.[1]?.parts?.[0]?.text ?? ''}
     </div>
   )
 }))
@@ -73,11 +76,18 @@ vi.mock('@/components/search/search-landing', () => ({
 
 import SearchPage from './page'
 
+const originalEnableGuestChat = process.env.ENABLE_GUEST_CHAT
+
 describe('app/search/page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    process.env.ENABLE_GUEST_CHAT = originalEnableGuestChat
     mocks.getCurrentUserId.mockResolvedValue('user-1')
     mocks.loadChat.mockResolvedValue(null)
+  })
+
+  afterEach(() => {
+    process.env.ENABLE_GUEST_CHAT = originalEnableGuestChat
   })
 
   it('renders the search landing surface for bare /search requests', async () => {
@@ -162,7 +172,7 @@ describe('app/search/page', () => {
     )
     expect(screen.getByTestId('chat')).toHaveTextContent('::search_')
     expect(screen.getByTestId('chat')).toHaveTextContent(
-      ':quick:2:I need a little more to search well.'
+      ':quick:2:false:I need a little more to search well.'
     )
   })
 
@@ -195,7 +205,7 @@ describe('app/search/page', () => {
 
     expect(screen.getByTestId('chat')).toHaveTextContent('::search_')
     expect(screen.getByTestId('chat')).toHaveTextContent(
-      ':search:2:Existing answer'
+      ':search:2:false:Existing answer'
     )
   })
 
@@ -216,5 +226,66 @@ describe('app/search/page', () => {
     expect(screen.getByTestId('search-landing')).toHaveTextContent(
       'false:true:deep'
     )
+  })
+
+  it('allows guest query-backed search when guest chat is enabled', async () => {
+    process.env.ENABLE_GUEST_CHAT = 'true'
+    mocks.getCurrentUserId.mockResolvedValue(undefined)
+    mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
+
+    render(
+      await SearchPage({
+        searchParams: Promise.resolve({
+          q: 'latest ai funding',
+          mode: 'search'
+        })
+      })
+    )
+
+    expect(mocks.requireFeatureAccess).not.toHaveBeenCalled()
+    expect(mocks.loadChat).not.toHaveBeenCalled()
+    expect(screen.getByTestId('chat')).toHaveTextContent(':latest ai funding:')
+    expect(screen.getByTestId('chat')).toHaveTextContent(':search:0:true:')
+  })
+
+  it('falls back to guest search when auth lookup fails for guest-enabled search', async () => {
+    process.env.ENABLE_GUEST_CHAT = 'true'
+    mocks.getCurrentUserId.mockRejectedValue(new TypeError('Failed to fetch'))
+    mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
+
+    render(
+      await SearchPage({
+        searchParams: Promise.resolve({
+          q: 'latest ai funding',
+          mode: 'search'
+        })
+      })
+    )
+
+    expect(mocks.requireFeatureAccess).not.toHaveBeenCalled()
+    expect(mocks.loadChat).not.toHaveBeenCalled()
+    expect(screen.getByTestId('chat')).toHaveTextContent(':search:0:true:')
+  })
+
+  it('keeps guest deep search behind feature access', async () => {
+    process.env.ENABLE_GUEST_CHAT = 'true'
+    mocks.getCurrentUserId.mockResolvedValue(undefined)
+    mocks.requireFeatureAccess.mockResolvedValue({})
+    mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
+
+    render(
+      await SearchPage({
+        searchParams: Promise.resolve({
+          q: 'latest ai funding',
+          mode: 'deep'
+        })
+      })
+    )
+
+    expect(mocks.requireFeatureAccess).toHaveBeenCalledWith(
+      '/search?q=latest+ai+funding&mode=deep',
+      'search'
+    )
+    expect(mocks.loadChat).not.toHaveBeenCalled()
   })
 })

@@ -8,7 +8,11 @@ import {
   hasFeatureAccess,
   isAppAccessGateEnabled
 } from '@/lib/auth/app-access'
-import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import {
+  getCurrentUserIdForOptionalGuestSearch,
+  isGuestSearchEnabled,
+  isGuestSearchMode
+} from '@/lib/auth/guest-search'
 import { normalizeSearchMode } from '@/lib/config/search-modes'
 import { checkAndEnforceAdaptiveLimit } from '@/lib/rate-limit/adaptive-limit'
 import { checkAndEnforceOverallChatLimit } from '@/lib/rate-limit/chat-limits'
@@ -20,7 +24,7 @@ import {
 import { createChatStreamResponse } from '@/lib/streaming/create-chat-stream-response'
 import { createEphemeralChatStreamResponse } from '@/lib/streaming/create-ephemeral-chat-stream-response'
 import { createSimpleChatStreamResponse } from '@/lib/streaming/create-simple-chat-stream-response'
-import { SearchMode } from '@/lib/types/search'
+import type { SearchMode } from '@/lib/types/search'
 import {
   getLatestUserMessage,
   getSimpleUtilityReplyForMessage,
@@ -70,9 +74,21 @@ export async function POST(req: Request) {
     const referer = req.headers.get('referer')
     const isSharePage = referer?.includes('/share/')
 
+    const cookieStore = await cookies()
+
+    // Get search mode from cookie
+    const searchModeCookie = cookieStore.get('searchMode')?.value
+    const requestedSearchMode: SearchMode = normalizeSearchMode(
+      typeof mode === 'string' ? mode : searchModeCookie
+    )
     const authStart = performance.now()
-    const userId = await getCurrentUserId()
+    const userId =
+      await getCurrentUserIdForOptionalGuestSearch(requestedSearchMode)
     perfTime('Auth completed', authStart)
+    const isGuest = !userId
+    const guestChatEnabled = isGuestSearchEnabled()
+    const canUseGuestSearch =
+      isGuest && guestChatEnabled && isGuestSearchMode(requestedSearchMode)
 
     if (isSharePage) {
       return new Response('Chat API is not available on share pages', {
@@ -83,21 +99,21 @@ export async function POST(req: Request) {
 
     if (isAppAccessGateEnabled()) {
       const access = await getCurrentAppAccess()
-      if (!access.user) {
+      if (!access.user && !canUseGuestSearch) {
         return new Response('Authentication required', {
           status: 401,
           statusText: 'Unauthorized'
         })
       }
 
-      if (!access.allowed) {
+      if (access.user && !access.allowed) {
         return new Response('Access pending', {
           status: 403,
           statusText: 'Forbidden'
         })
       }
 
-      if (!hasFeatureAccess(access, 'search')) {
+      if (access.user && !hasFeatureAccess(access, 'search')) {
         return new Response('Search access denied', {
           status: 403,
           statusText: 'Forbidden'
@@ -105,8 +121,6 @@ export async function POST(req: Request) {
       }
     }
 
-    const guestChatEnabled = process.env.ENABLE_GUEST_CHAT === 'true'
-    const isGuest = !userId
     if (isGuest && !guestChatEnabled) {
       return new Response('Authentication required', {
         status: 401,
@@ -123,14 +137,6 @@ export async function POST(req: Request) {
       const guestLimitResponse = await checkAndEnforceGuestLimit(ip)
       if (guestLimitResponse) return guestLimitResponse
     }
-
-    const cookieStore = await cookies()
-
-    // Get search mode from cookie
-    const searchModeCookie = cookieStore.get('searchMode')?.value
-    const requestedSearchMode: SearchMode = normalizeSearchMode(
-      typeof mode === 'string' ? mode : searchModeCookie
-    )
     const currentUserMessage =
       message ?? getLatestUserMessage(Array.isArray(messages) ? messages : [])
     const intentDecision = classifyBrokIntent(currentUserMessage)
@@ -143,6 +149,21 @@ export async function POST(req: Request) {
           requestedSearchMode
         })
     const simpleReply = getSimpleUtilityReplyForMessage(currentUserMessage)
+    if (isGuest && !isGuestSearchMode(searchMode)) {
+      return new Response(
+        JSON.stringify({
+          error:
+            'Sign in to use Deep Research, Code mode, and private tool workflows. Quick search remains available without an account.',
+          mode: searchMode,
+          authRequired: true
+        }),
+        {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
     if (simpleReply && trigger === 'submit-message') {
       // Enforce rate limits even for simple utility replies
       if (!isGuest) {
@@ -175,27 +196,6 @@ export async function POST(req: Request) {
         status: 404,
         statusText: 'Not Found'
       })
-    }
-
-    // Deep mode is gated to authenticated users on cloud deployments.
-    // Guests are nudged to sign in instead of being downgraded silently.
-    if (
-      isGuest &&
-      searchMode === 'deep' &&
-      process.env.BROK_CLOUD_DEPLOYMENT === 'true'
-    ) {
-      return new Response(
-        JSON.stringify({
-          error:
-            'Sign in to use Deep Research mode. Quick modes remain available without an account.',
-          mode: 'deep',
-          authRequired: true
-        }),
-        {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      )
     }
 
     if (!isGuest) {

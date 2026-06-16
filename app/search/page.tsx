@@ -2,7 +2,11 @@ import { createHash } from 'crypto'
 
 import { loadChat } from '@/lib/actions/chat'
 import { requireFeatureAccess } from '@/lib/auth/app-access'
-import { getCurrentUserId } from '@/lib/auth/get-current-user'
+import {
+  getCurrentUserIdForOptionalGuestSearch,
+  isGuestSearchEnabled,
+  isGuestSearchMode
+} from '@/lib/auth/guest-search'
 import { normalizeSearchMode } from '@/lib/config/search-modes'
 import { getModelSelectorData } from '@/lib/model-selector/get-model-selector-data'
 import type { UIMessage } from '@/lib/types/ai'
@@ -57,9 +61,16 @@ export default async function SearchPage(props: {
   const q = firstParam(searchParams.q)?.trim() ?? ''
   const mode = normalizeSearchMode(firstParam(searchParams.mode))
   const redirectTo = buildSearchRedirectPath(q, mode)
+  const userId = await getCurrentUserIdForOptionalGuestSearch(mode)
+  const isGuest = !userId
+  const canUseGuestSearch =
+    isGuest && isGuestSearchEnabled() && isGuestSearchMode(mode)
+
+  if (!canUseGuestSearch) {
+    await requireFeatureAccess(redirectTo, 'search')
+  }
 
   if (!q) {
-    await requireFeatureAccess(redirectTo, 'search')
     const isCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT === 'true'
     const modelSelectorData = await getModelSelectorData()
 
@@ -72,8 +83,6 @@ export default async function SearchPage(props: {
     )
   }
 
-  await requireFeatureAccess(redirectTo, 'search')
-  const userId = await getCurrentUserId()
   const id = getQueryBackedChatId(q, mode, userId ?? 'guest')
   const existingChat = userId ? await loadChat(id, userId) : null
   const isCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT === 'true'
@@ -112,7 +121,7 @@ export default async function SearchPage(props: {
       }
       initialQueryMessageId={`${id}_user`}
       initialSearchMode={mode}
-      isGuest={false}
+      isGuest={isGuest}
       isCloudDeployment={isCloudDeployment}
       modelSelectorData={modelSelectorData}
     />
