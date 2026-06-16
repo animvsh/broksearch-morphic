@@ -42,6 +42,67 @@ function tableNameFor(value: string, index: number) {
   return `${base}s`
 }
 
+function quoteIdent(identifier: string) {
+  return `"${identifier.replace(/"/g, '""')}"`
+}
+
+function buildMigrationSql(tableNames: string[]) {
+  if (tableNames.length === 0) {
+    return [
+      '-- No application tables were inferred for this Brok Build plan.',
+      '-- Add tables here before applying the migration if the app needs persistence.'
+    ].join('\n')
+  }
+
+  return tableNames
+    .flatMap(tableName => {
+      const quoted = quoteIdent(tableName)
+      return [
+        `create table if not exists public.${quoted} (`,
+        '  id uuid primary key default gen_random_uuid(),',
+        '  owner_id uuid not null references auth.users(id) on delete cascade,',
+        '  title text not null,',
+        "  status text not null default 'active',",
+        "  metadata jsonb not null default '{}'::jsonb,",
+        '  created_at timestamptz not null default now(),',
+        '  updated_at timestamptz not null default now()',
+        ');',
+        '',
+        `create index if not exists ${quoteIdent(`${tableName}_owner_id_idx`)} on public.${quoted} (owner_id);`,
+        `create index if not exists ${quoteIdent(`${tableName}_status_idx`)} on public.${quoted} (status);`,
+        '',
+        `alter table public.${quoted} enable row level security;`,
+        '',
+        `drop policy if exists ${quoteIdent(`${tableName}_owner_select`)} on public.${quoted};`,
+        `create policy ${quoteIdent(`${tableName}_owner_select`)}`,
+        `  on public.${quoted} for select`,
+        '  using (owner_id = auth.uid());',
+        '',
+        `drop policy if exists ${quoteIdent(`${tableName}_owner_insert`)} on public.${quoted};`,
+        `create policy ${quoteIdent(`${tableName}_owner_insert`)}`,
+        `  on public.${quoted} for insert`,
+        '  with check (owner_id = auth.uid());',
+        '',
+        `drop policy if exists ${quoteIdent(`${tableName}_owner_update`)} on public.${quoted};`,
+        `create policy ${quoteIdent(`${tableName}_owner_update`)}`,
+        `  on public.${quoted} for update`,
+        '  using (owner_id = auth.uid())',
+        '  with check (owner_id = auth.uid());',
+        '',
+        `drop policy if exists ${quoteIdent(`${tableName}_owner_delete`)} on public.${quoted};`,
+        `create policy ${quoteIdent(`${tableName}_owner_delete`)}`,
+        `  on public.${quoted} for delete`,
+        '  using (owner_id = auth.uid());',
+        '',
+        `drop trigger if exists ${quoteIdent(`${tableName}_set_updated_at`)} on public.${quoted};`,
+        `create trigger ${quoteIdent(`${tableName}_set_updated_at`)}`,
+        `  before update on public.${quoted}`,
+        '  for each row execute function system.update_updated_at();'
+      ]
+    })
+    .join('\n\n')
+}
+
 export function buildInsForgeBackendResourcePlan(
   internalPlan: InternalPlan,
   title = 'brok_app'
@@ -59,6 +120,7 @@ export function buildInsForgeBackendResourcePlan(
     internalPlan.functions.map(fn => `${appSlug}_${fn}`),
     `${appSlug}_function`
   )
+  const migrationSql = buildMigrationSql(tableNames)
 
   return {
     provider: 'insforge',
@@ -93,6 +155,7 @@ export function buildInsForgeBackendResourcePlan(
       ...functionSlugs.map(
         slug => `npx @insforge/cli functions deploy ${slug}`
       )
-    ]
+    ],
+    migrationSql
   }
 }

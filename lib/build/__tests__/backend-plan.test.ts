@@ -69,5 +69,10 @@ describe('buildInsForgeBackendResourcePlan', () => {
         'npx @insforge/cli functions deploy sales_crm_send_follow_up_email'
       ])
     )
+    expect(plan.migrationSql).toContain(
+      'create table if not exists public."customers"'
+    )
+    expect(plan.migrationSql).toContain('enable row level security')
+    expect(plan.migrationSql).toContain('owner_id = auth.uid()')
   })
 })

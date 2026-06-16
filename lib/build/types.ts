@@ -101,6 +101,7 @@ export type BrokBuildBackendResourcePlan = {
   publicEnv: string[]
   privateEnv: string[]
   applySteps: string[]
+  migrationSql: string
 }
 
 export type UserVisiblePlan = {

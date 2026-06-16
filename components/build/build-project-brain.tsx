@@ -375,6 +375,12 @@ function BackendTab({
               ))}
             </div>
           </Section>
+
+          <Section title="Migration">
+            <p className="font-mono text-[11px] text-foreground/80">
+              {backendPlan.migrationSql.split('\n').length} SQL lines
+            </p>
+          </Section>
         </>
       ) : (
         <>
