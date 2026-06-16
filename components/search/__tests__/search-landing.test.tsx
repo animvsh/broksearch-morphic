@@ -48,6 +48,7 @@ describe('SearchLanding', () => {
     expect(mocks.push).toHaveBeenCalledWith(
       '/search?q=best+study+plan+for+finals&mode=quick'
     )
+    expect(window.localStorage.setItem).toHaveBeenCalledTimes(1)
   })
 
   it('shows the MVP example prompts and starts from one immediately', () => {
