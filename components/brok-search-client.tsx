@@ -5,10 +5,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowUp,
+  ChevronDown,
   ExternalLink,
   Globe2,
   Info,
   Loader2,
+  ShieldAlert,
   Sparkles,
   Square
 } from 'lucide-react'
@@ -114,6 +116,18 @@ function toSearchResultItem(source: Source): SearchResultItem {
 
 function getSourceIdentity(source: Source) {
   return source.id ?? source.url ?? `${source.title}:${source.publisher ?? ''}`
+}
+
+function isLocalFallbackSource(source: Source) {
+  return (
+    source.id === 'fallback_local_1' ||
+    source.publisher === 'Brok local fallback' ||
+    source.url.includes('#local-fallback')
+  )
+}
+
+function hasOnlyLocalFallbackSources(sources: Source[]) {
+  return sources.length > 0 && sources.every(isLocalFallbackSource)
 }
 
 function buildCitationMaps(
@@ -901,7 +915,7 @@ export function BrokSearchClient({
   return (
     <div className="flex w-full gap-6">
       <section
-        className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pb-12 pt-8 sm:px-6"
+        className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pb-32 pt-8 sm:px-6"
         data-testid="brok-search-client"
       >
         <header className="flex flex-col gap-2">
@@ -989,8 +1003,8 @@ export function BrokSearchClient({
 
         {isLoading && <SearchProgressIndicator progress={progress} />}
 
-        {progress.sources.length > 0 && !answer && (
-          <SourceStrip
+        {progress.sources.length > 0 && (
+          <SourceList
             sources={progress.sources}
             onOpenSource={source => setActiveSource(toSearchResultItem(source))}
           />
@@ -1005,9 +1019,15 @@ export function BrokSearchClient({
           >
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <div className="inline-flex items-center gap-2">
-                <Globe2 className="size-3.5" />
+                {hasOnlyLocalFallbackSources(progress.sources) ? (
+                  <ShieldAlert className="size-3.5 text-amber-600" />
+                ) : (
+                  <Globe2 className="size-3.5" />
+                )}
                 <span>
-                  {progress.sources.length} sources
+                  {hasOnlyLocalFallbackSources(progress.sources)
+                    ? 'Model knowledge fallback'
+                    : `${progress.sources.length} sources`}
                   {progress.classification
                     ? ` • ${progress.classification.replace(/\//g, ' ')}`
                     : ''}
@@ -1023,17 +1043,14 @@ export function BrokSearchClient({
               citationMaps={activeCitationMaps}
               onCitationOpen={setActiveSource}
             />
+            {progress.status === 'done' &&
+              hasOnlyLocalFallbackSources(progress.sources) && (
+                <FallbackSourcesNotice />
+              )}
             {progress.status === 'done' && progress.sources.length === 0 && (
               <NoSourcesNotice />
             )}
           </article>
-        )}
-
-        {progress.sources.length > 0 && (
-          <SourceList
-            sources={progress.sources}
-            onOpenSource={source => setActiveSource(toSearchResultItem(source))}
-          />
         )}
 
         {progress.status === 'done' && (
@@ -1053,7 +1070,7 @@ export function BrokSearchClient({
 
         {(answer || completedTurns.length > 0 || isLoading) && (
           <form
-            className="sticky bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] mt-2 flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-2 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.35)] backdrop-blur"
+            className="mt-2 flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-2 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.35)] backdrop-blur sm:sticky sm:bottom-[calc(env(safe-area-inset-bottom)+0.75rem)]"
             data-testid="brok-follow-up-form"
             onSubmit={submitFollowUp}
           >
@@ -1139,44 +1156,18 @@ function NoSourcesNotice() {
   )
 }
 
-function SourceStrip({
-  onOpenSource,
-  sources
-}: {
-  onOpenSource: (source: Source) => void
-  sources: Source[]
-}) {
-  if (sources.length === 0) return null
-
+function FallbackSourcesNotice() {
   return (
-    <section
-      className="mobile-chip-row flex items-center gap-2 overflow-x-auto pb-1"
-      aria-label="Sources found"
-      data-testid="brok-source-strip"
+    <div
+      className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-xs leading-5 text-amber-800"
+      data-testid="brok-fallback-sources-notice"
     >
-      {sources.slice(0, 6).map((source, index) => (
-        <button
-          key={getSourceIdentity(source)}
-          type="button"
-          onClick={() => onOpenSource(source)}
-          className="inline-flex h-11 max-w-[12rem] shrink-0 items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/85 px-3 text-xs font-medium text-zinc-700 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.2)] transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
-          aria-label={`Verify source ${index + 1}: ${source.title}`}
-          data-testid={`brok-source-chip-${index}`}
-        >
-          <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-zinc-100 font-mono text-[9px] font-semibold text-zinc-600">
-            {index + 1}
-          </span>
-          <span className="truncate">
-            {source.publisher ?? safeHostname(source.url)}
-          </span>
-        </button>
-      ))}
-      {sources.length > 6 && (
-        <span className="shrink-0 text-xs text-muted-foreground">
-          +{sources.length - 6} more
-        </span>
-      )}
-    </section>
+      <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+      <span>
+        Live web search was unavailable, so this answer is not verified by web
+        sources yet. Rerun it when search is back for real citations.
+      </span>
+    </div>
   )
 }
 
@@ -1292,51 +1283,127 @@ function SourceList({
   onOpenSource: (source: Source) => void
   sources: Source[]
 }) {
+  const [expanded, setExpanded] = useState(false)
+
   if (sources.length === 0) return null
+  const visibleSources = expanded ? sources : sources.slice(0, 6)
+  const fallbackOnly = hasOnlyLocalFallbackSources(sources)
+
   return (
     <section
-      className="rounded-2xl border border-zinc-200 bg-white/80 p-4 shadow-[0_18px_44px_-32px_rgba(15,23,42,0.18)]"
+      className="rounded-2xl border border-zinc-200 bg-white/75 p-3 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.2)]"
       data-testid="brok-search-sources"
     >
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Sources
-      </h2>
-      <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
-        {sources.map((source, index) => (
-          <li
-            key={getSourceIdentity(source)}
-            className="flex flex-col gap-1 rounded-xl border border-zinc-200/70 bg-white/90 p-3"
-            data-testid={`brok-search-source-${index}`}
-          >
-            <div className="flex min-w-0 items-start justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => onOpenSource(source)}
-                className="line-clamp-2 min-h-11 min-w-0 flex-1 rounded-md py-1 text-left text-xs font-semibold text-zinc-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {fallbackOnly ? (
+            <ShieldAlert className="size-3.5 shrink-0 text-amber-600" />
+          ) : (
+            <Globe2 className="size-3.5 shrink-0 text-zinc-500" />
+          )}
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {fallbackOnly ? 'Fallback' : 'Sources'}
+          </h2>
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-zinc-100 px-1.5 text-[11px] font-medium text-zinc-700">
+            {sources.length}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setExpanded(open => !open)}
+          className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+          aria-expanded={expanded}
+          aria-controls="brok-source-details"
+        >
+          {expanded ? 'Hide details' : 'Show details'}
+          <ChevronDown
+            className={`size-3.5 transition-transform ${
+              expanded ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+      </div>
+
+      <ul
+        className={
+          expanded
+            ? 'grid grid-cols-1 gap-2 md:grid-cols-2'
+            : 'mobile-chip-row flex gap-2 overflow-x-auto pb-1'
+        }
+        id="brok-source-details"
+      >
+        {visibleSources.map((source, index) => {
+          const sourceIndex = index + 1
+          const sourceDomain = source.publisher ?? safeHostname(source.url)
+
+          if (!expanded) {
+            return (
+              <li
+                key={getSourceIdentity(source)}
+                className="min-w-0 shrink-0"
+                data-testid={`brok-search-source-${index}`}
               >
-                [{index + 1}] {source.title}
-              </button>
-              <a
-                href={source.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
-                aria-label={`Open ${source.title}`}
-              >
-                <ExternalLink className="size-3.5" />
-              </a>
-            </div>
-            <span className="text-[11px] text-muted-foreground">
-              {source.publisher ?? safeHostname(source.url)}
-            </span>
-            {source.snippet && (
-              <p className="line-clamp-3 text-[12px] text-zinc-600">
-                {source.snippet}
-              </p>
-            )}
-          </li>
-        ))}
+                <button
+                  type="button"
+                  onClick={() => onOpenSource(source)}
+                  className="inline-flex h-10 max-w-[13rem] items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/90 px-3 text-xs font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+                  aria-label={`Verify source ${sourceIndex}: ${source.title}`}
+                >
+                  <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-zinc-100 font-mono text-[9px] font-semibold text-zinc-600">
+                    {sourceIndex}
+                  </span>
+                  <span className="truncate">{sourceDomain}</span>
+                  <span className="sr-only">{source.title}</span>
+                </button>
+              </li>
+            )
+          }
+
+          return (
+            <li
+              key={getSourceIdentity(source)}
+              className={`flex flex-col gap-1 rounded-xl border p-3 ${
+                isLocalFallbackSource(source)
+                  ? 'border-amber-200/80 bg-amber-50/70'
+                  : 'border-zinc-200/70 bg-white/90'
+              }`}
+              data-testid={`brok-search-source-${index}`}
+            >
+              <div className="flex min-w-0 items-start justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenSource(source)}
+                  className="line-clamp-2 min-h-11 min-w-0 flex-1 rounded-md py-1 text-left text-xs font-semibold text-zinc-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+                >
+                  [{sourceIndex}] {source.title}
+                </button>
+                <a
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+                  aria-label={`Open ${source.title}`}
+                >
+                  <ExternalLink className="size-3.5" />
+                </a>
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                {sourceDomain}
+              </span>
+              {source.snippet && (
+                <p className="line-clamp-3 text-[12px] text-zinc-600">
+                  {source.snippet}
+                </p>
+              )}
+            </li>
+          )
+        })}
       </ul>
+      {!expanded && sources.length > visibleSources.length && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          +{sources.length - visibleSources.length} more sources in details
+        </p>
+      )}
     </section>
   )
 }
