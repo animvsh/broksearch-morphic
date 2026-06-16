@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import {
+  canExecuteComposioTools,
   isComposioConfigured,
   isComposioConnectMode,
   listAuthConfigs,
@@ -103,12 +104,23 @@ export async function GET(
       return isActiveAccountStatus(status)
     })
     const ready = authConfigs.length > 0
-    const connected = connectedAccounts.length > 0
+    const accountConnected = connectedAccounts.length > 0
+    const executionReady = canExecuteComposioTools()
+    const connected = accountConnected && executionReady
 
     return NextResponse.json({
       configured: true,
       connected,
-      status: connected ? 'connected' : ready ? 'ready' : 'unavailable',
+      accountConnected,
+      executionReady,
+      status:
+        connected || accountConnected
+          ? connected
+            ? 'connected'
+            : 'ready'
+          : ready
+            ? 'ready'
+            : 'unavailable',
       toolkit,
       provider: isComposioConnectMode() ? 'composio-connect' : 'composio',
       authConfigCount: authConfigs.length,
@@ -119,10 +131,12 @@ export async function GET(
         toolkit: account.toolkit_slug || account.toolkit || toolkit
       })),
       message: connected
-        ? `${toolkit} is connected through Composio.`
-        : ready
-          ? `${toolkit} is ready to connect. Complete the provider approval popup to finish setup.`
-          : `${toolkit} is not configured in Composio yet.`
+        ? `${toolkit} is connected through Composio and ready for agent actions.`
+        : accountConnected && !executionReady
+          ? `${toolkit} account is connected, but agent actions need a backend COMPOSIO_API_KEY before they can execute.`
+          : ready
+            ? `${toolkit} is ready to connect. Complete the provider approval popup to finish setup.`
+            : `${toolkit} is not configured in Composio yet.`
     })
   } catch (error) {
     return NextResponse.json(

@@ -63,6 +63,25 @@ describe('API key hashing', () => {
 })
 
 describe('rate limiter fail-closed in cloud', () => {
+  it('uses the aggregate rate-limit count when deciding the current window', async () => {
+    vi.resetModules()
+    delete process.env.BROK_CLOUD_DEPLOYMENT
+
+    const dbMod = await import('@/lib/db')
+    ;(dbMod.db.select as any).mockReturnValueOnce({
+      from: () => ({
+        where: () => Promise.resolve([{ count: 2 }])
+      })
+    })
+
+    const { checkRateLimit } = await import('@/lib/brok/rate-limiter')
+    const result = await checkRateLimit('key-1', 'ws-1', 2)
+
+    expect(result.allowed).toBe(false)
+    expect(result.current).toBe(2)
+    expect(result.reason).toBe('rate_limit_exceeded')
+  })
+
   it('returns allowed=false with reason=rate_limit_check_failed in cloud when DB errors', async () => {
     vi.resetModules()
     process.env.BROK_CLOUD_DEPLOYMENT = 'true'

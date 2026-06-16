@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server'
 
-import {
-  hasFeatureAccess,
-  requireAnyFeatureAccessForApi
-} from '@/lib/auth/app-access'
+import { requireAnyFeatureAccessForApi } from '@/lib/auth/app-access'
 import { reconcileStaleBrokCodeTask } from '@/lib/brokcode/durable-job'
 import { listBackgroundTasks } from '@/lib/tasks/background-tasks'
+import { canAccessTaskKind } from '@/lib/tasks/task-feature-access'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -33,9 +31,9 @@ export async function GET(request: Request) {
         : Promise.resolve(task)
     )
   )
-  const visibleTasks = hasFeatureAccess(access.access, 'search')
-    ? reconciledTasks
-    : reconciledTasks.filter(task => task.kind === 'brokcode')
+  const visibleTasks = reconciledTasks.filter(task =>
+    canAccessTaskKind(access.access, task.kind)
+  )
 
   return NextResponse.json({ tasks: visibleTasks })
 }

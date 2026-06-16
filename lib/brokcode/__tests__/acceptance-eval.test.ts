@@ -12,6 +12,7 @@ describe('BrokCode acceptance eval', () => {
       completedAt: '2026-05-25T00:01:00.000Z',
       baseUrl: 'https://brok.test',
       matrixMode: true,
+      fallbackPolicy: 'allowed',
       tuiStatus: 'passed',
       cases: [
         {
@@ -54,12 +55,13 @@ describe('BrokCode acceptance eval', () => {
     )
   })
 
-  it('requires the TUI smoke for a full pass', () => {
+  it('marks skipped TUI as partial even when generated-app checks pass', () => {
     const evalRecord = buildBrokCodeAcceptanceSuiteEval({
       startedAt: '2026-05-25T00:00:00.000Z',
       completedAt: '2026-05-25T00:01:00.000Z',
       baseUrl: 'https://brok.test',
       matrixMode: true,
+      fallbackPolicy: 'allowed',
       tuiStatus: 'skipped',
       cases: [
         {
@@ -73,7 +75,35 @@ describe('BrokCode acceptance eval', () => {
       ]
     })
 
-    expect(evalRecord.status).toBe('failed')
+    expect(evalRecord.status).toBe('partial')
+    expect(evalRecord.launchGate).toBe(false)
     expect(evalRecord.score).toBe(100)
+    expect(formatBrokCodeAcceptanceAdminReview(evalRecord)).toContain(
+      'Launch gate: false'
+    )
+  })
+
+  it('fails the suite when the TUI smoke did not run', () => {
+    const evalRecord = buildBrokCodeAcceptanceSuiteEval({
+      startedAt: '2026-05-25T00:00:00.000Z',
+      completedAt: '2026-05-25T00:01:00.000Z',
+      baseUrl: 'https://brok.test',
+      matrixMode: true,
+      fallbackPolicy: 'allowed',
+      tuiStatus: 'not-run',
+      cases: [
+        {
+          id: 'landing-bakery',
+          title: 'Landing page',
+          category: 'landing',
+          status: 'passed',
+          checks: ['managed-deploy'],
+          startedAt: '2026-05-25T00:00:00.000Z'
+        }
+      ]
+    })
+
+    expect(evalRecord.status).toBe('failed')
+    expect(evalRecord.blockers).toContain('tui: not-run')
   })
 })

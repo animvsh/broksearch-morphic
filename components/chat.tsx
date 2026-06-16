@@ -21,6 +21,7 @@ import {
 import type { ModelSelectorData } from '@/lib/types/model-selector'
 import type { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
+import { getCookie } from '@/lib/utils/cookies'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
@@ -58,22 +59,79 @@ function getMessageText(message: UIMessage) {
   )
 }
 
+const CHAT_FETCH_RETRY_DELAY_MS = 250
+const GUEST_CHAT_STORAGE_PREFIX = 'brok:guest-chat:'
+
+function wait(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isTransientFetchError(error: unknown) {
+  if (!(error instanceof Error)) return false
+
+  const message = error.message.toLowerCase()
+  return (
+    error.name === 'TypeError' &&
+    (message.includes('failed to fetch') ||
+      message.includes('networkerror') ||
+      message.includes('load failed'))
+  )
+}
+
+function getGuestChatStorageKey(chatId: string) {
+  return `${GUEST_CHAT_STORAGE_PREFIX}${chatId}`
+}
+
+function isRestorableGuestMessageList(value: unknown): value is UIMessage[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      message =>
+        message &&
+        typeof message === 'object' &&
+        typeof (message as { id?: unknown }).id === 'string' &&
+        typeof (message as { role?: unknown }).role === 'string' &&
+        Array.isArray((message as { parts?: unknown }).parts)
+    )
+  )
+}
+
+async function resilientChatFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit
+) {
+  const retryInput = input instanceof Request ? input.clone() : input
+
+  try {
+    return await fetch(input, init)
+  } catch (error) {
+    if (init?.signal?.aborted || !isTransientFetchError(error)) {
+      throw error
+    }
+
+    await wait(CHAT_FETCH_RETRY_DELAY_MS)
+    return fetch(retryInput, init)
+  }
+}
+
 export function Chat({
   id: providedId,
   savedMessages = [],
   query,
+  initialQueryMessageId,
+  initialSearchMode,
   isGuest = false,
   isCloudDeployment = false,
-  modelSelectorData,
-  initialSearchMode
+  modelSelectorData
 }: {
   id?: string
   savedMessages?: UIMessage[]
   query?: string
+  initialQueryMessageId?: string
+  initialSearchMode?: SearchMode
   isGuest?: boolean
   isCloudDeployment?: boolean
   modelSelectorData?: ModelSelectorData
-  initialSearchMode?: SearchMode
 }) {
   const router = useRouter()
 
@@ -99,11 +157,21 @@ export function Chat({
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const isAtBottomRef = useRef(true)
+  const submittedInitialQueryRef = useRef<string | null>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [input, setInput] = useState('')
   const [pendingUserMessage, setPendingUserMessage] =
-    useState<UIMessage | null>(null)
+    useState<UIMessage | null>(() => {
+      const initialQuery = query?.trim()
+      if (!initialQuery || savedMessages.length > 0) return null
+
+      return {
+        id: initialQueryMessageId ?? generateId(),
+        role: 'user',
+        parts: [{ type: 'text', text: initialQuery }]
+      } as UIMessage
+    })
   const [errorModal, setErrorModal] = useState<{
     open: boolean
     type: 'rate-limit' | 'auth' | 'forbidden' | 'general'
@@ -128,6 +196,7 @@ export function Chat({
     id: chatId, // use the client-generated or provided chatId
     transport: new DefaultChatTransport({
       api: '/api/chat',
+      fetch: resilientChatFetch,
       prepareSendMessagesRequest: ({ messages, trigger, messageId }) => {
         // Simplify by passing AI SDK's default trigger values directly
         const lastMessage = messages[messages.length - 1]
@@ -149,6 +218,7 @@ export function Chat({
                 : trigger === 'submit-message'
                   ? lastMessage
                   : undefined,
+            mode: getCookie('searchMode') ?? initialSearchMode,
             isNewChat:
               trigger === 'submit-message' &&
               messages.length === 1 &&
@@ -254,6 +324,37 @@ export function Chat({
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value)
   }
+
+  useEffect(() => {
+    if (!isGuest || !providedId || savedMessages.length > 0) return
+    if (typeof window === 'undefined') return
+
+    try {
+      const raw = window.localStorage.getItem(getGuestChatStorageKey(chatId))
+      if (!raw) return
+
+      const restored = JSON.parse(raw)
+      if (isRestorableGuestMessageList(restored) && restored.length > 0) {
+        setMessages(restored)
+      }
+    } catch {
+      window.localStorage.removeItem(getGuestChatStorageKey(chatId))
+    }
+  }, [chatId, isGuest, providedId, savedMessages.length, setMessages])
+
+  useEffect(() => {
+    if (!isGuest || messages.length === 0) return
+    if (typeof window === 'undefined') return
+
+    try {
+      window.localStorage.setItem(
+        getGuestChatStorageKey(chatId),
+        JSON.stringify(messages)
+      )
+    } catch {
+      // Storage can be unavailable in private browsing or low-disk states.
+    }
+  }, [chatId, isGuest, messages])
 
   useEffect(() => {
     if (!pendingUserMessage) return
@@ -573,8 +674,11 @@ export function Chat({
         })
       })
 
+      const isInitialQuerySubmit =
+        promptOverride?.trim() === query?.trim() &&
+        Boolean(initialQueryMessageId)
       const outgoingMessage = {
-        id: generateId(),
+        id: isInitialQuerySubmit ? initialQueryMessageId! : generateId(),
         role: 'user',
         parts
       } as UIMessage
@@ -584,10 +688,13 @@ export function Chat({
       setUploadedFiles([])
       sendMessage(outgoingMessage)
 
-      // Push URL state immediately after sending message (for new chats)
-      // Check if we're on the root path (new chat)
-      if (!isGuest && window.location.pathname === '/') {
-        window.history.pushState({}, '', `/search/${chatId}`)
+      // Commit query-backed and root submissions away from /search?q=...
+      // immediately, so a browser reload does not replay the prompt.
+      if (
+        window.location.pathname === '/' ||
+        window.location.pathname === '/search'
+      ) {
+        window.history.replaceState({}, '', `/search/${chatId}`)
       }
     }
   }
@@ -596,6 +703,31 @@ export function Chat({
     e.preventDefault()
     submitToSearch()
   }
+
+  useEffect(() => {
+    const initialQuery = query?.trim()
+    if (!initialQuery) return
+    if (submittedInitialQueryRef.current === initialQuery) return
+
+    const hasExistingQueryMessage = messages.some(
+      message =>
+        message.role === 'user' &&
+        (message.id === initialQueryMessageId ||
+          getMessageText(message).trim() === initialQuery)
+    )
+
+    if (hasExistingQueryMessage) {
+      submittedInitialQueryRef.current = initialQuery
+      setPendingUserMessage(null)
+      return
+    }
+
+    submittedInitialQueryRef.current = initialQuery
+    submitToSearch(initialQuery)
+    // submitToSearch intentionally remains local to this component; including
+    // it would resubmit whenever chat UI state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, initialQueryMessageId, messages])
 
   const {
     isDragging,
@@ -640,6 +772,8 @@ export function Chat({
           status={status}
           chatId={chatId}
           isGuest={isGuest}
+          hasPendingSubmission={Boolean(pendingUserMessage)}
+          onFollowUpSubmit={(text: string) => submitToSearch(text)}
           addToolResult={({
             toolCallId,
             result
@@ -700,10 +834,10 @@ export function Chat({
           onFilesSelected={processFiles}
           scrollContainerRef={scrollContainerRef}
           onNewChat={handleNewChat}
+          initialSearchMode={initialSearchMode}
           isCloudDeployment={isCloudDeployment}
           isGuest={isGuest}
           modelSelectorData={modelSelectorData}
-          initialSearchMode={initialSearchMode}
           sections={sections}
         />
         <DragOverlay visible={isDragging} />

@@ -6,6 +6,8 @@ export type BrokCodeAcceptanceCaseEval = {
   category: BrokCodeAcceptanceCase['category']
   status: 'passed' | 'failed'
   checks: string[]
+  runtime?: string
+  model?: string
   startedAt: string
   completedAt?: string
   projectId?: string
@@ -19,13 +21,15 @@ export type BrokCodeAcceptanceSuiteEvalInput = {
   completedAt: string
   baseUrl: string
   matrixMode: boolean
-  tuiStatus: 'passed' | 'skipped'
+  fallbackPolicy: 'allowed' | 'disallowed'
+  tuiStatus: 'passed' | 'skipped' | 'failed' | 'not-run'
   cases: BrokCodeAcceptanceCaseEval[]
 }
 
 export type BrokCodeAcceptanceSuiteEval = BrokCodeAcceptanceSuiteEvalInput & {
   kind: 'brokcode_acceptance_eval'
-  status: 'passed' | 'failed'
+  status: 'passed' | 'partial' | 'failed'
+  launchGate: boolean
   score: number
   passCount: number
   failCount: number
@@ -44,14 +48,19 @@ export function buildBrokCodeAcceptanceSuiteEval(
   const blockers = input.cases
     .filter(testCase => testCase.status === 'failed')
     .map(testCase => `${testCase.id}: ${testCase.error ?? 'failed'}`)
+  if (input.tuiStatus === 'failed' || input.tuiStatus === 'not-run') {
+    blockers.push(`tui: ${input.tuiStatus}`)
+  }
+  const launchGate =
+    input.matrixMode && input.tuiStatus === 'passed' && blockers.length === 0
   const score =
     totalCount === 0 ? 0 : Math.round((passCount / totalCount) * 100)
 
   return {
     kind: 'brokcode_acceptance_eval',
     ...input,
-    status:
-      failCount === 0 && input.tuiStatus !== 'skipped' ? 'passed' : 'failed',
+    status: blockers.length > 0 ? 'failed' : launchGate ? 'passed' : 'partial',
+    launchGate,
     score,
     passCount,
     failCount,
@@ -67,9 +76,11 @@ export function formatBrokCodeAcceptanceAdminReview(
     '# BrokCode Acceptance Admin Review',
     '',
     `- Status: ${evalRecord.status}`,
+    `- Launch gate: ${evalRecord.launchGate ? 'passed' : 'false'}`,
     `- Score: ${evalRecord.score}%`,
     `- Cases: ${evalRecord.passCount}/${evalRecord.totalCount} passed`,
     `- TUI: ${evalRecord.tuiStatus}`,
+    `- Fallback policy: ${evalRecord.fallbackPolicy}`,
     `- Base URL: ${evalRecord.baseUrl}`,
     `- Started: ${evalRecord.startedAt}`,
     `- Completed: ${evalRecord.completedAt}`,
@@ -85,6 +96,8 @@ export function formatBrokCodeAcceptanceAdminReview(
       `- Preview: ${testCase.previewUrl ?? 'not available'}`,
       `- Deploy: ${testCase.deploymentUrl ?? 'not available'}`,
       `- Checks: ${testCase.checks.join(', ') || 'none'}`,
+      `- Runtime: ${testCase.runtime ?? 'unknown'}`,
+      `- Model: ${testCase.model ?? 'unknown'}`,
       ...(testCase.error ? [`- Error: ${testCase.error}`] : []),
       ''
     ]),

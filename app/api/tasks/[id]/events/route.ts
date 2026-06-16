@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 
-import {
-  hasFeatureAccess,
-  requireAnyFeatureAccessForApi
-} from '@/lib/auth/app-access'
+import { requireAnyFeatureAccessForApi } from '@/lib/auth/app-access'
 import { reconcileStaleBrokCodeTask } from '@/lib/brokcode/durable-job'
 import { getBackgroundTask } from '@/lib/tasks/background-tasks'
+import {
+  canAccessTaskKind,
+  getTaskFeatureDeniedBody
+} from '@/lib/tasks/task-feature-access'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,7 @@ export async function GET(
 ) {
   const access = await requireAnyFeatureAccessForApi(['search', 'brokcode'])
   if (!access.ok) return access.response
+  const appAccess = access.access
 
   const { id } = await params
   const userId = access.user.id
@@ -30,12 +32,10 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const canReadSearchTasks = hasFeatureAccess(access.access, 'search')
-  if (!canReadSearchTasks && initialTask.kind !== 'brokcode') {
-    return NextResponse.json(
-      { error: 'Feature access denied', feature: 'search' },
-      { status: 403 }
-    )
+  if (!canAccessTaskKind(appAccess, initialTask.kind)) {
+    return NextResponse.json(getTaskFeatureDeniedBody(initialTask.kind), {
+      status: 403
+    })
   }
 
   const encoder = new TextEncoder()
@@ -64,7 +64,7 @@ export async function GET(
               ? await reconcileStaleBrokCodeTask({ task })
               : task
 
-          if (!canReadSearchTasks && reconciledTask.kind !== 'brokcode') {
+          if (!canAccessTaskKind(appAccess, reconciledTask.kind)) {
             controller.enqueue(
               encoder.encode(
                 sse('task.error', {

@@ -102,6 +102,27 @@ function resolveModelForMode(mode: SearchMode): Model | undefined {
   }
 }
 
+function resolveSelectedCookieModel(
+  parsedCookie: ReturnType<typeof parseModelSelectionCookie>
+): Model | null {
+  if (!parsedCookie) {
+    return null
+  }
+
+  if (!isProviderEnabled(parsedCookie.providerId)) {
+    console.warn(
+      `[ModelSelection] Saved model provider "${parsedCookie.providerId}" is not enabled.`
+    )
+    return null
+  }
+
+  if (parsedCookie.providerId === DEFAULT_MODEL.providerId) {
+    return getBrokChatModel(parsedCookie.modelId) ?? null
+  }
+
+  return buildLocalCookieModel(parsedCookie.providerId, parsedCookie.modelId)
+}
+
 /**
  * Determines which model to use based on search mode preference.
  *
@@ -118,38 +139,12 @@ export async function selectModel({
   const parsedCookie = parseModelSelectionCookie(
     cookieStore?.get(MODEL_SELECTION_COOKIE)?.value
   )
-
-  if (
-    parsedCookie?.providerId === DEFAULT_MODEL.providerId &&
-    isProviderEnabled(DEFAULT_MODEL.providerId)
-  ) {
-    const brokChatModel = getBrokChatModel(parsedCookie.modelId)
-    if (brokChatModel) {
-      return brokChatModel
-    }
+  const selectedCookieModel = resolveSelectedCookieModel(parsedCookie)
+  if (selectedCookieModel) {
+    return selectedCookieModel
   }
 
   if (!isCloudDeployment()) {
-    if (parsedCookie) {
-      try {
-        if (!isProviderEnabled(parsedCookie.providerId)) {
-          console.warn(
-            `[ModelSelection] Saved model provider "${parsedCookie.providerId}" is not enabled.`
-          )
-        } else {
-          return buildLocalCookieModel(
-            parsedCookie.providerId,
-            parsedCookie.modelId
-          )
-        }
-      } catch (error) {
-        console.error(
-          '[ModelSelection] Failed to resolve model from cookie:',
-          error
-        )
-      }
-    }
-
     if (isProviderEnabled(DEFAULT_MODEL.providerId)) {
       return DEFAULT_MODEL
     }

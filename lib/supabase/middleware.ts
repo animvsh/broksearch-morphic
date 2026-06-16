@@ -4,6 +4,44 @@ import { createServerClient } from '@supabase/ssr'
 
 import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
 
+const PUBLIC_PATH_EXACT = new Set([
+  '/',
+  '/features',
+  '/pricing',
+  '/manifest.webmanifest',
+  '/sw.js',
+  '/offline.html'
+])
+const PUBLIC_PATH_PREFIXES = [
+  '/features',
+  '/brokcode/apps',
+  '/brokcode/shared',
+  '/search',
+  '/share',
+  '/docs'
+]
+const PUBLIC_PATH_STEMS = ['/auth', '/api']
+
+function normalizePathname(pathname: string) {
+  const trimmed = pathname.trim()
+  return trimmed === '/' ? '/' : trimmed.replace(/\/+$/, '')
+}
+
+export function isPublicPath(pathname: string) {
+  const normalized = normalizePathname(pathname)
+  return (
+    PUBLIC_PATH_EXACT.has(normalized) ||
+    PUBLIC_PATH_EXACT.has(pathname) ||
+    PUBLIC_PATH_PREFIXES.some(
+      prefix =>
+        pathname === prefix ||
+        normalized === prefix ||
+        normalized.startsWith(`${prefix}/`)
+    ) ||
+    PUBLIC_PATH_STEMS.some(stem => pathname.startsWith(stem))
+  )
+}
+
 export async function updateSession(request: NextRequest) {
   if (isAnonymousAuthMode()) {
     return NextResponse.next({ request })
@@ -53,25 +91,10 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname
-  const isPwaAsset =
-    pathname === '/manifest.webmanifest' ||
-    pathname === '/sw.js' ||
-    pathname === '/offline.html'
-  const isPublicPath =
-    pathname === '/' ||
-    pathname.startsWith('/features') ||
-    pathname === '/pricing' ||
-    isPwaAsset ||
-    pathname.startsWith('/auth') ||
-    pathname.startsWith('/api') ||
-    pathname.startsWith('/docs') ||
-    pathname.startsWith('/brokcode/apps') ||
-    pathname.startsWith('/brokcode/shared') ||
-    pathname.startsWith('/search') ||
-    pathname.startsWith('/share')
+  const isPublicRoute = isPublicPath(pathname)
 
   // Redirect to login if the user is not authenticated and the path is not public
-  if (!user && !isPublicPath) {
+  if (!user && !isPublicRoute) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'

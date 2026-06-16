@@ -1,4 +1,3 @@
-import { getProviderRoutes, saveProviderRoute } from '@/lib/actions/admin-brok'
 import { requirePageAuth } from '@/lib/auth/require-page-auth'
 import { BROK_MODELS } from '@/lib/brok/models'
 
@@ -9,6 +8,9 @@ export const dynamic = 'force-dynamic'
 
 export default async function AdminProvidersPage() {
   await requirePageAuth('/admin/brok/providers')
+  const { getProviderRoutes, saveProviderRoute } = await import(
+    '@/lib/actions/admin-brok'
+  )
   let routes = await getProviderRoutes()
   if (!routes.length) {
     routes = Object.entries(BROK_MODELS).map(([brokModel, config], index) => ({

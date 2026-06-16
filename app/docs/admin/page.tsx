@@ -33,16 +33,36 @@ export default function AdminDocsPage() {
         <h2>Routes</h2>
         <ul>
           <li>
-            <Link href="/admin/brok">Admin panel</Link>
+            <Link
+              href="/admin/brok"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
+              Admin panel
+            </Link>
           </li>
           <li>
-            <Link href="/usage">Usage</Link>
+            <Link
+              href="/usage"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
+              Usage
+            </Link>
           </li>
           <li>
-            <Link href="/billing">Billing</Link>
+            <Link
+              href="/billing"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
+              Billing
+            </Link>
           </li>
           <li>
-            <Link href="/api-keys">API keys</Link>
+            <Link
+              href="/api-keys"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
+              API keys
+            </Link>
           </li>
         </ul>
       </div>

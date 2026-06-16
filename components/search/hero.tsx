@@ -1,9 +1,6 @@
 'use client'
 
-/* eslint-disable react-hooks/set-state-in-effect -- sync defaultMode prop and cookie side-effect */
-
 import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
 
 import { ArrowUp, Paperclip, Sparkles, Square } from 'lucide-react'
 
@@ -54,13 +51,21 @@ export function Hero({
     setCookie('searchMode', mode)
   }, [mode])
 
+  const submitQuery = (
+    submittedQuery: string,
+    submittedMode: SearchMode = mode,
+    submittedFiles: File[] = files
+  ) => {
+    const trimmed = submittedQuery.trim()
+    if (!trimmed || isSubmitting) return
+    recordRecentSearch(trimmed, submittedMode, recentStorageKey)
+    onSubmit(trimmed, submittedMode, submittedFiles)
+    setQuery('')
+  }
+
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault()
-    const trimmed = query.trim()
-    if (!trimmed || isSubmitting) return
-    recordRecentSearch(trimmed, mode, recentStorageKey)
-    onSubmit(trimmed, mode, files)
-    setQuery('')
+    submitQuery(query)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -80,18 +85,21 @@ export function Hero({
   }
 
   const handleExampleSelect = (q: string, m?: SearchMode) => {
+    const nextMode = m ?? mode
     if (m) setLocalMode(m)
-    setQuery(q)
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus()
-    })
+    submitQuery(q, nextMode, [])
   }
 
-  const handleRecentSelect = (q: string) => {
-    setQuery(q)
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus()
-    })
+  const handleRecentSelect = (q: string, storedMode?: string) => {
+    const nextMode =
+      storedMode === 'quick' ||
+      storedMode === 'search' ||
+      storedMode === 'deep' ||
+      storedMode === 'code'
+        ? storedMode
+        : mode
+    setLocalMode(nextMode)
+    submitQuery(q, nextMode, [])
   }
 
   const handlePaste = async (e: React.ClipboardEvent) => {
@@ -121,40 +129,13 @@ export function Hero({
       <div className="mb-8 flex flex-col items-center text-center">
         <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur">
           <Sparkles className="size-3 text-foreground/70" />
-          AI search, better than ever
-        </div>
-        <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50/90 px-3 py-1 text-[11px] font-semibold text-emerald-700">
-          One student plan starts at only
-          <span className="text-sm font-semibold">$7/month</span>
+          Fast answers with sources
         </div>
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          What are we working on?
+          Ask anything
         </h1>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          Ask a question, drop a file, or pick an example to get started.
-        </p>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Explore tools, pricing, and docs in
-          <Link
-            href="/features"
-            className="mx-1 font-medium text-foreground underline decoration-dotted underline-offset-4"
-          >
-            Features
-          </Link>
-          <Link
-            href="/pricing"
-            className="mx-1 font-medium text-foreground underline decoration-dotted underline-offset-4"
-          >
-            Pricing
-          </Link>
-          and
-          <Link
-            href="/features/api"
-            className="mx-1 font-medium text-foreground underline decoration-dotted underline-offset-4"
-          >
-            API
-          </Link>
-          pages.
+          Get a concise answer, cited sources, and useful follow-up questions.
         </p>
       </div>
 
@@ -171,7 +152,7 @@ export function Hero({
               onChange={e => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              placeholder="Ask anything..."
+              placeholder='Ask anything, e.g. "What is the best way to learn React?"'
               rows={1}
               className={cn(
                 'block w-full resize-none bg-transparent px-4 pt-4 pb-2 text-base leading-relaxed text-foreground placeholder:text-muted-foreground/70',
@@ -203,7 +184,7 @@ export function Hero({
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-2 px-2 pb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-2">
             <div className="flex items-center gap-1.5">
               <input
                 ref={fileInputRef}
@@ -218,7 +199,7 @@ export function Hero({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="clicky-control inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Attach files"
               >
                 <Paperclip className="size-4" />
@@ -230,7 +211,7 @@ export function Hero({
               type="submit"
               disabled={!query.trim() || isSubmitting}
               className={cn(
-                'inline-flex size-9 items-center justify-center rounded-lg transition-all',
+                'clicky-control inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-lg transition-all',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                 query.trim() && !isSubmitting
                   ? 'bg-foreground text-background hover:bg-foreground/90'
@@ -288,7 +269,7 @@ function FileChip({ file, onRemove }: { file: File; onRemove: () => void }) {
       <button
         type="button"
         onClick={onRemove}
-        className="ml-0.5 inline-flex size-4 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+        className="ml-0.5 inline-flex size-11 min-h-11 min-w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
         aria-label={`Remove ${file.name}`}
       >
         ×

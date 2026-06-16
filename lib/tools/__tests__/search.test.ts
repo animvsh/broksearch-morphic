@@ -13,7 +13,7 @@ const {
     primaryProviderSearch,
     mockCreateSearchProvider: vi.fn((type?: string) => ({
       search:
-        !type || type === 'minimax'
+        !type || type === 'brok'
           ? fallbackProviderSearch
           : primaryProviderSearch
     }))
@@ -21,7 +21,7 @@ const {
 })
 
 vi.mock('@/lib/tools/search/providers', () => ({
-  DEFAULT_PROVIDER: 'minimax',
+  DEFAULT_PROVIDER: 'brok',
   createSearchProvider: mockCreateSearchProvider
 }))
 
@@ -45,6 +45,10 @@ async function collectSearchChunks(
   return chunks
 }
 
+function asAsyncIterable(result: unknown) {
+  return result as AsyncIterable<any>
+}
+
 describe('createSearchTool', () => {
   const originalEnv = { ...process.env }
 
@@ -56,11 +60,12 @@ describe('createSearchTool', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     process.env = { ...originalEnv }
   })
 
-  it('returns a completed unavailable result when the provider fails', async () => {
+  it('returns an honest model-knowledge fallback when the default provider fails', async () => {
     fallbackProviderSearch.mockRejectedValueOnce(new Error('missing api key'))
 
     const tool = createSearchTool('openai:gpt-4o-mini')
@@ -90,14 +95,26 @@ describe('createSearchTool', () => {
     expect(chunks.at(-1)).toMatchObject({
       state: 'complete',
       query: 'campus housing deadlines',
-      results: [],
+      results: [
+        {
+          title: 'Model knowledge fallback',
+          url: 'https://www.brok.fyi/docs/search-completions#model-knowledge-fallback',
+          publisher: 'Brok'
+        }
+      ],
       images: [],
-      number_of_results: 0,
+      number_of_results: 1,
       toolCallId: 'search-call-1',
-      error: expect.stringContaining('Search is temporarily unavailable')
+      citationMap: {
+        1: {
+          title: 'Model knowledge fallback',
+          url: 'https://www.brok.fyi/docs/search-completions#model-knowledge-fallback'
+        }
+      },
+      error: expect.stringContaining('Live search sources were unavailable')
     })
     expect(mockCreateSearchProvider).toHaveBeenCalledTimes(1)
-    expect(mockCreateSearchProvider).toHaveBeenCalledWith('minimax')
+    expect(mockCreateSearchProvider).toHaveBeenCalledWith('brok')
   })
 
   it('adds citation maps to successful provider results', async () => {
@@ -182,7 +199,7 @@ describe('createSearchTool', () => {
     expect(primaryProviderSearch).toHaveBeenCalledTimes(1)
     expect(fallbackProviderSearch).toHaveBeenCalledTimes(1)
     expect(mockCreateSearchProvider).toHaveBeenNthCalledWith(1, 'tavily')
-    expect(mockCreateSearchProvider).toHaveBeenNthCalledWith(2, 'minimax')
+    expect(mockCreateSearchProvider).toHaveBeenNthCalledWith(2, 'brok')
     expect(chunks.at(-1)).toMatchObject({
       state: 'complete',
       toolCallId: 'search-call-3',
@@ -200,6 +217,78 @@ describe('createSearchTool', () => {
       }
     })
     expect(chunks.at(-1).error).toBeUndefined()
+  })
+
+  it('falls back when the configured provider times out', async () => {
+    vi.useFakeTimers()
+    process.env.SEARCH_API = 'tavily'
+    process.env.SEARCH_PROVIDER_TIMEOUT_MS = '25'
+    primaryProviderSearch.mockImplementationOnce(
+      () => new Promise(() => undefined)
+    )
+    fallbackProviderSearch.mockResolvedValueOnce({
+      results: [
+        {
+          title: 'Fast fallback source',
+          url: 'https://fallback.example/source',
+          content: 'The backup search provider returned quickly.'
+        }
+      ],
+      images: [],
+      query: 'slow provider query',
+      number_of_results: 1
+    })
+
+    const tool = createSearchTool('openai:gpt-4o-mini')
+    const result = tool.execute?.(
+      {
+        query: 'slow provider query',
+        type: 'optimized',
+        content_types: ['web'],
+        max_results: 10,
+        search_depth: 'basic',
+        include_domains: [],
+        exclude_domains: []
+      },
+      {
+        toolCallId: 'search-call-timeout',
+        messages: []
+      }
+    )
+
+    expect(result).toBeDefined()
+    const iterator = asAsyncIterable(await result!)[Symbol.asyncIterator]()
+
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: {
+        state: 'searching',
+        query: 'slow provider query'
+      }
+    })
+
+    const finalChunk = iterator.next()
+    await vi.advanceTimersByTimeAsync(25)
+
+    await expect(finalChunk).resolves.toMatchObject({
+      done: false,
+      value: {
+        state: 'complete',
+        toolCallId: 'search-call-timeout',
+        results: [
+          {
+            title: 'Fast fallback source',
+            url: 'https://fallback.example/source'
+          }
+        ]
+      }
+    })
+    await expect(iterator.next()).resolves.toEqual({
+      done: true,
+      value: undefined
+    })
+    expect(primaryProviderSearch).toHaveBeenCalledTimes(1)
+    expect(fallbackProviderSearch).toHaveBeenCalledTimes(1)
   })
 
   it('falls back when advanced search route is unavailable', async () => {
@@ -247,7 +336,7 @@ describe('createSearchTool', () => {
       expect.objectContaining({ method: 'POST' })
     )
     expect(mockCreateSearchProvider).toHaveBeenCalledTimes(1)
-    expect(mockCreateSearchProvider).toHaveBeenCalledWith('minimax')
+    expect(mockCreateSearchProvider).toHaveBeenCalledWith('brok')
     expect(chunks.at(-1)).toMatchObject({
       state: 'complete',
       toolCallId: 'search-call-4',
@@ -257,6 +346,127 @@ describe('createSearchTool', () => {
           url: 'https://status.example.edu'
         }
       ]
+    })
+  })
+
+  it('falls back when the advanced search route times out', async () => {
+    vi.useFakeTimers()
+    process.env.SEARCH_API = 'searxng'
+    process.env.SEARXNG_DEFAULT_DEPTH = 'advanced'
+    process.env.NEXT_PUBLIC_BASE_URL = 'http://localhost:3000'
+    process.env.SEARCH_PROVIDER_TIMEOUT_MS = '25'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise(() => undefined))
+    )
+    fallbackProviderSearch.mockResolvedValueOnce({
+      results: [
+        {
+          title: 'Advanced route fallback source',
+          url: 'https://fallback.example/advanced',
+          content: 'The default provider answered after advanced search hung.'
+        }
+      ],
+      images: [],
+      query: 'advanced slow query',
+      number_of_results: 1
+    })
+
+    const tool = createSearchTool('openai:gpt-4o-mini')
+    const result = tool.execute?.(
+      {
+        query: 'advanced slow query',
+        type: 'optimized',
+        content_types: ['web'],
+        max_results: 10,
+        search_depth: 'advanced',
+        include_domains: [],
+        exclude_domains: []
+      },
+      {
+        toolCallId: 'search-call-advanced-timeout',
+        messages: []
+      }
+    )
+
+    expect(result).toBeDefined()
+    const iterator = asAsyncIterable(await result!)[Symbol.asyncIterator]()
+
+    await expect(iterator.next()).resolves.toMatchObject({
+      done: false,
+      value: {
+        state: 'searching',
+        query: 'advanced slow query'
+      }
+    })
+
+    const finalChunk = iterator.next()
+    await vi.advanceTimersByTimeAsync(25)
+
+    await expect(finalChunk).resolves.toMatchObject({
+      done: false,
+      value: {
+        state: 'complete',
+        toolCallId: 'search-call-advanced-timeout',
+        results: [
+          {
+            title: 'Advanced route fallback source',
+            url: 'https://fallback.example/advanced'
+          }
+        ]
+      }
+    })
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/advanced-search'),
+      expect.objectContaining({ method: 'POST' })
+    )
+    expect(mockCreateSearchProvider).toHaveBeenCalledTimes(1)
+    expect(mockCreateSearchProvider).toHaveBeenCalledWith('brok')
+    expect(fallbackProviderSearch).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns the model-knowledge fallback when both primary and fallback providers fail', async () => {
+    process.env.SEARCH_API = 'tavily'
+    primaryProviderSearch.mockRejectedValueOnce(new Error('Tavily unavailable'))
+    fallbackProviderSearch.mockRejectedValueOnce(new Error('Brok unavailable'))
+
+    const tool = createSearchTool('openai:gpt-4o-mini')
+    const result = tool.execute?.(
+      {
+        query: 'what is the best way to learn react',
+        type: 'optimized',
+        content_types: ['web'],
+        max_results: 10,
+        search_depth: 'basic',
+        include_domains: [],
+        exclude_domains: []
+      },
+      {
+        toolCallId: 'search-call-double-failure',
+        messages: []
+      }
+    )
+
+    const chunks = await collectSearchChunks(await result!)
+
+    expect(primaryProviderSearch).toHaveBeenCalledTimes(1)
+    expect(fallbackProviderSearch).toHaveBeenCalledTimes(1)
+    expect(chunks.at(-1)).toMatchObject({
+      state: 'complete',
+      toolCallId: 'search-call-double-failure',
+      results: [
+        {
+          title: 'Model knowledge fallback',
+          publisher: 'Brok',
+          content: expect.stringContaining('No live web search source')
+        }
+      ],
+      citationMap: {
+        1: {
+          title: 'Model knowledge fallback'
+        }
+      },
+      error: expect.stringContaining('Live search sources were unavailable')
     })
   })
 })

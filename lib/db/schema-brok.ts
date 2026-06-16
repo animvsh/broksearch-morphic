@@ -22,6 +22,31 @@ export const planEnum = pgEnum('plan', [
   'scale',
   'enterprise'
 ])
+export const appProjectStatusEnum = pgEnum('app_project_status', [
+  'draft',
+  'generating',
+  'preview_ready',
+  'build_failed',
+  'exported',
+  'deleted',
+  'suspended'
+])
+export const appGenerationStatusEnum = pgEnum('app_generation_status', [
+  'started',
+  'completed',
+  'failed'
+])
+export const appExportStatusEnum = pgEnum('app_export_status', [
+  'pending',
+  'processing',
+  'completed',
+  'failed'
+])
+export const presentationShareStatusEnum = pgEnum('presentation_share_status', [
+  'active',
+  'revoked',
+  'expired'
+])
 export const keyStatusEnum = pgEnum('key_status', [
   'active',
   'paused',
@@ -59,6 +84,39 @@ export const presentationStatusEnum = pgEnum('presentation_status', [
   'error'
 ])
 
+// Admin audit logs — every privileged admin action is recorded
+// so support, finance, and owners can answer "who did what, when."
+export const adminAuditLogs = pgTable(
+  'admin_audit_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    adminUserId: text('admin_user_id'),
+    adminEmail: text('admin_email'),
+    action: text('action').notNull(),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id'),
+    beforeValue: jsonb('before_value').$type<Record<string, unknown>>(),
+    afterValue: jsonb('after_value').$type<Record<string, unknown>>(),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => ({
+    adminUserIdx: index('admin_audit_logs_admin_user_idx').on(
+      table.adminUserId
+    ),
+    actionIdx: index('admin_audit_logs_action_idx').on(table.action),
+    targetIdx: index('admin_audit_logs_target_idx').on(
+      table.targetType,
+      table.targetId
+    ),
+    createdAtIdx: index('admin_audit_logs_created_at_idx').on(
+      table.createdAt.desc()
+    )
+  })
+)
+
 // Workspaces
 export const workspaces = pgTable('workspaces', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -91,6 +149,32 @@ export const appAccessAllowlist = pgTable(
   })
 )
 
+export const appAccessRequests = pgTable(
+  'app_access_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: text('email').notNull(),
+    phoneNumber: text('phone_number').notNull(),
+    status: text('status').default('pending').notNull(),
+    userId: text('user_id'),
+    source: text('source'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    reviewedAt: timestamp('reviewed_at'),
+    reviewedBy: text('reviewed_by')
+  },
+  table => ({
+    emailUniqueIdx: uniqueIndex('app_access_requests_email_unique_idx').on(
+      table.email
+    ),
+    statusIdx: index('app_access_requests_status_idx').on(table.status),
+    createdAtIdx: index('app_access_requests_created_at_idx').on(
+      table.createdAt.desc()
+    )
+  })
+)
+
 // API Keys
 export const apiKeys = pgTable(
   'api_keys',
@@ -117,6 +201,7 @@ export const apiKeys = pgTable(
   },
   table => ({
     workspaceIdx: index('api_keys_workspace_idx').on(table.workspaceId),
+    keyPrefixIdx: index('api_keys_key_prefix_idx').on(table.keyPrefix),
     keyHashIdx: index('api_keys_key_hash_idx').on(table.keyHash)
   })
 )
@@ -158,6 +243,7 @@ export const usageEvents = pgTable(
   },
   table => ({
     workspaceIdx: index('usage_events_workspace_idx').on(table.workspaceId),
+    requestIdx: index('usage_events_request_id_idx').on(table.requestId),
     apiKeyIdx: index('usage_events_api_key_idx').on(table.apiKeyId),
     surfaceIdx: index('usage_events_surface_idx').on(table.surface),
     sourceIdx: index('usage_events_source_idx').on(table.source),
@@ -233,6 +319,38 @@ export const brokCodeRuntimeKeys = pgTable(
       table.workspaceId
     ),
     userIdx: index('brokcode_runtime_keys_user_idx').on(table.userId)
+  })
+)
+
+export const playgroundSessionKeys = pgTable(
+  'playground_session_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    apiKeyId: uuid('api_key_id').references(() => apiKeys.id),
+    keyPrefix: text('key_prefix').notNull(),
+    encryptedKey: text('encrypted_key').notNull(),
+    environment: environmentEnum('environment').default('test').notNull(),
+    scopes: jsonb('scopes').default([]).notNull(),
+    expiresAt: timestamp('expires_at').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    lastUsedAt: timestamp('last_used_at')
+  },
+  table => ({
+    workspaceUserUniqueIdx: uniqueIndex(
+      'playground_session_keys_workspace_user_unique_idx'
+    ).on(table.workspaceId, table.userId),
+    workspaceIdx: index('playground_session_keys_workspace_idx').on(
+      table.workspaceId
+    ),
+    userIdx: index('playground_session_keys_user_idx').on(table.userId),
+    expiresAtIdx: index('playground_session_keys_expires_at_idx').on(
+      table.expiresAt
+    )
   })
 )
 
@@ -585,6 +703,9 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
   brokCodeVersions: many(brokCodeVersions),
   brokCodeProjects: many(brokCodeProjects),
   brokCodeRuntimeSandboxes: many(brokCodeRuntimeSandboxes),
+  brokCodeGenerations: many(brokCodeGenerations),
+  brokCodeBuilds: many(brokCodeBuilds),
+  brokCodeExports: many(brokCodeExports),
   connectorActionRuns: many(connectorActionRuns)
 }))
 
@@ -658,7 +779,10 @@ export const brokCodeProjectsRelations = relations(
     }),
     files: many(brokCodeProjectFiles),
     deployments: many(brokCodeDeployments),
-    runtimeSandboxes: many(brokCodeRuntimeSandboxes)
+    runtimeSandboxes: many(brokCodeRuntimeSandboxes),
+    generations: many(brokCodeGenerations),
+    builds: many(brokCodeBuilds),
+    exports: many(brokCodeExports)
   })
 )
 
@@ -897,12 +1021,131 @@ export const presentationExports = pgTable(
   ]
 )
 
+export const presentationShares = pgTable(
+  'presentation_shares',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    presentationId: uuid('presentation_id')
+      .notNull()
+      .references(() => presentations.id, { onDelete: 'cascade' }),
+    shareId: text('share_id').notNull(),
+    isPublic: boolean('is_public').default(false).notNull(),
+    status: presentationShareStatusEnum('status').default('active').notNull(),
+    viewCount: integer('view_count').default(0).notNull(),
+    lastViewedAt: timestamp('last_viewed_at'),
+    expiresAt: timestamp('expires_at'),
+    revokedAt: timestamp('revoked_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    uniqueIndex('presentation_shares_share_id_unique').on(table.shareId),
+    index('presentation_shares_presentation_id_idx').on(table.presentationId),
+    index('presentation_shares_status_idx').on(table.status)
+  ]
+)
+
+export const brokCodeGenerations = pgTable(
+  'brokcode_generations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => brokCodeProjects.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    userId: text('user_id').notNull(),
+    prompt: text('prompt').notNull(),
+    model: text('model').notNull(),
+    inputTokens: integer('input_tokens').default(0).notNull(),
+    outputTokens: integer('output_tokens').default(0).notNull(),
+    costUsd: decimal('cost_usd', { precision: 10, scale: 6 })
+      .default('0')
+      .notNull(),
+    filesChanged: jsonb('files_changed')
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    buildResult: text('build_result').default('pending'),
+    status: appGenerationStatusEnum('status').default('started').notNull(),
+    errorCode: text('error_code'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    index('brokcode_generations_project_idx').on(table.projectId),
+    index('brokcode_generations_workspace_idx').on(table.workspaceId),
+    index('brokcode_generations_user_idx').on(table.userId),
+    index('brokcode_generations_status_idx').on(table.status),
+    index('brokcode_generations_created_at_idx').on(table.createdAt.desc())
+  ]
+)
+
+export const brokCodeBuilds = pgTable(
+  'brokcode_builds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => brokCodeProjects.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    userId: text('user_id').notNull(),
+    buildCommand: text('build_command'),
+    installCommand: text('install_command'),
+    status: text('status').default('queued').notNull(),
+    durationMs: integer('duration_ms').default(0).notNull(),
+    installLogs: text('install_logs'),
+    typeErrors: jsonb('type_errors').$type<unknown[]>().default([]),
+    viteErrors: jsonb('vite_errors').$type<unknown[]>().default([]),
+    repairAttempts: integer('repair_attempts').default(0).notNull(),
+    finalStatus: text('final_status'),
+    errorCode: text('error_code'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    index('brokcode_builds_project_idx').on(table.projectId),
+    index('brokcode_builds_workspace_idx').on(table.workspaceId),
+    index('brokcode_builds_status_idx').on(table.status),
+    index('brokcode_builds_created_at_idx').on(table.createdAt.desc())
+  ]
+)
+
+export const brokCodeExports = pgTable(
+  'brokcode_exports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => brokCodeProjects.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    userId: text('user_id').notNull(),
+    exportType: text('export_type').notNull(),
+    fileUrl: text('file_url'),
+    status: appExportStatusEnum('status').default('pending').notNull(),
+    errorCode: text('error_code'),
+    costUsd: decimal('cost_usd', { precision: 10, scale: 6 })
+      .default('0')
+      .notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    index('brokcode_exports_project_idx').on(table.projectId),
+    index('brokcode_exports_workspace_idx').on(table.workspaceId),
+    index('brokcode_exports_status_idx').on(table.status)
+  ]
+)
+
 export const presentationsRelations = relations(presentations, ({ many }) => ({
   slides: many(presentationSlides),
   outline: many(presentationOutlines),
   assets: many(presentationAssets),
   generations: many(presentationGenerations),
-  exports: many(presentationExports)
+  exports: many(presentationExports),
+  shares: many(presentationShares)
 }))
 
 export const presentationSlidesRelations = relations(
@@ -959,3 +1202,373 @@ export const presentationExportsRelations = relations(
     })
   })
 )
+
+export const presentationSharesRelations = relations(
+  presentationShares,
+  ({ one }) => ({
+    presentation: one(presentations, {
+      fields: [presentationShares.presentationId],
+      references: [presentations.id]
+    })
+  })
+)
+
+export const brokCodeGenerationsRelations = relations(
+  brokCodeGenerations,
+  ({ one }) => ({
+    project: one(brokCodeProjects, {
+      fields: [brokCodeGenerations.projectId],
+      references: [brokCodeProjects.id]
+    }),
+    workspace: one(workspaces, {
+      fields: [brokCodeGenerations.workspaceId],
+      references: [workspaces.id]
+    })
+  })
+)
+
+// ============================================================================
+// Brok Library, Spaces, and Discover
+// ============================================================================
+
+export const libraryItemKindEnum = pgEnum('library_item_kind', [
+  'search',
+  'chat',
+  'project',
+  'presentation',
+  'api_session'
+])
+
+export const libraryItemStatusEnum = pgEnum('library_item_status', [
+  'active',
+  'archived',
+  'shared',
+  'deleted'
+])
+
+export const spaceRoleEnum = pgEnum('space_role', ['owner', 'editor', 'viewer'])
+
+export const spaceVisibilityEnum = pgEnum('space_visibility', [
+  'private',
+  'link',
+  'public'
+])
+
+export const discoverItemKindEnum = pgEnum('discover_item_kind', [
+  'thread',
+  'project',
+  'presentation',
+  'prompt',
+  'api_session'
+])
+
+export const discoverCategoryEnum = pgEnum('discover_category', [
+  'ai_apps',
+  'search',
+  'code',
+  'chat',
+  'presentations'
+])
+
+// Library tags (per user, optional cross-item labels)
+export const libraryTags = pgTable(
+  'library_tags',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    name: text('name').notNull(),
+    color: text('color'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    uniqueIndex('library_tags_user_id_name_unique').on(
+      table.userId,
+      table.name
+    ),
+    index('library_tags_user_id_idx').on(table.userId)
+  ]
+)
+
+// Library items — every user-created artifact in one table for filtering
+export const libraryItems = pgTable(
+  'library_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    kind: libraryItemKindEnum('kind').notNull(),
+    title: text('title').notNull(),
+    summary: text('summary'),
+    href: text('href').notNull(),
+    model: text('model'),
+    status: libraryItemStatusEnum('status').default('active').notNull(),
+    isPublic: boolean('is_public').default(false).notNull(),
+    useCount: integer('use_count').default(0).notNull(),
+    citeCount: integer('cite_count').default(0).notNull(),
+    sourceRefId: text('source_ref_id'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    lastUsedAt: timestamp('last_used_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    index('library_items_user_id_idx').on(table.userId),
+    index('library_items_user_id_kind_idx').on(table.userId, table.kind),
+    index('library_items_user_id_status_idx').on(table.userId, table.status),
+    index('library_items_user_id_updated_idx').on(
+      table.userId,
+      table.updatedAt.desc()
+    ),
+    index('library_items_user_id_use_count_idx').on(
+      table.userId,
+      table.useCount.desc()
+    ),
+    index('library_items_user_id_cite_count_idx').on(
+      table.userId,
+      table.citeCount.desc()
+    )
+  ]
+)
+
+// Many-to-many between library items and tags
+export const libraryItemTags = pgTable(
+  'library_item_tags',
+  {
+    libraryItemId: uuid('library_item_id')
+      .notNull()
+      .references(() => libraryItems.id, { onDelete: 'cascade' }),
+    tagId: uuid('tag_id')
+      .notNull()
+      .references(() => libraryTags.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    uniqueIndex('library_item_tags_unique').on(
+      table.libraryItemId,
+      table.tagId
+    ),
+    index('library_item_tags_tag_idx').on(table.tagId)
+  ]
+)
+
+// Spaces — collaborative workspaces
+export const spaces = pgTable(
+  'spaces',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    ownerUserId: text('owner_user_id').notNull(),
+    visibility: spaceVisibilityEnum('visibility').default('private').notNull(),
+    inviteToken: text('invite_token'),
+    iconColor: text('icon_color'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    memberCount: integer('member_count').default(1).notNull(),
+    threadCount: integer('thread_count').default(0).notNull(),
+    projectCount: integer('project_count').default(0).notNull(),
+    presentationCount: integer('presentation_count').default(0).notNull(),
+    lastActivityAt: timestamp('last_activity_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    uniqueIndex('spaces_slug_unique').on(table.slug),
+    index('spaces_owner_user_id_idx').on(table.ownerUserId),
+    index('spaces_visibility_idx').on(table.visibility),
+    index('spaces_last_activity_idx').on(table.lastActivityAt.desc())
+  ]
+)
+
+export const spaceMembers = pgTable(
+  'space_members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    spaceId: uuid('space_id')
+      .notNull()
+      .references(() => spaces.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
+    email: text('email'),
+    displayName: text('display_name'),
+    role: spaceRoleEnum('role').default('editor').notNull(),
+    lastActiveAt: timestamp('last_active_at'),
+    invitedAt: timestamp('invited_at').defaultNow().notNull(),
+    acceptedAt: timestamp('accepted_at')
+  },
+  table => [
+    uniqueIndex('space_members_space_user_unique').on(
+      table.spaceId,
+      table.userId
+    ),
+    index('space_members_user_id_idx').on(table.userId),
+    index('space_members_space_id_idx').on(table.spaceId)
+  ]
+)
+
+export const spaceProjects = pgTable(
+  'space_projects',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    spaceId: uuid('space_id')
+      .notNull()
+      .references(() => spaces.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    description: text('description'),
+    status: text('status').default('active').notNull(),
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  table => [
+    index('space_projects_space_id_idx').on(table.spaceId),
+    index('space_projects_space_id_updated_idx').on(
+      table.spaceId,
+      table.updatedAt.desc()
+    )
+  ]
+)
+
+export const spaceInvites = pgTable(
+  'space_invites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    spaceId: uuid('space_id')
+      .notNull()
+      .references(() => spaces.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    role: spaceRoleEnum('role').default('viewer').notNull(),
+    token: text('token').notNull(),
+    invitedBy: text('invited_by').notNull(),
+    expiresAt: timestamp('expires_at'),
+    acceptedAt: timestamp('accepted_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    uniqueIndex('space_invites_token_unique').on(table.token),
+    index('space_invites_space_id_idx').on(table.spaceId),
+    index('space_invites_email_idx').on(table.email)
+  ]
+)
+
+// Discover — public feed of trending content
+export const discoverItems = pgTable(
+  'discover_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    kind: discoverItemKindEnum('kind').notNull(),
+    category: discoverCategoryEnum('category').notNull(),
+    title: text('title').notNull(),
+    summary: text('summary'),
+    authorName: text('author_name'),
+    authorHandle: text('author_handle'),
+    href: text('href').notNull(),
+    thumbnailUrl: text('thumbnail_url'),
+    likeCount: integer('like_count').default(0).notNull(),
+    saveCount: integer('save_count').default(0).notNull(),
+    shareCount: integer('share_count').default(0).notNull(),
+    viewCount: integer('view_count').default(0).notNull(),
+    isFeatured: boolean('is_featured').default(false).notNull(),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    publishedAt: timestamp('published_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => [
+    index('discover_items_category_idx').on(table.category),
+    index('discover_items_kind_idx').on(table.kind),
+    index('discover_items_published_at_idx').on(table.publishedAt.desc()),
+    index('discover_items_featured_idx').on(table.isFeatured),
+    index('discover_items_like_count_idx').on(table.likeCount.desc())
+  ]
+)
+
+export const trendingTopics = pgTable(
+  'trending_topics',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    label: text('label').notNull(),
+    category: discoverCategoryEnum('category').notNull(),
+    velocity: integer('velocity').default(0).notNull(),
+    window: text('window').default('24h').notNull(),
+    rank: integer('rank').default(0).notNull(),
+    capturedAt: timestamp('captured_at').defaultNow().notNull()
+  },
+  table => [
+    index('trending_topics_category_idx').on(table.category),
+    index('trending_topics_window_idx').on(table.window),
+    index('trending_topics_rank_idx').on(table.rank)
+  ]
+)
+
+// Relations
+export const libraryTagsRelations = relations(libraryTags, ({ many }) => ({
+  itemTags: many(libraryItemTags)
+}))
+
+export const libraryItemsRelations = relations(libraryItems, ({ many }) => ({
+  tags: many(libraryItemTags)
+}))
+
+export const libraryItemTagsRelations = relations(
+  libraryItemTags,
+  ({ one }) => ({
+    item: one(libraryItems, {
+      fields: [libraryItemTags.libraryItemId],
+      references: [libraryItems.id]
+    }),
+    tag: one(libraryTags, {
+      fields: [libraryItemTags.tagId],
+      references: [libraryTags.id]
+    })
+  })
+)
+
+export const brokCodeBuildsRelations = relations(brokCodeBuilds, ({ one }) => ({
+  project: one(brokCodeProjects, {
+    fields: [brokCodeBuilds.projectId],
+    references: [brokCodeProjects.id]
+  }),
+  workspace: one(workspaces, {
+    fields: [brokCodeBuilds.workspaceId],
+    references: [workspaces.id]
+  })
+}))
+
+export const brokCodeExportsRelations = relations(
+  brokCodeExports,
+  ({ one }) => ({
+    project: one(brokCodeProjects, {
+      fields: [brokCodeExports.projectId],
+      references: [brokCodeProjects.id]
+    }),
+    workspace: one(workspaces, {
+      fields: [brokCodeExports.workspaceId],
+      references: [workspaces.id]
+    })
+  })
+)
+
+export const spacesRelations = relations(spaces, ({ many }) => ({
+  members: many(spaceMembers),
+  projects: many(spaceProjects),
+  invites: many(spaceInvites)
+}))
+
+export const spaceMembersRelations = relations(spaceMembers, ({ one }) => ({
+  space: one(spaces, {
+    fields: [spaceMembers.spaceId],
+    references: [spaces.id]
+  })
+}))
+
+export const spaceProjectsRelations = relations(spaceProjects, ({ one }) => ({
+  space: one(spaces, {
+    fields: [spaceProjects.spaceId],
+    references: [spaces.id]
+  })
+}))
+
+export const spaceInvitesRelations = relations(spaceInvites, ({ one }) => ({
+  space: one(spaces, {
+    fields: [spaceInvites.spaceId],
+    references: [spaces.id]
+  })
+}))

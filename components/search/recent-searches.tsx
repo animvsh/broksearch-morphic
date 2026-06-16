@@ -1,7 +1,5 @@
 'use client'
 
-/* eslint-disable react-hooks/set-state-in-effect -- localStorage sync is the documented pattern */
-
 import { useEffect, useState } from 'react'
 
 import { Clock, Search } from 'lucide-react'
@@ -16,7 +14,7 @@ interface RecentSearch {
 }
 
 interface RecentSearchesProps {
-  onSelect: (query: string) => void
+  onSelect: (query: string, mode?: string) => void
   className?: string
   storageKey?: string
 }
@@ -54,7 +52,7 @@ export function RecentSearches({
           <button
             key={item.id}
             type="button"
-            onClick={() => onSelect(item.query)}
+            onClick={() => onSelect(item.query, item.mode)}
             className={cn(
               'group inline-flex max-w-full items-center gap-2 rounded-full border border-border/60 bg-card/50 px-3 py-1.5 text-xs transition-all',
               'hover:border-foreground/15 hover:bg-card hover:shadow-sm',

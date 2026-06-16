@@ -1,11 +1,5 @@
 import type { UIMessage } from 'ai'
 
-import {
-  createChat,
-  createChatWithFirstMessage,
-  upsertMessage
-} from '@/lib/actions/chat'
-import { generateId } from '@/lib/db/schema'
 import type { SearchMode } from '@/lib/types/search'
 import { getVisibleTextFromParts } from '@/lib/utils/message-utils'
 
@@ -37,6 +31,14 @@ async function persistSimpleMessages({
 >) {
   if (!chatId || !userId || !message) return
 
+  const [
+    { createChat, createChatWithFirstMessage, upsertMessage },
+    { generateId }
+  ] = await Promise.all([
+    import('@/lib/actions/chat'),
+    import('@/lib/db/schema')
+  ])
+
   const userMessage = {
     ...message,
     id: message.id || generateId()
@@ -45,7 +47,12 @@ async function persistSimpleMessages({
   const title = getVisibleTextFromParts(userMessage.parts) || 'Quick check'
 
   if (isNewChat) {
-    await createChatWithFirstMessage(chatId, userMessage, userId, title)
+    try {
+      await createChatWithFirstMessage(chatId, userMessage, userId, title)
+    } catch (error) {
+      if (!isDuplicateChatError(error)) throw error
+      await upsertMessage(chatId, userMessage, userId)
+    }
   } else {
     try {
       await upsertMessage(chatId, userMessage, userId)
@@ -69,8 +76,20 @@ async function persistSimpleMessages({
   )
 }
 
+function isDuplicateChatError(error: unknown) {
+  if (!(error instanceof Error)) return false
+  const cause = (error as Error & { cause?: unknown }).cause
+  return (
+    error.message.includes('duplicate key') ||
+    (typeof cause === 'object' &&
+      cause !== null &&
+      'code' in cause &&
+      cause.code === '23505')
+  )
+}
+
 export function createSimpleChatStreamResponse(config: SimpleChatStreamConfig) {
-  const persistPromise = persistSimpleMessages(config).catch(error => {
+  void persistSimpleMessages(config).catch(error => {
     console.error('Failed to persist simple chat response:', error)
   })
 
@@ -94,7 +113,6 @@ export function createSimpleChatStreamResponse(config: SimpleChatStreamConfig) {
       controller.enqueue(streamEvent({ type: 'finish-step' }))
       controller.enqueue(streamEvent({ type: 'finish', finishReason: 'stop' }))
       controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-      await persistPromise
       controller.close()
     }
   })

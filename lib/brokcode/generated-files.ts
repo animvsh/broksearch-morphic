@@ -224,9 +224,13 @@ function ensureCssPreviewHygiene(content: string) {
   return `${content.trim()}
 
 /* data-brokcode-preview-hygiene */
-*, *::before, *::after { box-sizing: border-box; }
-html, body { max-width: 100%; overflow-x: hidden; }
-img, svg, video, canvas, iframe { max-width: 100%; height: auto; }
+*, *::before, *::after { box-sizing: border-box; min-width: 0; }
+html, body { width: 100%; max-width: 100%; overflow-x: clip; }
+body > * { max-width: 100%; }
+img, svg, video, canvas, iframe, table, pre, code { max-width: 100%; }
+img, svg, video, canvas, iframe { height: auto; }
+pre, code, table { overflow-x: auto; }
+button, input, textarea, select { max-width: 100%; }
 `
 }
 

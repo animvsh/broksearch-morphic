@@ -233,7 +233,6 @@ export function validateOpenAiChatMessages(
           'system, developer, user, assistant, or tool.'
       }
     }
-
     const typedMessage = message as Record<string, unknown>
     const contentValidation = validateOpenAiMessageContent({
       content: typedMessage.content,

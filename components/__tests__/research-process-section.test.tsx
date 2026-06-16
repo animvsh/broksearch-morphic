@@ -131,7 +131,7 @@ describe('ResearchProcessSection', () => {
   })
 
   describe('Segmentation Logic', () => {
-    test('splits parts by text correctly', () => {
+    test('hides reasoning when research progress is available', () => {
       const parts: any[] = [
         { type: 'reasoning', text: 'First reasoning' } as ReasoningPart,
         {
@@ -159,12 +159,9 @@ describe('ResearchProcessSection', () => {
         />
       )
 
-      // Should render 3 sections (2 reasoning + 1 tool, split by text)
-      const allSections = [
-        ...screen.getAllByTestId('reasoning-section'),
-        ...screen.getAllByTestId('tool-section')
-      ]
-      expect(allSections).toHaveLength(3)
+      expect(screen.queryByTestId('reasoning-section')).not.toBeInTheDocument()
+      expect(screen.getAllByTestId('tool-section')).toHaveLength(1)
+      expect(screen.getByTestId('research-progress')).toBeInTheDocument()
     })
 
     test('groups consecutive tool parts of same type', () => {
@@ -481,6 +478,7 @@ describe('ResearchProcessSection', () => {
       expect(screen.getByText('Understanding question')).toBeInTheDocument()
       expect(screen.getByText('Searching web')).toBeInTheDocument()
       expect(screen.getByText('Reading sources')).toBeInTheDocument()
+      expect(screen.queryByTestId('reasoning-section')).not.toBeInTheDocument()
       expect(
         screen.queryByText('private planning details')
       ).not.toBeInTheDocument()

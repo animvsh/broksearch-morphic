@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner'
 
 import { appendAssistantMessageToChat } from '@/lib/actions/chat'
+import { normalizeSearchMode } from '@/lib/config/search-modes'
 import { generateId } from '@/lib/db/schema'
 import { SHORTCUT_EVENTS } from '@/lib/keyboard-shortcuts'
 import { UploadedFile } from '@/lib/types'
@@ -58,12 +59,13 @@ interface ChatPanelProps {
   onFilesSelected: (files: File[]) => Promise<void> | void
   /** Callback to reset chatId when starting a new chat */
   onNewChat?: () => void
+  /** Search mode requested by a query-backed /search URL */
+  initialSearchMode?: SearchMode
   /** Whether the deployment is cloud mode */
   isCloudDeployment?: boolean
   /** Whether the current chat is running without an authenticated user */
   isGuest?: boolean
   modelSelectorData?: ModelSelectorData
-  initialSearchMode?: SearchMode
   /** Chat sections for message navigation dots */
   sections?: { id: string; userMessage: UIMessage }[]
 }
@@ -90,6 +92,44 @@ type BackgroundTaskSummary = {
   }
 }
 
+type ComposerLoadingStage = {
+  id: string
+  label: string
+}
+
+const COMPOSER_LOADING_STAGES: ComposerLoadingStage[] = [
+  { id: 'understanding', label: 'Understanding' },
+  { id: 'searching', label: 'Searching' },
+  { id: 'reading', label: 'Reading' },
+  { id: 'writing', label: 'Writing' }
+]
+
+function getComposerStageIndex(label: string | null) {
+  const normalized = label?.toLowerCase() ?? ''
+  if (
+    normalized.includes('search') ||
+    normalized.includes('source') ||
+    normalized.includes('web')
+  ) {
+    return 1
+  }
+  if (
+    normalized.includes('read') ||
+    normalized.includes('fetch') ||
+    normalized.includes('extract')
+  ) {
+    return 2
+  }
+  if (
+    normalized.includes('answer') ||
+    normalized.includes('compos') ||
+    normalized.includes('writ')
+  ) {
+    return 3
+  }
+  return 0
+}
+
 export function ChatPanel({
   input,
   handleInputChange,
@@ -107,15 +147,14 @@ export function ChatPanel({
   onFilesSelected,
   scrollContainerRef,
   onNewChat,
+  initialSearchMode,
   isCloudDeployment = false,
   isGuest = false,
   modelSelectorData,
-  initialSearchMode,
   sections = []
 }: ChatPanelProps) {
   const router = useRouter()
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const isFirstRender = useRef(true)
   const [isComposing, setIsComposing] = useState(false) // Composition state
   const [enterDisabled, setEnterDisabled] = useState(false) // Disable Enter after composition ends
   const [isInputFocused, setIsInputFocused] = useState(false) // Track input focus
@@ -269,16 +308,6 @@ export function ChatPanel({
     return null
   }
 
-  const sendProgrammaticPrompt = useCallback(
-    (text: string) => {
-      append({
-        role: 'user',
-        parts: [{ type: 'text', text }]
-      })
-    },
-    [append]
-  )
-
   const startDeepResearch = useCallback(async () => {
     const queryText = input.trim()
     if (!queryText) return
@@ -369,13 +398,11 @@ export function ChatPanel({
     [chatId, isGuest, messages, router, setMessages]
   )
 
-  // if query is not empty, submit the query
   useEffect(() => {
-    if (isFirstRender.current && query && query.trim().length > 0) {
-      sendProgrammaticPrompt(query)
-      isFirstRender.current = false
+    if (initialSearchMode) {
+      setCookie('searchMode', normalizeSearchMode(initialSearchMode))
     }
-  }, [query, sendProgrammaticPrompt])
+  }, [initialSearchMode])
 
   const handleFileRemove = useCallback(
     (index: number) => {
@@ -396,13 +423,14 @@ export function ChatPanel({
   const activeToolLabel = getActiveToolLabel()
   const hasActiveToolInvocation = Boolean(activeToolLabel)
   const loadingLabel = activeToolLabel ?? 'Composing answer'
+  const loadingStageIndex = getComposerStageIndex(loadingLabel)
 
   return (
     <div
       className={cn(
         'w-full group/form-container shrink-0',
         messages.length > 0
-          ? 'sticky bottom-0 bg-gradient-to-t from-[#f7f7f8] via-[#f7f7f8]/96 to-transparent px-4 pb-4 pt-4 md:px-6'
+          ? 'sticky bottom-0 bg-gradient-to-t from-[#f7f7f8] via-[#f7f7f8]/96 to-transparent px-3 pb-[calc(env(safe-area-inset-bottom)+4.75rem)] pt-2 md:px-6 md:pb-4 md:pt-4'
           : 'mx-auto flex w-full max-w-3xl flex-col px-4 pb-8 pt-12 sm:px-6 md:pt-20'
       )}
     >
@@ -470,23 +498,25 @@ export function ChatPanel({
         )}
         {messages.length > 0 && isLoading && (
           <div className="mx-auto mb-2 max-w-3xl px-1">
-            <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/88 px-3 py-2 shadow-[0_16px_42px_-38px_rgba(15,23,42,0.38)] backdrop-blur">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <IconBlinkingLogo className="size-3.5" />
-                <span className="inline-flex min-w-0 items-center gap-1">
-                  <span className="font-medium text-foreground/80">
-                    {loadingLabel}
-                  </span>
-                  <span className="typing-dots" aria-hidden>
-                    <span />
-                    <span />
-                    <span />
-                  </span>
+            <div
+              className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200/80 bg-white/88 px-3 py-2 text-xs text-zinc-600 shadow-sm backdrop-blur"
+              role="status"
+              aria-live="polite"
+            >
+              <span className="inline-flex min-w-0 items-center gap-2">
+                <IconBlinkingLogo className="size-3.5 shrink-0" />
+                <span className="truncate font-medium text-zinc-800">
+                  {loadingLabel}
                 </span>
-              </div>
-              <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted/70">
-                <div className="h-full w-1/2 animate-[brok-progress_1.35s_ease-in-out_infinite] rounded-full bg-zinc-950/80 dark:bg-white/80" />
-              </div>
+                <span className="typing-dots shrink-0" aria-hidden>
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              </span>
+              <span className="hidden shrink-0 items-center gap-1.5 text-[11px] text-zinc-500 sm:inline-flex">
+                {COMPOSER_LOADING_STAGES[loadingStageIndex]?.label ?? 'Working'}
+              </span>
             </div>
           </div>
         )}
@@ -566,6 +596,7 @@ export function ChatPanel({
         <div
           className={cn(
             'smooth-composer morphic-surface relative flex w-full flex-col gap-2 overflow-hidden rounded-2xl backdrop-blur-xl transition-all duration-200',
+            isLoading && 'gap-1.5 md:gap-2',
             isLoading &&
               'border-zinc-300/90 shadow-[0_18px_48px_-40px_rgba(15,23,42,0.28)]',
             isInputFocused &&
@@ -597,7 +628,12 @@ export function ChatPanel({
             value={input}
             readOnly={isLoading || hasActiveToolInvocation}
             aria-busy={isLoading || hasActiveToolInvocation}
-            className="min-h-14 w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-7 placeholder:text-zinc-400 focus-visible:outline-hidden read-only:cursor-default md:min-h-16 md:p-5"
+            className={cn(
+              'w-full resize-none border-0 bg-transparent text-[15px] leading-7 placeholder:text-zinc-400 focus-visible:outline-hidden read-only:cursor-default',
+              isLoading
+                ? 'min-h-10 p-3 md:min-h-16 md:p-5'
+                : 'min-h-14 p-4 md:min-h-16 md:p-5'
+            )}
             onChange={handleInputChange}
             onKeyDown={e => {
               if (isLoading || hasActiveToolInvocation) {
@@ -647,13 +683,20 @@ export function ChatPanel({
               ) : null}
             </div>
           )}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100/90 bg-white/48 p-2.5 md:p-3">
+          <div
+            className={cn(
+              'flex items-center justify-between gap-2 border-t border-zinc-100/90 bg-white/48 md:p-3',
+              isLoading ? 'p-2' : 'flex-wrap p-2.5'
+            )}
+          >
             <div className="flex items-center gap-2">
-              <FileUploadButton
-                onFileSelect={files => {
-                  void onFilesSelected(files)
-                }}
-              />
+              {!isLoading && (
+                <FileUploadButton
+                  onFileSelect={files => {
+                    void onFilesSelected(files)
+                  }}
+                />
+              )}
               <SearchModeSelector />
               {!isGuest && input.trim().length > 0 && !isDeepResearchMode && (
                 <Button
@@ -676,10 +719,10 @@ export function ChatPanel({
               <span className="hidden text-[11px] text-muted-foreground md:inline">
                 {selectedMode?.label || 'Quick'} mode
               </span>
-              {modelSelectorData && (
+              {modelSelectorData && !isLoading && (
                 <ModelSelectorClient data={modelSelectorData} />
               )}
-              {messages.length > 0 && (
+              {messages.length > 0 && !isLoading && (
                 <Button
                   variant="outline"
                   size="icon"
@@ -700,11 +743,11 @@ export function ChatPanel({
                   'size-8 rounded-xl md:size-10'
                 )}
                 disabled={
-                  (!isLoading &&
-                    input.trim().length === 0 &&
-                    !hasUploadedFiles) ||
-                  hasUploadingFiles ||
-                  (!hasAvailableModels && !canSubmitWithoutModel)
+                  isLoading
+                    ? false
+                    : (input.trim().length === 0 && !hasUploadedFiles) ||
+                      hasUploadingFiles ||
+                      (!hasAvailableModels && !canSubmitWithoutModel)
                 }
                 onClick={isLoading ? stop : undefined}
                 aria-label={isLoading ? 'Stop response' : 'Send message'}

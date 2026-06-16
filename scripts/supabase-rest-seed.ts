@@ -10,6 +10,7 @@ type ApiKeyInsert = {
   name: string
   key_prefix: string
   key_hash: string
+  key_salt: string
   environment: 'test' | 'live'
   scopes: string[]
   allowed_models: string[]

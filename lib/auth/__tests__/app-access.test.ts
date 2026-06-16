@@ -72,7 +72,11 @@ describe('app access gate', () => {
         email: 'user@example.com',
         app_metadata: {}
       } as any)
-    ).resolves.toMatchObject({ allowed: true, source: 'database' })
+    ).resolves.toMatchObject({
+      allowed: true,
+      source: 'database',
+      features: 'all'
+    })
   })
 
   it('preserves feature scopes from database allowlist rows', async () => {

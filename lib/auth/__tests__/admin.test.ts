@@ -1,26 +1,27 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { requireAdminAccess } from '../admin'
-import { getCurrentUser } from '../get-current-user'
-
-vi.mock('../get-current-user', () => ({
+const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn()
 }))
 
-const mockedGetCurrentUser = vi.mocked(getCurrentUser)
+vi.mock('@/lib/auth/get-current-user', () => ({
+  getCurrentUser: mocks.getCurrentUser
+}))
 
 describe('requireAdminAccess', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.clearAllMocks()
+    vi.resetModules()
   })
 
   it('fails closed in production when no admin allowlist is configured', async () => {
     vi.stubEnv('NODE_ENV', 'production')
-    mockedGetCurrentUser.mockResolvedValue({
+    mocks.getCurrentUser.mockResolvedValue({
       id: 'user_1',
       email: 'user@example.com'
     } as any)
+    const { requireAdminAccess } = await import('../admin')
 
     await expect(requireAdminAccess()).resolves.toMatchObject({
       ok: false,
@@ -31,10 +32,11 @@ describe('requireAdminAccess', () => {
   it('allows explicitly configured admin emails', async () => {
     vi.stubEnv('NODE_ENV', 'production')
     vi.stubEnv('ADMIN_EMAILS', 'admin@example.com')
-    mockedGetCurrentUser.mockResolvedValue({
+    mocks.getCurrentUser.mockResolvedValue({
       id: 'user_1',
       email: 'ADMIN@example.com'
     } as any)
+    const { requireAdminAccess } = await import('../admin')
 
     await expect(requireAdminAccess()).resolves.toMatchObject({
       ok: true,
@@ -44,10 +46,11 @@ describe('requireAdminAccess', () => {
 
   it('keeps local development convenient when no allowlist is configured', async () => {
     vi.stubEnv('NODE_ENV', 'development')
-    mockedGetCurrentUser.mockResolvedValue({
+    mocks.getCurrentUser.mockResolvedValue({
       id: 'user_1',
       email: 'user@example.com'
     } as any)
+    const { requireAdminAccess } = await import('../admin')
 
     await expect(requireAdminAccess()).resolves.toMatchObject({
       ok: true,

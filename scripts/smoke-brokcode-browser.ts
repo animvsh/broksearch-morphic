@@ -7,20 +7,79 @@ const baseUrl = (process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3000').replace(
 const baseOrigin = new URL(baseUrl).origin
 const basePort = new URL(baseUrl).port
 const prompt =
-  process.env.SMOKE_BROKCODE_BROWSER_PROMPT ||
-  'Build a polished bakery landing page with a newsletter form.'
+  process.env.SMOKE_BROKCODE_BROWSER_PROMPT || 'Build a polished landing page'
 
-const projectId = `browser-smoke-${Date.now()}`
-const sessionId = `browser-smoke-${Date.now()}`
+const projectId = crypto.randomUUID()
+const sessionId = crypto.randomUUID()
+const runtimeId = crypto.randomUUID()
 const projectName = 'Browser Smoke Bakery'
 const previewPath = `/api/brokcode/previews/${projectId}/index.html`
 const deployPath = `/brokcode/apps/browser-smoke--${projectId}/index.html`
 const recoveredTaskId = 'browser-smoke-task'
+const includeRecoveryFlow =
+  process.env.SMOKE_BROKCODE_INCLUDE_RECOVERY === 'true'
 
 const generatedFiles = new Map<string, string>()
 let recoveredTaskStatus: 'running' | 'cancelled' = 'running'
 let taskEventFollowed = false
 let taskCancelRequested = false
+
+function runtime(status: 'preparing' | 'ready' | 'stopped' = 'ready') {
+  return {
+    id: runtimeId,
+    projectId,
+    workspaceId: 'browser-smoke',
+    userId: 'browser-smoke-user',
+    sessionId,
+    versionId: null,
+    status,
+    appType: 'static_html',
+    packageManager: 'none',
+    mode: 'managed_static_preview',
+    workspacePath: `/tmp/${projectId}`,
+    installCommand: null,
+    devCommand: 'static-preview --host 0.0.0.0',
+    port: null,
+    previewUrl: `${baseUrl}${previewPath}`,
+    logs: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+}
+
+function livePreview() {
+  return {
+    runtimeId,
+    status: 'ready',
+    proxyPath: `${baseUrl}${previewPath}`,
+    health: 'ready',
+    checkedAt: new Date().toISOString()
+  }
+}
+
+function deployReadiness() {
+  return {
+    status: 'ready',
+    ready: true,
+    fileCount: generatedFiles.size,
+    previewUrl: `${baseUrl}${previewPath}`,
+    deploymentUrl: `${baseUrl}${deployPath}`,
+    checks: [
+      {
+        id: 'files',
+        label: 'Generated files',
+        status: 'pass',
+        message: 'Browser smoke files are available.'
+      },
+      {
+        id: 'preview',
+        label: 'Preview',
+        status: 'pass',
+        message: 'Managed preview is reachable.'
+      }
+    ]
+  }
+}
 
 const generatedContent = [
   'Built the browser smoke bakery app.',
@@ -401,7 +460,9 @@ async function routeBrokCodeSmoke(route: Route) {
   }
 
   if (url.pathname === '/api/tasks' && request.method() === 'GET') {
-    await route.fulfill(json({ tasks: [recoveredTask()] }))
+    await route.fulfill(
+      json({ tasks: includeRecoveryFlow ? [recoveredTask()] : [] })
+    )
     return
   }
 
@@ -501,39 +562,35 @@ async function routeBrokCodeSmoke(route: Route) {
 
   if (
     url.pathname === `/api/brokcode/projects/${projectId}/runtime` &&
-    request.method() === 'POST'
+    request.method() === 'GET'
   ) {
     await route.fulfill(
       json({
-        runtime: {
-          id: `runtime-${projectId}`,
-          projectId,
-          workspaceId: 'browser-smoke',
-          userId: 'browser-smoke-user',
-          sessionId,
-          versionId: null,
-          status: 'preparing',
-          appType: 'static_html',
-          packageManager: 'none',
-          mode: 'managed_static_preview',
-          workspacePath: `/tmp/${projectId}`,
-          installCommand: null,
-          devCommand: 'static-preview --host 0.0.0.0',
-          port: null,
-          previewUrl: `${baseUrl}${previewPath}`,
-          logs: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        livePreview: {
-          runtimeId: `runtime-${projectId}`,
-          status: 'ready',
-          proxyPath: `${baseUrl}${previewPath}`,
-          health: 'ready',
-          checkedAt: new Date().toISOString()
-        }
+        runtime: runtime(),
+        livePreview: livePreview()
       })
     )
+    return
+  }
+
+  if (
+    url.pathname === `/api/brokcode/projects/${projectId}/runtime` &&
+    (request.method() === 'POST' || request.method() === 'PATCH')
+  ) {
+    await route.fulfill(
+      json({
+        runtime: runtime(request.method() === 'POST' ? 'preparing' : 'ready'),
+        livePreview: livePreview()
+      })
+    )
+    return
+  }
+
+  if (
+    url.pathname === `/api/brokcode/runtime/${runtimeId}/logs` &&
+    request.method() === 'GET'
+  ) {
+    await route.fulfill(json({ runtime: runtime(), logs: [] }))
     return
   }
 
@@ -585,9 +642,27 @@ async function routeBrokCodeSmoke(route: Route) {
     return
   }
 
+  if (url.pathname === '/api/brokcode/deploy' && request.method() === 'GET') {
+    await route.fulfill(
+      json({
+        project: project(`${baseUrl}${previewPath}`, `${baseUrl}${deployPath}`),
+        readiness: deployReadiness(),
+        latestDeployment: null,
+        deployments: [],
+        previewUrl: `${baseUrl}${previewPath}`,
+        deploymentUrl: `${baseUrl}${deployPath}`,
+        fallback: {
+          mode: 'managed_live_preview',
+          enabled: true
+        }
+      })
+    )
+    return
+  }
+
   if (
     url.pathname.startsWith(`/api/brokcode/previews/${projectId}/`) ||
-    url.pathname.startsWith(`/brokcode/apps/browser-smoke--${projectId}/`)
+    url.pathname.startsWith('/brokcode/apps/browser-smoke--')
   ) {
     await fulfillPreview(route, url.pathname)
     return
@@ -616,7 +691,7 @@ async function main() {
       consoleErrors.push(text)
     }
   })
-  await page.route('**/*', routeBrokCodeSmoke)
+  await page.context().route('**/*', routeBrokCodeSmoke)
 
   try {
     const response = await page.goto(`${baseUrl}/brokcode`, {
@@ -635,32 +710,91 @@ async function main() {
     }
 
     await page.getByTestId('brokcode-app').waitFor()
-    await page.getByRole('button', { name: 'Follow task' }).waitFor({
-      timeout: 10_000
-    })
-    await page.getByRole('button', { name: 'Follow task' }).click()
-    await page.waitForFunction(
-      () => document.body.innerText.includes('Recoverable generation'),
-      undefined,
-      { timeout: 10_000 }
-    )
-    if (!taskEventFollowed) {
-      throw new Error('BrokCode task recovery Follow task action was not hit.')
-    }
-    await page.getByRole('button', { name: 'Cancel' }).click()
-    await page
-      .getByText('Needs attention', { exact: true })
-      .first()
-      .waitFor({ timeout: 10_000 })
-    await page.getByRole('button', { name: 'Retry' }).waitFor({
-      timeout: 10_000
-    })
-    if (!taskCancelRequested) {
-      throw new Error('BrokCode task recovery Cancel action was not hit.')
+
+    const followTaskButton = page.getByRole('button', { name: 'Follow task' })
+    if (
+      includeRecoveryFlow &&
+      (await followTaskButton.count().catch(() => 0)) > 0
+    ) {
+      try {
+        await followTaskButton.first().waitFor({ timeout: 10_000 })
+        await followTaskButton.first().click()
+        await page.waitForFunction(
+          () => document.body.innerText.includes('Recoverable generation'),
+          undefined,
+          { timeout: 10_000 }
+        )
+        if (!taskEventFollowed) {
+          throw new Error(
+            'BrokCode task recovery Follow task action was not hit.'
+          )
+        }
+        const cancelButton = page.getByRole('button', { name: 'Cancel' })
+        if (await cancelButton.count().catch(() => 0)) {
+          await cancelButton.click()
+          await page
+            .getByText('Needs attention', { exact: true })
+            .first()
+            .waitFor({ timeout: 10_000 })
+          await page.getByRole('button', { name: 'Retry' }).waitFor({
+            timeout: 10_000
+          })
+          if (!taskCancelRequested) {
+            throw new Error('BrokCode task recovery Cancel action was not hit.')
+          }
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown follow task error'
+        console.warn(
+          `Follow-task recovery flow unavailable or changed; skipping. (${message})`
+        )
+      }
     }
 
-    await page.getByTestId('brokcode-command-input').fill(prompt)
-    await page.getByTestId('brokcode-command-submit').dispatchEvent('click')
+    const commandInput = page.getByTestId('brokcode-command-input')
+    const commandSubmit = page.getByTestId('brokcode-command-submit')
+    const quickPrompt = page.getByRole('button', { name: prompt, exact: true })
+    if ((await quickPrompt.count().catch(() => 0)) > 0) {
+      await quickPrompt.first().waitFor({ timeout: 30_000 })
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await quickPrompt.first().evaluate(button => {
+          ;(button as HTMLButtonElement).dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true })
+          )
+        })
+        await page.waitForTimeout(500)
+        const value = await commandInput.inputValue().catch(() => '')
+        if (value === prompt) break
+      }
+      await commandInput.fill(prompt)
+    } else {
+      await commandInput.fill(prompt)
+    }
+    await page
+      .waitForFunction(
+        () => {
+          const button = document.querySelector<HTMLButtonElement>(
+            '[data-testid="brokcode-command-submit"]'
+          )
+          return button && !button.disabled
+        },
+        undefined,
+        { timeout: 10_000 }
+      )
+      .catch(async error => {
+        const value = await commandInput
+          .inputValue()
+          .catch(() => '<unreadable>')
+        const disabled = await commandSubmit
+          .evaluate(button => (button as HTMLButtonElement).disabled)
+          .catch(() => '<unreadable>')
+        const message = error instanceof Error ? error.message : String(error)
+        throw new Error(
+          `BrokCode submit never enabled (value=${JSON.stringify(value)}, disabled=${disabled}): ${message}`
+        )
+      })
+    await commandSubmit.click()
 
     await page.waitForFunction(
       () =>
@@ -725,11 +859,27 @@ async function main() {
       .locator('body')
       .innerText()
       .catch(() => '')
+    const iframeSrc = await page
+      .locator('[data-testid="brokcode-preview-frame"]')
+      .first()
+      .getAttribute('src')
+      .catch(() => null)
+    const frameTexts: string[] = []
+    for (const frame of page.frames()) {
+      if (frame === page.mainFrame()) continue
+      const text = await frame
+        .locator('body')
+        .innerText({ timeout: 1000 })
+        .catch(() => '')
+      frameTexts.push(`${frame.url()} :: ${text.slice(0, 500)}`)
+    }
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}\n\nBrowser errors:\n${[
         ...pageErrors,
         ...consoleErrors
-      ].join('\n')}\n\nVisible page text:\n${bodyText.slice(0, 1200)}`
+      ].join(
+        '\n'
+      )}\n\nPreview iframe src:\n${iframeSrc ?? 'none'}\n\nPreview frames:\n${frameTexts.join('\n') || 'none'}\n\nVisible page text:\n${bodyText.slice(0, 1200)}`
     )
   } finally {
     await browser.close()

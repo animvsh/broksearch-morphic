@@ -17,7 +17,7 @@ export function Citing({
   className,
   ...props
 }: CustomLinkProps) {
-  const { citationMaps } = useCitation()
+  const { citationMaps, onCitationOpen } = useCitation()
   const childrenText = children?.toString() || ''
   // Match domain names (alphanumeric and hyphens) or numbers for backward compatibility
   const isCitation = /^[\w-]+$/.test(childrenText)
@@ -48,6 +48,7 @@ export function Citing({
       href={href || '#'}
       className={className}
       citationData={citationData}
+      onCitationOpen={onCitationOpen}
       {...props}
     >
       {children}

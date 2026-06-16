@@ -1,11 +1,13 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 import { UseChatHelpers } from '@ai-sdk/react'
 import { ChatRequestOptions } from 'ai'
+import { Info } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { extractFollowUpsFromText } from '@/lib/render/follow-ups'
 import type { SearchResultItem } from '@/lib/types'
 import type {
   UIDataTypes,
@@ -26,6 +28,7 @@ import {
   type SourceCardData,
   SourcesPanel
 } from '@/components/search/source-card'
+import { SourceSidePanel } from '@/components/search/source-side-panel'
 import { StreamingProgress } from '@/components/search/streaming-progress'
 
 import { CollapsibleMessage } from '../collapsible-message'
@@ -36,6 +39,7 @@ export interface SearchAnswerSectionProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
   chatId?: string
+  onFollowUpSubmit?: (query: string) => void
   showActions?: boolean
   messageId: string
   metadata?: UIMessageMetadata
@@ -49,13 +53,12 @@ export interface SearchAnswerSectionProps {
   className?: string
 }
 
-function extractSources(
+export function extractSources(
   citationMaps: Record<string, Record<number, SearchResultItem>> = {}
 ): SourceCardData[] {
   const seen = new Set<string>()
   const out: SourceCardData[] = []
-  let order = 0
-  for (const toolMap of Object.values(citationMaps)) {
+  for (const [toolCallId, toolMap] of Object.entries(citationMaps)) {
     if (!toolMap) continue
     const sortedKeys = Object.keys(toolMap)
       .map(Number)
@@ -63,20 +66,60 @@ function extractSources(
     for (const k of sortedKeys) {
       const item = toolMap[k]
       if (!item || !item.url) continue
-      if (seen.has(item.url)) continue
-      seen.add(item.url)
+      const sourceKey = normalizeSourceKey(item.url)
+      if (seen.has(sourceKey)) continue
+      seen.add(sourceKey)
       out.push({
-        id: String(k),
+        id: `${toolCallId}:${k}`,
         url: item.url,
         title: item.title,
         domain: safeHostname(item.url),
         snippet: item.content || item.snippet,
         publishedAt: formatDate(item.publishedDate || item.date)
       })
-      order += 1
     }
   }
   return out
+}
+
+function extractSourcesFromItems(
+  sources: SearchResultItem[],
+  toolCallId = 'answer'
+): SourceCardData[] {
+  const seen = new Set<string>()
+  const out: SourceCardData[] = []
+
+  sources.forEach((item, index) => {
+    if (!item?.url) return
+    const sourceKey = normalizeSourceKey(item.url)
+    if (seen.has(sourceKey)) return
+    seen.add(sourceKey)
+    out.push({
+      id: `${toolCallId}:${index + 1}`,
+      url: item.url,
+      title: item.title,
+      domain: safeHostname(item.url),
+      snippet: item.content || item.snippet,
+      publishedAt: formatDate(item.publishedDate || item.date)
+    })
+  })
+
+  return out
+}
+
+function normalizeSourceKey(url: string): string {
+  try {
+    const parsed = new URL(url)
+    parsed.hash = ''
+    for (const key of Array.from(parsed.searchParams.keys())) {
+      if (/^utm_/i.test(key) || key === 'ref' || key === 'fbclid') {
+        parsed.searchParams.delete(key)
+      }
+    }
+    return parsed.toString().replace(/\/$/, '')
+  } catch {
+    return url.trim()
+  }
 }
 
 function safeHostname(url: string): string {
@@ -99,7 +142,7 @@ function formatDate(input?: string | Date): string | undefined {
 }
 
 function generateFollowUps(content: string): FollowUp[] {
-  const trimmed = content.trim()
+  const trimmed = getFollowUpTopicSource(content)
   if (!trimmed) return []
   const topic = trimmed.split(/[.!?\n]/)[0].slice(0, 80) || 'this topic'
   return [
@@ -126,24 +169,110 @@ function generateFollowUps(content: string): FollowUp[] {
   ]
 }
 
+function stripThinkingText(content: string): string {
+  const withoutClosedThinking = content.replace(
+    /<think\b[^>]*>[\s\S]*?<\/think>/gi,
+    ''
+  )
+
+  return withoutClosedThinking.replace(/<think\b[^>]*>[\s\S]*$/gi, '').trim()
+}
+
+function getFollowUpTopicSource(content: string): string {
+  return stripThinkingText(content)
+    .replace(/```spec[\s\S]*?```/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function getMetadataSources(
+  metadata?: UIMessageMetadata
+): SearchResultItem[] | undefined {
+  return Array.isArray(metadata?.answer?.sources)
+    ? metadata.answer.sources
+    : undefined
+}
+
+function getMetadataFollowUps(metadata?: UIMessageMetadata): FollowUp[] {
+  if (!Array.isArray(metadata?.answer?.followUps)) return []
+
+  return metadata.answer.followUps
+    .filter(
+      followUp =>
+        typeof followUp?.query === 'string' && followUp.query.trim().length > 0
+    )
+    .map((followUp, index) => ({
+      id: followUp.id || `metadata-follow-up-${index + 1}`,
+      kind: 'related' as const,
+      query: followUp.query.trim()
+    }))
+}
+
 export function SearchAnswerSection({
   content,
   isOpen,
   onOpenChange,
   messageId,
+  metadata,
   status,
   reload,
   citationMaps,
+  onFollowUpSubmit,
   isGuest = false,
+  showActions = true,
   className
 }: SearchAnswerSectionProps) {
-  const sources = useMemo(() => extractSources(citationMaps), [citationMaps])
+  const metadataSources = useMemo(
+    () => getMetadataSources(metadata),
+    [metadata]
+  )
+  const sources = useMemo(
+    () =>
+      metadataSources && metadataSources.length > 0
+        ? extractSourcesFromItems(metadataSources)
+        : extractSources(citationMaps),
+    [citationMaps, metadataSources]
+  )
   const isStreaming = status === 'submitted' || status === 'streaming'
   const streaming = useStreamingPhases(isStreaming)
+  const streamingSources = useMemo(
+    () =>
+      sources.map(source => ({
+        id: source.id,
+        title: source.title,
+        url: source.url,
+        domain: source.domain,
+        snippet: source.snippet
+      })),
+    [sources]
+  )
+  const streamingPhase = content.trim()
+    ? 'synthesizing'
+    : sources.length > 0
+      ? 'gathering'
+      : 'reading'
+  const displayContent = useMemo(() => stripThinkingText(content), [content])
+  const [activeSource, setActiveSource] = useState<
+    SearchResultItem | SourceCardData | null
+  >(null)
+  const generatedFollowUps = useMemo(
+    () => extractFollowUpsFromText(displayContent, messageId),
+    [displayContent, messageId]
+  )
+  const metadataFollowUps = useMemo(
+    () => getMetadataFollowUps(metadata),
+    [metadata]
+  )
 
   const followUps = useMemo(
-    () => (isStreaming ? [] : generateFollowUps(content)),
-    [content, isStreaming]
+    () =>
+      isStreaming || generatedFollowUps.length > 0
+        ? []
+        : metadataFollowUps.length > 0
+          ? metadataFollowUps
+          : generateFollowUps(displayContent),
+    [displayContent, generatedFollowUps.length, isStreaming, metadataFollowUps]
   )
 
   const handleReload = () => {
@@ -172,7 +301,7 @@ export function SearchAnswerSection({
     }
     const synth = window.speechSynthesis
     synth.cancel()
-    const utter = new SpeechSynthesisUtterance(content)
+    const utter = new SpeechSynthesisUtterance(displayContent)
     synth.speak(utter)
   }
 
@@ -181,6 +310,11 @@ export function SearchAnswerSection({
   }
 
   const handleFollowUp = (fu: FollowUp) => {
+    if (onFollowUpSubmit) {
+      onFollowUpSubmit(fu.query)
+      return
+    }
+
     if (typeof window === 'undefined') return
     const input = document.querySelector<HTMLTextAreaElement>(
       'textarea[name="input"]'
@@ -211,12 +345,12 @@ export function SearchAnswerSection({
         className={cn('flex flex-col gap-4', className)}
         data-testid="search-answer-section"
       >
-        {isStreaming && sources.length === 0 && (
+        {isStreaming && (
           <StreamingProgress
             state={{
-              phase: 'reading',
-              sourceCount: 0,
-              sources: [],
+              phase: streamingPhase,
+              sourceCount: sources.length,
+              sources: streamingSources,
               elapsedMs: streaming.state.elapsedMs,
               startedAt: streaming.state.startedAt,
               error: null
@@ -224,20 +358,36 @@ export function SearchAnswerSection({
           />
         )}
 
-        {content && (
+        {isStreaming && sources.length === 0 && <SourceSkeletonStrip />}
+
+        {sources.length > 0 && (
+          <SourcesPanel
+            sources={sources}
+            defaultExpanded={false}
+            onOpenSource={setActiveSource}
+          />
+        )}
+
+        {displayContent ? (
           <div className="flex flex-col gap-1" data-testid="answer-section">
-            <MarkdownMessage message={content} citationMaps={citationMaps} />
+            <MarkdownMessage
+              message={displayContent}
+              citationMaps={citationMaps}
+              onCitationOpen={setActiveSource}
+            />
           </div>
+        ) : isStreaming ? (
+          <AnswerSkeleton />
+        ) : null}
+
+        {!isStreaming && displayContent && sources.length === 0 && (
+          <KnowledgeFallbackNotice />
         )}
 
-        {!isStreaming && sources.length > 0 && (
-          <SourcesPanel sources={sources} defaultExpanded={true} />
-        )}
-
-        {!isStreaming && content && (
+        {!isStreaming && displayContent && showActions && (
           <div className="flex flex-col gap-4">
             <AnswerToolbar
-              answerText={content}
+              answerText={displayContent}
               onShare={handleShare}
               onRegenerate={handleReload}
               onReadAloud={handleReadAloud}
@@ -251,7 +401,69 @@ export function SearchAnswerSection({
             )}
           </div>
         )}
+
+        <SourceSidePanel
+          source={activeSource}
+          open={Boolean(activeSource)}
+          onOpenChange={open => {
+            if (!open) setActiveSource(null)
+          }}
+        />
       </div>
     </CollapsibleMessage>
+  )
+}
+
+function KnowledgeFallbackNotice() {
+  return (
+    <div
+      className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/35 px-3 py-2 text-xs leading-5 text-muted-foreground"
+      data-testid="knowledge-fallback-notice"
+    >
+      <Info className="mt-0.5 size-3.5 shrink-0 text-foreground/55" />
+      <span>
+        No web sources were attached to this answer. Treat it as model knowledge
+        and verify important details before relying on it.
+      </span>
+    </div>
+  )
+}
+
+function SourceSkeletonStrip() {
+  return (
+    <div
+      className="flex items-center gap-2 overflow-hidden"
+      aria-label="Loading sources"
+      data-testid="source-skeleton-strip"
+    >
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div
+          key={index}
+          className="flex h-9 w-28 shrink-0 animate-pulse items-center gap-2 rounded-lg border border-border/60 bg-muted/45 px-2.5"
+          data-testid="source-skeleton"
+        >
+          <span className="size-4 rounded-full bg-background/80" />
+          <span className="h-2 w-14 rounded-full bg-background/80" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function AnswerSkeleton() {
+  return (
+    <div
+      className="flex flex-col gap-2 rounded-xl border border-border/50 bg-background/60 p-4 shadow-sm"
+      aria-label="Writing answer"
+      data-testid="answer-skeleton"
+    >
+      <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="size-1.5 rounded-full bg-violet-500/70" />
+        Drafting the answer as sources arrive
+      </div>
+      <div className="h-3 w-11/12 animate-pulse rounded-full bg-muted" />
+      <div className="h-3 w-10/12 animate-pulse rounded-full bg-muted" />
+      <div className="h-3 w-8/12 animate-pulse rounded-full bg-muted" />
+    </div>
   )
 }

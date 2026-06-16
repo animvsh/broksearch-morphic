@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
 
-import {
-  hasFeatureAccess,
-  requireAnyFeatureAccessForApi
-} from '@/lib/auth/app-access'
+import { requireAnyFeatureAccessForApi } from '@/lib/auth/app-access'
 import {
   appendBackgroundTaskEvent,
   getBackgroundTask,
   updateBackgroundTask
 } from '@/lib/tasks/background-tasks'
+import {
+  canAccessTaskKind,
+  getTaskFeatureDeniedBody
+} from '@/lib/tasks/task-feature-access'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -28,14 +29,10 @@ export async function POST(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  if (
-    !hasFeatureAccess(access.access, 'search') &&
-    existing.kind !== 'brokcode'
-  ) {
-    return NextResponse.json(
-      { error: 'Feature access denied', feature: 'search' },
-      { status: 403 }
-    )
+  if (!canAccessTaskKind(access.access, existing.kind)) {
+    return NextResponse.json(getTaskFeatureDeniedBody(existing.kind), {
+      status: 403
+    })
   }
 
   if (TERMINAL_STATUSES.has(existing.status)) {
