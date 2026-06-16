@@ -44,7 +44,7 @@ const browserNavigationTimeoutMs = readPositiveIntegerEnv(
 )
 
 const uiChecks: UiCheck[] = [
-  { path: '/', expectedText: 'Save research, code context' },
+  { path: '/', expectedText: 'Fast answers with sources' },
   { path: '/docs', expectedText: 'Brok Documentation' },
   { path: '/docs/quickstart', expectedText: 'Quickstart' },
   { path: '/docs/api-keys', expectedText: 'API Keys' }

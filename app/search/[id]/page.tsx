@@ -26,7 +26,11 @@ export async function generateMetadata(props: {
   })
   const effectiveUser =
     isAnonymousAuthMode() && isGuestSearchEnabled() ? null : user
-  const chat = effectiveUser ? await loadChat(id, effectiveUser.id) : null
+  const shouldLoadStoredChat =
+    Boolean(effectiveUser) || !id.startsWith('search_')
+  const chat = shouldLoadStoredChat
+    ? await loadChat(id, effectiveUser?.id)
+    : null
 
   if (!chat) {
     return { title: 'Search' }
@@ -48,7 +52,11 @@ export default async function SearchPage(props: {
   const effectiveUser =
     isAnonymousAuthMode() && isGuestSearchEnabled() ? null : user
 
-  const chat = effectiveUser ? await loadChat(id, effectiveUser.id) : null
+  const shouldLoadStoredChat =
+    Boolean(effectiveUser) || !id.startsWith('search_')
+  const chat = shouldLoadStoredChat
+    ? await loadChat(id, effectiveUser?.id)
+    : null
   const isCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT === 'true'
   const modelSelectorData = await getModelSelectorData()
 
