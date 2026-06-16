@@ -166,8 +166,14 @@ export async function POST(req: Request) {
   return new Response(
     new ReadableStream({
       async start(controller) {
+        let closed = false
         const send = (event: string, data: unknown) => {
-          controller.enqueue(encoder.encode(sseEvent(event, data)))
+          if (closed) return
+          try {
+            controller.enqueue(encoder.encode(sseEvent(event, data)))
+          } catch {
+            closed = true
+          }
         }
         const emittedSourceKeys = new Set<string>()
 
@@ -230,7 +236,13 @@ export async function POST(req: Request) {
                 result.tokensUsed + Math.round(result.answer.length / 4)
             }
           })
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+          if (!closed) {
+            try {
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+            } catch {
+              closed = true
+            }
+          }
         } catch {
           send('search.error', {
             id: requestId,
@@ -239,7 +251,13 @@ export async function POST(req: Request) {
             }
           })
         } finally {
-          controller.close()
+          if (!closed) {
+            try {
+              controller.close()
+            } catch {
+              // The client may have gone away after the final event.
+            }
+          }
         }
       }
     }),

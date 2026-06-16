@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   loadChat: vi.fn(),
   requireFeatureAccess: vi.fn(),
   getCurrentUser: vi.fn(),
+  isAnonymousAuthMode: vi.fn(),
   getModelSelectorData: vi.fn()
 }))
 
@@ -22,7 +23,8 @@ vi.mock('@/lib/auth/app-access', () => ({
 }))
 
 vi.mock('@/lib/auth/get-current-user', () => ({
-  getCurrentUser: mocks.getCurrentUser
+  getCurrentUser: mocks.getCurrentUser,
+  isAnonymousAuthMode: mocks.isAnonymousAuthMode
 }))
 
 vi.mock('@/lib/model-selector/get-model-selector-data', () => ({
@@ -53,6 +55,7 @@ describe('app/search/[id]/page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     process.env.ENABLE_GUEST_CHAT = originalEnableGuestChat
+    mocks.isAnonymousAuthMode.mockReturnValue(false)
     mocks.getCurrentUser.mockResolvedValue({ id: 'user-1' })
     mocks.loadChat.mockResolvedValue({
       visibility: 'private',
@@ -91,6 +94,27 @@ describe('app/search/[id]/page', () => {
     expect(mocks.redirect).not.toHaveBeenCalled()
     expect(screen.getByTestId('chat')).toHaveTextContent(
       'search_local_guest_answer:0:true'
+    )
+  })
+
+  it('allows local anonymous search answer pages without loading chat storage', async () => {
+    process.env.ENABLE_GUEST_CHAT = 'true'
+    mocks.isAnonymousAuthMode.mockReturnValue(true)
+    mocks.getCurrentUser.mockResolvedValue({
+      id: '00000000-0000-0000-0000-000000000000'
+    })
+    mocks.loadChat.mockResolvedValue(null)
+
+    render(
+      await SearchPage({
+        params: Promise.resolve({ id: 'search_local_anonymous_answer' })
+      })
+    )
+
+    expect(mocks.loadChat).not.toHaveBeenCalled()
+    expect(mocks.redirect).not.toHaveBeenCalled()
+    expect(screen.getByTestId('chat')).toHaveTextContent(
+      'search_local_anonymous_answer:0:true'
     )
   })
 

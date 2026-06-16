@@ -59,8 +59,28 @@ function streamResponse(events: Array<{ event: string; data: unknown }>) {
 }
 
 describe('BrokSearchClient', () => {
+  const storage = new Map<string, string>()
+
   beforeEach(() => {
     vi.restoreAllMocks()
+    storage.clear()
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: vi.fn((key: string) => storage.get(key) ?? null),
+        setItem: vi.fn((key: string, value: string) => {
+          storage.set(key, value)
+        }),
+        removeItem: vi.fn((key: string) => {
+          storage.delete(key)
+        }),
+        clear: vi.fn(() => {
+          storage.clear()
+        })
+      }
+    })
+    window.history.replaceState({}, '', '/search?q=What+is+Brok%3F&mode=quick')
+    window.localStorage.clear()
   })
 
   it('uses the browser-safe session stream endpoint by default', async () => {
@@ -111,17 +131,30 @@ describe('BrokSearchClient', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<BrokSearchClient initialQuery="What is Brok?" />)
+    render(
+      <BrokSearchClient
+        initialQuery="What is Brok?"
+        initialMode="search"
+        searchId="search_test"
+      />
+    )
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/search/session',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ query: 'What is Brok?', stream: true })
+          body: JSON.stringify({
+            query: 'What is Brok?',
+            mode: 'search',
+            stream: true
+          })
         })
       )
     })
+
+    expect(window.location.pathname).toBe('/search/search_test')
+    expect(window.location.search).toBe('')
 
     expect(await screen.findByTestId('brok-search-sources')).toHaveTextContent(
       'Brok docs'
@@ -132,5 +165,32 @@ describe('BrokSearchClient', () => {
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent(
       'How does Brok cite sources?'
     )
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem('brok:guest-chat:search_test') ?? '[]'
+    )
+    expect(persisted).toHaveLength(2)
+    expect(persisted[0]).toMatchObject({
+      id: 'search_test_user',
+      role: 'user',
+      parts: [{ type: 'text', text: 'What is Brok?' }]
+    })
+    expect(persisted[1]).toMatchObject({
+      id: 'search_test_assistant',
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'Brok answers with sources. [1]' }],
+      metadata: {
+        searchMode: 'search',
+        modelId: 'brok-session-search',
+        answer: {
+          citationCount: 1
+        }
+      }
+    })
+    expect(persisted[1].metadata.answer.sources[0]).toMatchObject({
+      title: 'Brok docs',
+      url: 'https://docs.example.com/search',
+      content: 'Brok search docs.'
+    })
   })
 })

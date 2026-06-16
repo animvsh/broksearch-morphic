@@ -12,6 +12,10 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import type { SearchResultItem } from '@/lib/types'
+import type { UIMessage } from '@/lib/types/ai'
+import type { SearchMode } from '@/lib/types/search'
+
 import { FollowUpChips, type FollowUpItem } from './follow-up-chips'
 import { MarkdownMessage } from './message'
 import { RelatedQuestionsPanel } from './related-questions-panel'
@@ -45,12 +49,94 @@ interface SearchProgress {
 
 interface BrokSearchClientProps {
   initialQuery?: string
+  initialMode?: SearchMode
+  searchId?: string
   apiKey?: string
   apiBase?: string
   onFollowUpSelect?: (query: string) => void
 }
 
 const DEFAULT_API_BASE = '/api/search/session'
+const GUEST_CHAT_STORAGE_PREFIX = 'brok:guest-chat:'
+
+function getGuestChatStorageKey(chatId: string) {
+  return `${GUEST_CHAT_STORAGE_PREFIX}${chatId}`
+}
+
+function toSearchResultItem(source: Source): SearchResultItem {
+  return {
+    title: source.title,
+    url: source.url,
+    content: source.snippet,
+    snippet: source.snippet,
+    publisher: source.publisher,
+    retrievedAt: source.retrievedAt
+  }
+}
+
+function toDurableMessages({
+  answer,
+  followUps,
+  mode,
+  query,
+  searchId,
+  sources
+}: {
+  answer: string
+  followUps: FollowUpItem[]
+  mode: SearchMode
+  query: string
+  searchId: string
+  sources: Source[]
+}): UIMessage[] {
+  return [
+    {
+      id: `${searchId}_user`,
+      role: 'user',
+      parts: [{ type: 'text', text: query }]
+    },
+    {
+      id: `${searchId}_assistant`,
+      role: 'assistant',
+      parts: [{ type: 'text', text: answer }],
+      metadata: {
+        searchMode: mode,
+        modelId: 'brok-session-search',
+        answer: {
+          sources: sources.map(toSearchResultItem),
+          citationCount: sources.length,
+          followUps: followUps.map((followUp, index) => ({
+            id: `session-follow-up-${index + 1}`,
+            label: followUp.label ?? followUp.query,
+            query: followUp.query
+          }))
+        }
+      }
+    }
+  ] as UIMessage[]
+}
+
+function persistDurableMessages(
+  searchId: string | undefined,
+  messages: UIMessage[]
+) {
+  if (!searchId || typeof window === 'undefined') return
+
+  try {
+    window.localStorage.setItem(
+      getGuestChatStorageKey(searchId),
+      JSON.stringify(messages)
+    )
+  } catch {
+    // Local persistence is a reload convenience, not a reason to fail search.
+  }
+}
+
+function commitDurableSearchUrl(searchId: string | undefined) {
+  if (!searchId || typeof window === 'undefined') return
+  if (window.location.pathname !== '/search') return
+  window.history.replaceState({}, '', `/search/${searchId}`)
+}
 
 /**
  * Client for the Brok Search SSE endpoint. Renders the streaming answer,
@@ -60,6 +146,8 @@ const DEFAULT_API_BASE = '/api/search/session'
  */
 export function BrokSearchClient({
   initialQuery,
+  initialMode = 'quick',
+  searchId,
   apiKey,
   apiBase,
   onFollowUpSelect
@@ -87,6 +175,7 @@ export function BrokSearchClient({
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
+      commitDurableSearchUrl(searchId)
 
       setPendingQuery(trimmed)
       setAnswer('')
@@ -98,15 +187,49 @@ export function BrokSearchClient({
         status: 'planning',
         message: 'Planning search query...'
       })
+      persistDurableMessages(
+        searchId,
+        toDurableMessages({
+          answer: '',
+          followUps: [],
+          mode: initialMode,
+          query: trimmed,
+          searchId: searchId ?? 'search_session',
+          sources: []
+        })
+      )
 
       try {
+        let streamedAnswer = ''
+        let streamedSources: Source[] = []
+        let streamedFollowUps: FollowUpItem[] = []
+
+        const persistSnapshot = () => {
+          if (!searchId) return
+          persistDurableMessages(
+            searchId,
+            toDurableMessages({
+              answer: streamedAnswer,
+              followUps: streamedFollowUps,
+              mode: initialMode,
+              query: trimmed,
+              searchId,
+              sources: streamedSources
+            })
+          )
+        }
+
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
           },
-          body: JSON.stringify({ query: trimmed, stream: true }),
+          body: JSON.stringify({
+            query: trimmed,
+            mode: initialMode,
+            stream: true
+          }),
           signal: controller.signal
         })
 
@@ -157,6 +280,10 @@ export function BrokSearchClient({
               }))
               return
             case 'source_found':
+              if (!streamedSources.some(s => s.id === data.source.id)) {
+                streamedSources = [...streamedSources, data.source as Source]
+                persistSnapshot()
+              }
               setProgress(prev => {
                 if (prev.sources.some(s => s.id === data.source.id)) {
                   return prev
@@ -175,6 +302,8 @@ export function BrokSearchClient({
               }))
               return
             case 'answer_delta':
+              streamedAnswer += data.delta ?? ''
+              persistSnapshot()
               setAnswer(prev => prev + (data.delta ?? ''))
               setProgress(prev => ({
                 ...prev,
@@ -186,12 +315,17 @@ export function BrokSearchClient({
               // Citations are surfaced via source_found; nothing to do here.
               return
             case 'follow_ups_generated':
+              streamedFollowUps = data.follow_ups ?? []
+              persistSnapshot()
               setFollowUps(data.follow_ups ?? [])
               return
             case 'follow_ups':
-              setFollowUps(data.items ?? data.follow_ups ?? [])
+              streamedFollowUps = data.items ?? data.follow_ups ?? []
+              persistSnapshot()
+              setFollowUps(streamedFollowUps)
               return
             case 'done':
+              persistSnapshot()
               setProgress(prev => ({
                 ...prev,
                 status: 'done',
@@ -250,7 +384,7 @@ export function BrokSearchClient({
         setPendingQuery(null)
       }
     },
-    [endpoint, apiKey]
+    [endpoint, apiKey, initialMode, searchId]
   )
 
   useEffect(() => {

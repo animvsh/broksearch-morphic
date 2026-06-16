@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 
 import { loadChat } from '@/lib/actions/chat'
 import { requireFeatureAccess } from '@/lib/auth/app-access'
+import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
 import {
   getCurrentUserIdForOptionalGuestSearch,
   isGuestSearchEnabled,
@@ -17,6 +18,7 @@ import {
   isSimpleUtilityText
 } from '@/lib/utils/chat-routing'
 
+import { BrokSearchClient } from '@/components/brok-search-client'
 import { Chat } from '@/components/chat'
 import { SearchLanding } from '@/components/search/search-landing'
 
@@ -62,7 +64,10 @@ export default async function SearchPage(props: {
   const mode = normalizeSearchMode(firstParam(searchParams.mode))
   const redirectTo = buildSearchRedirectPath(q, mode)
   const userId = await getCurrentUserIdForOptionalGuestSearch(mode)
-  const isGuest = !userId
+  const isLocalAnonymousGuest =
+    isAnonymousAuthMode() && isGuestSearchEnabled() && isGuestSearchMode(mode)
+  const effectiveUserId = isLocalAnonymousGuest ? undefined : userId
+  const isGuest = !effectiveUserId
   const canUseGuestSearch =
     isGuest && isGuestSearchEnabled() && isGuestSearchMode(mode)
 
@@ -83,13 +88,22 @@ export default async function SearchPage(props: {
     )
   }
 
-  const id = getQueryBackedChatId(q, mode, userId ?? 'guest')
-  const existingChat = userId ? await loadChat(id, userId) : null
+  const id = getQueryBackedChatId(q, mode, effectiveUserId ?? 'guest')
+  const existingChat = effectiveUserId
+    ? await loadChat(id, effectiveUserId)
+    : null
   const isCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT === 'true'
   const modelSelectorData = await getModelSelectorData()
   const simpleUtilityReply = isSimpleUtilityText(q)
     ? createSimpleUtilityReply(q)
     : null
+
+  if (!existingChat?.messages.length && simpleUtilityReply === null) {
+    return (
+      <BrokSearchClient initialQuery={q} initialMode={mode} searchId={id} />
+    )
+  }
+
   const initialMessages: UIMessage[] =
     simpleUtilityReply === null
       ? []

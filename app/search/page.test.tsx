@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   loadChat: vi.fn(),
   requireFeatureAccess: vi.fn(),
   getCurrentUserId: vi.fn(),
+  isAnonymousAuthMode: vi.fn(),
   getModelSelectorData: vi.fn(),
   generateUUID: vi.fn()
 }))
@@ -23,7 +24,8 @@ vi.mock('@/lib/auth/app-access', () => ({
 }))
 
 vi.mock('@/lib/auth/get-current-user', () => ({
-  getCurrentUserId: mocks.getCurrentUserId
+  getCurrentUserId: mocks.getCurrentUserId,
+  isAnonymousAuthMode: mocks.isAnonymousAuthMode
 }))
 
 vi.mock('@/lib/model-selector/get-model-selector-data', () => ({
@@ -58,6 +60,22 @@ vi.mock('@/components/chat', () => ({
   )
 }))
 
+vi.mock('@/components/brok-search-client', () => ({
+  BrokSearchClient: ({
+    initialQuery,
+    initialMode,
+    searchId
+  }: {
+    initialQuery?: string
+    initialMode?: string
+    searchId?: string
+  }) => (
+    <div data-testid="brok-search-client">
+      {searchId}:{initialQuery}:{initialMode}
+    </div>
+  )
+}))
+
 vi.mock('@/components/search/search-landing', () => ({
   SearchLanding: ({
     defaultMode,
@@ -82,6 +100,7 @@ describe('app/search/page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     process.env.ENABLE_GUEST_CHAT = originalEnableGuestChat
+    mocks.isAnonymousAuthMode.mockReturnValue(false)
     mocks.getCurrentUserId.mockResolvedValue('user-1')
     mocks.loadChat.mockResolvedValue(null)
   })
@@ -106,7 +125,7 @@ describe('app/search/page', () => {
     )
   })
 
-  it('renders chat for query-backed search requests with the requested mode', async () => {
+  it('renders the browser-safe stream client for new query-backed searches', async () => {
     mocks.requireFeatureAccess.mockResolvedValue({})
     mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
 
@@ -125,11 +144,10 @@ describe('app/search/page', () => {
     )
     expect(mocks.loadChat).toHaveBeenCalledOnce()
     expect(mocks.getModelSelectorData).toHaveBeenCalledOnce()
-    const chatText = screen.getByTestId('chat').textContent ?? ''
-    expect(chatText).toContain(':latest ai funding:')
-    expect(chatText).toContain(':search:')
-    expect(chatText).toMatch(/^search_[a-f0-9]{48}:/)
-    expect(chatText).toMatch(/:search_[a-f0-9]{48}_user:/)
+    const clientText =
+      screen.getByTestId('brok-search-client').textContent ?? ''
+    expect(clientText).toContain(':latest ai funding:search')
+    expect(clientText).toMatch(/^search_[a-f0-9]{48}:/)
   })
 
   it('normalizes invalid search modes before auth redirects', async () => {
@@ -149,8 +167,9 @@ describe('app/search/page', () => {
       '/search?q=latest+ai+funding&mode=quick',
       'search'
     )
-    expect(screen.getByTestId('chat')).toHaveTextContent(':latest ai funding:')
-    expect(screen.getByTestId('chat')).toHaveTextContent(':quick:')
+    expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
+      ':latest ai funding:quick'
+    )
   })
 
   it('server-seeds tiny utility answers instead of waiting for client auto-submit', async () => {
@@ -244,8 +263,9 @@ describe('app/search/page', () => {
 
     expect(mocks.requireFeatureAccess).not.toHaveBeenCalled()
     expect(mocks.loadChat).not.toHaveBeenCalled()
-    expect(screen.getByTestId('chat')).toHaveTextContent(':latest ai funding:')
-    expect(screen.getByTestId('chat')).toHaveTextContent(':search:0:true:')
+    expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
+      ':latest ai funding:search'
+    )
   })
 
   it('falls back to guest search when auth lookup fails for guest-enabled search', async () => {
@@ -264,7 +284,33 @@ describe('app/search/page', () => {
 
     expect(mocks.requireFeatureAccess).not.toHaveBeenCalled()
     expect(mocks.loadChat).not.toHaveBeenCalled()
-    expect(screen.getByTestId('chat')).toHaveTextContent(':search:0:true:')
+    expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
+      ':latest ai funding:search'
+    )
+  })
+
+  it('uses the stream client in local anonymous auth mode without loading chat storage', async () => {
+    process.env.ENABLE_GUEST_CHAT = 'true'
+    mocks.isAnonymousAuthMode.mockReturnValue(true)
+    mocks.getCurrentUserId.mockResolvedValue(
+      '00000000-0000-0000-0000-000000000000'
+    )
+    mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
+
+    render(
+      await SearchPage({
+        searchParams: Promise.resolve({
+          q: 'what is react in one sentence',
+          mode: 'quick'
+        })
+      })
+    )
+
+    expect(mocks.requireFeatureAccess).not.toHaveBeenCalled()
+    expect(mocks.loadChat).not.toHaveBeenCalled()
+    expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
+      ':what is react in one sentence:quick'
+    )
   })
 
   it('keeps guest deep search behind feature access', async () => {
