@@ -7,6 +7,10 @@ import type { UIMessage } from '@/lib/types/ai'
 
 import { RenderMessage } from '../render-message'
 
+vi.hoisted(() => {
+  process.env.NEXT_PUBLIC_NEW_SEARCH_SURFACE = 'true'
+})
+
 vi.mock('../answer-section', () => ({
   AnswerSection: ({ content }: { content: string }) => (
     <div data-testid="answer-section">{content}</div>
@@ -79,5 +83,53 @@ describe('RenderMessage', () => {
       )
     ).map(node => node.getAttribute('data-testid'))
     expect(order).toEqual(['research-process', 'answer-section'])
+  })
+
+  test('renders the source-heavy search answer only for the final text part', () => {
+    const citationMaps = {
+      'tool-search-1': {
+        1: {
+          title: 'Brok docs',
+          url: 'https://docs.brok.ai/search',
+          content: 'Search docs.'
+        }
+      }
+    }
+    const message: UIMessage = {
+      id: 'assistant-msg',
+      role: 'assistant',
+      parts: [
+        { type: 'text', text: 'Early cited chunk [1](#tool-search-1).' } as any,
+        {
+          type: 'tool-search',
+          toolCallId: 'tool-search-1',
+          state: 'output-available',
+          input: {},
+          output: {}
+        } as any,
+        { type: 'text', text: 'Final answer with citations.' } as any
+      ]
+    } as UIMessage
+
+    render(
+      <RenderMessage
+        citationMaps={citationMaps}
+        message={message}
+        messageId={message.id}
+        getIsOpen={() => true}
+        onOpenChange={() => {}}
+      />
+    )
+
+    expect(screen.getAllByTestId('search-answer-section')).toHaveLength(1)
+    expect(screen.getByTestId('search-answer-section')).toHaveTextContent(
+      'Final answer with citations.'
+    )
+    expect(screen.getByText(/Early cited chunk/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '1' })).toHaveAttribute(
+      'href',
+      'https://docs.brok.ai/search'
+    )
+    expect(screen.getAllByText('Sources')).toHaveLength(1)
   })
 })

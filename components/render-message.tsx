@@ -12,6 +12,7 @@ import type { DynamicToolPart } from '@/lib/types/dynamic-tools'
 import { SearchAnswerSection } from './search/search-answer-section'
 import { AnswerSection } from './answer-section'
 import { DynamicToolDisplay } from './dynamic-tool-display'
+import { MarkdownMessage } from './message'
 import ResearchProcessSection from './research-process-section'
 import { UserFileSection } from './user-file-section'
 import { UserTextSection } from './user-text-section'
@@ -149,7 +150,15 @@ export function RenderMessage({
         isLastTextPart && (isLatestMessage ? isStreamingComplete : true)
 
       elements.push(
-        USE_NEW_SEARCH_SURFACE ? (
+        USE_NEW_SEARCH_SURFACE && !isLastTextPart ? (
+          <div
+            key={`${messageId}-text-${index}`}
+            className="flex flex-col gap-1"
+            data-testid="answer-section"
+          >
+            <MarkdownMessage message={part.text} citationMaps={citationMaps} />
+          </div>
+        ) : USE_NEW_SEARCH_SURFACE ? (
           <SearchAnswerSection
             key={`${messageId}-text-${index}`}
             content={part.text}
