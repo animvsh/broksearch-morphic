@@ -287,18 +287,34 @@ function normalizeTableSchema(value: unknown) {
 }
 
 function normalizeBuckets(value: unknown) {
-  if (isRecord(value) && Array.isArray(value.buckets)) {
-    return value.buckets
-      .filter((bucket): bucket is string => typeof bucket === 'string')
-      .slice(0, 20)
-  }
-  return []
+  const buckets =
+    isRecord(value) && Array.isArray(value.buckets)
+      ? value.buckets
+      : Array.isArray(value)
+        ? value
+        : []
+
+  return buckets
+    .map(bucket =>
+      typeof bucket === 'string'
+        ? bucket
+        : isRecord(bucket)
+          ? getString(bucket.name)
+          : ''
+    )
+    .filter(Boolean)
+    .slice(0, 20)
 }
 
 function normalizeFunctions(value: unknown) {
-  if (!Array.isArray(value)) return []
+  const functions =
+    isRecord(value) && Array.isArray(value.functions)
+      ? value.functions
+      : Array.isArray(value)
+        ? value
+        : []
 
-  return value
+  return functions
     .filter(isRecord)
     .map(fn => ({
       slug: getString(fn.slug),

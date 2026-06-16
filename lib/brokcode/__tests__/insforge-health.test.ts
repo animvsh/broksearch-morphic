@@ -151,17 +151,24 @@ describe('InsForge project health checks', () => {
         })
       }
       if (url.endsWith('/api/storage/buckets')) {
-        return Response.json({ buckets: ['uploads'] })
-      }
-      if (url.endsWith('/api/functions')) {
         return Response.json([
           {
-            slug: 'send-email',
-            name: 'Send Email',
-            status: 'active',
-            description: 'Sends an email'
+            name: 'uploads',
+            public: false
           }
         ])
+      }
+      if (url.endsWith('/api/functions')) {
+        return Response.json({
+          functions: [
+            {
+              slug: 'send-email',
+              name: 'Send Email',
+              status: 'active',
+              description: 'Sends an email'
+            }
+          ]
+        })
       }
       return new Response('', { status: 404 })
     })
