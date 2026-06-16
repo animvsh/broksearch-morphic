@@ -9,7 +9,8 @@ import {
   Globe2,
   Info,
   Loader2,
-  Sparkles
+  Sparkles,
+  Square
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -190,6 +191,17 @@ export function BrokSearchClient({
   const activeTurnRef = useRef<SearchTurn | null>(null)
 
   const endpoint = useMemo(() => apiBase ?? DEFAULT_API_BASE, [apiBase])
+
+  const stopSearch = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setPendingQuery(null)
+    setProgress(prev => ({
+      ...prev,
+      status: answer.trim() ? 'done' : 'idle',
+      message: answer.trim() ? 'Stopped' : undefined
+    }))
+  }, [answer])
 
   useEffect(() => {
     if (!activeQuestion.trim()) {
@@ -533,12 +545,18 @@ export function BrokSearchClient({
             />
             <VoiceInputButton onTranscript={handleVoiceTranscript} />
             <button
-              type="submit"
-              disabled={isLoading || !query.trim()}
+              type={isLoading ? 'button' : 'submit'}
+              disabled={!isLoading && !query.trim()}
               className="inline-flex h-11 items-center justify-center rounded-2xl bg-zinc-950 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label={isLoading ? 'Stop search' : 'Search'}
+              onClick={event => {
+                if (!isLoading) return
+                event.preventDefault()
+                stopSearch()
+              }}
             >
               {isLoading ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Square className="size-3.5 fill-current" />
               ) : (
                 'Search'
               )}
@@ -631,13 +649,18 @@ export function BrokSearchClient({
               aria-label="Ask a follow-up"
             />
             <button
-              type="submit"
-              disabled={isLoading || !followUpInput.trim()}
+              type={isLoading ? 'button' : 'submit'}
+              disabled={!isLoading && !followUpInput.trim()}
               className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Send follow-up"
+              aria-label={isLoading ? 'Stop search' : 'Send follow-up'}
+              onClick={event => {
+                if (!isLoading) return
+                event.preventDefault()
+                stopSearch()
+              }}
             >
               {isLoading ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Square className="size-3.5 fill-current" />
               ) : (
                 <ArrowUp className="size-4" />
               )}

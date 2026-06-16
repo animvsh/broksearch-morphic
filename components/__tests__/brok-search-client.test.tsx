@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('next/navigation', () => ({
@@ -319,6 +319,44 @@ describe('BrokSearchClient', () => {
 
     unmount()
     stream.close()
+  })
+
+  it('aborts the active search when the stop control is clicked', async () => {
+    const stream = controllableStreamResponse()
+    const fetchMock = vi.fn(async () => stream.response)
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="React hooks"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled()
+    })
+
+    const calls = fetchMock.mock.calls as unknown as Array<
+      [unknown, RequestInit?]
+    >
+    const init = calls[0]?.[1] as RequestInit
+    const signal = init.signal as AbortSignal
+    expect(signal.aborted).toBe(false)
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByLabelText('Stop search')[0])
+    })
+
+    expect(signal.aborted).toBe(true)
+    await waitFor(() => {
+      expect(screen.queryByTestId('search-progress')).not.toBeInTheDocument()
+    })
+
+    await act(async () => {
+      stream.close()
+    })
   })
 
   it('labels source-free answers as model knowledge', async () => {
