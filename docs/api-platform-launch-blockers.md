@@ -13,6 +13,31 @@ do not paste them into Linear, docs, commits, terminal output, or chat.
 | BRO-168 | Production database and seeded API traffic           | Apply the usage-ledger migrations and run seeded smoke/stress so usage reservations finalize under live traffic.            |
 | BRO-182 | GitHub Actions repository secrets and production app | Add `SMOKE_SEED_TOKEN`, run `API Platform Production Proof`, and attach the passing run to release notes.                   |
 
+## Repo-Side Evidence Matrix
+
+| Linear  | Repo-side status | Evidence                                                                                                                                                                                                                                                                                                |
+| ------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRO-163 | Implemented      | `scripts/scan-secrets.ts` and `scripts/secret-scan-core.ts` scan committed/staged/local env surfaces without printing secret values; CI runs `bun run scan:secrets -- --tracked`; this checklist documents the rotation incident response and prohibits copying secret values into issue trackers/docs. |
+| BRO-164 | Implemented      | `components/playground/chat-playground.tsx` no longer accepts browser-supplied API keys, `/api/playground/run` resolves an account-owned server session key, and `bun run check:api-platform-launch` now guards against playground key placeholders, `apiKey:` request bodies, and storage writes.      |
+| BRO-165 | Implemented      | `.env.local.example`, `docs/CONFIGURATION.md`, and `docs/deployment/railway-to-brok-fyi.md` document required env names; `bun run check:deploy-env -- --provider local --env-file .env.local.example` passes; CI includes the Deploy Env Names gate.                                                    |
+| BRO-168 | Implemented      | `lib/brok/usage-tracker.ts` provides fail-closed `recordUsage`, preflight `reserveUsage`, finalization, and stale reservation expiry; API/chat/search/messages/BrokCode routes call it; `scripts/reconcile-usage-reservations.ts` provides the reconciliation command.                                  |
+| BRO-182 | Implemented      | `.github/workflows/api-platform-production-proof.yml` runs public contract stress, requires `SMOKE_SEED_TOKEN`, then runs seeded smoke and stress; `bun run check:api-platform-launch -- --require-external` validates the required seeded-proof inputs without printing values.                        |
+| BRO-188 | Done             | BrokCode streaming execution reserves usage before runtime work, finalizes success/error outcomes, fails closed in cloud when reservation creation fails, and has stale reservation reconciliation coverage in `lib/brok/__tests__/usage-tracker.test.ts`.                                              |
+
+The launch checker also guards the BrokCode browser UI itself:
+`components/brokcode/brokcode-app.tsx` must not collect API keys, read legacy
+stored API keys, persist API keys, or hold saved key metadata in React state.
+Old `brok_code_api_key` browser storage is deleted rather than migrated through
+the client.
+
+## Current PR/CI Caveat
+
+PR #143 is the repo-side blocker implementation branch. GitHub Actions may show
+red checks even when no job ran. Check the failed job annotations: if they say
+`The job was not started because your account is locked due to a billing issue`,
+the failure is account-level and must be cleared in GitHub billing before CI can
+execute. Do not treat that as proof that lint/typecheck/tests ran and failed.
+
 ## Required Operator Sequence
 
 0. Confirm the repo-side launch blocker artifacts are present:
