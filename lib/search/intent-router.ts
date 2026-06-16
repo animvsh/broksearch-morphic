@@ -191,7 +191,8 @@ export function resolveSearchModeForIntent({
   intent: BrokIntent
   requestedSearchMode: SearchMode
 }): SearchMode {
-  if (intent === 'utility' || intent === 'quick_search') return 'quick'
+  if (intent === 'utility') return 'quick'
+  if (intent === 'quick_search') return 'search'
   if (intent === 'connector_action') return 'quick'
   if (intent === 'standard_search') return 'search'
   if (intent === 'deep_research') return 'deep'

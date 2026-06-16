@@ -10,6 +10,14 @@ Keep your Brok API keys and applications secure.
 
 ## API Key Best Practices
 
+### Browser Storage
+
+Do not store full Brok API secrets in localStorage, sessionStorage, IndexedDB,
+analytics payloads, or client-visible app state. The hosted playground uses an
+account-owned encrypted server session key by default; optional manual keys stay
+in current-tab memory only. Production apps should call Brok from trusted server
+code.
+
 ### Store Keys Securely
 
 Never hardcode API keys in your source code. Use environment variables:
@@ -169,6 +177,15 @@ export default function SecurityPage() {
         </p>
 
         <h2>API Key Best Practices</h2>
+
+        <h3>Browser Storage</h3>
+        <p>
+          Do not store full Brok API secrets in localStorage, sessionStorage,
+          IndexedDB, analytics payloads, or client-visible app state. The hosted
+          playground uses an account-owned encrypted server session key by
+          default; optional manual keys stay in current-tab memory only.
+          Production apps should call Brok from trusted server code.
+        </p>
 
         <h3>Store Keys Securely</h3>
         <p>

@@ -1,7 +1,5 @@
 'use client'
 
-/* eslint-disable react-hooks/set-state-in-effect -- typewriter uses setInterval callback */
-
 import { useEffect, useState } from 'react'
 
 import { cn } from '@/lib/utils'

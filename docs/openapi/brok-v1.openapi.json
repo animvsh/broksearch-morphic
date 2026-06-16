@@ -1,0 +1,938 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Brok API",
+    "version": "1.0.0",
+    "summary": "Brok public developer API",
+    "description": "Machine-readable contract for Brok v1 chat, messages, search, models, and usage APIs. Streaming endpoints return Server-Sent Events and document event names with x-brok-sse-events."
+  },
+  "servers": [
+    {
+      "url": "https://www.brok.fyi",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development"
+    }
+  ],
+  "security": [
+    {
+      "BrokApiKey": []
+    }
+  ],
+  "paths": {
+    "/api/v1/models": {
+      "get": {
+        "operationId": "listModels",
+        "summary": "List available Brok models",
+        "description": "Returns model metadata filtered by the authenticated key allowlist. Pricing fields are included only when include_pricing=true and the key has usage:read scope.",
+        "tags": ["Models"],
+        "parameters": [
+          {
+            "name": "include_pricing",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Model list",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/usage": {
+      "get": {
+        "operationId": "getUsage",
+        "summary": "Get workspace usage totals",
+        "description": "Returns aggregate usage for the authenticated key workspace. Requires usage:read scope.",
+        "tags": ["Usage"],
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["day", "week", "month"],
+              "default": "month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usage totals",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-brok-degraded": {
+                "description": "Present when local development fallback usage storage is unavailable.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/chat/completions": {
+      "post": {
+        "operationId": "createChatCompletion",
+        "summary": "Create an OpenAI-compatible chat completion",
+        "description": "Runs a Brok chat model. Set stream=true for OpenAI-style Server-Sent Events.",
+        "tags": ["Chat"],
+        "x-brok-sse-events": ["message", "done", "error"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatCompletionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chat completion or SSE stream",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "x-ratelimit-limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "x-ratelimit-remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "x-ratelimit-reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompletionResponse"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "SSE stream. Each data line contains a ChatCompletionChunk JSON object or [DONE]."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/messages": {
+      "post": {
+        "operationId": "createMessage",
+        "summary": "Create an Anthropic-compatible message",
+        "description": "Runs a Brok model with Anthropic-style message payloads. Requires code:write scope.",
+        "tags": ["Messages"],
+        "x-brok-sse-events": [
+          "content_block_start",
+          "content_block_delta",
+          "content_block_stop",
+          "message_delta",
+          "message_stop",
+          "error"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessagesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Message response or SSE stream",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessagesResponse"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "SSE stream using Anthropic-compatible event names."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/search/completions": {
+      "post": {
+        "operationId": "createSearchCompletion",
+        "summary": "Create a search-backed completion with citations",
+        "description": "Runs a search-capable Brok model and returns answer text, citations, follow-ups, and usage. Streaming uses canonical Brok SSE events.",
+        "tags": ["Search"],
+        "x-brok-sse-events": [
+          "status",
+          "query",
+          "source",
+          "citation",
+          "answer_delta",
+          "follow_ups",
+          "done",
+          "error"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchCompletionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search completion or SSE stream",
+            "headers": {
+              "x-request-id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchCompletionResponse"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "SSE stream using x-brok-sse-events event names."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BrokApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "brok_sk_*"
+      }
+    },
+    "headers": {
+      "RequestId": {
+        "description": "Request ID for support/debugging.",
+        "schema": {
+          "type": "string",
+          "pattern": "^req_"
+        }
+      },
+      "RateLimitLimit": {
+        "description": "Request limit for the current window.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "RateLimitRemaining": {
+        "description": "Requests remaining in the current window.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "RateLimitReset": {
+        "description": "Unix timestamp when the rate limit window resets.",
+        "schema": {
+          "type": "integer"
+        }
+      }
+    },
+    "responses": {
+      "InvalidRequest": {
+        "description": "Invalid request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid API key",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Missing scope, model access, or feature access",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded",
+        "headers": {
+          "retry-after": {
+            "description": "Seconds to wait before retrying.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "Temporary service, provider, rate-limit, or usage-ledger failure",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["type", "message"],
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ChatMessage": {
+        "type": "object",
+        "required": ["role", "content"],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": ["system", "user", "assistant", "tool"]
+          },
+          "content": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            ]
+          },
+          "tool_call_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "ChatCompletionRequest": {
+        "type": "object",
+        "required": ["model", "messages"],
+        "properties": {
+          "model": {
+            "type": "string",
+            "examples": ["brok-code"]
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            }
+          },
+          "stream": {
+            "type": "boolean",
+            "default": false
+          },
+          "temperature": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "top_p": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "max_tokens": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "max_completion_tokens": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "tool_choice": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "additionalProperties": true
+              }
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "Usage": {
+        "type": "object",
+        "properties": {
+          "prompt_tokens": {
+            "type": "integer"
+          },
+          "completion_tokens": {
+            "type": "integer"
+          },
+          "total_tokens": {
+            "type": "integer"
+          },
+          "search_queries": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      },
+      "ChatCompletionResponse": {
+        "type": "object",
+        "required": ["id", "object", "created", "model", "choices"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "chat.completion"
+          },
+          "created": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["index", "message"],
+              "properties": {
+                "index": {
+                  "type": "integer"
+                },
+                "message": {
+                  "$ref": "#/components/schemas/ChatMessage"
+                },
+                "finish_reason": {
+                  "type": ["string", "null"]
+                }
+              }
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        }
+      },
+      "MessagesRequest": {
+        "type": "object",
+        "required": ["messages"],
+        "properties": {
+          "model": {
+            "type": "string",
+            "default": "brok-code"
+          },
+          "system": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            ]
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["role", "content"],
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": ["user", "assistant"]
+                },
+                "content": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "max_tokens": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "temperature": {
+            "type": "number"
+          },
+          "top_p": {
+            "type": "number"
+          },
+          "stream": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": true
+      },
+      "MessagesResponse": {
+        "type": "object",
+        "required": ["id", "type", "role", "model", "content"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "message"
+          },
+          "role": {
+            "type": "string",
+            "const": "assistant"
+          },
+          "model": {
+            "type": "string"
+          },
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        },
+        "additionalProperties": true
+      },
+      "SearchCompletionRequest": {
+        "type": "object",
+        "required": ["model", "query"],
+        "properties": {
+          "model": {
+            "type": "string",
+            "examples": ["brok-search", "brok-search-pro"]
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1
+          },
+          "search_depth": {
+            "type": "string",
+            "enum": ["lite", "standard", "deep", "basic", "quick", "advanced"],
+            "default": "standard"
+          },
+          "depth": {
+            "type": "string",
+            "enum": ["lite", "standard", "deep", "basic", "quick", "advanced"]
+          },
+          "stream": {
+            "type": "boolean",
+            "default": true
+          },
+          "recency_days": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "Citation": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "title": {
+            "type": "string"
+          },
+          "publisher": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "retrievedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "qualityScore": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": true
+      },
+      "SearchCompletionResponse": {
+        "type": "object",
+        "required": ["id", "object", "model", "choices", "citations"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "search.completion"
+          },
+          "model": {
+            "type": "string"
+          },
+          "resolved_query": {
+            "type": "string"
+          },
+          "classification": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "search_queries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "$ref": "#/components/schemas/ChatMessage"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            }
+          },
+          "follow_ups": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "query": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Model": {
+        "type": "object",
+        "required": ["id", "name", "provider", "max_tokens", "context_window"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "const": "brok"
+          },
+          "max_tokens": {
+            "type": "integer"
+          },
+          "context_window": {
+            "type": "integer"
+          },
+          "supports_search": {
+            "type": "boolean"
+          },
+          "supports_streaming": {
+            "type": "boolean"
+          },
+          "supports_tools": {
+            "type": "boolean"
+          },
+          "supports_code": {
+            "type": "boolean"
+          },
+          "input_cost_per_million": {
+            "type": "number"
+          },
+          "output_cost_per_million": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": true
+      },
+      "ModelList": {
+        "type": "object",
+        "required": ["object", "data"],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "list"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Model"
+            }
+          }
+        }
+      },
+      "UsageResponse": {
+        "type": "object",
+        "required": ["period", "usage"],
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": ["day", "week", "month"]
+          },
+          "usage": {
+            "type": "object",
+            "required": [
+              "requests",
+              "input_tokens",
+              "output_tokens",
+              "cached_tokens",
+              "search_queries",
+              "billed_usd"
+            ],
+            "properties": {
+              "requests": {
+                "type": "integer"
+              },
+              "input_tokens": {
+                "type": "integer"
+              },
+              "output_tokens": {
+                "type": "integer"
+              },
+              "cached_tokens": {
+                "type": "integer"
+              },
+              "search_queries": {
+                "type": "integer"
+              },
+              "billed_usd": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Chat"
+    },
+    {
+      "name": "Messages"
+    },
+    {
+      "name": "Search"
+    },
+    {
+      "name": "Models"
+    },
+    {
+      "name": "Usage"
+    }
+  ]
+}

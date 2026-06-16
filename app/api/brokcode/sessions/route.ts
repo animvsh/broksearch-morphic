@@ -6,11 +6,8 @@ import {
   resolveBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 import {
-  appendBrokCodeSessionEvent,
-  BrokCodeSessionRole,
-  BrokCodeSessionSource,
-  getBrokCodeSession,
-  listBrokCodeSessions
+  type BrokCodeSessionRole,
+  type BrokCodeSessionSource
 } from '@/lib/brokcode/session-store'
 
 export const runtime = 'nodejs'
@@ -23,8 +20,26 @@ const VALID_ROLES = new Set<BrokCodeSessionRole>([
   'system'
 ])
 
+async function getSessionStore() {
+  const {
+    appendBrokCodeSessionEvent,
+    getBrokCodeSession,
+    listBrokCodeSessions
+  } = await import('@/lib/brokcode/session-store')
+
+  return {
+    appendBrokCodeSessionEvent,
+    getBrokCodeSession,
+    listBrokCodeSessions
+  }
+}
+
 function filterSessionForWorkspace<
-  T extends Awaited<ReturnType<typeof getBrokCodeSession>>
+  T extends Awaited<
+    ReturnType<
+      Awaited<ReturnType<typeof getSessionStore>>['getBrokCodeSession']
+    >
+  >
 >(session: T, workspaceId: string): T {
   if (!session) return session
 
@@ -63,12 +78,14 @@ export async function GET(request: NextRequest) {
 
   const sessionId = request.nextUrl.searchParams.get('session_id')
   if (sessionId) {
+    const { getBrokCodeSession } = await getSessionStore()
     const session = await getBrokCodeSession(sessionId, authResult.workspace.id)
     return jsonNoStore({
       session: filterSessionForWorkspace(session, authResult.workspace.id)
     })
   }
 
+  const { listBrokCodeSessions } = await getSessionStore()
   const sessions = (
     await listBrokCodeSessions({
       workspaceId: authResult.workspace.id
@@ -111,6 +128,7 @@ export async function POST(request: NextRequest) {
       ? (body.metadata as Record<string, unknown>)
       : undefined
 
+  const { appendBrokCodeSessionEvent } = await getSessionStore()
   const session = await appendBrokCodeSessionEvent({
     sessionId:
       typeof body?.session_id === 'string' ? body.session_id : 'default',

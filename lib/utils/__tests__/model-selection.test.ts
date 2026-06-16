@@ -108,6 +108,20 @@ describe('selectModel', () => {
     })
   })
 
+  it('uses the selected enabled model in cloud mode', async () => {
+    const result = await selectModel({
+      searchMode: 'quick',
+      cookieStore: createCookieStore('provider-c:chosen-model')
+    })
+
+    expect(result).toEqual({
+      id: 'chosen-model',
+      name: 'chosen-model',
+      provider: 'provider-c',
+      providerId: 'provider-c'
+    })
+  })
+
   it('falls back to DEFAULT_MODEL when cloud models are unavailable', async () => {
     matrix = {}
     setMatrixImplementation()

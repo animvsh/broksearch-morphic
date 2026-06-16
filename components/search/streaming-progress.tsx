@@ -70,7 +70,9 @@ export function StreamingProgress({
         <SourceThumbStrip sources={state.sources} />
       )}
 
-      {(isReading || isSynthesizing) && <ProgressBar phase={state.phase} />}
+      {(isReading || isGathering || isSynthesizing) && (
+        <ProgressBar phase={state.phase} />
+      )}
 
       {isError && state.error && (
         <p className="mt-2 text-xs text-destructive">{state.error}</p>
@@ -122,9 +124,9 @@ function PhaseLabel({ state }: { state: StreamingState }) {
   if (state.phase === 'reading') {
     return (
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium">Reading sources...</div>
+        <div className="text-sm font-medium">Searching sources</div>
         <div className="text-xs text-muted-foreground">
-          Searching the web for relevant references
+          Looking for fresh references to ground the answer
         </div>
       </div>
     )
@@ -133,11 +135,11 @@ function PhaseLabel({ state }: { state: StreamingState }) {
     return (
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium">
-          Found {state.sourceCount}{' '}
+          Checking {state.sourceCount}{' '}
           {state.sourceCount === 1 ? 'source' : 'sources'}
         </div>
         <div className="text-xs text-muted-foreground">
-          Gathering the most relevant references
+          Ranking the strongest pages before writing
         </div>
       </div>
     )
@@ -145,11 +147,12 @@ function PhaseLabel({ state }: { state: StreamingState }) {
   if (state.phase === 'synthesizing') {
     return (
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium">Synthesizing answer...</div>
+        <div className="text-sm font-medium">Writing answer</div>
         <div className="text-xs text-muted-foreground">
-          Reading {state.sourceCount}{' '}
-          {state.sourceCount === 1 ? 'source' : 'sources'} and composing a
-          response
+          Composing a cited response
+          {state.sourceCount > 0
+            ? ` from ${state.sourceCount} ${state.sourceCount === 1 ? 'source' : 'sources'}`
+            : ''}
         </div>
       </div>
     )
@@ -192,25 +195,28 @@ function SourceThumbStrip({ sources }: { sources: SourcePreview[] }) {
 
 function ProgressBar({ phase }: { phase: StreamingState['phase'] }) {
   const [progress, setProgress] = useState(() => {
-    if (phase === 'reading') return 25
+    if (phase === 'reading') return 18
+    if (phase === 'gathering') return 48
     if (phase === 'synthesizing') return 70
     return 0
   })
   useEffect(() => {
-    if (phase === 'synthesizing') {
-      const t = setInterval(() => {
-        setProgress(p => Math.min(p + 1, 92))
-      }, 200)
-      return () => clearInterval(t)
-    }
+    const target = phase === 'reading' ? 52 : phase === 'gathering' ? 68 : 92
+    const step = phase === 'synthesizing' ? 1 : 2
+    const t = setInterval(() => {
+      setProgress(p => Math.min(p + step, target))
+    }, 220)
+    return () => clearInterval(t)
   }, [phase])
 
   const color =
     phase === 'reading'
       ? 'bg-amber-500'
-      : phase === 'synthesizing'
-        ? 'bg-violet-500'
-        : 'bg-foreground'
+      : phase === 'gathering'
+        ? 'bg-sky-500'
+        : phase === 'synthesizing'
+          ? 'bg-violet-500'
+          : 'bg-foreground'
 
   return (
     <div className="mt-3 h-0.5 w-full overflow-hidden rounded-full bg-foreground/5">

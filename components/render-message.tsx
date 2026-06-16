@@ -12,6 +12,7 @@ import type { DynamicToolPart } from '@/lib/types/dynamic-tools'
 import { SearchAnswerSection } from './search/search-answer-section'
 import { AnswerSection } from './answer-section'
 import { DynamicToolDisplay } from './dynamic-tool-display'
+import { MarkdownMessage } from './message'
 import ResearchProcessSection from './research-process-section'
 import { UserFileSection } from './user-file-section'
 import { UserTextSection } from './user-text-section'
@@ -28,6 +29,7 @@ interface RenderMessageProps {
   isGuest?: boolean
   status?: UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>['status']
   addToolResult?: (params: { toolCallId: string; result: any }) => void
+  onFollowUpSubmit?: (query: string) => void
   onUpdateMessage?: (messageId: string, newContent: string) => Promise<void>
   reload?: (messageId: string) => Promise<void | string | null | undefined>
   isLatestMessage?: boolean
@@ -43,6 +45,7 @@ export function RenderMessage({
   isGuest = false,
   status,
   addToolResult,
+  onFollowUpSubmit,
   onUpdateMessage,
   reload,
   isLatestMessage = false,
@@ -147,7 +150,15 @@ export function RenderMessage({
         isLastTextPart && (isLatestMessage ? isStreamingComplete : true)
 
       elements.push(
-        USE_NEW_SEARCH_SURFACE ? (
+        USE_NEW_SEARCH_SURFACE && !isLastTextPart ? (
+          <div
+            key={`${messageId}-text-${index}`}
+            className="flex flex-col gap-1"
+            data-testid="answer-section"
+          >
+            <MarkdownMessage message={part.text} citationMaps={citationMaps} />
+          </div>
+        ) : USE_NEW_SEARCH_SURFACE ? (
           <SearchAnswerSection
             key={`${messageId}-text-${index}`}
             content={part.text}
@@ -165,6 +176,7 @@ export function RenderMessage({
             reload={reload}
             status={status}
             citationMaps={citationMaps}
+            onFollowUpSubmit={onFollowUpSubmit}
           />
         ) : (
           <AnswerSection

@@ -82,7 +82,8 @@
         "zustand": "^5.0.13",
       },
       "devDependencies": {
-        "@next/swc-wasm-nodejs": "^16.2.3",
+        "@next/swc-wasm-nodejs": "^16.2.7",
+        "@next/swc-wasm-web": "^16.2.3",
         "@tailwindcss/postcss": "^4.1.11",
         "@testing-library/dom": "^10.4.1",
         "@testing-library/jest-dom": "^6.6.3",
@@ -504,7 +505,9 @@
 
     "@next/swc-linux-x64-musl": ["@next/swc-linux-x64-musl@16.2.3", "", { "os": "linux", "cpu": "x64" }, "sha512-Kt44hGJfZSefebhk/7nIdivoDr3Ugp5+oNz9VvF3GUtfxutucUIHfIO0ZYO8QlOPDQloUVQn4NVC/9JvHRk9hw=="],
 
-    "@next/swc-wasm-nodejs": ["@next/swc-wasm-nodejs@16.2.6", "", {}, "sha512-hwa9pdxfzDsug/m4eukZiy2bOXasDAlZG41YCNHqJfXaVQ0c544ox6MvAbvJn7GaVHDrkD+pwVeJz2djKjcsUA=="],
+    "@next/swc-wasm-nodejs": ["@next/swc-wasm-nodejs@16.2.7", "", {}, "sha512-cnrWR8F2M2L6CFs8k15j6r9ePYXR7xmcNfgP/IozonOdT0cJvEmyATWU+i4QBDUyLu6maPSBbHBG08JMC+1cJw=="],
+
+    "@next/swc-wasm-web": ["@next/swc-wasm-web@16.2.4", "", {}, "sha512-DoQVosCSx/TKp04IDWzWTUXph2LAPst+V0ku3oa8MQN0yNmpbs+ZjdcJjCW6l06tUVUShoKT+3vwyN8DE5WxLg=="],
 
     "@next/swc-win32-arm64-msvc": ["@next/swc-win32-arm64-msvc@16.2.3", "", { "os": "win32", "cpu": "arm64" }, "sha512-O2NZ9ie3Tq6xj5Z5CSwBT3+aWAMW2PIZ4egUi9MaWLkwaehgtB7YZjPm+UpcNpKOme0IQuqDcor7BsW6QBiQBw=="],
 

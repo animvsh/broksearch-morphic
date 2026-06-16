@@ -13,9 +13,15 @@ export default function BrokCodeDocsPage() {
       <div className="prose prose-neutral dark:prose-invert">
         <h2>Brok Code Cloud</h2>
         <p>
-          Open <Link href="/brokcode">Brok Code Cloud</Link>, save a{' '}
-          <code>brok_sk_</code> key, connect GitHub, then describe the app or
-          repo change you want. The cloud view keeps chat, live preview,
+          Open{' '}
+          <Link
+            href="/brokcode"
+            className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+          >
+            Brok Code Cloud
+          </Link>
+          , save a <code>brok_sk_</code> key, connect GitHub, then describe the
+          app or repo change you want. The cloud view keeps chat, live preview,
           execution status, Cloud/TUI sync, usage, version history, GitHub PR,
           Composio integration, and deploy controls in one workspace.
         </p>
@@ -26,7 +32,7 @@ export default function BrokCodeDocsPage() {
           <code>scripts/brokcode-tui.mjs</code>. There is no separate binary
           download advertised in this app yet; clone the Brok repository,
           install dependencies, and run the script through{' '}
-          <code>npm run brokcode</code>. The terminal version uses the same Brok
+          <code>bun run brokcode</code>. The terminal version uses the same Brok
           API key and sync session ID as cloud, so terminal and browser work
           appear in one timeline.
         </p>
@@ -34,24 +40,24 @@ export default function BrokCodeDocsPage() {
         <pre className="rounded-lg bg-muted p-4">
           <code>{`git clone <your-brok-platform-repo-url> brok
 cd brok
-npm install
+bun install
 
 export BROK_API_KEY="brok_sk_your_key"
 export BROK_BASE_URL="https://your-brok-domain.com/api/v1"
 export BROK_SYNC_URL="https://your-brok-domain.com"
 export BROKCODE_SESSION_ID="default"
 
-npm run brokcode`}</code>
+bun run brokcode`}</code>
         </pre>
 
         <h3>Local Development Run</h3>
         <pre className="rounded-lg bg-muted p-4">
-          <code>{`npm run dev -- --hostname 127.0.0.1 --port 3001
+          <code>{`bun dev --hostname 127.0.0.1 --port 3001
 export BROK_BASE_URL="http://127.0.0.1:3001/api/v1"
 export BROK_SYNC_URL="http://127.0.0.1:3001"
 export BROKCODE_SESSION_ID="default"
 export BROK_API_KEY="brok_sk_..."
-npm run brokcode`}</code>
+bun run brokcode`}</code>
         </pre>
 
         <h2>Cloud/TUI Sync</h2>
@@ -366,15 +372,30 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
         </ul>
 
         <h2>Next Steps</h2>
-        <ul>
+        <ul className="space-y-2">
           <li>
-            <Link href="/brokcode">Open Brok Code Cloud</Link>
+            <Link
+              href="/brokcode"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
+              Open Brok Code Cloud
+            </Link>
           </li>
           <li>
-            <Link href="/brokcode/tui">Open TUI Instructions</Link>
+            <Link
+              href="/brokcode/tui"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
+              Open TUI Instructions
+            </Link>
           </li>
           <li>
-            <Link href="/playground">Test the BrokCode API</Link>
+            <Link
+              href="/api-platform/playground"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-2 leading-none"
+            >
+              Test the BrokCode API
+            </Link>
           </li>
         </ul>
       </div>

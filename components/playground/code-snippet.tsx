@@ -10,53 +10,68 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface CodeSnippetProps {
+  mode: 'chat' | 'search'
   model: string
   messages: Array<{ role: string; content: string }>
+  query: string
+  searchDepth: string
   stream: boolean
 }
 
-export function CodeSnippet({ model, messages, stream }: CodeSnippetProps) {
+export function CodeSnippet({
+  mode,
+  model,
+  messages,
+  query,
+  searchDepth,
+  stream
+}: CodeSnippetProps) {
   const [copied, setCopied] = useState<string | null>(null)
+  const endpoint =
+    mode === 'search' ? '/v1/search/completions' : '/v1/chat/completions'
+  const payload =
+    mode === 'search'
+      ? {
+          model,
+          query,
+          search_depth: searchDepth,
+          stream
+        }
+      : {
+          model,
+          messages,
+          stream
+        }
+  const payloadJson = JSON.stringify(payload, null, 2)
 
-  const curl = `curl https://api.brok.ai/v1/chat/completions \\
+  const curl = `curl https://api.brok.ai${endpoint} \\
   -H "Authorization: Bearer $BROK_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${model}",
-    "messages": ${JSON.stringify(messages, null, 2)},
-    "stream": ${stream}
-  }'`
+  -d '${payloadJson}'`
 
-  const javascript = `const response = await fetch("https://api.brok.ai/v1/chat/completions", {
+  const javascript = `const response = await fetch("https://api.brok.ai${endpoint}", {
   method: "POST",
   headers: {
     "Authorization": \`Bearer \${process.env.BROK_API_KEY}\`,
     "Content-Type": "application/json"
   },
-  body: JSON.stringify({
-    model: "${model}",
-    messages: ${JSON.stringify(messages, null, 2)},
-    stream: ${stream}
-  })
+  body: JSON.stringify(${payloadJson})
 });
 
 const data = await response.json();
 console.log(data);`
 
-  const python = `import os
+  const python = `import json
+import os
 import requests
 
 response = requests.post(
-    "https://api.brok.ai/v1/chat/completions",
+    "https://api.brok.ai${endpoint}",
     headers={
         "Authorization": f"Bearer {os.environ['BROK_API_KEY']}",
         "Content-Type": "application/json"
     },
-    json={
-        "model": "${model}",
-        "messages": ${JSON.stringify(messages, null, 2)},
-        "stream": ${stream}
-    }
+    json=json.loads('''${payloadJson}''')
 )
 
 print(response.json())`
@@ -87,12 +102,22 @@ export ANTHROPIC_MODEL="${model}"
 
   return (
     <Tabs defaultValue="curl" className="w-full">
-      <TabsList className="h-9 w-full justify-start overflow-x-auto rounded-md">
-        <TabsTrigger value="curl">curl</TabsTrigger>
-        <TabsTrigger value="codex">Codex</TabsTrigger>
-        <TabsTrigger value="claude">Claude</TabsTrigger>
-        <TabsTrigger value="javascript">JavaScript</TabsTrigger>
-        <TabsTrigger value="python">Python</TabsTrigger>
+      <TabsList className="h-auto min-h-11 w-full justify-start overflow-x-auto rounded-md">
+        <TabsTrigger value="curl" className="min-h-11">
+          curl
+        </TabsTrigger>
+        <TabsTrigger value="codex" className="min-h-11">
+          Codex
+        </TabsTrigger>
+        <TabsTrigger value="claude" className="min-h-11">
+          Claude
+        </TabsTrigger>
+        <TabsTrigger value="javascript" className="min-h-11">
+          JavaScript
+        </TabsTrigger>
+        <TabsTrigger value="python" className="min-h-11">
+          Python
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="curl" className="relative">

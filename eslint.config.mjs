@@ -33,7 +33,9 @@ export default defineConfig([
           groups: importSortGroups
         }
       ],
-      'simple-import-sort/exports': 'error'
+      'simple-import-sort/exports': 'error',
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/immutability': 'off'
     }
   },
   globalIgnores([

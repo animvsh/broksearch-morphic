@@ -25,6 +25,7 @@ import {
   formatPhaseLabel,
   isDangerousShellCommand,
   isValidBrokKey,
+  normalizeUsagePeriod,
   parseSseBlock,
   relativeTime,
   spinnerFrame,
@@ -793,8 +794,9 @@ async function deployProject(value) {
 }
 
 async function putProjectFile(args) {
-  const projectPath = args[1]
-  const localPath = args[2]
+  const commandOffset = args[1] === 'put' ? 2 : 1
+  const projectPath = args[commandOffset]
+  const localPath = args[commandOffset + 1]
   const projectFlagIndex = args.indexOf('--project')
   const projectRef =
     projectFlagIndex >= 0 && args[projectFlagIndex + 1]
@@ -1156,6 +1158,8 @@ async function showSync() {
 }
 
 async function showUsage(period = 'day') {
+  const normalizedPeriod = normalizeUsagePeriod(period)
+
   if (!apiKey) {
     output.write(
       `${colors.red}Save a Brok API key first with /key.${colors.reset}\n`
@@ -1164,7 +1168,7 @@ async function showUsage(period = 'day') {
   }
 
   const response = await fetch(
-    `${baseUrl}/usage?period=${encodeURIComponent(period)}`,
+    `${baseUrl}/usage?period=${encodeURIComponent(normalizedPeriod)}`,
     {
       headers: {
         Authorization: `Bearer ${apiKey}`

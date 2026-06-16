@@ -7,6 +7,24 @@ export interface ExampleQuery {
 
 export const EXAMPLE_QUERIES: ExampleQuery[] = [
   {
+    id: 'mvp-react',
+    query: 'What is the best way to learn React?',
+    category: 'how-to',
+    mode: 'quick'
+  },
+  {
+    id: 'mvp-cursor-windsurf',
+    query: 'Compare Cursor vs Windsurf',
+    category: 'comparison',
+    mode: 'search'
+  },
+  {
+    id: 'mvp-ai-news',
+    query: 'Summarize the latest AI news',
+    category: 'news',
+    mode: 'search'
+  },
+  {
     id: 'ex-1',
     query: 'What are the latest advances in fusion energy as of 2026?',
     category: 'research',

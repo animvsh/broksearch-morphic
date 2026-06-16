@@ -38,6 +38,16 @@ describe('BrokCode acceptance matrix', () => {
         testCase => testCase.category === 'backend_backed'
       )?.minimumGeneratedFiles
     ).toBeGreaterThanOrEqual(4)
+    expect(
+      BROKCODE_ACCEPTANCE_MATRIX.find(
+        testCase => testCase.id === 'landing-bakery'
+      )?.requiredFiles
+    ).toEqual(['index.html', 'styles.css', 'app.js'])
+    expect(
+      BROKCODE_ACCEPTANCE_MATRIX.find(
+        testCase => testCase.category === 'backend_backed'
+      )?.requiredFiles
+    ).toContain('api/mock-feedback.json')
   })
 
   it('resolves selected cases and validates expected preview terms', () => {

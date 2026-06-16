@@ -4,7 +4,19 @@ export function ResponseViewer({
   response,
   error
 }: {
-  response: { content: string; usage?: any; done: boolean } | null
+  response: {
+    content: string
+    usage?: any
+    done: boolean
+    citations?: Array<{
+      id?: string
+      title?: string
+      url?: string
+      publisher?: string
+      snippet?: string
+    }>
+    followUps?: Array<{ label?: string; query?: string } | string>
+  } | null
   error: string | null
 }) {
   if (error) {
@@ -54,6 +66,67 @@ export function ResponseViewer({
           </div>
         </div>
       )}
+
+      {response.done &&
+        Array.isArray(response.citations) &&
+        response.citations.length > 0 && (
+          <div className="border-t pt-3">
+            <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+              Citations
+            </p>
+            <div className="space-y-2">
+              {response.citations.slice(0, 6).map((citation, index) => (
+                <a
+                  key={citation.id ?? `${citation.url}-${index}`}
+                  href={citation.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block rounded-md border bg-muted/20 p-2 text-sm hover:bg-muted/40"
+                >
+                  <span className="font-medium">
+                    {citation.title || citation.url || `Source ${index + 1}`}
+                  </span>
+                  {citation.publisher && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {citation.publisher}
+                    </span>
+                  )}
+                  {citation.snippet && (
+                    <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">
+                      {citation.snippet}
+                    </span>
+                  )}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+      {response.done &&
+        Array.isArray(response.followUps) &&
+        response.followUps.length > 0 && (
+          <div className="border-t pt-3">
+            <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+              Follow-ups
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {response.followUps.slice(0, 6).map((followUp, index) => {
+                const label =
+                  typeof followUp === 'string'
+                    ? followUp
+                    : followUp.label || followUp.query
+                return label ? (
+                  <span
+                    key={`${label}-${index}`}
+                    className="rounded-md border bg-muted/20 px-2 py-1 text-xs text-muted-foreground"
+                  >
+                    {label}
+                  </span>
+                ) : null
+              })}
+            </div>
+          </div>
+        )}
 
       {!response.done && (
         <div className="flex items-center gap-2">

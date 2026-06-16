@@ -65,6 +65,32 @@ describe('BrokMail Gmail routes', () => {
     expect(body.message).toContain('COMPOSIO_API_KEY')
   })
 
+  it('rejects Gmail sync early when only Composio Connect is configured', async () => {
+    vi.mocked(canExecuteComposioTools).mockReturnValue(false)
+
+    const response = await getGmailThreads()
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.error).toContain('backend COMPOSIO_API_KEY')
+    expect(body.error).toContain('cannot execute Gmail reads')
+    expect(listConnectedAccounts).not.toHaveBeenCalled()
+    expect(executeComposioTool).not.toHaveBeenCalled()
+  })
+
+  it('rejects Calendar sync early when only Composio Connect is configured', async () => {
+    vi.mocked(canExecuteComposioTools).mockReturnValue(false)
+
+    const response = await getCalendarEvents()
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.error).toContain('backend COMPOSIO_API_KEY')
+    expect(body.error).toContain('cannot execute Calendar reads')
+    expect(listConnectedAccounts).not.toHaveBeenCalled()
+    expect(executeComposioTool).not.toHaveBeenCalled()
+  })
+
   it('requires BrokMail access before returning Gmail configuration status', async () => {
     vi.mocked(getCurrentUser).mockResolvedValue(null)
     vi.mocked(isComposioConfigured).mockReturnValue(false)
