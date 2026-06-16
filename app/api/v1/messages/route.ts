@@ -15,6 +15,11 @@ import {
   invalidRequestResponse,
   readJsonBody
 } from '@/lib/brok/http'
+import {
+  beginIdempotentRequest,
+  completeIdempotentRequest,
+  idempotencyHeaders
+} from '@/lib/brok/idempotency'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import { applyBrokMarkup } from '@/lib/brok/pricing'
 import {
@@ -64,13 +69,6 @@ export async function POST(request: NextRequest) {
   }
   if (!apiKeyHasScope(auth.apiKey, 'code:write')) {
     return forbiddenScopeResponse('code:write')
-  }
-  const usageLimit = await checkUsageLimits({
-    apiKey: auth.apiKey,
-    workspace: auth.workspace
-  })
-  if (!usageLimit.allowed) {
-    return usageLimitResponse(usageLimit)
   }
 
   const parsedBody = await readJsonBody<{
@@ -145,6 +143,31 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  const idempotency = await beginIdempotentRequest({
+    request,
+    workspaceId: auth.workspace.id,
+    apiKeyId: auth.apiKey.id,
+    route: '/api/v1/messages',
+    body,
+    stream: shouldStream
+  })
+  if (idempotency.kind === 'replay' || idempotency.kind === 'blocked') {
+    return idempotency.response
+  }
+
+  const usageLimit = await checkUsageLimits({
+    apiKey: auth.apiKey,
+    workspace: auth.workspace
+  })
+  if (!usageLimit.allowed) {
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      status: 'failed'
+    })
+    return usageLimitResponse(usageLimit)
+  }
+
   const rpmLimit = auth.apiKey.rpmLimit ?? 60
   const rateLimit = await checkRateLimit(
     auth.apiKey.id,
@@ -154,6 +177,11 @@ export async function POST(request: NextRequest) {
 
   if (!rateLimit.allowed) {
     if (rateLimit.reason === 'rate_limit_check_failed') {
+      await completeIdempotentRequest({
+        idempotency,
+        requestId,
+        status: 'failed'
+      })
       return NextResponse.json(
         {
           type: 'error',
@@ -176,6 +204,11 @@ export async function POST(request: NextRequest) {
       true
     )
 
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      status: 'failed'
+    })
     return NextResponse.json(
       {
         type: 'error',
@@ -256,6 +289,11 @@ export async function POST(request: NextRequest) {
                 usageSource: usage ? 'provider' : 'estimated'
               }
             })
+            await completeIdempotentRequest({
+              idempotency,
+              requestId,
+              status: 'completed'
+            })
           },
           onAbort: async ({ content, usage }) => {
             const latencyMs = Date.now() - startTime
@@ -289,6 +327,11 @@ export async function POST(request: NextRequest) {
                 aborted: true
               }
             })
+            await completeIdempotentRequest({
+              idempotency,
+              requestId,
+              status: 'failed'
+            })
           }
         }),
         {
@@ -297,6 +340,9 @@ export async function POST(request: NextRequest) {
             'Cache-Control': 'no-cache, no-transform',
             Connection: 'keep-alive',
             'X-Brok-Request-Id': requestId,
+            ...idempotencyHeaders({
+              key: idempotency.kind === 'reserved' ? idempotency.key : undefined
+            }),
             ...brokRateLimitHeaders({
               limit: rateLimit.limit,
               current: rateLimit.current + 1,
@@ -341,36 +387,51 @@ export async function POST(request: NextRequest) {
       providerResponse.choices?.[0]?.message?.content ?? ''
     )
 
-    return NextResponse.json(
-      {
-        id: requestId,
-        type: 'message',
-        role: 'assistant',
-        model: modelId,
-        content: [{ type: 'text', text }],
-        stop_reason:
-          providerResponse.choices?.[0]?.finish_reason === 'length'
-            ? 'max_tokens'
-            : 'end_turn',
-        stop_sequence: null,
-        usage: {
-          input_tokens: inputTokens,
-          output_tokens: outputTokens
-        }
-      },
-      {
-        headers: {
-          'X-Brok-Request-Id': requestId,
-          ...brokRateLimitHeaders({
-            limit: rateLimit.limit,
-            current: rateLimit.current + 1,
-            resetAt: rateLimit.resetAt
-          })
-        }
+    const brokResponse = {
+      id: requestId,
+      type: 'message',
+      role: 'assistant',
+      model: modelId,
+      content: [{ type: 'text', text }],
+      stop_reason:
+        providerResponse.choices?.[0]?.finish_reason === 'length'
+          ? 'max_tokens'
+          : 'end_turn',
+      stop_sequence: null,
+      usage: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens
       }
-    )
+    }
+    const responseHeaders = {
+      'X-Brok-Request-Id': requestId,
+      ...idempotencyHeaders({
+        key: idempotency.kind === 'reserved' ? idempotency.key : undefined
+      }),
+      ...brokRateLimitHeaders({
+        limit: rateLimit.limit,
+        current: rateLimit.current + 1,
+        resetAt: rateLimit.resetAt
+      })
+    }
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      responseStatus: 200,
+      responseBody: brokResponse,
+      responseHeaders
+    })
+
+    return NextResponse.json(brokResponse, {
+      headers: responseHeaders
+    })
   } catch (error) {
     if (error instanceof UsageRecordError) {
+      await completeIdempotentRequest({
+        idempotency,
+        requestId,
+        status: 'failed'
+      })
       return NextResponse.json(
         {
           type: 'error',
@@ -406,6 +467,11 @@ export async function POST(request: NextRequest) {
       latencyMs,
       status: 'error',
       errorCode: error instanceof Error ? error.message : 'unknown_error'
+    })
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      status: 'failed'
     })
 
     return NextResponse.json(

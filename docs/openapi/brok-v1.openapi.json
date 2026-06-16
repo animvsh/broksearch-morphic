@@ -120,9 +120,14 @@
       "post": {
         "operationId": "createChatCompletion",
         "summary": "Create an OpenAI-compatible chat completion",
-        "description": "Runs a Brok chat model. Set stream=true for OpenAI-style Server-Sent Events.",
+        "description": "Runs a Brok chat model. Set stream=true for OpenAI-style Server-Sent Events. Non-streaming billable responses support Idempotency-Key replay for 24 hours; streaming requests with the same key return 409 while in progress or after completion because stream bodies are not replayed.",
         "tags": ["Chat"],
         "x-brok-sse-events": ["message", "done", "error"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -148,6 +153,12 @@
               },
               "x-ratelimit-reset": {
                 "$ref": "#/components/headers/RateLimitReset"
+              },
+              "idempotency-key": {
+                "$ref": "#/components/headers/IdempotencyKey"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
               }
             },
             "content": {
@@ -173,6 +184,9 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
+          "409": {
+            "$ref": "#/components/responses/IdempotencyConflict"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -186,7 +200,7 @@
       "post": {
         "operationId": "createMessage",
         "summary": "Create an Anthropic-compatible message",
-        "description": "Runs a Brok model with Anthropic-style message payloads. Requires code:write scope.",
+        "description": "Runs a Brok model with Anthropic-style message payloads. Requires code:write scope. Non-streaming billable responses support Idempotency-Key replay for 24 hours; streaming requests with the same key return 409 while in progress or after completion because stream bodies are not replayed.",
         "tags": ["Messages"],
         "x-brok-sse-events": [
           "content_block_start",
@@ -195,6 +209,11 @@
           "message_delta",
           "message_stop",
           "error"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
         ],
         "requestBody": {
           "required": true,
@@ -212,6 +231,12 @@
             "headers": {
               "x-request-id": {
                 "$ref": "#/components/headers/RequestId"
+              },
+              "idempotency-key": {
+                "$ref": "#/components/headers/IdempotencyKey"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
               }
             },
             "content": {
@@ -237,6 +262,9 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
+          "409": {
+            "$ref": "#/components/responses/IdempotencyConflict"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -250,7 +278,7 @@
       "post": {
         "operationId": "createSearchCompletion",
         "summary": "Create a search-backed completion with citations",
-        "description": "Runs a search-capable Brok model and returns answer text, citations, follow-ups, and usage. Streaming uses canonical Brok SSE events.",
+        "description": "Runs a search-capable Brok model and returns answer text, citations, follow-ups, and usage. Streaming uses canonical Brok SSE events. Non-streaming billable responses support Idempotency-Key replay for 24 hours; streaming requests with the same key return 409 while in progress or after completion because stream bodies are not replayed.",
         "tags": ["Search"],
         "x-brok-sse-events": [
           "status",
@@ -261,6 +289,11 @@
           "follow_ups",
           "done",
           "error"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
         ],
         "requestBody": {
           "required": true,
@@ -278,6 +311,12 @@
             "headers": {
               "x-request-id": {
                 "$ref": "#/components/headers/RequestId"
+              },
+              "idempotency-key": {
+                "$ref": "#/components/headers/IdempotencyKey"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
               }
             },
             "content": {
@@ -303,6 +342,9 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
+          "409": {
+            "$ref": "#/components/responses/IdempotencyConflict"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -321,12 +363,38 @@
         "bearerFormat": "brok_sk_*"
       }
     },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "description": "Optional client-generated key for billable POST retries. Keys are scoped to the API key, route, and exact request payload for 24 hours. Completed non-stream JSON responses replay with Idempotency-Replayed=true; streaming responses are not replayed.",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    },
     "headers": {
       "RequestId": {
         "description": "Request ID for support/debugging.",
         "schema": {
           "type": "string",
           "pattern": "^req_"
+        }
+      },
+      "IdempotencyKey": {
+        "description": "Echoes the accepted Idempotency-Key on new and replayed idempotent requests.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "IdempotencyReplayed": {
+        "description": "true when the response was replayed from the idempotency ledger; false for newly executed idempotent requests.",
+        "schema": {
+          "type": "string",
+          "enum": ["true", "false"]
         }
       },
       "RateLimitLimit": {
@@ -371,6 +439,16 @@
       },
       "Forbidden": {
         "description": "Missing scope, model access, or feature access",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "IdempotencyConflict": {
+        "description": "Idempotency-Key conflict, in-progress duplicate, failed prior attempt, or unsupported streaming replay",
         "content": {
           "application/json": {
             "schema": {

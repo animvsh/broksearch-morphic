@@ -252,6 +252,44 @@ export const usageEvents = pgTable(
   })
 )
 
+export const brokIdempotencyKeys = pgTable(
+  'brok_idempotency_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    apiKeyId: uuid('api_key_id')
+      .references(() => apiKeys.id)
+      .notNull(),
+    key: text('key').notNull(),
+    route: text('route').notNull(),
+    requestHash: text('request_hash').notNull(),
+    status: text('status').default('processing').notNull(),
+    requestId: text('request_id'),
+    responseStatus: integer('response_status'),
+    responseBody: jsonb('response_body').$type<Record<string, unknown>>(),
+    responseHeaders: jsonb('response_headers').$type<Record<string, string>>(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    expiresAt: timestamp('expires_at').notNull()
+  },
+  table => ({
+    keyUniqueIdx: uniqueIndex('brok_idempotency_keys_unique_idx').on(
+      table.workspaceId,
+      table.apiKeyId,
+      table.route,
+      table.key
+    ),
+    workspaceIdx: index('brok_idempotency_keys_workspace_idx').on(
+      table.workspaceId
+    ),
+    expiresAtIdx: index('brok_idempotency_keys_expires_at_idx').on(
+      table.expiresAt
+    )
+  })
+)
+
 // Rate Limit Events
 export const rateLimitEvents = pgTable('rate_limit_events', {
   id: uuid('id').primaryKey().defaultRandom(),

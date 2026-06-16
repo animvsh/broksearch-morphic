@@ -74,6 +74,16 @@ for (const [path, methods] of Object.entries(requiredPaths)) {
       hasRequestIdHeader(operation),
       `x-request-id documented: ${method.toUpperCase()} ${path}`
     )
+    if (method === 'post') {
+      check(
+        hasIdempotencyParameter(operation),
+        `idempotency key documented: ${method.toUpperCase()} ${path}`
+      )
+      check(
+        Boolean(operation?.responses?.['409']),
+        `409 response exists: ${method.toUpperCase()} ${path}`
+      )
+    }
   }
 }
 
@@ -111,6 +121,16 @@ finish()
 function hasRequestIdHeader(operation) {
   const headers = operation?.responses?.['200']?.headers ?? {}
   return Boolean(headers['x-request-id'] ?? headers['X-Request-Id'])
+}
+
+function hasIdempotencyParameter(operation) {
+  const parameters = operation?.parameters ?? []
+  return parameters.some(parameter => {
+    if (parameter?.$ref === '#/components/parameters/IdempotencyKey') {
+      return true
+    }
+    return parameter?.name?.toLowerCase() === 'idempotency-key'
+  })
 }
 
 function check(ok, name) {
