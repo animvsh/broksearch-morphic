@@ -6,6 +6,14 @@ interface ChatErrorProps {
   error: Error | string | null | undefined
 }
 
+function normalizeChatErrorMessage(errorMessage: string) {
+  if (/failed to fetch|networkerror|load failed/i.test(errorMessage)) {
+    return 'Brok lost the connection before the answer could start. Please try again.'
+  }
+
+  return errorMessage
+}
+
 export function ChatError({ error }: ChatErrorProps) {
   if (!error) return null
 
@@ -23,6 +31,8 @@ export function ChatError({ error }: ChatErrorProps) {
   } catch {
     // If parsing fails, use the original error message
   }
+
+  errorMessage = normalizeChatErrorMessage(errorMessage)
 
   return (
     <Card className="border-destructive bg-destructive/10 p-4">

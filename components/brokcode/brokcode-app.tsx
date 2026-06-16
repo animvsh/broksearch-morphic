@@ -1281,13 +1281,46 @@ async function readBackgroundTaskEventStream(
 
 type BrokCodeAppProps = {
   initialPrompt?: string
+  initialProjectId?: string | null
   autoStart?: boolean
   connectGithub?: boolean
   accountEmail?: string
 }
 
+export function normalizeInitialBrokCodeProjectId(projectId?: string | null) {
+  const normalized = projectId?.trim()
+  return normalized ? normalized : ''
+}
+
+export function resolveBrokCodeActiveProjectId(params: {
+  currentProjectId: string
+  requestedProjectId?: string | null
+  projects: Pick<BrokCodeProject, 'id'>[]
+}) {
+  const { currentProjectId, requestedProjectId, projects } = params
+  const normalizedCurrent = normalizeInitialBrokCodeProjectId(currentProjectId)
+  if (
+    normalizedCurrent &&
+    projects.some(project => project.id === normalizedCurrent)
+  ) {
+    return normalizedCurrent
+  }
+
+  const normalizedRequested =
+    normalizeInitialBrokCodeProjectId(requestedProjectId)
+  if (
+    normalizedRequested &&
+    projects.some(project => project.id === normalizedRequested)
+  ) {
+    return normalizedRequested
+  }
+
+  return projects[0]?.id ?? ''
+}
+
 export function BrokCodeApp({
   initialPrompt = '',
+  initialProjectId = null,
   autoStart = false,
   connectGithub = false,
   accountEmail = 'Brok account'
@@ -1298,6 +1331,7 @@ export function BrokCodeApp({
   const runCommandRef = useRef<((command: string) => Promise<void>) | null>(
     null
   )
+  const commandInputRef = useRef<HTMLTextAreaElement>(null)
   const [selectedId, setSelectedId] = useState('')
   const [input, setInput] = useState('')
   const [isRunning, setIsRunning] = useState(false)
@@ -1361,7 +1395,9 @@ export function BrokCodeApp({
   const [versions, setVersions] = useState<BrokCodeVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [projects, setProjects] = useState<BrokCodeProject[]>([])
-  const [activeProjectId, setActiveProjectId] = useState('')
+  const [activeProjectId, setActiveProjectId] = useState(() =>
+    normalizeInitialBrokCodeProjectId(initialProjectId)
+  )
   const [projectFiles, setProjectFiles] = useState<BrokCodeProjectFile[]>([])
   const [projectFilesLoading, setProjectFilesLoading] = useState(false)
   const [projectFilesError, setProjectFilesError] = useState<string | null>(
@@ -1388,6 +1424,40 @@ export function BrokCodeApp({
   const [insForgeDashboardUrl, setInsForgeDashboardUrl] = useState('')
   const [insForgeAdminKey, setInsForgeAdminKey] = useState('')
   const [mobilePane, setMobilePane] = useState<BrokCodeMobilePane>('chat')
+
+  const setCommandInput = useCallback((value: string) => {
+    const commandInputElement =
+      commandInputRef.current ??
+      document.querySelector<HTMLTextAreaElement>(
+        '[data-testid="brokcode-command-input"]'
+      )
+    if (commandInputElement && commandInputElement.value !== value) {
+      commandInputElement.value = value
+    }
+
+    setInput(current => (current === value ? current : value))
+  }, [])
+
+  useEffect(() => {
+    const syncFromDom = () => {
+      const commandInputElement =
+        commandInputRef.current ??
+        document.querySelector<HTMLTextAreaElement>(
+          '[data-testid="brokcode-command-input"]'
+        )
+      if (!commandInputElement) return
+
+      const nextValue = commandInputElement.value
+      setCommandInput(nextValue)
+    }
+
+    syncFromDom()
+    const timer = window.setInterval(syncFromDom, 100)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [setCommandInput])
   const [isSharing, startShareTransition] = useTransition()
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -1838,9 +1908,11 @@ export function BrokCodeApp({
           : []
         setProjects(nextProjects)
         setActiveProjectId(current =>
-          current && nextProjects.some(project => project.id === current)
-            ? current
-            : (nextProjects[0]?.id ?? '')
+          resolveBrokCodeActiveProjectId({
+            currentProjectId: current,
+            requestedProjectId: initialProjectId,
+            projects: nextProjects
+          })
         )
       } catch (error) {
         setRuntimeError(
@@ -1848,7 +1920,7 @@ export function BrokCodeApp({
         )
       }
     },
-    [apiKey, getAuthHeaders]
+    [apiKey, getAuthHeaders, initialProjectId]
   )
 
   const refreshProjectRuntime = useCallback(
@@ -3490,7 +3562,7 @@ export function BrokCodeApp({
 
   async function deployBrokCodeCloud() {
     if (!hasLiveRuntime) {
-      setRuntimeError('Sign in before deploying from BrokCode Cloud.')
+      setRuntimeError('Sign in before publishing from BrokCode Cloud.')
       return
     }
 
@@ -3530,7 +3602,7 @@ export function BrokCodeApp({
       const loadedPreviewUrl = loadPreviewUrlIfAllowed(previewCandidate)
       const message = loadedPreviewUrl
         ? strategy === 'managed_live_preview'
-          ? 'App is live on its managed URL.'
+          ? 'App is published on its managed URL.'
           : 'Deployment preview is live.'
         : typeof body?.message === 'string'
           ? body.message
@@ -3573,7 +3645,7 @@ export function BrokCodeApp({
         }
       ])
       void persistVersionSnapshot({
-        command: '1-click deploy',
+        command: 'Publish managed app',
         summary: `${message} Strategy: ${strategy}`,
         runtime: activeRuntime === 'not_connected' ? 'brok' : activeRuntime,
         status: 'done',
@@ -3586,8 +3658,8 @@ export function BrokCodeApp({
       }
       toast.success(
         loadedPreviewUrl
-          ? 'Deployment triggered and preview loaded'
-          : 'Deployment triggered'
+          ? 'Publish triggered and preview loaded'
+          : 'Publish triggered'
       )
     } catch (error) {
       const message =
@@ -3974,7 +4046,7 @@ export function BrokCodeApp({
 
   function focusAgent(agent: BrokCodeSubagent) {
     setSelectedId(agent.id)
-    setInput(`Continue with ${agent.name}: ${agent.nextStep}`)
+    setCommandInput(`Continue with ${agent.name}: ${agent.nextStep}`)
   }
 
   async function runCommand(
@@ -3995,7 +4067,7 @@ export function BrokCodeApp({
       ? null
       : detectIntegrationConnectIntent(trimmed)
     if (integrationToolkit) {
-      setInput('')
+      setCommandInput('')
       setMessages(current => [
         ...current,
         { id: createId('user'), role: 'user', content: trimmed },
@@ -4058,7 +4130,7 @@ export function BrokCodeApp({
     const run = createExecutionRun(trimmed)
     const assistantMessageId = createId('assistant')
     setExecutionRuns(current => [run, ...current].slice(0, 8))
-    setInput('')
+    setCommandInput('')
     setIsRunning(true)
     setSelectedId('')
     setMessages(current => [
@@ -4537,7 +4609,7 @@ export function BrokCodeApp({
       'After fixing, regenerate the preview and verify the error is gone.'
     ].join('\n\n')
 
-    setInput(prompt)
+    setCommandInput(prompt)
     setMobilePane('chat')
     void runCommandRef.current?.(prompt)
   }
@@ -4552,7 +4624,7 @@ export function BrokCodeApp({
     if (!prompt) return
 
     cloudBootstrapRef.current = true
-    setInput(prompt)
+    setCommandInput(prompt)
 
     if (connectGithub) {
       setMessages(current => [
@@ -4610,7 +4682,8 @@ export function BrokCodeApp({
     githubStatus,
     hasLiveRuntime,
     initialPrompt,
-    runtimeBootstrapped
+    runtimeBootstrapped,
+    setCommandInput
   ])
 
   useEffect(() => {
@@ -4801,7 +4874,7 @@ export function BrokCodeApp({
                   }}
                 >
                   <Rocket className="size-4" />
-                  {isDeploying ? 'Deploying...' : '1-click deploy'}
+                  {isDeploying ? 'Publishing...' : 'Publish managed app'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
@@ -4858,7 +4931,7 @@ export function BrokCodeApp({
                 key={item.id}
                 type="button"
                 className={cn(
-                  'flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium transition-colors',
+                  'flex h-11 min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-xs font-medium transition-colors',
                   active
                     ? 'bg-zinc-950 text-white shadow-sm'
                     : 'text-zinc-600 hover:bg-white hover:text-zinc-950'
@@ -5039,8 +5112,20 @@ export function BrokCodeApp({
                 <button
                   key={prompt}
                   type="button"
-                  className="shrink-0 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-950"
-                  onClick={() => setInput(prompt)}
+                  className="shrink-0 h-11 min-h-11 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-950"
+                  onClick={() => setCommandInput(prompt)}
+                  onMouseDown={event => {
+                    if (event.button === 0) {
+                      setCommandInput(prompt)
+                    }
+                  }}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setCommandInput(prompt)
+                    }
+                  }}
+                  onPointerDown={() => setCommandInput(prompt)}
                 >
                   {prompt}
                 </button>
@@ -5058,7 +5143,11 @@ export function BrokCodeApp({
                 <Textarea
                   value={input}
                   data-testid="brokcode-command-input"
-                  onChange={event => setInput(event.target.value)}
+                  ref={commandInputRef}
+                  onChange={event => setCommandInput(event.target.value)}
+                  onInput={event =>
+                    setCommandInput((event.target as HTMLTextAreaElement).value)
+                  }
                   onKeyDown={event => {
                     if (event.key === 'Enter' && !event.shiftKey) {
                       event.preventDefault()
@@ -5148,7 +5237,7 @@ export function BrokCodeApp({
                   ) : (
                     <Rocket className="size-4" />
                   )}
-                  Deploy
+                  Publish
                 </Button>
                 <Button
                   asChild
@@ -5635,16 +5724,6 @@ export function BrokCodeApp({
                 )}
               </div>
             </div>
-            <DeployReadinessPanel
-              state={deployReadiness}
-              loading={deployReadinessLoading}
-              error={deployReadinessError}
-              hasProject={Boolean(activeProject)}
-              onRefresh={() => {
-                void refreshDeployReadiness()
-              }}
-              onOpenPreview={url => loadPreviewUrlIfAllowed(url)}
-            />
             <Tabs defaultValue="brain" className="mb-2">
               <TabsList className="grid h-auto grid-cols-3 rounded-lg border border-zinc-200 bg-white p-1 text-xs shadow-sm xl:grid-cols-6">
                 <TabsTrigger value="brain" className="rounded-md text-xs">
@@ -5671,7 +5750,7 @@ export function BrokCodeApp({
                   brain={projectBrain}
                   hasProject={Boolean(activeProject)}
                   onSuggestedAction={action => {
-                    setInput(action)
+                    setCommandInput(action)
                     setMobilePane('chat')
                   }}
                 />
@@ -5817,7 +5896,7 @@ function DeployReadinessPanel({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium text-zinc-950">Deploy readiness</p>
+            <p className="font-medium text-zinc-950">Publish readiness</p>
             <Badge
               variant={summary.tone === 'ready' ? 'default' : 'outline'}
               className={cn(

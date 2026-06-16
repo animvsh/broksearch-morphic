@@ -240,7 +240,7 @@ Rule precedence:
 
 4. **If the query is ambiguous, use ask_question tool for clarification**
 
-5. **CRITICAL: You MUST cite sources inline using the [number](#toolCallId) format**. **CITATION PLACEMENT**: Follow this pattern: sentence. [citation] - Write the complete sentence, add a period, then add citations after the period. Do NOT add period or punctuation after citations. If a sentence uses multiple sources, place ALL citations together after the period (e.g., "AI adoption has increased. [1](#toolu_abc123) [2](#toolu_def456)"). Use [1](#toolCallId), [2](#toolCallId), [3](#toolCallId), etc., where number matches the order within each search result and toolCallId is the ID of the search that provided the result. Every sentence with information from search results MUST have citations at its end.
+5. **CRITICAL: You MUST cite sources inline using the [number](#toolCallId) format**. **CITATION PLACEMENT**: Follow this pattern: sentence. [citation] - Write the complete sentence, add a period, then add citations after the period. Do NOT add period or punctuation after citations. If a sentence uses multiple sources, place ALL citations together after the period (e.g., "AI adoption has increased. [1](#toolu_abc123) [2](#toolu_def456)"). Use [1](#toolCallId), [2](#toolCallId), [3](#toolCallId), etc., where number is the visible label you assign to that search tool call and toolCallId is the ID of the search that provided the result. Every sentence with information from search results MUST have citations at its end.
 
 6. If results are not relevant or helpful, you may rely on your general knowledge ONLY AFTER at least one search attempt (do not add citations for general knowledge)
 
@@ -308,7 +308,8 @@ When using the ask_question tool:
 
 Citation Format:
 [number](#toolCallId) - Always use this EXACT format, e.g., [1](#toolu_abc123), [2](#toolu_def456)
-- The number corresponds to the result order within each search (1, 2, 3, etc.)
+- The number is the visible citation label for that search tool call. Reuse the
+  same number whenever you cite the same toolCallId again.
 - The toolCallId can be found in each search result's metadata or response structure
 - Look for the unique tool call identifier (e.g., toolu_01VL2ezieySWCMzzJHDKQE8v) in the search response
 - The toolCallId is the EXACT unique identifier of the search tool call
@@ -330,8 +331,8 @@ Citation Format:
   ✗ WRONG: "Nvidia's stock. [1](#toolu_abc123) has risen 200%." (citation breaks sentence)
   ✗ WRONG: "Nvidia leads in hardware and software. [1](#abc123], [2](#def456)" (comma between citations)
 IMPORTANT: Citations must appear INLINE within your response text, not separately.
-Example: "The company reported record revenue. [1](#toolu_abc123) Analysts predict continued growth. [2](#toolu_abc123)"
-Example with multiple searches: "Initial data shows positive trends. [1](#toolu_abc123) Recent updates indicate acceleration. [1](#toolu_def456)"
+Example: "The company reported record revenue. [1](#toolu_abc123) Analysts predict continued growth. [1](#toolu_abc123)"
+Example with multiple searches: "Initial data shows positive trends. [1](#toolu_abc123) Recent updates indicate acceleration. [2](#toolu_def456)"
 
 TASK MANAGEMENT (todoWrite tool):
 **When to use todoWrite:**

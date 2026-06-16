@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 
-import {
-  hasFeatureAccess,
-  requireAnyFeatureAccessForApi
-} from '@/lib/auth/app-access'
+import { requireAnyFeatureAccessForApi } from '@/lib/auth/app-access'
 import { reconcileStaleBrokCodeTask } from '@/lib/brokcode/durable-job'
 import { getBackgroundTask } from '@/lib/tasks/background-tasks'
+import {
+  canAccessTaskKind,
+  getTaskFeatureDeniedBody
+} from '@/lib/tasks/task-feature-access'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -26,14 +27,10 @@ export async function GET(
   const reconciledTask =
     task.kind === 'brokcode' ? await reconcileStaleBrokCodeTask({ task }) : task
 
-  if (
-    !hasFeatureAccess(access.access, 'search') &&
-    reconciledTask.kind !== 'brokcode'
-  ) {
-    return NextResponse.json(
-      { error: 'Feature access denied', feature: 'search' },
-      { status: 403 }
-    )
+  if (!canAccessTaskKind(access.access, reconciledTask.kind)) {
+    return NextResponse.json(getTaskFeatureDeniedBody(reconciledTask.kind), {
+      status: 403
+    })
   }
 
   return NextResponse.json({ task: reconciledTask })

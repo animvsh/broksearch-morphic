@@ -247,15 +247,15 @@ export function ChatPlayground() {
                 placeholder="brok_sk_..."
                 type="password"
                 autoComplete="off"
-                className="h-9"
+                className="h-11"
               />
-              <Button size="sm" className="h-9" onClick={saveApiKey}>
+              <Button size="sm" className="h-11" onClick={saveApiKey}>
                 Save
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-9"
+                className="h-11"
                 onClick={clearApiKey}
               >
                 Clear
@@ -280,7 +280,7 @@ export function ChatPlayground() {
               <div>
                 <Label className="text-xs">Model</Label>
                 <Select value={selectedModel} onValueChange={setSelectedModel}>
-                  <SelectTrigger className="mt-1 h-9">
+                  <SelectTrigger className="mt-1 h-11">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -395,7 +395,7 @@ export function ChatPlayground() {
                           step={0.1}
                           value={temperature}
                           onChange={e => setTemperature(Number(e.target.value))}
-                          className="min-w-0 flex-1"
+                          className="min-w-0 flex-1 h-11"
                         />
                         <span className="w-8 text-right text-xs">
                           {temperature}
@@ -411,7 +411,7 @@ export function ChatPlayground() {
                         type="number"
                         value={maxTokens}
                         onChange={e => setMaxTokens(Number(e.target.value))}
-                        className="mt-1 h-9"
+                        className="mt-1 h-11"
                       />
                     </div>
                   </div>
@@ -423,13 +423,14 @@ export function ChatPlayground() {
                       id="stream"
                       checked={stream}
                       onCheckedChange={setStream}
+                      className="min-h-11"
                     />
                   </div>
                 </div>
               </details>
 
               <Button
-                className="h-10 gap-2"
+                className="h-11 gap-2"
                 onClick={handleSubmit}
                 disabled={loading || !userMessage.trim() || !savedApiKey}
               >
@@ -447,16 +448,16 @@ export function ChatPlayground() {
           className="dashboard-card flex h-full min-h-0 flex-col"
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b px-3 py-2">
-            <TabsList className="h-9 rounded-md border border-border/70 bg-muted/40 p-1">
+            <TabsList className="h-auto min-h-11 rounded-md border border-border/70 bg-muted/40 p-1">
               <TabsTrigger
                 value="response"
-                className="data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
+                className="min-h-11 data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
               >
                 Response
               </TabsTrigger>
               <TabsTrigger
                 value="snippets"
-                className="data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
+                className="min-h-11 data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border"
               >
                 Snippets
               </TabsTrigger>

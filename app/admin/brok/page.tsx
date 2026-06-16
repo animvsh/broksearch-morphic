@@ -1,12 +1,5 @@
 import Link from 'next/link'
 
-import {
-  addAppAccessAllowlistEmail,
-  getAppAccessAllowlist,
-  getBrokStats,
-  revokeAppAccessAllowlistEmail,
-  updateAppAccessAllowlistFeatures
-} from '@/lib/actions/admin-brok'
 import { APP_FEATURES, AppFeature } from '@/lib/auth/app-access'
 import { requirePageAuth } from '@/lib/auth/require-page-auth'
 
@@ -14,6 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+
+import { UniversalAdminSearch } from '@/components/admin/universal-search'
 
 export const dynamic = 'force-dynamic'
 
@@ -213,40 +208,76 @@ function SplitBars({
 
 export default async function BrokAdminPage() {
   await requirePageAuth('/admin/brok')
-  const [stats, allowlist] = await Promise.all([
+  const {
+    addAppAccessAllowlistEmail,
+    getAppAccessAllowlist,
+    getAppAccessRequests,
+    getBrokStats,
+    revokeAppAccessAllowlistEmail,
+    updateAppAccessAllowlistFeatures
+  } = await import('@/lib/actions/admin-brok')
+  const [stats, allowlist, accessRequests] = await Promise.all([
     getBrokStats(),
-    getAppAccessAllowlist()
+    getAppAccessAllowlist(),
+    getAppAccessRequests()
   ])
   const brokCode = stats.brokCode
 
   return (
     <div className="space-y-8 px-4 pb-8 sm:px-6 lg:px-8">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Brok API</h1>
           <p className="text-muted-foreground">
             Platform health, BrokCode usage, key activity, and cost telemetry.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/admin/brok/logs?endpoint=code"
-            className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
-          >
-            Code logs
-          </Link>
-          <Link
-            href="/admin/brok/api-keys"
-            className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
-          >
-            API keys
-          </Link>
-          <Link
-            href="/admin/brok/providers"
-            className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
-          >
-            Providers
-          </Link>
+        <div className="flex flex-col gap-3 lg:items-end">
+          <UniversalAdminSearch />
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/health"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            >
+              System health
+            </Link>
+            <Link
+              href="/admin/audit-logs"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            >
+              Audit logs
+            </Link>
+            <Link
+              href="/admin/settings"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            >
+              Settings
+            </Link>
+            <Link
+              href="/admin/access"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            >
+              Access
+            </Link>
+            <Link
+              href="/admin/brok/logs?endpoint=code"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            >
+              Code logs
+            </Link>
+            <Link
+              href="/admin/brok/api-keys"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            >
+              API keys
+            </Link>
+            <Link
+              href="/admin/brok/providers"
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            >
+              Providers
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -268,36 +299,82 @@ export default async function BrokAdminPage() {
               type="email"
               placeholder="founder@company.com"
               required
-              className="h-10"
+              className="h-11"
             />
             <Input
               name="note"
               placeholder="Invite note or account context"
-              className="h-10"
+              className="h-11"
             />
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap gap-2">
                 {APP_FEATURES.map(feature => (
                   <label
                     key={feature}
-                    className="inline-flex h-8 items-center gap-2 rounded-md border bg-background px-2.5 text-xs font-medium text-muted-foreground"
+                    className="inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md border bg-background px-2.5 text-xs font-medium text-muted-foreground"
                   >
                     <input
                       name="features"
                       type="checkbox"
                       value={feature}
                       defaultChecked
-                      className="size-3.5 accent-primary"
+                      className="size-11 accent-primary"
                     />
                     {FEATURE_LABELS[feature]}
                   </label>
                 ))}
               </div>
-              <Button type="submit" className="h-10 self-start">
+              <Button type="submit" className="h-11 self-start">
                 Allow Email
               </Button>
             </div>
           </form>
+
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40 text-muted-foreground">
+                  <th className="px-3 py-2 text-left font-medium">
+                    Pending request
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium">Phone</th>
+                  <th className="px-3 py-2 text-left font-medium">Status</th>
+                  <th className="px-3 py-2 text-left font-medium">Source</th>
+                  <th className="px-3 py-2 text-left font-medium">Submitted</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accessRequests.length === 0 ? (
+                  <tr>
+                    <td
+                      className="px-3 py-6 text-center text-muted-foreground"
+                      colSpan={5}
+                    >
+                      No access requests yet.
+                    </td>
+                  </tr>
+                ) : (
+                  accessRequests.map(request => (
+                    <tr key={request.id} className="border-b last:border-0">
+                      <td className="px-3 py-2 font-medium">{request.email}</td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {request.phoneNumber}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Badge variant="secondary">{request.status}</Badge>
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {request.source || '-'}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {formatDateTime(request.createdAt)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full min-w-[980px] text-sm">
@@ -350,14 +427,14 @@ export default async function BrokAdminPage() {
                             {APP_FEATURES.map(feature => (
                               <label
                                 key={feature}
-                                className="inline-flex h-8 items-center gap-2 rounded-md border bg-background px-2.5 text-xs font-medium text-muted-foreground"
+                                className="inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md border bg-background px-2.5 text-xs font-medium text-muted-foreground"
                               >
                                 <input
                                   name="features"
                                   type="checkbox"
                                   value={feature}
                                   defaultChecked={entryFeatures.has(feature)}
-                                  className="size-3.5 accent-primary"
+                                  className="size-11 accent-primary"
                                 />
                                 {FEATURE_LABELS[feature]}
                               </label>
@@ -366,7 +443,7 @@ export default async function BrokAdminPage() {
                               type="submit"
                               size="sm"
                               variant="outline"
-                              className="h-8"
+                              className="h-11"
                             >
                               Save
                             </Button>
@@ -385,6 +462,7 @@ export default async function BrokAdminPage() {
                               type="submit"
                               size="sm"
                               variant="outline"
+                              className="h-11"
                               disabled={entry.status !== 'active'}
                             >
                               Revoke

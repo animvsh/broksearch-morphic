@@ -12,6 +12,7 @@ const SIMPLE_CHAT_PATTERNS = [
   /^(can u see this|can you see this|can you hear me|are we live)[!.?]*$/i
 ]
 
+const TINY_FRAGMENT_PATTERN = /^[a-z]{1,2}$/u
 const URL_PATTERN = /\bhttps?:\/\/\S+|\bwww\.\S+/i
 const QUESTION_LIKE_PATTERN =
   /\b(who|what|when|where|why|how|which|can|should|does|do|did|is|are|was|were)\b/i
@@ -28,6 +29,7 @@ const DEEP_TRIGGER_PATTERN =
 export function isSimpleUtilityText(text: string) {
   const normalized = text.trim()
   if (!normalized || URL_PATTERN.test(normalized)) return false
+  if (TINY_FRAGMENT_PATTERN.test(normalized)) return true
 
   return SIMPLE_CHAT_PATTERNS.some(pattern => pattern.test(normalized))
 }
@@ -137,6 +139,18 @@ export function createSimpleUtilityReply(text: string) {
     .replace(/[!.?]+$/g, '')
 
   if (
+    normalized === 'hi' ||
+    normalized === 'hello' ||
+    normalized === 'hey' ||
+    normalized === 'yo' ||
+    normalized === 'sup' ||
+    normalized === 'hiya' ||
+    normalized === 'howdy'
+  ) {
+    return 'Hey, I am here.'
+  }
+
+  if (
     normalized === 'test' ||
     normalized === 'testing' ||
     normalized === 'ping' ||
@@ -165,6 +179,10 @@ export function createSimpleUtilityReply(text: string) {
     normalized === 'ty'
   ) {
     return 'You got it.'
+  }
+
+  if (TINY_FRAGMENT_PATTERN.test(normalized)) {
+    return 'I need a little more to search well. Try a full question or topic.'
   }
 
   return 'Hey, I am here.'

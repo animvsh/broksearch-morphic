@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 
 import { Redis } from '@upstash/redis'
 import http from 'http'
-import { Agent } from 'http'
 import https from 'https'
 import { JSDOM, VirtualConsole } from 'jsdom'
 import { createClient } from 'redis'
@@ -26,6 +25,14 @@ const SEARXNG_MAX_RESULTS = Math.max(
 
 const CACHE_TTL = 3600 // Cache time-to-live in seconds (1 hour)
 const CACHE_EXPIRATION_CHECK_INTERVAL = 3600000 // 1 hour in milliseconds
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function normalizeSearchDepth(searchDepth: unknown): 'basic' | 'advanced' {
+  return searchDepth === 'basic' ? 'basic' : 'advanced'
+}
 
 let redisClient: Redis | ReturnType<typeof createClient> | null = null
 let redisUnavailableLogged = false
@@ -153,8 +160,53 @@ async function cleanupExpiredCache() {
 setInterval(cleanupExpiredCache, CACHE_EXPIRATION_CHECK_INTERVAL)
 
 export async function POST(request: Request) {
-  const { query, maxResults, searchDepth, includeDomains, excludeDomains } =
-    await request.json()
+  let payload: Record<string, unknown>
+  try {
+    payload = await request.json()
+  } catch {
+    return NextResponse.json(
+      {
+        message: 'Invalid JSON payload'
+      },
+      { status: 400 }
+    )
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return NextResponse.json(
+      {
+        message: 'Invalid JSON payload'
+      },
+      { status: 400 }
+    )
+  }
+
+  const query = isNonEmptyString(payload.query) ? payload.query.trim() : ''
+  if (!query) {
+    return NextResponse.json(
+      {
+        message: 'Missing required field: query'
+      },
+      { status: 400 }
+    )
+  }
+
+  const maxResults =
+    typeof payload.maxResults === 'number' &&
+    Number.isFinite(payload.maxResults)
+      ? Math.max(
+          1,
+          Math.min(Math.floor(payload.maxResults), SEARXNG_MAX_RESULTS)
+        )
+      : undefined
+  const searchDepth = normalizeSearchDepth(payload.searchDepth)
+
+  const includeDomains = Array.isArray(payload.includeDomains)
+    ? payload.includeDomains.filter(isNonEmptyString)
+    : []
+  const excludeDomains = Array.isArray(payload.excludeDomains)
+    ? payload.excludeDomains.filter(isNonEmptyString)
+    : []
 
   const SEARXNG_DEFAULT_DEPTH = process.env.SEARXNG_DEFAULT_DEPTH || 'basic'
 
@@ -172,7 +224,7 @@ export async function POST(request: Request) {
     // If not cached, perform the search
     const results = await advancedSearchXNGSearch(
       query,
-      Math.min(maxResults, SEARXNG_MAX_RESULTS),
+      Math.min(maxResults ?? SEARXNG_MAX_RESULTS, SEARXNG_MAX_RESULTS),
       searchDepth || SEARXNG_DEFAULT_DEPTH,
       Array.isArray(includeDomains) ? includeDomains : [],
       Array.isArray(excludeDomains) ? excludeDomains : []
@@ -263,13 +315,17 @@ async function advancedSearchXNGSearch(
     // Apply domain filtering manually
     if (includeDomains.length > 0 || excludeDomains.length > 0) {
       generalResults = generalResults.filter(result => {
-        const domain = new URL(result.url).hostname
-        return (
-          (includeDomains.length === 0 ||
-            includeDomains.some(d => domain.includes(d))) &&
-          (excludeDomains.length === 0 ||
-            !excludeDomains.some(d => domain.includes(d)))
-        )
+        try {
+          const domain = new URL(result.url).hostname
+          return (
+            (includeDomains.length === 0 ||
+              includeDomains.some(d => domain.includes(d))) &&
+            (excludeDomains.length === 0 ||
+              !excludeDomains.some(d => domain.includes(d)))
+          )
+        } catch {
+          return false
+        }
       })
     }
 

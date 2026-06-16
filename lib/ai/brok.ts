@@ -8,7 +8,7 @@
  */
 
 export const BROK_PROVIDER_MODEL =
-  process.env.BROK_PROVIDER_MODEL || 'MiniMax-M2.7'
+  process.env.BROK_PROVIDER_MODEL || 'MiniMax-M2.7-highspeed'
 export const BROK_PROVIDER_CHAT_MODEL = BROK_PROVIDER_MODEL
 
 export const BROK_PROVIDER_BASE_URL =

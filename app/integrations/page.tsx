@@ -4,6 +4,7 @@ import { CheckCircle2, Link2, PlugZap, ShieldAlert } from 'lucide-react'
 
 import { requireFeatureAccess } from '@/lib/auth/app-access'
 import {
+  canExecuteComposioTools,
   isComposioConfigured,
   isComposioConnectMode,
   listAuthConfigs,
@@ -128,6 +129,14 @@ const FEATURED_TOOLKITS = [
     envKeys: ['COMPOSIO_LINEAR_AUTH_CONFIG_ID']
   },
   {
+    slug: 'slack',
+    aliases: ['slack'],
+    name: 'Slack',
+    description:
+      'Inspect channels and prepare approved Slack workspace actions.',
+    envKeys: ['COMPOSIO_SLACK_AUTH_CONFIG_ID']
+  },
+  {
     slug: 'supabase',
     aliases: ['supabase'],
     name: 'Supabase',
@@ -190,13 +199,21 @@ function applyToolkitMetadata(row: IntegrationRow): IntegrationRow {
 async function loadIntegrationRows(userId: string): Promise<{
   configured: boolean
   connectMode: boolean
+  executionReady: boolean
   rows: IntegrationRow[]
   error: string | null
 }> {
   const connectMode = isComposioConnectMode()
+  const executionReady = canExecuteComposioTools()
 
   if (!isComposioConfigured()) {
-    return { configured: false, connectMode, rows: [], error: null }
+    return {
+      configured: false,
+      connectMode,
+      executionReady,
+      rows: [],
+      error: null
+    }
   }
 
   try {
@@ -215,6 +232,8 @@ async function loadIntegrationRows(userId: string): Promise<{
         description: undefined,
         authConfigCount: 0,
         connectedCount: 0,
+        accountConnected: false,
+        executionReady,
         status: 'unavailable' as const
       }
       current.authConfigCount += 1
@@ -232,9 +251,12 @@ async function loadIntegrationRows(userId: string): Promise<{
         description: undefined,
         authConfigCount: 0,
         connectedCount: 0,
+        accountConnected: false,
+        executionReady,
         status: 'unavailable' as const
       }
       current.connectedCount += 1
+      current.accountConnected = true
       if (account.appName && current.name === formatToolkitName(slug)) {
         current.name = account.appName
       }
@@ -258,6 +280,8 @@ async function loadIntegrationRows(userId: string): Promise<{
         featured: true,
         authConfigCount: 1,
         connectedCount: 0,
+        accountConnected: false,
+        executionReady,
         status: 'ready'
       })
     }
@@ -265,13 +289,18 @@ async function loadIntegrationRows(userId: string): Promise<{
     const rows = [...byToolkit.values()]
       .map(row => {
         const status: IntegrationRow['status'] =
-          row.connectedCount > 0
+          row.connectedCount > 0 && executionReady
             ? 'connected'
-            : row.authConfigCount > 0
+            : row.authConfigCount > 0 || row.connectedCount > 0
               ? 'ready'
               : 'unavailable'
 
-        return applyToolkitMetadata({ ...row, status })
+        return applyToolkitMetadata({
+          ...row,
+          accountConnected: row.connectedCount > 0,
+          executionReady,
+          status
+        })
       })
       .sort((a, b) => {
         const aFeaturedIndex = FEATURED_TOOLKITS.findIndex(
@@ -294,11 +323,12 @@ async function loadIntegrationRows(userId: string): Promise<{
         return a.name.localeCompare(b.name)
       })
 
-    return { configured: true, connectMode, rows, error: null }
+    return { configured: true, connectMode, executionReady, rows, error: null }
   } catch (error) {
     return {
       configured: true,
       connectMode,
+      executionReady,
       rows: [],
       error:
         error instanceof Error ? error.message : 'Failed to load integrations'
@@ -309,11 +339,11 @@ async function loadIntegrationRows(userId: string): Promise<{
 export default async function IntegrationsPage() {
   const user = await requireFeatureAccess('/integrations', 'tools')
 
-  const { configured, connectMode, rows, error } = await loadIntegrationRows(
-    user.id
-  )
+  const { configured, connectMode, executionReady, rows, error } =
+    await loadIntegrationRows(user.id)
   const connected = rows.filter(row => row.status === 'connected').length
   const ready = rows.filter(row => row.status === 'ready').length
+  const accountConnected = rows.filter(row => row.accountConnected).length
   const unavailable = rows.filter(row => row.status === 'unavailable').length
   const providerLabel = connectMode ? 'Composio Connect MCP' : 'Composio API'
 
@@ -322,13 +352,18 @@ export default async function IntegrationsPage() {
       label: 'Connected',
       value: connected,
       icon: CheckCircle2,
-      detail: 'Accounts ready for agent actions'
+      detail: executionReady
+        ? 'Accounts ready for agent actions'
+        : 'Needs backend execution key'
     },
     {
       label: 'Ready',
       value: ready,
       icon: PlugZap,
-      detail: 'Auth configs waiting for approval'
+      detail:
+        accountConnected > connected
+          ? 'Connected accounts awaiting execution'
+          : 'Auth configs waiting for approval'
     },
     {
       label: 'Needs config',

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { createId } from '@paralleldrive/cuid2'
-import { and, eq, gte, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
 import { apiKeys, usageEvents, workspaces } from '@/lib/db/schema-brok'
@@ -30,6 +30,18 @@ export interface UsageRecord {
   status: 'success' | 'error' | 'aborted'
   errorCode?: string
   metadata?: Record<string, unknown>
+}
+
+const LOCAL_FALLBACK_API_KEY_ID = '00000000-0000-0000-0000-000000000001'
+const LOCAL_FALLBACK_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000'
+
+function isLocalFallbackIdentity(apiKeyId: string | null, workspaceId: string) {
+  return (
+    process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK === 'true' &&
+    process.env.BROK_CLOUD_DEPLOYMENT !== 'true' &&
+    apiKeyId === LOCAL_FALLBACK_API_KEY_ID &&
+    workspaceId === LOCAL_FALLBACK_WORKSPACE_ID
+  )
 }
 
 export type UsageLimitResult =
@@ -84,6 +96,10 @@ export function generateRequestId(): string {
  * production whenever the new columns weren't present.
  */
 export async function recordUsage(record: UsageRecord): Promise<void> {
+  if (isLocalFallbackIdentity(record.apiKeyId, record.workspaceId)) {
+    return
+  }
+
   try {
     await db.insert(usageEvents).values({
       requestId: record.requestId,
@@ -130,18 +146,6 @@ export async function recordUsage(record: UsageRecord): Promise<void> {
   }
 }
 
-function startOfUtcDay() {
-  const now = new Date()
-  return new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  )
-}
-
-function startOfUtcMonth() {
-  const now = new Date()
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-}
-
 function dollarsToCents(value: unknown) {
   const numeric =
     typeof value === 'number'
@@ -184,7 +188,7 @@ export async function checkUsageLimits({
         .where(
           and(
             eq(usageEvents.apiKeyId, apiKey.id),
-            gte(usageEvents.createdAt, startOfUtcDay())
+            sql`${usageEvents.createdAt} >= date_trunc('day', now())::timestamp`
           )
         )
 
@@ -198,7 +202,6 @@ export async function checkUsageLimits({
       }
     }
 
-    const monthlyStart = startOfUtcMonth()
     const [monthlyForKey] = await db
       .select({
         billedUsd: sql<string>`coalesce(sum(${usageEvents.billedUsd}), 0)::text`
@@ -207,7 +210,7 @@ export async function checkUsageLimits({
       .where(
         and(
           eq(usageEvents.apiKeyId, apiKey.id),
-          gte(usageEvents.createdAt, monthlyStart)
+          sql`${usageEvents.createdAt} >= date_trunc('month', now())::timestamp`
         )
       )
 
@@ -246,7 +249,7 @@ export async function checkUsageLimits({
         .where(
           and(
             eq(usageEvents.workspaceId, workspace.id),
-            gte(usageEvents.createdAt, monthlyStart)
+            sql`${usageEvents.createdAt} >= date_trunc('month', now())::timestamp`
           )
         )
 

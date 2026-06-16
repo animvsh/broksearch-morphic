@@ -1,14 +1,32 @@
-import { and, eq, gte } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
 import { rateLimitEvents } from '@/lib/db/schema-brok'
+
+const LOCAL_FALLBACK_API_KEY_ID = '00000000-0000-0000-0000-000000000001'
+const LOCAL_FALLBACK_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000'
+
+function isLocalFallbackIdentity(apiKeyId: string, workspaceId: string) {
+  return (
+    process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK === 'true' &&
+    process.env.BROK_CLOUD_DEPLOYMENT !== 'true' &&
+    apiKeyId === LOCAL_FALLBACK_API_KEY_ID &&
+    workspaceId === LOCAL_FALLBACK_WORKSPACE_ID
+  )
+}
 
 export interface RateLimitResult {
   allowed: boolean
   current: number
   limit: number
   resetAt: number // Unix timestamp
-  reason?: 'over_limit' | 'rate_limit_check_failed'
+  /**
+   * Optional diagnostic reason for the rate-limit decision. Used by callers
+   * to distinguish a true overflow (`'rate_limit_exceeded'`) from a
+   * check-engine failure (`'rate_limit_check_failed'`) when surfacing 503 vs
+   * 429 responses to API consumers.
+   */
+  reason?: 'rate_limit_exceeded' | 'rate_limit_check_failed'
 }
 
 export interface RateLimitConfig {
@@ -32,31 +50,32 @@ export async function checkRateLimit(
 ): Promise<RateLimitResult> {
   const now = Date.now()
   const windowMs = 60 * 1000 // 1 minute window
-  const windowStart = new Date(now - windowMs)
   const resetAt = Math.floor((now + windowMs) / 1000) // Unix timestamp
 
   try {
     // Count accepted requests in the current window. Blocked attempts are still
     // recorded for observability, but they should not extend the lockout window.
-    const result = await db
-      .select({ count: rateLimitEvents.id })
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
       .from(rateLimitEvents)
       .where(
         and(
           eq(rateLimitEvents.apiKeyId, apiKeyId),
+          eq(rateLimitEvents.workspaceId, workspaceId),
           eq(rateLimitEvents.blocked, false),
-          gte(rateLimitEvents.createdAt, windowStart)
+          sql`${rateLimitEvents.createdAt} >= now() - interval '60 seconds'`
         )
       )
 
-    const currentCount = result.length
+    const currentCount = Number(result?.count ?? 0)
     const allowed = currentCount < rpmLimit
 
     return {
       allowed,
       current: currentCount,
       limit: rpmLimit,
-      resetAt
+      resetAt,
+      reason: allowed ? undefined : 'rate_limit_exceeded'
     }
   } catch (error) {
     console.error('Rate limit check error:', error)
@@ -93,6 +112,10 @@ export async function recordRateLimitEvent(
   currentValue: number,
   blocked: boolean
 ): Promise<void> {
+  if (isLocalFallbackIdentity(apiKeyId, workspaceId)) {
+    return
+  }
+
   try {
     await db.insert(rateLimitEvents).values({
       workspaceId,

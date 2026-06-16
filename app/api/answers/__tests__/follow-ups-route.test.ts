@@ -64,6 +64,46 @@ describe('GET /api/answers/:answer_id/follow-ups', () => {
     })
   })
 
+  test('prefers durable metadata follow-ups when present', async () => {
+    mockLoadMessage.mockResolvedValue({
+      id: 'answer_2',
+      role: 'assistant',
+      metadata: {
+        answer: {
+          followUps: [
+            {
+              id: 'persisted_1',
+              label: 'Compare source quality',
+              query: 'Compare source quality'
+            }
+          ]
+        }
+      },
+      parts: [
+        {
+          type: 'text',
+          text: 'Answer text without a spec block.'
+        }
+      ]
+    })
+
+    const response = await GET(
+      new Request('http://localhost/api/answers/answer_2/follow-ups') as any,
+      routeParams('answer_2')
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.follow_ups).toEqual([
+      {
+        id: 'persisted_1',
+        label: 'Compare source quality',
+        query: 'Compare source quality',
+        clicked: false
+      }
+    ])
+  })
+
   test('returns 404 for missing or non-assistant answers', async () => {
     mockLoadMessage.mockResolvedValue({ id: 'message_1', role: 'user' })
 

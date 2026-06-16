@@ -1,15 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { and, eq, gte, sql } from 'drizzle-orm'
-
 import {
   apiKeyHasScope,
   forbiddenScopeResponse,
   unauthorizedResponse,
   verifyRequestAuth
 } from '@/lib/brok/auth'
-import { db } from '@/lib/db'
-import { usageEvents } from '@/lib/db/schema-brok'
+
+async function getUsageDependencies() {
+  const [{ and, eq, sql }, { db }, { usageEvents }] = await Promise.all([
+    import('drizzle-orm'),
+    import('@/lib/db'),
+    import('@/lib/db/schema-brok')
+  ])
+
+  return { and, eq, sql, db, usageEvents }
+}
+
+function usagePeriodWindow(
+  period: 'day' | 'week' | 'month',
+  deps: Awaited<ReturnType<typeof getUsageDependencies>>
+) {
+  const { sql, usageEvents } = deps
+
+  if (period === 'day') {
+    return sql`${usageEvents.createdAt} >= date_trunc('day', now())::timestamp`
+  }
+  if (period === 'week') {
+    return sql`${usageEvents.createdAt} >= now()::timestamp - interval '7 days'`
+  }
+  return sql`${usageEvents.createdAt} >= now()::timestamp - interval '1 month'`
+}
 
 export async function GET(request: NextRequest) {
   const auth = await verifyRequestAuth(request)
@@ -35,15 +56,6 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  let dateFrom = new Date()
-  if (period === 'day') {
-    dateFrom.setHours(0, 0, 0, 0)
-  } else if (period === 'week') {
-    dateFrom.setDate(dateFrom.getDate() - 7)
-  } else if (period === 'month') {
-    dateFrom.setMonth(dateFrom.getMonth() - 1)
-  }
-
   let stats:
     | {
         totalRequests: number
@@ -56,6 +68,9 @@ export async function GET(request: NextRequest) {
     | undefined
 
   try {
+    const usageDeps = await getUsageDependencies()
+    const { and, db, eq, sql, usageEvents } = usageDeps
+
     ;[stats] = await db
       .select({
         totalRequests: sql<number>`count(*)`,
@@ -69,7 +84,7 @@ export async function GET(request: NextRequest) {
       .where(
         and(
           eq(usageEvents.workspaceId, auth.workspace.id),
-          gte(usageEvents.createdAt, dateFrom)
+          usagePeriodWindow(period, usageDeps)
         )
       )
   } catch (error) {

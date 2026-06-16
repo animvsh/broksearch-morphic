@@ -65,7 +65,7 @@ export function FeatureRequestWidgetPanel({
           type="button"
           variant="ghost"
           size="icon"
-          className="size-8 shrink-0 rounded-md"
+          className="size-11 shrink-0 rounded-md"
           onClick={onClose}
           aria-label="Collapse feature request widget"
         >
@@ -97,7 +97,7 @@ export function FeatureRequestWidgetPanel({
               <Button
                 type="button"
                 size="sm"
-                className="h-8 shrink-0 gap-2 rounded-lg"
+                className="min-h-11 shrink-0 gap-2 rounded-lg"
                 onClick={submit}
                 disabled={isPending || request.trim().length < 3}
               >

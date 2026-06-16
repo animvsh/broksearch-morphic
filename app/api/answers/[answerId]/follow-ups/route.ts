@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
 import { loadMessage } from '@/lib/db/actions'
+import type { ExtractedFollowUp } from '@/lib/render/follow-ups'
 import { extractFollowUpsFromMessage } from '@/lib/render/follow-ups'
 
 export const runtime = 'nodejs'
@@ -56,9 +57,16 @@ export async function GET(
     )
   }
 
+  const metadataFollowUps: ExtractedFollowUp[] | null = Array.isArray(
+    (message.metadata as any)?.answer?.followUps
+  )
+    ? (message.metadata as any).answer.followUps
+    : null
+  const followUps = metadataFollowUps ?? extractFollowUpsFromMessage(message)
+
   return NextResponse.json({
     answer_id: answerId,
-    follow_ups: extractFollowUpsFromMessage(message).map(followUp => ({
+    follow_ups: followUps.map(followUp => ({
       ...followUp,
       clicked: false
     }))

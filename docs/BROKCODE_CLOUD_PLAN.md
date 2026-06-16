@@ -30,7 +30,7 @@ Only Brok API keys are accepted by the Brok Code TUI and cloud API.
 - `/api/v1/chat/completions` accepts coding-tool fields such as `tools`, `tool_choice`, `top_p`, and `max_completion_tokens`.
 - `/api/v1/messages` provides Anthropic-style compatibility.
 - `/api/v1/usage` reports Brok API usage for the key workspace.
-- `npm run brokcode` launches the Brok Code TUI.
+- `bun run brokcode` launches the Brok Code TUI.
 - The TUI supports streaming chat, usage stats, worktree creation, direct mode, GitHub mode guidance, and Agent Skills guidance.
 
 ## Cloud Runtime

@@ -36,6 +36,10 @@ function sseEvent(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }
 
+function sourceEventKey(citation: { id?: string; url?: string }) {
+  return citation.id || citation.url || ''
+}
+
 function usagePayload(
   searchResult: Awaited<ReturnType<typeof runSearchPipeline>>
 ) {
@@ -78,10 +82,35 @@ function completionPayload({
   }
 }
 
-function normalizeSearchDepth(value: unknown): 'lite' | 'standard' | 'deep' {
-  if (value === 'deep' || value === 'advanced') return 'deep'
-  if (value === 'lite' || value === 'basic' || value === 'quick') return 'lite'
-  return 'standard'
+type SearchDepth = 'lite' | 'standard' | 'deep'
+
+function parseSearchDepth(
+  value: unknown
+):
+  | { ok: true; depth: SearchDepth }
+  | { ok: false; code: string; message: string } {
+  if (value === undefined || value === null) {
+    return { ok: true, depth: 'standard' }
+  }
+
+  if (value === 'deep' || value === 'advanced') {
+    return { ok: true, depth: 'deep' }
+  }
+
+  if (value === 'lite' || value === 'basic' || value === 'quick') {
+    return { ok: true, depth: 'lite' }
+  }
+
+  if (value === 'standard') {
+    return { ok: true, depth: 'standard' }
+  }
+
+  return {
+    ok: false,
+    code: 'invalid_search_depth',
+    message:
+      'search_depth must be one of lite, standard, deep, basic, quick, or advanced.'
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -131,7 +160,11 @@ export async function POST(request: NextRequest) {
   }
 
   const shouldStream = stream
-  const depth = normalizeSearchDepth(body.depth ?? body.search_depth)
+  const depthResult = parseSearchDepth(body.depth ?? body.search_depth)
+  if (!depthResult.ok) {
+    return invalidRequestResponse(depthResult.code, depthResult.message)
+  }
+  const depth = depthResult.depth
   const searchDomains = Array.isArray(domains)
     ? domains.filter((domain): domain is string => typeof domain === 'string')
     : undefined
@@ -197,7 +230,6 @@ export async function POST(request: NextRequest) {
         { status: 503 }
       )
     }
-
     await recordRateLimitEvent(
       auth.apiKey.id,
       auth.workspace.id,
@@ -248,6 +280,58 @@ export async function POST(request: NextRequest) {
         async start(controller) {
           const send = (event: string, data: unknown) => {
             controller.enqueue(encoder.encode(sseEvent(event, data)))
+          }
+          const emittedSourceKeys = new Set<string>()
+          let streamedAnswer = ''
+          let writingStatusSent = false
+          const sendSourceEvents = (
+            citations: Awaited<
+              ReturnType<typeof runSearchPipeline>
+            >['citations']
+          ) => {
+            citations.forEach((citation, index) => {
+              const key = sourceEventKey(citation)
+              if (key && emittedSourceKeys.has(key)) return
+              if (key) emittedSourceKeys.add(key)
+
+              const citationNumber = index + 1
+
+              send('source_found', {
+                id: requestId,
+                index: citationNumber,
+                source: citation
+              })
+              send('source', {
+                id: requestId,
+                source_id: citation.id,
+                citation_number: citationNumber,
+                title: citation.title,
+                url: citation.url,
+                domain: citation.publisher,
+                snippet: citation.snippet,
+                retrieved_at: citation.retrievedAt,
+                quality_score: citation.qualityScore
+              })
+              send('source_read', {
+                id: requestId,
+                source_id: citation.id,
+                url: citation.url,
+                title: citation.title,
+                quality_score: citation.qualityScore
+              })
+              send('citation_added', {
+                id: requestId,
+                citation_id: citation.id,
+                marker: `[${citationNumber}]`,
+                url: citation.url
+              })
+              send('citation', {
+                id: requestId,
+                source_id: citation.id,
+                citation_number: citationNumber,
+                url: citation.url
+              })
+            })
           }
 
           const classification = classifyQuery(query)
@@ -307,7 +391,37 @@ export async function POST(request: NextRequest) {
               query,
               depth,
               recencyDays: recency_days,
-              domains: searchDomains
+              domains: searchDomains,
+              signal: request.signal,
+              onSources: sources => {
+                send('search.step', {
+                  id: requestId,
+                  message: `Found ${sources.length} source${sources.length === 1 ? '' : 's'}`,
+                  status: 'running',
+                  citations: sources.length
+                })
+                send('status', {
+                  id: requestId,
+                  message: 'Reading sources'
+                })
+                sendSourceEvents(sources)
+              },
+              onAnswerDelta: delta => {
+                if (!delta) return
+                if (!writingStatusSent) {
+                  writingStatusSent = true
+                  send('status', {
+                    id: requestId,
+                    message: 'Writing answer'
+                  })
+                }
+                streamedAnswer += delta
+                send('answer_delta', {
+                  id: requestId,
+                  delta,
+                  text: delta
+                })
+              }
             })
 
             const latencyMs = Date.now() - startTime
@@ -333,56 +447,34 @@ export async function POST(request: NextRequest) {
               status: 'success'
             })
 
-            searchResult.citations.forEach((citation, index) => {
-              const citationNumber = index + 1
+            sendSourceEvents(searchResult.citations)
 
-              send('source_found', {
+            if (!writingStatusSent) {
+              writingStatusSent = true
+              send('status', {
                 id: requestId,
-                index: citationNumber,
-                source: citation
+                message: 'Writing answer'
               })
-              send('source', {
-                id: requestId,
-                source_id: citation.id,
-                citation_number: citationNumber,
-                title: citation.title,
-                url: citation.url,
-                domain: citation.publisher,
-                snippet: citation.snippet,
-                retrieved_at: citation.retrievedAt,
-                quality_score: citation.qualityScore
-              })
-              send('source_read', {
-                id: requestId,
-                source_id: citation.id,
-                url: citation.url,
-                title: citation.title,
-                quality_score: citation.qualityScore
-              })
-              send('citation_added', {
-                id: requestId,
-                citation_id: citation.id,
-                marker: `[${citationNumber}]`,
-                url: citation.url
-              })
-              send('citation', {
-                id: requestId,
-                source_id: citation.id,
-                citation_number: citationNumber,
-                url: citation.url
-              })
-            })
+            }
 
-            send('status', {
-              id: requestId,
-              message: 'Writing answer'
-            })
-
-            send('answer_delta', {
-              id: requestId,
-              delta: searchResult.answer,
-              text: searchResult.answer
-            })
+            if (!streamedAnswer) {
+              send('answer_delta', {
+                id: requestId,
+                delta: searchResult.answer,
+                text: searchResult.answer
+              })
+            } else if (searchResult.answer.startsWith(streamedAnswer)) {
+              const remainingAnswer = searchResult.answer.slice(
+                streamedAnswer.length
+              )
+              if (remainingAnswer) {
+                send('answer_delta', {
+                  id: requestId,
+                  delta: remainingAnswer,
+                  text: remainingAnswer
+                })
+              }
+            }
             send('follow_ups_generated', {
               id: requestId,
               follow_ups: searchResult.followUps

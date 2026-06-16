@@ -1,10 +1,6 @@
 import { redirect } from 'next/navigation'
 
 import type { User } from '@supabase/supabase-js'
-import { eq } from 'drizzle-orm'
-
-import { db } from '@/lib/db'
-import { appAccessAllowlist } from '@/lib/db/schema'
 
 import { getCurrentUser } from './get-current-user'
 
@@ -108,6 +104,16 @@ function canFailOpenForLocalDev(error: unknown) {
   ].some(fragment => message.includes(fragment))
 }
 
+async function getAllowlistDependencies() {
+  const [{ eq }, { db }, { appAccessAllowlist }] = await Promise.all([
+    import('drizzle-orm'),
+    import('@/lib/db'),
+    import('@/lib/db/schema')
+  ])
+
+  return { eq, db, appAccessAllowlist }
+}
+
 export async function getAppAccessForUser(
   user: User | null
 ): Promise<AppAccessResult> {
@@ -138,6 +144,7 @@ export async function getAppAccessForUser(
   }
 
   try {
+    const { eq, db, appAccessAllowlist } = await getAllowlistDependencies()
     const [allowlisted] = await db
       .select({
         id: appAccessAllowlist.id,

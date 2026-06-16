@@ -534,6 +534,9 @@ function createAnthropicStream(
           if (emitProviderLine(line, controller, encoder)) {
             emittedDelta = true
           }
+          if (emitProviderLine(line, controller, encoder)) {
+            emittedDelta = true
+          }
         }
 
         if (started && emittedDelta) {

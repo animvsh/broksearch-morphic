@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
 
 export default function AppBuilderPage() {
-  redirect('/brokcode')
+  redirect('/build')
 }

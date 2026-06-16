@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { generateApiKey, hashApiKey, verifyApiKey } from '../../api-key'
+import {
+  generateApiKey,
+  getKeyPrefix,
+  hashApiKey,
+  verifyApiKey
+} from '../../api-key'
 
 describe('API Key Functions', () => {
   it('generates a key with correct prefix', () => {
@@ -11,6 +16,13 @@ describe('API Key Functions', () => {
   it('generates a key with correct prefix for test', () => {
     const key = generateApiKey('test')
     expect(key.startsWith('brok_sk_test_')).toBe(true)
+  })
+
+  it('stores a lookup prefix that includes random key material', () => {
+    const key = 'brok_sk_live_abcdefghijklmnopqrstuvwxyz'
+    const prefix = getKeyPrefix(key)
+    expect(prefix).toBe('brok_sk_live_abcdefg')
+    expect(prefix).not.toBe('brok_sk_live')
   })
 
   it('hashes a key consistently', () => {

@@ -10,6 +10,7 @@ export default async function BrokCodePage(props: {
     prompt?: string
     autostart?: string
     connect?: string
+    project?: string
   }>
 }) {
   const searchParams = await props.searchParams
@@ -23,6 +24,7 @@ export default async function BrokCodePage(props: {
   return (
     <BrokCodeApp
       initialPrompt={searchParams.prompt ?? ''}
+      initialProjectId={searchParams.project ?? null}
       autoStart={searchParams.autostart === '1'}
       connectGithub={searchParams.connect === 'github'}
       accountEmail={user.email ?? 'Brok account'}

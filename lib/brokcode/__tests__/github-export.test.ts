@@ -39,6 +39,28 @@ describe('BrokCode GitHub export helpers', () => {
     expect(sanitizeGithubExportPath('apps/final')).toBe('apps/final')
   })
 
+  it('excludes generated secret-bearing files before GitHub export', () => {
+    expect(
+      normalizeGithubExportFiles({
+        files: [
+          { path: '.env.local', content: 'OPENAI_API_KEY=sk-live-secret' },
+          {
+            path: '.npmrc',
+            content: '//registry.npmjs.org/:_authToken=secret'
+          },
+          { path: 'src/secrets.json', content: '{"token":"secret"}' },
+          { path: 'certs/private.key', content: '-----BEGIN PRIVATE KEY-----' },
+          { path: 'src/App.tsx', content: 'export function App() {}' }
+        ]
+      })
+    ).toEqual([
+      {
+        path: 'src/App.tsx',
+        content: 'export function App() {}'
+      }
+    ])
+  })
+
   it('builds deterministic branch, commit, and PR body metadata', () => {
     expect(
       buildGithubExportBranchName({

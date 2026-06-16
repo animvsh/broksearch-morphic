@@ -150,12 +150,24 @@ export function assertActionPayloadIsRunnable(
 }
 
 function assertRunnableThread(thread: BrokMailApprovalThread) {
+  assertProviderIdIfPresent(thread.providerThreadId, 'Provider thread id')
+  assertProviderIdIfPresent(thread.id, 'Thread id')
+  thread.providerMessageIds?.forEach(messageId => {
+    assertProviderIdIfPresent(messageId, 'Provider message id')
+  })
+
   const hasThreadId =
     isProviderId(thread.providerThreadId) || isProviderId(thread.id)
   const hasMessageId = thread.providerMessageIds?.some(isProviderId) ?? false
 
   if (!hasThreadId && !hasMessageId) {
     throw new Error('A valid provider thread or message id is required.')
+  }
+}
+
+function assertProviderIdIfPresent(value: string | undefined, label: string) {
+  if (value !== undefined && !isProviderId(value)) {
+    throw new Error(`${label} is invalid.`)
   }
 }
 

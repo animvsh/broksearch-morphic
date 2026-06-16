@@ -18,6 +18,7 @@ interface CitationLinkProps {
   children: React.ReactNode
   className?: string
   citationData?: SearchResultItem
+  onCitationOpen?: (citation: SearchResultItem) => void
 }
 
 // Helper function to safely extract hostname from URL
@@ -33,12 +34,16 @@ export const CitationLink = memo(function CitationLink({
   href,
   children,
   className,
-  citationData
+  citationData,
+  onCitationOpen
 }: CitationLinkProps) {
   const [open, setOpen] = useState(false)
   const childrenText = children?.toString() || ''
   // Match domain names (alphanumeric and hyphens) or numbers for backward compatibility
   const isCitation = /^[\w-]+$/.test(childrenText)
+  const citationLabel = /^\d+$/.test(childrenText)
+    ? `[${childrenText}]`
+    : children
 
   const linkClasses = cn(
     isCitation
@@ -49,7 +54,7 @@ export const CitationLink = memo(function CitationLink({
 
   if (!citationData) {
     if (isCitation && href.startsWith('#')) {
-      return <span className={linkClasses}>{children}</span>
+      return <span className={linkClasses}>{citationLabel}</span>
     }
 
     return (
@@ -59,7 +64,7 @@ export const CitationLink = memo(function CitationLink({
         rel="noopener noreferrer"
         className={linkClasses}
       >
-        {children}
+        {isCitation ? citationLabel : children}
       </a>
     )
   }
@@ -74,10 +79,19 @@ export const CitationLink = memo(function CitationLink({
             target="_blank"
             rel="noopener noreferrer"
             className={linkClasses}
+            onClick={event => {
+              if (onCitationOpen) {
+                event.preventDefault()
+                onCitationOpen(citationData)
+                setOpen(false)
+              }
+            }}
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
+            aria-label={`Source ${childrenText}: ${citationData.title}`}
+            title={`Source ${childrenText}: ${citationData.title}`}
           >
-            {children}
+            {citationLabel}
           </a>
         </PopoverTrigger>
         <PopoverContent

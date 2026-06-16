@@ -6,6 +6,8 @@ import { getCurrentAppAccess } from '@/lib/auth/app-access'
 
 import { Button } from '@/components/ui/button'
 
+import { AccessRequestForm } from '@/components/access-request-form'
+
 export default async function AccessPendingPage() {
   const access = await getCurrentAppAccess()
   const email = access.user?.email
@@ -23,8 +25,10 @@ export default async function AccessPendingPage() {
             : 'Sign in with an approved account to use the private Brok workspace.'}
         </p>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Ask an admin to add your email from the Brok admin panel.
+          Request access here so an admin can review your email and phone number
+          from the Brok admin panel.
         </p>
+        <AccessRequestForm className="mt-6" defaultEmail={email} compact />
         <div className="mt-6 flex flex-wrap gap-3">
           <Button asChild>
             <Link href="/auth/login">Sign in again</Link>
