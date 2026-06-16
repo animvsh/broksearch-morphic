@@ -328,6 +328,29 @@ function persistDurableMessages(
   }
 }
 
+function persistDurableMessagesToServer(
+  searchId: string | undefined,
+  messages: UIMessage[]
+) {
+  if (!searchId || !searchId.startsWith('search_') || messages.length === 0) {
+    return
+  }
+  const hasAssistantAnswer = messages.some(
+    message => message.role === 'assistant' && getTextPart(message).trim()
+  )
+  if (!hasAssistantAnswer) return
+
+  Promise.resolve(
+    fetch(`/api/search/session/${encodeURIComponent(searchId)}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages })
+    })
+  ).catch(() => {
+    // Local persistence remains the fast/offline fallback when server save fails.
+  })
+}
+
 function commitDurableSearchUrl(searchId: string | undefined) {
   if (!searchId || typeof window === 'undefined') return
   if (window.location.pathname !== '/search') return
@@ -381,6 +404,7 @@ export function BrokSearchClient({
   const completedTurnsRef = useRef<SearchTurn[]>([])
   const requestIdRef = useRef(0)
   const persistTimerRef = useRef<number | null>(null)
+  const serverPersistSnapshotRef = useRef<string | null>(null)
 
   const endpoint = useMemo(() => apiBase ?? DEFAULT_API_BASE, [apiBase])
   const activeCitationMaps = useMemo(
@@ -430,6 +454,11 @@ export function BrokSearchClient({
       persistTimerRef.current = null
     }
     persistDurableMessages(searchId, durableMessagesRef.current)
+    const serverSnapshot = JSON.stringify(durableMessagesRef.current)
+    if (serverPersistSnapshotRef.current !== serverSnapshot) {
+      serverPersistSnapshotRef.current = serverSnapshot
+      persistDurableMessagesToServer(searchId, durableMessagesRef.current)
+    }
   }, [searchId])
 
   useEffect(() => {
@@ -741,13 +770,7 @@ export function BrokSearchClient({
         }
       }
     },
-    [
-      endpoint,
-      apiKey,
-      flushPendingPersistence,
-      initialMode,
-      searchId
-    ]
+    [endpoint, apiKey, flushPendingPersistence, initialMode, searchId]
   )
 
   useEffect(() => {
@@ -846,36 +869,41 @@ export function BrokSearchClient({
             <span>Brok Search</span>
           </div>
           <form
-            className="flex items-center gap-2"
+            className="rounded-2xl border border-zinc-200/80 bg-white/90 p-2 shadow-[0_18px_55px_-42px_rgba(15,23,42,0.35)] backdrop-blur transition-colors focus-within:border-zinc-300"
             onSubmit={event => {
               event.preventDefault()
               void runSearch(query)
             }}
+            aria-label="New search"
           >
-            <input
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Ask anything..."
-              className="flex-1 rounded-2xl border border-zinc-200 bg-white/90 px-4 py-3 text-sm shadow-[0_8px_24px_-18px_rgba(15,23,42,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
-            />
-            <VoiceInputButton onTranscript={handleVoiceTranscript} />
-            <button
-              type={isLoading ? 'button' : 'submit'}
-              disabled={!isLoading && !query.trim()}
-              className="inline-flex h-11 items-center justify-center rounded-2xl bg-zinc-950 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label={isLoading ? 'Stop search' : 'Search'}
-              onClick={event => {
-                if (!isLoading) return
-                event.preventDefault()
-                stopSearch()
-              }}
-            >
-              {isLoading ? (
-                <Square className="size-3.5 fill-current" />
-              ) : (
-                'Search'
-              )}
-            </button>
+            <div className="flex min-h-11 items-center gap-2">
+              <input
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="Ask anything..."
+                className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none"
+              />
+              <div className="flex shrink-0 items-center gap-1">
+                <VoiceInputButton onTranscript={handleVoiceTranscript} />
+                <button
+                  type={isLoading ? 'button' : 'submit'}
+                  disabled={!isLoading && !query.trim()}
+                  className="inline-flex size-10 min-h-10 min-w-10 items-center justify-center rounded-xl bg-zinc-950 text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={isLoading ? 'Stop search' : 'Search'}
+                  onClick={event => {
+                    if (!isLoading) return
+                    event.preventDefault()
+                    stopSearch()
+                  }}
+                >
+                  {isLoading ? (
+                    <Square className="size-3.5 fill-current" />
+                  ) : (
+                    <ArrowUp className="size-4" strokeWidth={2.5} />
+                  )}
+                </button>
+              </div>
+            </div>
           </form>
         </header>
 

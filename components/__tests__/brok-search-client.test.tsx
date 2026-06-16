@@ -153,6 +153,18 @@ function controllableStreamResponse() {
   }
 }
 
+function getSessionSearchCalls(fetchMock: ReturnType<typeof vi.fn>) {
+  return fetchMock.mock.calls.filter(
+    ([url]) => String(url) === '/api/search/session'
+  )
+}
+
+function getSessionPersistCalls(fetchMock: ReturnType<typeof vi.fn>) {
+  return fetchMock.mock.calls.filter(([url]) =>
+    String(url).startsWith('/api/search/session/search_test/messages')
+  )
+}
+
 describe('BrokSearchClient', () => {
   const storage = new Map<string, string>()
 
@@ -318,6 +330,27 @@ describe('BrokSearchClient', () => {
       title: 'Brok docs',
       url: 'https://docs.example.com/search',
       content: 'Brok search docs.'
+    })
+    await waitFor(() => {
+      expect(getSessionPersistCalls(fetchMock)).toHaveLength(1)
+    })
+    const serverPersistRequest = getSessionPersistCalls(fetchMock)[0] as [
+      unknown,
+      RequestInit
+    ]
+    expect(JSON.parse(String(serverPersistRequest[1]?.body))).toMatchObject({
+      messages: [
+        {
+          id: 'search_test_user',
+          role: 'user',
+          parts: [{ type: 'text', text: 'What is Brok?' }]
+        },
+        {
+          id: 'search_test_assistant',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Brok answers with sources. [1]' }]
+        }
+      ]
     })
   })
 
@@ -826,9 +859,9 @@ describe('BrokSearchClient', () => {
     fireEvent.submit(screen.getByTestId('brok-follow-up-form'))
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(getSessionSearchCalls(fetchMock)).toHaveLength(2)
     })
-    const followUpRequest = fetchMock.mock.calls[1] as unknown as [
+    const followUpRequest = getSessionSearchCalls(fetchMock)[1] as unknown as [
       unknown,
       RequestInit
     ]
