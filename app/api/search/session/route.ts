@@ -30,6 +30,12 @@ type SessionSearchBody = {
   depth?: unknown
   recency_days?: unknown
   domains?: unknown
+  context?: unknown
+}
+
+type SessionSearchContextTurn = {
+  query: string
+  answer: string
 }
 
 function sseEvent(event: string, data: unknown) {
@@ -51,6 +57,62 @@ function normalizeDomains(value: unknown) {
     value.every(domain => typeof domain === 'string')
     ? value
     : undefined
+}
+
+function normalizeContext(value: unknown): SessionSearchContextTurn[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .filter((turn): turn is Record<string, unknown> => {
+      return Boolean(turn && typeof turn === 'object')
+    })
+    .map(turn => ({
+      query: typeof turn.query === 'string' ? turn.query.trim() : '',
+      answer:
+        typeof turn.answer === 'string'
+          ? turn.answer.replace(/\s+/g, ' ').trim()
+          : ''
+    }))
+    .filter(turn => turn.query && turn.answer)
+    .slice(-3)
+    .map(turn => ({
+      query: turn.query.slice(0, 240),
+      answer: turn.answer.slice(0, 900)
+    }))
+}
+
+function buildPipelineQuery(query: string, context: SessionSearchContextTurn[]) {
+  if (context.length === 0) return query
+
+  const contextText = context
+    .map(
+      (turn, index) =>
+        `Previous turn ${index + 1} question: ${turn.query}\nPrevious turn ${
+          index + 1
+        } answer summary: ${turn.answer}`
+    )
+    .join('\n\n')
+
+  return `Answer the current follow-up question using the previous conversation only as context.\n\n${contextText}\n\nCurrent follow-up question: ${query}`
+}
+
+function getDisplayFollowUps(query: string) {
+  const topic = query.trim() || 'this follow-up'
+
+  return [
+    {
+      label: 'Go deeper',
+      query: `Go deeper on ${topic}`
+    },
+    {
+      label: 'Compare options',
+      query: `Compare options for ${topic}`
+    },
+    {
+      label: 'Find risks',
+      query: `What are the risks or caveats around ${topic}?`
+    }
+  ]
 }
 
 function getRequestIp(req: Request) {
@@ -154,8 +216,10 @@ export async function POST(req: Request) {
   const recencyDays =
     typeof body.recency_days === 'number' ? body.recency_days : undefined
   const domains = normalizeDomains(body.domains)
+  const context = normalizeContext(body.context)
+  const pipelineQuery = buildPipelineQuery(query, context)
   const cachedResult = getCachedSearchPipelineResponse({
-    query,
+    query: pipelineQuery,
     depth,
     recencyDays,
     domains
@@ -236,7 +300,7 @@ export async function POST(req: Request) {
           const result =
             cachedResult ??
             (await runSearchPipeline({
-              query,
+              query: pipelineQuery,
               depth,
               recencyDays,
               domains,
@@ -300,10 +364,13 @@ export async function POST(req: Request) {
               })
             }
           }
+          const resultFollowUps =
+            context.length > 0 ? getDisplayFollowUps(query) : result.followUps
+
           send('follow_ups', {
             id: requestId,
-            items: result.followUps,
-            follow_ups: result.followUps
+            items: resultFollowUps,
+            follow_ups: resultFollowUps
           })
           send('done', {
             id: requestId,

@@ -196,7 +196,7 @@ describe('POST /api/search/session', () => {
         mode: 'quick'
       })
     )
-    await response.text()
+    const stream = await response.text()
 
     expect(response.status).toBe(200)
     expect(mocks.checkAndEnforceGuestLimit).toHaveBeenCalledWith('203.0.113.20')
@@ -240,12 +240,49 @@ describe('POST /api/search/session', () => {
         mode: 'search'
       })
     )
-    await response.text()
+    const stream = await response.text()
 
     expect(response.status).toBe(200)
     expect(mocks.checkAndEnforceOverallChatLimit).not.toHaveBeenCalled()
     expect(mocks.checkAndEnforceGuestLimit).not.toHaveBeenCalled()
     expect(mocks.runSearchPipeline).not.toHaveBeenCalled()
+  })
+
+  it('passes compact prior-turn context into follow-up search pipeline queries', async () => {
+    const response = await POST(
+      makeRequest({
+        query: 'What about pricing?',
+        mode: 'search',
+        context: [
+          {
+            query: 'Compare Cursor vs Windsurf',
+            answer: 'Cursor is stronger for agentic coding. Windsurf is cheaper.'
+          }
+        ]
+      })
+    )
+    const stream = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(mocks.runSearchPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.stringContaining(
+          'Current follow-up question: What about pricing?'
+        )
+      })
+    )
+    expect(mocks.runSearchPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.stringContaining('Compare Cursor vs Windsurf')
+      })
+    )
+    expect(mocks.getCachedSearchPipelineResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.stringContaining('Previous turn 1 question')
+      })
+    )
+    expect(stream).toContain('Go deeper on What about pricing?')
+    expect(stream).not.toContain('Answer the current follow-up question')
   })
 
   it('requires auth when guest search is not allowed', async () => {

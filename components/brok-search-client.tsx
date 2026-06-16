@@ -59,6 +59,11 @@ interface SearchTurn {
   followUps: FollowUpItem[]
 }
 
+interface SearchContextTurn {
+  query: string
+  answer: string
+}
+
 type StoredAnswerMetadata = {
   answer?: {
     sources?: SearchResultItem[]
@@ -329,6 +334,16 @@ function commitDurableSearchUrl(searchId: string | undefined) {
   window.history.replaceState({}, '', `/search/${searchId}`)
 }
 
+function compactSearchContext(turns: SearchTurn[]): SearchContextTurn[] {
+  return turns
+    .filter(turn => turn.query.trim() && turn.answer.trim())
+    .slice(-3)
+    .map(turn => ({
+      query: turn.query.trim().slice(0, 240),
+      answer: turn.answer.replace(/\s+/g, ' ').trim().slice(0, 900)
+    }))
+}
+
 /**
  * Client for the Brok Search SSE endpoint. Renders the streaming answer,
  * source list, follow-up chips, and the related-questions panel as the
@@ -363,6 +378,7 @@ export function BrokSearchClient({
   const abortRef = useRef<AbortController | null>(null)
   const durableMessagesRef = useRef<UIMessage[]>([])
   const activeTurnRef = useRef<SearchTurn | null>(null)
+  const completedTurnsRef = useRef<SearchTurn[]>([])
   const requestIdRef = useRef(0)
   const persistTimerRef = useRef<number | null>(null)
 
@@ -417,6 +433,10 @@ export function BrokSearchClient({
   }, [searchId])
 
   useEffect(() => {
+    completedTurnsRef.current = completedTurns
+  }, [completedTurns])
+
+  useEffect(() => {
     if (!activeQuestion.trim()) {
       activeTurnRef.current = null
       return
@@ -451,6 +471,10 @@ export function BrokSearchClient({
         requestIdRef.current === requestId && !controller.signal.aborted
 
       const previousTurn = activeTurnRef.current
+      const contextTurns = compactSearchContext([
+        ...completedTurnsRef.current,
+        ...(previousTurn?.answer.trim() ? [previousTurn] : [])
+      ])
       if (previousTurn?.answer.trim()) {
         setCompletedTurns(prev =>
           prev.some(turn => turn.id === previousTurn.id)
@@ -533,17 +557,20 @@ export function BrokSearchClient({
           })
         }
 
+        const requestBody = {
+          query: trimmed,
+          mode: initialMode,
+          stream: true,
+          ...(contextTurns.length > 0 ? { context: contextTurns } : {})
+        }
+
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
           },
-          body: JSON.stringify({
-            query: trimmed,
-            mode: initialMode,
-            stream: true
-          }),
+          body: JSON.stringify(requestBody),
           signal: controller.signal
         })
 
@@ -714,7 +741,13 @@ export function BrokSearchClient({
         }
       }
     },
-    [endpoint, apiKey, flushPendingPersistence, initialMode, searchId]
+    [
+      endpoint,
+      apiKey,
+      flushPendingPersistence,
+      initialMode,
+      searchId
+    ]
   )
 
   useEffect(() => {

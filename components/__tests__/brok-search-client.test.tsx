@@ -247,6 +247,15 @@ describe('BrokSearchClient', () => {
         })
       )
     })
+    const firstRequest = fetchMock.mock.calls[0] as unknown as [
+      unknown,
+      RequestInit
+    ]
+    expect(JSON.parse(String(firstRequest[1]?.body))).toEqual({
+      query: 'What is Brok?',
+      mode: 'search',
+      stream: true
+    })
 
     expect(window.location.pathname).toBe('/search/search_test')
     expect(window.location.search).toBe('')
@@ -785,6 +794,21 @@ describe('BrokSearchClient', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+    const followUpRequest = fetchMock.mock.calls[1] as unknown as [
+      unknown,
+      RequestInit
+    ]
+    expect(JSON.parse(String(followUpRequest[1]?.body))).toEqual({
+      query: 'How does Brok cite sources?',
+      mode: 'search',
+      stream: true,
+      context: [
+        {
+          query: 'What is Brok?',
+          answer: 'Brok answers with sources. [1]'
+        }
+      ]
     })
     expect(
       await screen.findByTestId('completed-search-turn')
