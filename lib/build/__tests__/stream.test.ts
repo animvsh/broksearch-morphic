@@ -70,6 +70,7 @@ describe('runBuildStream', () => {
     const previousSyncDir = process.env.BROKCODE_SYNC_DIR
     process.env.BROKCODE_PROJECT_STORAGE = 'file'
     process.env.BROKCODE_SYNC_DIR = syncDir
+    let executionPrompt = ''
 
     try {
       const result = await runBuildStream({
@@ -82,7 +83,8 @@ describe('runBuildStream', () => {
             headers: new Headers({ host: 'localhost:3000' }),
             url: 'http://localhost:3000/api/build/stream'
           },
-          executeBrokCodeBuild: async ({ projectId, workspaceId }) => {
+          executeBrokCodeBuild: async ({ prompt, projectId, workspaceId }) => {
+            executionPrompt = prompt
             await upsertBrokCodeProjectFile({
               projectId,
               workspaceId,
@@ -119,6 +121,11 @@ describe('runBuildStream', () => {
         source: 'brokcode_execute',
         degraded: false
       })
+      expect(executionPrompt).toContain(
+        'Build a production-quality static BrokCode managed preview'
+      )
+      expect(executionPrompt).toContain('App title: CRM Login Customers Notes')
+      expect(executionPrompt).toContain('Tables: users, customers, notes, tasks')
       expect(result.projectId).not.toBe('brok-test-persist')
       expect(result.projectId).toBeTruthy()
       const persistedProjectId = result.projectId
@@ -257,6 +264,59 @@ describe('runBuildStream', () => {
         userId: 'user_test'
       })
       expect(deployments).toHaveLength(0)
+    } finally {
+      if (previousStorage === undefined) {
+        delete process.env.BROKCODE_PROJECT_STORAGE
+      } else {
+        process.env.BROKCODE_PROJECT_STORAGE = previousStorage
+      }
+      if (previousSyncDir === undefined) {
+        delete process.env.BROKCODE_SYNC_DIR
+      } else {
+        process.env.BROKCODE_SYNC_DIR = previousSyncDir
+      }
+      await rm(syncDir, { recursive: true, force: true })
+    }
+  }, 15000)
+
+  it('fails closed when BrokCode execution is required for build proof', async () => {
+    const syncDir = await mkdtemp(path.join(tmpdir(), 'brok-build-required-'))
+    const previousStorage = process.env.BROKCODE_PROJECT_STORAGE
+    const previousSyncDir = process.env.BROKCODE_SYNC_DIR
+    process.env.BROKCODE_PROJECT_STORAGE = 'file'
+    process.env.BROKCODE_SYNC_DIR = syncDir
+
+    try {
+      const result = await runBuildStream({
+        prompt: 'Build me a CRM with login, customers, notes, and tasks',
+        projectId: 'brok-test-required',
+        brokCodeProject: {
+          workspaceId: '00000000-0000-0000-0000-000000000003',
+          userId: 'user_test',
+          request: {
+            headers: new Headers({ host: 'localhost:3000' }),
+            url: 'http://localhost:3000/api/build/stream'
+          },
+          requireBrokCodeExecution: true,
+          executeBrokCodeBuild: async () => {
+            throw new Error('The operation timed out.')
+          }
+        }
+      })
+
+      expect(
+        result.events.some(event => event.kind === 'brokcode_project')
+      ).toBe(false)
+      expect(result.events).toContainEqual({
+        kind: 'error',
+        message:
+          'BrokCode execution required for Brok Build but failed: The operation timed out.'
+      })
+      expect(result.events.some(event => event.kind === 'files')).toBe(false)
+      expect(
+        result.events.some(event => event.kind === 'phase' && event.phase === 'ready')
+      ).toBe(false)
+      expect(result.projectId).toBeNull()
     } finally {
       if (previousStorage === undefined) {
         delete process.env.BROKCODE_PROJECT_STORAGE

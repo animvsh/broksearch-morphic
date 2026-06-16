@@ -22,6 +22,7 @@ export type PersistBrokBuildProjectOptions = {
   prompt: string
   userPlan: UserVisiblePlan
   backendPlan?: BrokBuildBackendResourcePlan
+  requireBrokCodeExecution?: boolean
   workspaceId: string
   userId: string
   request: { headers: Headers; url: string }
@@ -75,6 +76,8 @@ function cloneExecutionHeaders(request: PersistBrokBuildProjectOptions['request'
 
 async function runBrokCodeExecutionForBuild({
   prompt,
+  userPlan,
+  backendPlan,
   projectId,
   workspaceId,
   userId,
@@ -82,15 +85,23 @@ async function runBrokCodeExecutionForBuild({
   executeBrokCodeBuild
 }: {
   prompt: string
+  userPlan: UserVisiblePlan
+  backendPlan?: BrokBuildBackendResourcePlan
   projectId: string
   workspaceId: string
   userId: string
   request: PersistBrokBuildProjectOptions['request']
   executeBrokCodeBuild?: PersistBrokBuildProjectOptions['executeBrokCodeBuild']
 }) {
+  const executionPrompt = buildBrokCodeExecutionPrompt({
+    prompt,
+    userPlan,
+    backendPlan
+  })
+
   if (executeBrokCodeBuild) {
     return executeBrokCodeBuild({
-      prompt,
+      prompt: executionPrompt,
       projectId,
       workspaceId,
       userId,
@@ -103,7 +114,7 @@ async function runBrokCodeExecutionForBuild({
     method: 'POST',
     headers: cloneExecutionHeaders(request),
     body: JSON.stringify({
-      command: prompt,
+      command: executionPrompt,
       project_id: projectId,
       source: 'browser',
       session_id: `build-${projectId}`,
@@ -130,10 +141,55 @@ async function runBrokCodeExecutionForBuild({
   }
 }
 
+function buildBrokCodeExecutionPrompt({
+  prompt,
+  userPlan,
+  backendPlan
+}: {
+  prompt: string
+  userPlan: UserVisiblePlan
+  backendPlan?: BrokBuildBackendResourcePlan
+}) {
+  const tables =
+    backendPlan?.tables.map(table => table.name).filter(Boolean) ?? []
+  const buckets =
+    backendPlan?.storageBuckets.map(bucket => bucket.name).filter(Boolean) ?? []
+  const functions =
+    backendPlan?.functions.map(fn => fn.slug).filter(Boolean) ?? []
+
+  return [
+    'Build a production-quality static BrokCode managed preview for this app.',
+    '',
+    `Original user request: ${prompt}`,
+    `App title: ${userPlan.title}`,
+    `One-liner: ${userPlan.oneLiner}`,
+    `Audience: ${userPlan.audience}`,
+    `Design direction: ${userPlan.designDirection}`,
+    '',
+    'Required product bullets:',
+    ...userPlan.bullets.slice(0, 10).map(bullet => `- ${bullet}`),
+    '',
+    'Backend plan to reflect in UI state and copy:',
+    `- Provider: ${backendPlan?.provider ?? 'insforge'}`,
+    `- Tables: ${tables.length ? tables.join(', ') : 'none'}`,
+    `- Storage buckets: ${buckets.length ? buckets.join(', ') : 'none'}`,
+    `- Functions: ${functions.length ? functions.join(', ') : 'none'}`,
+    '',
+    'Output requirements:',
+    '- Create exactly these app files unless one tiny extra asset is essential: index.html, styles.css, app.js.',
+    '- Make the preview self-contained, responsive, nonblank, and interactive.',
+    '- Include realistic sample data for the planned tables and states.',
+    '- Do not install packages, start servers, or create framework scaffolds.',
+    '- Do not call external services or require real backend credentials.',
+    '- Keep the implementation concise enough to finish in one BrokCode run.'
+  ].join('\n')
+}
+
 export async function persistBrokBuildProject({
   prompt,
   userPlan,
   backendPlan,
+  requireBrokCodeExecution = false,
   workspaceId,
   userId,
   request,
@@ -152,6 +208,8 @@ export async function persistBrokBuildProject({
   try {
     const execution = await runBrokCodeExecutionForBuild({
       prompt,
+      userPlan,
+      backendPlan,
       projectId: project.id,
       workspaceId,
       userId,
@@ -224,6 +282,11 @@ export async function persistBrokBuildProject({
   } catch (error) {
     executionError =
       error instanceof Error ? error.message : 'BrokCode execution failed.'
+    if (requireBrokCodeExecution) {
+      throw new Error(
+        `BrokCode execution required for Brok Build but failed: ${executionError}`
+      )
+    }
   }
 
   const files = prepareGeneratedBrokCodeFiles(

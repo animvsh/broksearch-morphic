@@ -22,7 +22,11 @@ function encode(event: BrokStreamEvent) {
 }
 
 export async function POST(request: Request) {
-  let body: { prompt?: unknown; projectId?: unknown } = {}
+  let body: {
+    prompt?: unknown
+    projectId?: unknown
+    require_brokcode_execution?: unknown
+  } = {}
   try {
     body = await request.json()
   } catch {
@@ -57,7 +61,8 @@ export async function POST(request: Request) {
       ? {
           workspaceId: authResult.workspace.id,
           userId: authResult.apiKey.userId,
-          request
+          request,
+          requireBrokCodeExecution: body.require_brokcode_execution === true
         }
       : undefined
 

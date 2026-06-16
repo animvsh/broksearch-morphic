@@ -265,6 +265,23 @@ export async function runBuildStream(
         error instanceof Error
           ? error.message
           : 'BrokCode project persistence failed.'
+      if (options.brokCodeProject.requireBrokCodeExecution) {
+        const errorEvent: BrokStreamEvent = {
+          kind: 'error',
+          message
+        }
+        emit(errorEvent)
+        events.push(errorEvent)
+
+        return {
+          classification,
+          internalPlan,
+          userPlan,
+          projectId: null,
+          events
+        }
+      }
+
       const warnEvent: BrokStreamEvent = {
         kind: 'log',
         level: 'warn',
