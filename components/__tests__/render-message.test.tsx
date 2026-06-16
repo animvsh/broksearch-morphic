@@ -129,10 +129,7 @@ describe('RenderMessage', () => {
     const citationLink = screen.getByRole('link', {
       name: 'Source 1: Brok docs'
     })
-    expect(citationLink).toHaveAttribute(
-      'href',
-      'https://docs.brok.ai/search'
-    )
+    expect(citationLink).toHaveAttribute('href', 'https://docs.brok.ai/search')
     expect(citationLink).toHaveTextContent('[1]')
     expect(screen.getAllByText('Sources')).toHaveLength(1)
   })

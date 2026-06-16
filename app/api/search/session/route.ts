@@ -81,7 +81,10 @@ function normalizeContext(value: unknown): SessionSearchContextTurn[] {
     }))
 }
 
-function buildPipelineQuery(query: string, context: SessionSearchContextTurn[]) {
+function buildPipelineQuery(
+  query: string,
+  context: SessionSearchContextTurn[]
+) {
   if (context.length === 0) return query
 
   const contextText = context

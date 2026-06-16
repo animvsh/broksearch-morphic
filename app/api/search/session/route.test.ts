@@ -256,7 +256,8 @@ describe('POST /api/search/session', () => {
         context: [
           {
             query: 'Compare Cursor vs Windsurf',
-            answer: 'Cursor is stronger for agentic coding. Windsurf is cheaper.'
+            answer:
+              'Cursor is stronger for agentic coding. Windsurf is cheaper.'
           }
         ]
       })
