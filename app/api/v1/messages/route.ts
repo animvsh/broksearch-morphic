@@ -59,10 +59,12 @@ type AnthropicMessage = {
 }
 
 function anthropicErrorResponse({
+  code,
   type,
   message,
   status
 }: {
+  code?: string
   type: string
   message: string
   status: number
@@ -71,6 +73,7 @@ function anthropicErrorResponse({
     {
       type: 'error',
       error: {
+        ...(code ? { code } : {}),
         type,
         message
       }
@@ -114,6 +117,7 @@ function anthropicAuthErrorResponse(
   }
   const error = errors[auth.error]
   return anthropicErrorResponse({
+    code: auth.error,
     type: error.type,
     message: error.message,
     status: auth.status

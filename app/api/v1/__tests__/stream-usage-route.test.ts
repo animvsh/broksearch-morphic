@@ -342,6 +342,7 @@ describe('streaming usage metering', () => {
     expect(body).toMatchObject({
       type: 'error',
       error: {
+        code: 'missing_authorization',
         type: 'authentication_error',
         message: 'Authorization Bearer token or x-api-key header is required.'
       }
