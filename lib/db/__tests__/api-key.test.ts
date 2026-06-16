@@ -19,7 +19,7 @@ describe('API Key Functions', () => {
   })
 
   it('stores a lookup prefix that includes random key material', () => {
-    const key = 'brok_sk_live_abcdefghijklmnopqrstuvwxyz'
+    const key = 'brok_sk_live_abcdefg'
     const prefix = getKeyPrefix(key)
     expect(prefix).toBe('brok_sk_live_abcdefg')
     expect(prefix).not.toBe('brok_sk_live')

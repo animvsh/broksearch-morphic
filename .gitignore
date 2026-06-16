@@ -42,6 +42,7 @@ next-env.d.ts
 .brokcode/sync/projects.json
 .brok-audits/
 .brok-smoke/
+generated-projects/
 .gstack/
 
 # Conductor workspace scratch directory (cross-agent attachments, todos)

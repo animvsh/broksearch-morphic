@@ -6,6 +6,7 @@ import {
   ChevronDown,
   KeyRound,
   Play,
+  Search,
   Settings2,
   Sparkles,
   Zap
@@ -41,8 +42,7 @@ const MODELS = Object.entries(BROK_MODELS).map(([id, config]) => ({
   supportsTools: config.supportsTools
 }))
 
-const BROK_KEY_STORAGE = 'brok_code_api_key'
-const PLAYGROUND_KEY_STORAGE = 'brok_playground_key'
+const LEGACY_KEY_STORAGE_KEYS = ['brok_code_api_key', 'brok_playground_key']
 const MODEL_SPEED_NOTES: Record<string, string> = {
   'brok-fast': 'Default fast Brok route',
   'brok-lite': 'Highspeed Brok route',
@@ -57,46 +57,57 @@ const PLAYGROUND_STREAM_STEPS = [
   'Streaming tokens back',
   'Finalizing response payload'
 ]
-
-function isValidBrokKey(value: string) {
-  return value.trim().startsWith('brok_sk_')
-}
+const SEARCH_STREAM_STEPS = [
+  'Planning search queries',
+  'Fetching citations',
+  'Writing cited answer'
+]
 
 function formatTokens(value: number) {
   return value.toLocaleString('en-US')
 }
 
 export function ChatPlayground() {
+  const [mode, setMode] = useState<'chat' | 'search'>('chat')
   const [selectedModel, setSelectedModel] = useState('brok-code')
   const [systemMessage, setSystemMessage] = useState(
     'You are Brok Code, a coding agent for precise repository work. Do not reveal hidden reasoning or private planning; answer with user-facing progress and results only.'
   )
   const [userMessage, setUserMessage] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchDepth, setSearchDepth] = useState('standard')
   const [temperature, setTemperature] = useState(0.7)
   const [maxTokens, setMaxTokens] = useState(1000)
   const [stream, setStream] = useState(true)
   const [loading, setLoading] = useState(false)
-  const [apiKeyInput, setApiKeyInput] = useState('')
-  const [savedApiKey, setSavedApiKey] = useState<string | null>(null)
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null)
   const [response, setResponse] = useState<{
     content: string
     usage?: any
     done: boolean
+    citations?: Array<{
+      id?: string
+      title?: string
+      url?: string
+      publisher?: string
+      snippet?: string
+    }>
+    followUps?: Array<{ label?: string; query?: string } | string>
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadingStepIndex, setLoadingStepIndex] = useState(0)
+  const availableModels =
+    mode === 'search' ? MODELS.filter(model => model.supportsSearch) : MODELS
   const selectedModelDetails =
-    MODELS.find(model => model.id === selectedModel) ?? MODELS[0]
+    availableModels.find(model => model.id === selectedModel) ??
+    availableModels[0] ??
+    MODELS[0]
+  const promptValue = mode === 'search' ? searchQuery : userMessage
+  const loadingSteps =
+    mode === 'search' ? SEARCH_STREAM_STEPS : PLAYGROUND_STREAM_STEPS
 
   useEffect(() => {
-    const stored =
-      localStorage.getItem(BROK_KEY_STORAGE) ||
-      localStorage.getItem(PLAYGROUND_KEY_STORAGE)
-
-    if (stored) {
-      setSavedApiKey(stored)
-      setApiKeyInput(stored)
+    for (const key of LEGACY_KEY_STORAGE_KEYS) {
+      localStorage.removeItem(key)
     }
   }, [])
 
@@ -107,65 +118,53 @@ export function ChatPlayground() {
     }
 
     const timer = window.setInterval(() => {
-      setLoadingStepIndex(
-        current => (current + 1) % PLAYGROUND_STREAM_STEPS.length
-      )
+      setLoadingStepIndex(current => (current + 1) % loadingSteps.length)
     }, 900)
 
     return () => window.clearInterval(timer)
-  }, [loading])
+  }, [loading, loadingSteps.length])
 
-  function saveApiKey() {
-    const trimmed = apiKeyInput.trim()
-    if (!isValidBrokKey(trimmed)) {
-      setApiKeyError('Enter a Brok API key that starts with brok_sk_.')
-      return
+  useEffect(() => {
+    if (mode === 'search' && !selectedModelDetails.supportsSearch) {
+      setSelectedModel('brok-search')
     }
-
-    localStorage.setItem(BROK_KEY_STORAGE, trimmed)
-    localStorage.setItem(PLAYGROUND_KEY_STORAGE, trimmed)
-    setSavedApiKey(trimmed)
-    setApiKeyError(null)
-  }
-
-  function clearApiKey() {
-    localStorage.removeItem(BROK_KEY_STORAGE)
-    localStorage.removeItem(PLAYGROUND_KEY_STORAGE)
-    setSavedApiKey(null)
-    setApiKeyInput('')
-    setApiKeyError(null)
-  }
+  }, [mode, selectedModelDetails.supportsSearch])
 
   async function handleSubmit() {
-    if (!userMessage.trim()) return
-
-    const apiKey = savedApiKey || apiKeyInput.trim()
-    if (!isValidBrokKey(apiKey)) {
-      setApiKeyError('Save a Brok API key before running a request.')
-      return
-    }
+    if (!promptValue.trim()) return
 
     setLoading(true)
     setError(null)
     setResponse(null)
-    setApiKeyError(null)
 
     try {
-      const res = await fetch('/api/v1/chat/completions', {
+      const payload =
+        mode === 'search'
+          ? {
+              model: selectedModelDetails.id,
+              query: searchQuery,
+              search_depth: searchDepth,
+              stream
+            }
+          : {
+              model: selectedModelDetails.id,
+              messages: [
+                { role: 'system', content: systemMessage },
+                { role: 'user', content: userMessage }
+              ],
+              stream,
+              temperature,
+              max_tokens: maxTokens
+            }
+
+      const res = await fetch('/api/playground/run', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: selectedModel,
-          messages: [
-            { role: 'system', content: systemMessage },
-            { role: 'user', content: userMessage }
-          ],
-          stream,
-          temperature,
-          max_tokens: maxTokens
+          mode,
+          payload
         })
       })
 
@@ -174,52 +173,150 @@ export function ChatPlayground() {
         throw new Error(err.error?.message || 'Request failed')
       }
 
-      if (stream) {
-        const reader = res.body?.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-        let fullContent = ''
-
-        while (reader) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split(/\r?\n/)
-          buffer = lines.pop() ?? ''
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6)
-              if (data === '[DONE]') continue
-              try {
-                const parsed = JSON.parse(data)
-                if (parsed.choices?.[0]?.delta?.content) {
-                  fullContent += parsed.choices[0].delta.content
-                  setResponse({
-                    content: fullContent,
-                    done: false
-                  })
-                }
-              } catch {}
-            }
-          }
-        }
-
-        setResponse({ content: fullContent, done: true })
-      } else {
-        const data = await res.json()
-        setResponse({
-          content: data.choices?.[0]?.message?.content || '',
-          usage: data.usage,
-          done: true
-        })
+      if (mode === 'search') {
+        await handleSearchResponse(res)
+        return
       }
+
+      await handleChatResponse(res)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleChatResponse(res: Response) {
+    if (stream) {
+      const reader = res.body?.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let fullContent = ''
+
+      while (reader) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split(/\r?\n/)
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') continue
+            try {
+              const parsed = JSON.parse(data)
+              if (parsed.choices?.[0]?.delta?.content) {
+                fullContent += parsed.choices[0].delta.content
+                setResponse({
+                  content: fullContent,
+                  done: false
+                })
+              }
+            } catch {}
+          }
+        }
+      }
+
+      setResponse({ content: fullContent, done: true })
+      return
+    }
+
+    const data = await res.json()
+    setResponse({
+      content: data.choices?.[0]?.message?.content || '',
+      usage: data.usage,
+      done: true
+    })
+  }
+
+  async function handleSearchResponse(res: Response) {
+    if (stream) {
+      const reader = res.body?.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let fullContent = ''
+      let usage: any
+      const citations: Array<{
+        id?: string
+        title?: string
+        url?: string
+        publisher?: string
+        snippet?: string
+      }> = []
+      let followUps: Array<{ label?: string; query?: string } | string> = []
+
+      while (reader) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const events = buffer.split(/\n\n/)
+        buffer = events.pop() ?? ''
+
+        for (const eventBlock of events) {
+          const eventName =
+            eventBlock
+              .split(/\r?\n/)
+              .find(line => line.startsWith('event: '))
+              ?.slice(7) ?? 'message'
+          const dataLine = eventBlock
+            .split(/\r?\n/)
+            .find(line => line.startsWith('data: '))
+          if (!dataLine) continue
+          const data = dataLine.slice(6)
+          if (data === '[DONE]') continue
+
+          try {
+            const parsed = JSON.parse(data)
+            if (eventName === 'answer_delta') {
+              const delta = parsed.text ?? parsed.delta ?? ''
+              fullContent += delta
+              setResponse({
+                content: fullContent,
+                citations,
+                followUps,
+                done: false
+              })
+            }
+            if (eventName === 'source') {
+              citations.push({
+                id: parsed.source_id,
+                title: parsed.title,
+                url: parsed.url,
+                publisher: parsed.domain,
+                snippet: parsed.snippet
+              })
+            }
+            if (eventName === 'follow_ups') {
+              followUps = parsed.items ?? parsed.follow_ups ?? []
+            }
+            if (eventName === 'done') {
+              usage = parsed.usage
+            }
+          } catch {}
+        }
+      }
+
+      setResponse({
+        content: fullContent,
+        citations,
+        followUps,
+        usage,
+        done: true
+      })
+      return
+    }
+
+    const data = await res.json()
+    setResponse({
+      content: data.choices?.[0]?.message?.content || '',
+      usage: data.usage,
+      citations: data.citations,
+      followUps: data.follow_ups,
+      done: true
+    })
   }
 
   return (
@@ -230,45 +327,17 @@ export function ChatPlayground() {
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
                 <KeyRound className="size-4 text-muted-foreground" />
-                <p className="truncate text-sm font-semibold">API Key</p>
+                <p className="truncate text-sm font-semibold">Credentials</p>
               </div>
               <span className="rounded-md border px-2 py-0.5 text-[11px] text-muted-foreground">
-                {savedApiKey ? 'Saved' : 'Required'}
+                Account session
               </span>
             </div>
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-              <Input
-                id="playground-key"
-                value={apiKeyInput}
-                onChange={event => {
-                  setApiKeyInput(event.target.value)
-                  if (apiKeyError) setApiKeyError(null)
-                }}
-                placeholder="brok_sk_..."
-                type="password"
-                autoComplete="off"
-                className="h-11"
-              />
-              <Button size="sm" className="h-11" onClick={saveApiKey}>
-                Save
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-11"
-                onClick={clearApiKey}
-              >
-                Clear
-              </Button>
-            </div>
-            {apiKeyError && (
-              <p className="mt-2 text-xs text-destructive">{apiKeyError}</p>
-            )}
-            {!apiKeyError && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Stored locally in this browser for quick BrokCode API retries.
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              Signed-in playground runs are proxied with an account-owned server
+              session key. Paste long-lived API keys only into server-side code
+              or local environment variables.
+            </p>
           </section>
 
           <section className="dashboard-card p-3">
@@ -277,6 +346,30 @@ export function ChatPlayground() {
               <p className="text-sm font-semibold">Request</p>
             </div>
             <div className="grid gap-3">
+              <Tabs
+                value={mode}
+                onValueChange={value => {
+                  const nextMode = value as 'chat' | 'search'
+                  setMode(nextMode)
+                  setResponse(null)
+                  setError(null)
+                  if (nextMode === 'search') {
+                    setSelectedModel('brok-search')
+                  }
+                }}
+              >
+                <TabsList className="grid h-11 w-full grid-cols-2">
+                  <TabsTrigger value="chat" className="gap-2">
+                    <Sparkles className="size-4" />
+                    Chat
+                  </TabsTrigger>
+                  <TabsTrigger value="search" className="gap-2">
+                    <Search className="size-4" />
+                    Search
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
               <div>
                 <Label className="text-xs">Model</Label>
                 <Select value={selectedModel} onValueChange={setSelectedModel}>
@@ -284,7 +377,7 @@ export function ChatPlayground() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {MODELS.map(model => (
+                    {availableModels.map(model => (
                       <SelectItem key={model.id} value={model.id}>
                         {model.name}
                       </SelectItem>
@@ -347,17 +440,35 @@ export function ChatPlayground() {
               </div>
 
               <div>
-                <Label htmlFor="user" className="text-xs">
-                  User Message
-                </Label>
-                <Textarea
-                  id="user"
-                  value={userMessage}
-                  onChange={e => setUserMessage(e.target.value)}
-                  rows={7}
-                  placeholder="What would you like to ask Brok?"
-                  className="mt-1 min-h-40 resize-none"
-                />
+                {mode === 'search' ? (
+                  <>
+                    <Label htmlFor="search-query" className="text-xs">
+                      Search Query
+                    </Label>
+                    <Textarea
+                      id="search-query"
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      rows={7}
+                      placeholder="What should Brok research with citations?"
+                      className="mt-1 min-h-40 resize-none"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Label htmlFor="user" className="text-xs">
+                      User Message
+                    </Label>
+                    <Textarea
+                      id="user"
+                      value={userMessage}
+                      onChange={e => setUserMessage(e.target.value)}
+                      rows={7}
+                      placeholder="What would you like to ask Brok?"
+                      className="mt-1 min-h-40 resize-none"
+                    />
+                  </>
+                )}
               </div>
 
               <details className="group rounded-md border border-border/70 bg-muted/35 p-3">
@@ -369,52 +480,75 @@ export function ChatPlayground() {
                   <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
                 </summary>
                 <div className="mt-3 grid gap-3">
-                  <div>
-                    <Label htmlFor="system" className="text-xs">
-                      System Message
-                    </Label>
-                    <Textarea
-                      id="system"
-                      value={systemMessage}
-                      onChange={e => setSystemMessage(e.target.value)}
-                      rows={3}
-                      className="mt-1 resize-none"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {mode === 'search' ? (
                     <div>
-                      <Label htmlFor="temp" className="text-xs">
-                        Temperature
-                      </Label>
-                      <div className="mt-1 flex items-center gap-2">
-                        <input
-                          id="temp"
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.1}
-                          value={temperature}
-                          onChange={e => setTemperature(Number(e.target.value))}
-                          className="min-w-0 flex-1 h-11"
+                      <Label className="text-xs">Search Depth</Label>
+                      <Select
+                        value={searchDepth}
+                        onValueChange={setSearchDepth}
+                      >
+                        <SelectTrigger className="mt-1 h-11">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="lite">Lite</SelectItem>
+                          <SelectItem value="standard">Standard</SelectItem>
+                          <SelectItem value="deep">Deep</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <Label htmlFor="system" className="text-xs">
+                          System Message
+                        </Label>
+                        <Textarea
+                          id="system"
+                          value={systemMessage}
+                          onChange={e => setSystemMessage(e.target.value)}
+                          rows={3}
+                          className="mt-1 resize-none"
                         />
-                        <span className="w-8 text-right text-xs">
-                          {temperature}
-                        </span>
                       </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="maxTokens" className="text-xs">
-                        Max Tokens
-                      </Label>
-                      <Input
-                        id="maxTokens"
-                        type="number"
-                        value={maxTokens}
-                        onChange={e => setMaxTokens(Number(e.target.value))}
-                        className="mt-1 h-11"
-                      />
-                    </div>
-                  </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                          <Label htmlFor="temp" className="text-xs">
+                            Temperature
+                          </Label>
+                          <div className="mt-1 flex items-center gap-2">
+                            <input
+                              id="temp"
+                              type="range"
+                              min={0}
+                              max={1}
+                              step={0.1}
+                              value={temperature}
+                              onChange={e =>
+                                setTemperature(Number(e.target.value))
+                              }
+                              className="min-w-0 flex-1 h-11"
+                            />
+                            <span className="w-8 text-right text-xs">
+                              {temperature}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <Label htmlFor="maxTokens" className="text-xs">
+                            Max Tokens
+                          </Label>
+                          <Input
+                            id="maxTokens"
+                            type="number"
+                            value={maxTokens}
+                            onChange={e => setMaxTokens(Number(e.target.value))}
+                            className="mt-1 h-11"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
                   <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
                     <Label htmlFor="stream" className="text-xs">
                       Stream Response
@@ -432,10 +566,10 @@ export function ChatPlayground() {
               <Button
                 className="h-11 gap-2"
                 onClick={handleSubmit}
-                disabled={loading || !userMessage.trim() || !savedApiKey}
+                disabled={loading || !promptValue.trim()}
               >
                 <Play className="size-4" />
-                {loading ? 'Streaming...' : 'Run'}
+                {loading ? 'Running...' : 'Run'}
               </Button>
             </div>
           </section>
@@ -465,7 +599,7 @@ export function ChatPlayground() {
             {loading && (
               <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-2.5 py-1 text-xs text-muted-foreground shadow-sm">
                 <span className="size-2 animate-pulse rounded-full bg-primary" />
-                {PLAYGROUND_STREAM_STEPS[loadingStepIndex]}
+                {loadingSteps[loadingStepIndex]}
               </span>
             )}
           </div>
@@ -481,7 +615,7 @@ export function ChatPlayground() {
                   Live stream in progress
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {PLAYGROUND_STREAM_STEPS[loadingStepIndex]}
+                  {loadingSteps[loadingStepIndex]}
                 </p>
                 <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted/70">
                   <div className="h-full w-2/5 animate-[pulse_1.4s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-primary/40 via-primary to-violet-500/70" />
@@ -508,6 +642,7 @@ export function ChatPlayground() {
             className="m-0 min-h-0 flex-1 overflow-y-auto p-4"
           >
             <CodeSnippet
+              mode={mode}
               model={selectedModel}
               messages={[
                 { role: 'system', content: systemMessage },
@@ -516,6 +651,10 @@ export function ChatPlayground() {
                   content: userMessage || 'Build a production-ready AI feature.'
                 }
               ]}
+              query={
+                searchQuery || 'What changed in AI developer tools this week?'
+              }
+              searchDepth={searchDepth}
               stream={stream}
             />
           </TabsContent>

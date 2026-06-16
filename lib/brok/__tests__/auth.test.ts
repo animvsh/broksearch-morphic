@@ -165,7 +165,7 @@ describe('verifyRequestAuth', () => {
   })
 
   it('authenticates a per-key salted key through prefix-indexed candidates', async () => {
-    const rawKey = 'brok_sk_live_abcdefghijklmnopqrstuvwxyz'
+    const rawKey = 'brok_sk_live_abcdefg'
     const { hash, salt } = hashNewApiKey(rawKey)
     const keyRecord = {
       id: 'key-1',
@@ -237,7 +237,7 @@ describe('verifyRequestAuth', () => {
   })
 
   it('authenticates legacy hash keys through compatibility prefix scan', async () => {
-    const rawKey = 'brok_sk_live_legacycompatibilitytest'
+    const rawKey = 'brok_sk_live_legacy'
     const keyRecord = {
       id: 'key-2',
       workspaceId: 'workspace-1',

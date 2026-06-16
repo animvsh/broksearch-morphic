@@ -605,17 +605,6 @@ type PreviewHealth = {
 const BROK_KEY_STORAGE = 'brok_code_api_key'
 const BROK_SESSION_STORAGE = 'brok_code_session_id'
 
-type SavedBrokCodeKey = {
-  id: string
-  name: string
-  prefix: string
-  environment: 'test' | 'live'
-  scopes: string[]
-  defaultSessionId: string
-  updatedAt: string
-  lastValidatedAt: string
-}
-
 const accentStyles = {
   cyan: 'border-cyan-300 bg-cyan-50 text-cyan-950 dark:border-cyan-900 dark:bg-cyan-950 dark:text-cyan-50',
   emerald:
@@ -865,11 +854,6 @@ function detectIntegrationConnectIntent(command: string): string | null {
 
 function isValidBrokApiKey(value: string) {
   return value.startsWith('brok_sk_')
-}
-
-function maskBrokApiKey(value: string) {
-  if (value.length < 12) return `${value.slice(0, 4)}...`
-  return `${value.slice(0, 8)}...${value.slice(-4)}`
 }
 
 function buildCommandPrompt(command: string) {
@@ -1338,11 +1322,7 @@ export function BrokCodeApp({
   const [runHintIndex, setRunHintIndex] = useState(0)
   const [activeRuntime, setActiveRuntime] =
     useState<BrokCodeRuntime>('not_connected')
-  const [apiKeyInput, setApiKeyInput] = useState('')
-  const [apiKey, setApiKey] = useState<string | null>(null)
-  const [savedRuntimeKey, setSavedRuntimeKey] =
-    useState<SavedBrokCodeKey | null>(null)
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null)
+  const [apiKey] = useState<string | null>(null)
   const [models, setModels] = useState<BrokModel[]>([])
   const [selectedModel, setSelectedModel] = useState('brok-code')
   const [usage, setUsage] = useState<BrokUsage | null>(null)
@@ -1511,53 +1491,21 @@ export function BrokCodeApp({
       const savedSessionId = getStoredSessionId()
       setSyncSessionId(savedSessionId)
 
-      const legacySavedKey = localStorage.getItem(BROK_KEY_STORAGE)
-      if (legacySavedKey && isValidBrokApiKey(legacySavedKey)) {
-        try {
-          const saveResponse = await fetch('/api/brokcode/key', {
-            method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${legacySavedKey}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ defaultSessionId: savedSessionId })
-          })
-          if (saveResponse.ok) {
-            localStorage.removeItem(BROK_KEY_STORAGE)
-          }
-        } catch {}
-      }
+      localStorage.removeItem(BROK_KEY_STORAGE)
 
       if (cancelled) return
 
       try {
-        const response = await fetch('/api/brokcode/key', {
-          headers: legacySavedKey
-            ? { Authorization: `Bearer ${legacySavedKey}` }
-            : {}
-        })
+        const response = await fetch('/api/brokcode/key')
         const body = await response.json().catch(() => null)
         if (response.ok && body?.key) {
-          const savedKey = body.key as SavedBrokCodeKey
-          setSavedRuntimeKey(savedKey)
-          setApiKeyInput('')
-          if (savedKey.defaultSessionId) {
-            setSyncSessionId(savedKey.defaultSessionId)
-            localStorage.setItem(
-              BROK_SESSION_STORAGE,
-              savedKey.defaultSessionId
-            )
-          }
-        } else if (legacySavedKey && isValidBrokApiKey(legacySavedKey)) {
-          const accountResponse = await fetch('/api/brokcode/account', {
-            headers: { Authorization: `Bearer ${legacySavedKey}` }
-          })
-          if (!accountResponse.ok) {
-            setApiKeyError(
-              body?.error?.message ?? 'Saved key could not be restored.'
-            )
-          } else {
-            setApiKey(legacySavedKey)
+          const defaultSessionId =
+            typeof body.key.defaultSessionId === 'string'
+              ? body.key.defaultSessionId
+              : ''
+          if (defaultSessionId) {
+            setSyncSessionId(defaultSessionId)
+            localStorage.setItem(BROK_SESSION_STORAGE, defaultSessionId)
           }
         }
       } catch {}
@@ -1669,17 +1617,9 @@ export function BrokCodeApp({
     [syncSessionId, syncedSessions]
   )
 
-  const hasLiveKey = Boolean(
-    (apiKey && isValidBrokApiKey(apiKey)) || savedRuntimeKey
-  )
   const hasAccountRuntime = Boolean(accountEmail)
-  const hasLiveRuntime = hasAccountRuntime || hasLiveKey
-  const maskedKey =
-    apiKey && isValidBrokApiKey(apiKey)
-      ? maskBrokApiKey(apiKey)
-      : savedRuntimeKey
-        ? `${savedRuntimeKey.prefix}...`
-        : null
+  const hasLiveRuntime =
+    hasAccountRuntime || Boolean(apiKey && isValidBrokApiKey(apiKey))
   const codeModels =
     models.length > 0
       ? models
@@ -2415,7 +2355,6 @@ export function BrokCodeApp({
     void refreshProjects(apiKey)
   }, [
     apiKey,
-    hasLiveKey,
     hasLiveRuntime,
     refreshBrokCodeTasks,
     refreshProjects,
@@ -3125,85 +3064,6 @@ export function BrokCodeApp({
     }
   }
 
-  async function saveApiKey() {
-    const trimmed = apiKeyInput.trim()
-    if (!trimmed) {
-      setApiKeyError('Enter a Brok key before saving.')
-      return
-    }
-    if (!isValidBrokApiKey(trimmed)) {
-      setApiKeyError('Brok Code only accepts brok_sk_ keys.')
-      return
-    }
-
-    try {
-      const response = await fetch('/api/brokcode/account', {
-        headers: { Authorization: `Bearer ${trimmed}` }
-      })
-      const body = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        setApiKeyError(
-          body?.error?.message ??
-            'This Brok API key is not linked to your signed-in account.'
-        )
-        return
-      }
-    } catch {
-      setApiKeyError('Could not validate this key against your Brok account.')
-      return
-    }
-
-    try {
-      const saveResponse = await fetch('/api/brokcode/key', {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${trimmed}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ defaultSessionId: syncSessionId })
-      })
-      const savedBody = await saveResponse.json().catch(() => null)
-      if (!saveResponse.ok) {
-        setApiKeyError(
-          savedBody?.error?.message ??
-            'Validated key, but could not store it in BrokCode key vault.'
-        )
-        return
-      }
-      setSavedRuntimeKey((savedBody?.key as SavedBrokCodeKey) ?? null)
-    } catch {
-      setApiKeyError(
-        'Validated key, but could not store it in BrokCode key vault.'
-      )
-      return
-    }
-
-    localStorage.removeItem(BROK_KEY_STORAGE)
-    setApiKey(trimmed)
-    setApiKeyInput('')
-    setApiKeyError(null)
-    setRuntimeError(null)
-  }
-
-  async function clearApiKey() {
-    const keyToUse = apiKey
-    localStorage.removeItem(BROK_KEY_STORAGE)
-    try {
-      await fetch('/api/brokcode/key', {
-        method: 'DELETE',
-        headers: keyToUse ? { Authorization: `Bearer ${keyToUse}` } : {}
-      })
-    } catch {}
-    setApiKey(null)
-    setSavedRuntimeKey(null)
-    setActiveRuntime('not_connected')
-    setApiKeyInput('')
-    setApiKeyError(null)
-    setRuntimeError(null)
-    setUsage(null)
-  }
-
   function saveSyncSessionId() {
     const normalized =
       syncSessionId.trim().replace(/[^a-zA-Z0-9._:-]/g, '-') || 'default'
@@ -3510,7 +3370,7 @@ export function BrokCodeApp({
       checkMessages.push('- Models endpoint check failed.')
     }
 
-    if (hasLiveKey && apiKey) {
+    if (apiKey && isValidBrokApiKey(apiKey)) {
       try {
         const usageResponse = await fetch('/api/v1/usage?period=month', {
           headers: { Authorization: `Bearer ${apiKey}` }
@@ -4737,11 +4597,7 @@ export function BrokCodeApp({
                   hasLiveRuntime ? 'bg-emerald-500' : 'bg-zinc-300'
                 )}
               />
-              {hasLiveKey
-                ? 'Key ready'
-                : hasAccountRuntime
-                  ? 'Browser ready'
-                  : 'Sign in required'}
+              {hasAccountRuntime ? 'Browser session' : 'Sign in required'}
               <span className="text-zinc-300">/</span>
               <span
                 className={cn(
@@ -4885,9 +4741,7 @@ export function BrokCodeApp({
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled>
                   <KeyRound className="size-4" />
-                  {hasLiveKey
-                    ? `API key ${maskedKey ?? 'ready'}`
-                    : 'CLI/TUI key optional'}
+                  Browser session active
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled>
                   <Globe className="size-4" />
