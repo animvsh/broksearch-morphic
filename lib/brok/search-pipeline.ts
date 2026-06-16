@@ -35,6 +35,7 @@ export interface SearchRequest {
   recencyDays?: number
   domains?: string[]
   maxSources?: number
+  onSources?: (sources: SearchResult[]) => void | Promise<void>
 }
 
 export type QuestionType =
@@ -97,11 +98,16 @@ export async function runSearchPipeline(
 
   if (cacheTtlMs > 0) {
     const cached = getCachedSearchResponse(cacheKey)
-    if (cached) return cached
+    if (cached) {
+      await emitSourcePreview(request, cached.citations)
+      return cached
+    }
 
     const inFlight = inFlightSearches.get(cacheKey)
     if (inFlight) {
-      return cloneSearchResponse(await inFlight)
+      const response = cloneSearchResponse(await inFlight)
+      await emitSourcePreview(request, response.citations)
+      return response
     }
   }
 
@@ -147,7 +153,8 @@ async function runUncachedSearchPipeline(
       searchQueryList,
       maxSources,
       config.maxTokens,
-      domainHints
+      domainHints,
+      request
     )
   } catch (error) {
     console.warn('Falling back to HTML search pipeline:', error)
@@ -158,7 +165,8 @@ async function runUncachedSearchPipeline(
         searchQueryList,
         maxSources,
         config.maxTokens,
-        domainHints
+        domainHints,
+        request
       )
     } catch (fallbackError) {
       console.warn('Search providers unavailable; returning fallback:', {
@@ -231,6 +239,16 @@ function cloneSearchResponse(response: SearchResponse): SearchResponse {
   return JSON.parse(JSON.stringify(response)) as SearchResponse
 }
 
+async function emitSourcePreview(
+  request: Pick<SearchRequest, 'onSources'>,
+  citations: SearchResult[]
+) {
+  if (!request.onSources || citations.length === 0) return
+  await request.onSources(
+    JSON.parse(JSON.stringify(citations)) as SearchResult[]
+  )
+}
+
 export function clearSearchPipelineCache() {
   searchResponseCache.clear()
   inFlightSearches.clear()
@@ -280,7 +298,8 @@ async function runBrokWebSearch(
   searchQueryList: string[],
   numResults: number,
   maxTokens: number,
-  domainHints: string[]
+  domainHints: string[],
+  events: Pick<SearchRequest, 'onSources'>
 ): Promise<SearchResponse> {
   const batches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
@@ -312,6 +331,7 @@ async function runBrokWebSearch(
     resolvedQuery,
     numResults
   )
+  await emitSourcePreview(events, citations)
 
   const answer = await synthesizeAnswerFromResults(
     resolvedQuery,
@@ -341,7 +361,8 @@ async function runHtmlSearchPipeline(
   searchQueryList: string[],
   numResults: number,
   maxTokens: number,
-  domainHints: string[]
+  domainHints: string[],
+  events: Pick<SearchRequest, 'onSources'>
 ): Promise<SearchResponse> {
   const resultBatches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
@@ -370,6 +391,7 @@ async function runHtmlSearchPipeline(
     resolvedQuery,
     numResults
   )
+  await emitSourcePreview(events, citations)
   const answer = await synthesizeAnswerFromResults(
     resolvedQuery,
     citations,

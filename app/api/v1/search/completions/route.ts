@@ -36,6 +36,10 @@ function sseEvent(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }
 
+function sourceEventKey(citation: { id?: string; url?: string }) {
+  return citation.id || citation.url || ''
+}
+
 function usagePayload(
   searchResult: Awaited<ReturnType<typeof runSearchPipeline>>
 ) {
@@ -277,6 +281,56 @@ export async function POST(request: NextRequest) {
           const send = (event: string, data: unknown) => {
             controller.enqueue(encoder.encode(sseEvent(event, data)))
           }
+          const emittedSourceKeys = new Set<string>()
+          const sendSourceEvents = (
+            citations: Awaited<
+              ReturnType<typeof runSearchPipeline>
+            >['citations']
+          ) => {
+            citations.forEach((citation, index) => {
+              const key = sourceEventKey(citation)
+              if (key && emittedSourceKeys.has(key)) return
+              if (key) emittedSourceKeys.add(key)
+
+              const citationNumber = index + 1
+
+              send('source_found', {
+                id: requestId,
+                index: citationNumber,
+                source: citation
+              })
+              send('source', {
+                id: requestId,
+                source_id: citation.id,
+                citation_number: citationNumber,
+                title: citation.title,
+                url: citation.url,
+                domain: citation.publisher,
+                snippet: citation.snippet,
+                retrieved_at: citation.retrievedAt,
+                quality_score: citation.qualityScore
+              })
+              send('source_read', {
+                id: requestId,
+                source_id: citation.id,
+                url: citation.url,
+                title: citation.title,
+                quality_score: citation.qualityScore
+              })
+              send('citation_added', {
+                id: requestId,
+                citation_id: citation.id,
+                marker: `[${citationNumber}]`,
+                url: citation.url
+              })
+              send('citation', {
+                id: requestId,
+                source_id: citation.id,
+                citation_number: citationNumber,
+                url: citation.url
+              })
+            })
+          }
 
           const classification = classifyQuery(query)
           const resolvedQuery = resolveQuery(query, classification)
@@ -335,7 +389,20 @@ export async function POST(request: NextRequest) {
               query,
               depth,
               recencyDays: recency_days,
-              domains: searchDomains
+              domains: searchDomains,
+              onSources: sources => {
+                send('search.step', {
+                  id: requestId,
+                  message: `Found ${sources.length} source${sources.length === 1 ? '' : 's'}`,
+                  status: 'running',
+                  citations: sources.length
+                })
+                send('status', {
+                  id: requestId,
+                  message: 'Reading sources'
+                })
+                sendSourceEvents(sources)
+              }
             })
 
             const latencyMs = Date.now() - startTime
@@ -361,45 +428,7 @@ export async function POST(request: NextRequest) {
               status: 'success'
             })
 
-            searchResult.citations.forEach((citation, index) => {
-              const citationNumber = index + 1
-
-              send('source_found', {
-                id: requestId,
-                index: citationNumber,
-                source: citation
-              })
-              send('source', {
-                id: requestId,
-                source_id: citation.id,
-                citation_number: citationNumber,
-                title: citation.title,
-                url: citation.url,
-                domain: citation.publisher,
-                snippet: citation.snippet,
-                retrieved_at: citation.retrievedAt,
-                quality_score: citation.qualityScore
-              })
-              send('source_read', {
-                id: requestId,
-                source_id: citation.id,
-                url: citation.url,
-                title: citation.title,
-                quality_score: citation.qualityScore
-              })
-              send('citation_added', {
-                id: requestId,
-                citation_id: citation.id,
-                marker: `[${citationNumber}]`,
-                url: citation.url
-              })
-              send('citation', {
-                id: requestId,
-                source_id: citation.id,
-                citation_number: citationNumber,
-                url: citation.url
-              })
-            })
+            sendSourceEvents(searchResult.citations)
 
             send('status', {
               id: requestId,
