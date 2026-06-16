@@ -590,7 +590,10 @@ describe('BrokSearchClient', () => {
       />
     )
 
-    expect(await screen.findByTestId('brok-answer-loading-card')).toBeVisible()
+    expect(screen.getByTestId('search-progress')).toHaveTextContent(
+      'Planning search query'
+    )
+    expect(screen.getByTestId('brok-answer-loading-card')).toBeVisible()
 
     deferred.flush()
 
