@@ -580,6 +580,7 @@ export function BrokSearchClient({
         let streamedAnswer = ''
         let streamedSources: Source[] = []
         let streamedFollowUps: FollowUpItem[] = []
+        let streamCompleted = false
 
         const persistSnapshot = () => {
           writeDurableTurn({
@@ -708,6 +709,7 @@ export function BrokSearchClient({
               setFollowUps(streamedFollowUps)
               return
             case 'done':
+              streamCompleted = true
               persistSnapshot()
               flushPendingPersistence()
               setProgress(prev => ({
@@ -758,6 +760,26 @@ export function BrokSearchClient({
             }
           }
         }
+
+        if (!isCurrentRequest() || streamCompleted) return
+
+        if (streamedAnswer.trim()) {
+          persistSnapshot()
+          flushPendingPersistence()
+          setProgress(prev => ({
+            ...prev,
+            status: 'done',
+            message: 'Answer ready'
+          }))
+          return
+        }
+
+        setError('Search ended before returning an answer.')
+        setProgress(prev => ({
+          ...prev,
+          status: 'error',
+          message: 'Search ended before returning an answer.'
+        }))
       } catch (err) {
         if (!isCurrentRequest()) return
         if ((err as Error).name === 'AbortError') return

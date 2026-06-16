@@ -451,6 +451,69 @@ describe('BrokSearchClient', () => {
     ).toContain('Guest answer stays local.')
   })
 
+  it('finishes the answer UI when a stream closes after content without done', async () => {
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        {
+          event: 'source_found',
+          data: {
+            source: {
+              id: 'src_1',
+              title: 'Brok docs',
+              url: 'https://docs.example.com/search',
+              publisher: 'docs.example.com',
+              snippet: 'Brok search docs.',
+              retrievedAt: '2026-06-16T00:00:00.000Z',
+              qualityScore: 91
+            }
+          }
+        },
+        {
+          event: 'answer_delta',
+          data: { delta: 'Brok answers even if the stream ends early. [1]' }
+        }
+      ])
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="What is Brok?"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Brok answers even if the stream ends early. [1](#brok-session-search:1)'
+    )
+    await waitFor(() => {
+      expect(screen.queryByTestId('search-progress')).not.toBeInTheDocument()
+    })
+    expect(screen.getByLabelText('Ask a follow-up')).not.toBeDisabled()
+    expect(screen.getByLabelText('Ask a follow-up')).toHaveAttribute(
+      'placeholder',
+      'Ask a follow-up...'
+    )
+    expect(screen.getByTestId('follow-up-chips')).toHaveTextContent('Go deeper')
+
+    await waitFor(() => {
+      expect(getSessionPersistCalls(fetchMock)).toHaveLength(1)
+    })
+    const persisted = JSON.parse(
+      window.localStorage.getItem('brok:guest-chat:search_test') ?? '[]'
+    )
+    expect(persisted[1]).toMatchObject({
+      role: 'assistant',
+      parts: [
+        {
+          type: 'text',
+          text: 'Brok answers even if the stream ends early. [1]'
+        }
+      ]
+    })
+  })
+
   it('restores a completed durable search from the rewritten search id route', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
