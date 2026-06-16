@@ -797,7 +797,7 @@ export async function GET(request: NextRequest) {
     latestDeployment: deployments[0] ?? null,
     deployments,
     previewUrl: project.previewUrl ?? readiness.previewUrl,
-    deploymentUrl: project.deploymentUrl ?? readiness.deploymentUrl,
+    deploymentUrl: project.deploymentUrl ?? deployments[0]?.url ?? null,
     fallback: {
       mode: 'managed_live_preview',
       enabled: true

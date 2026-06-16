@@ -33,6 +33,11 @@ export function BrokBuildWorkspace({
   const [internalPlan, setInternalPlan] = useState<InternalPlan | null>(null)
   const [showPlanCard, setShowPlanCard] = useState(true)
   const [autoStarted, setAutoStarted] = useState(false)
+  const [deployState, setDeployState] = useState<{
+    status: 'idle' | 'publishing' | 'live' | 'failed'
+    url: string | null
+    message: string | null
+  }>({ status: 'idle', url: null, message: null })
   const startedRef = useRef(false)
 
   const { state, start, stop, sendEdit, send } = useBrokBuildStream()
@@ -95,6 +100,63 @@ export function BrokBuildWorkspace({
     )
   }, [phase])
 
+  const handleDeploy = useCallback(async () => {
+    if (!state.projectId || deployState.status === 'publishing') return
+    setDeployState({
+      status: 'publishing',
+      url: null,
+      message: 'Publishing managed app...'
+    })
+
+    try {
+      const response = await fetch('/api/brokcode/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: state.projectId,
+          source: 'browser'
+        })
+      })
+      const body = (await response.json().catch(() => null)) as {
+        deploymentUrl?: unknown
+        deploymentPreviewUrl?: unknown
+        previewUrl?: unknown
+        message?: unknown
+        error?: { message?: unknown }
+      } | null
+      if (!response.ok) {
+        throw new Error(
+          typeof body?.error?.message === 'string'
+            ? body.error.message
+            : `Deploy failed (${response.status}).`
+        )
+      }
+
+      const url =
+        typeof body?.deploymentUrl === 'string'
+          ? body.deploymentUrl
+          : typeof body?.deploymentPreviewUrl === 'string'
+            ? body.deploymentPreviewUrl
+            : typeof body?.previewUrl === 'string'
+              ? body.previewUrl
+              : null
+      setDeployState({
+        status: 'live',
+        url,
+        message:
+          typeof body?.message === 'string'
+            ? body.message
+            : 'Managed app published.'
+      })
+    } catch (error) {
+      setDeployState({
+        status: 'failed',
+        url: null,
+        message: error instanceof Error ? error.message : 'Deploy failed.'
+      })
+    }
+  }, [deployState.status, state.projectId])
+
   return (
     <div className="grid h-full grid-rows-[auto_minmax(0,1fr)_auto] bg-background">
       <WorkspaceHeader
@@ -102,12 +164,18 @@ export function BrokBuildWorkspace({
         phase={phase}
         progress={state.progress}
         previewUrl={state.previewUrl}
-        deploymentUrl={state.deploymentUrl}
+        deploymentUrl={deployState.url ?? state.deploymentUrl}
+        deployStatus={deployState.status}
+        deployMessage={deployState.message}
         projectId={state.projectId}
+        onDeploy={() => {
+          void handleDeploy()
+        }}
         onRestart={() => {
           startedRef.current = false
           setAutoStarted(false)
           setShowPlanCard(true)
+          setDeployState({ status: 'idle', url: null, message: null })
         }}
       />
 
@@ -180,17 +248,23 @@ type HeaderProps = {
   progress: number
   previewUrl: string | null
   deploymentUrl: string | null
+  deployStatus: 'idle' | 'publishing' | 'live' | 'failed'
+  deployMessage: string | null
   projectId: string | null
+  onDeploy: () => void
   onRestart: () => void
 }
 
-function WorkspaceHeader({
+export function WorkspaceHeader({
   projectName,
   phase,
   progress,
   previewUrl,
   deploymentUrl,
+  deployStatus,
+  deployMessage,
   projectId,
+  onDeploy,
   onRestart
 }: HeaderProps) {
   const brokCodeProjectUrl = projectId
@@ -220,15 +294,31 @@ function WorkspaceHeader({
         >
           Preview
         </a>
-        <a
-          href={deploymentUrl ?? previewUrl ?? '#'}
-          target="_blank"
-          rel="noreferrer"
-          aria-disabled={!deploymentUrl && !previewUrl}
-          className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground aria-disabled:pointer-events-none aria-disabled:opacity-50"
+        <button
+          type="button"
+          onClick={onDeploy}
+          disabled={!projectId || deployStatus === 'publishing'}
+          title={deployMessage ?? 'Publish the current managed app'}
+          className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
         >
-          Deploy
-        </a>
+          {deployStatus === 'publishing'
+            ? 'Publishing...'
+            : deployStatus === 'live'
+              ? 'Published'
+              : deployStatus === 'failed'
+                ? 'Retry deploy'
+                : 'Deploy'}
+        </button>
+        {deploymentUrl ? (
+          <a
+            href={deploymentUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground"
+          >
+            Live
+          </a>
+        ) : null}
         <a
           href={brokCodeProjectUrl ?? '#'}
           aria-disabled={!brokCodeProjectUrl}
