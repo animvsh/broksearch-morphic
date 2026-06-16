@@ -5,6 +5,7 @@ import {
   resolveBrokCodeRequestAuth
 } from '@/lib/brokcode/account-guard'
 import { getBrokCodeProject } from '@/lib/brokcode/project-store'
+import { getPersistedBrokBuildBackendPlan } from '@/lib/build/backend-plan-metadata'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -46,35 +47,6 @@ async function authorizeProject(request: Request, id: string) {
   return { ok: true as const, project }
 }
 
-function getBackendPlan(metadata: Record<string, unknown> | null | undefined) {
-  const preview =
-    metadata?.preview &&
-    typeof metadata.preview === 'object' &&
-    !Array.isArray(metadata.preview)
-      ? (metadata.preview as Record<string, unknown>)
-      : null
-  const backendPlan = preview?.backendPlan
-
-  if (
-    !backendPlan ||
-    typeof backendPlan !== 'object' ||
-    Array.isArray(backendPlan)
-  ) {
-    return null
-  }
-
-  const plan = backendPlan as Record<string, unknown>
-  if (
-    plan.provider !== 'insforge' ||
-    plan.status !== 'planned' ||
-    typeof plan.migrationSql !== 'string'
-  ) {
-    return null
-  }
-
-  return plan
-}
-
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -83,7 +55,7 @@ export async function GET(
   const access = await authorizeProject(request, id)
   if (!access.ok) return access.response
 
-  const backendPlan = getBackendPlan(access.project.metadata)
+  const backendPlan = getPersistedBrokBuildBackendPlan(access.project.metadata)
   if (!backendPlan) {
     return NextResponse.json(
       { error: 'Backend plan not found for this project.' },
