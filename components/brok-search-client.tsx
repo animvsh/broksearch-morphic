@@ -358,6 +358,19 @@ export function BrokSearchClient({
     }))
   }, [answer])
 
+  useEffect(() => {
+    const abortForNavigation = () => {
+      requestIdRef.current += 1
+      abortRef.current?.abort()
+      abortRef.current = null
+    }
+
+    window.addEventListener('pagehide', abortForNavigation)
+    return () => {
+      window.removeEventListener('pagehide', abortForNavigation)
+    }
+  }, [])
+
   const flushPendingPersistence = useCallback(() => {
     if (persistTimerRef.current) {
       window.clearTimeout(persistTimerRef.current)
