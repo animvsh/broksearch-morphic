@@ -15,7 +15,7 @@ Brok Code uses the model ID \`brok-code\` and is OpenAI-compatible for Codex and
 ## Endpoint
 
 \`\`\`
-POST https://api.brok.ai/v1/chat/completions
+POST https://www.brok.fyi/api/v1/chat/completions
 \`\`\`
 
 ## Request Body
@@ -49,7 +49,7 @@ POST https://api.brok.ai/v1/chat/completions
 ## Request Example
 
 \`\`\`bash
-curl https://api.brok.ai/v1/chat/completions \\
+curl https://www.brok.fyi/api/v1/chat/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -93,7 +93,7 @@ curl https://api.brok.ai/v1/chat/completions \\
 Enable streaming for real-time responses:
 
 \`\`\`bash
-curl https://api.brok.ai/v1/chat/completions \\
+curl https://www.brok.fyi/api/v1/chat/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -163,7 +163,7 @@ export default function ChatCompletionsPage() {
 
         <h2>Endpoint</h2>
         <pre className="bg-muted p-4 rounded-lg">
-          <code>POST https://api.brok.ai/v1/chat/completions</code>
+          <code>POST https://www.brok.fyi/api/v1/chat/completions</code>
         </pre>
 
         <h2>Request Body</h2>
@@ -247,7 +247,7 @@ export default function ChatCompletionsPage() {
 
         <h2>Request Example</h2>
         <pre className="bg-muted p-4 rounded-lg">
-          <code>{`curl https://api.brok.ai/v1/chat/completions \\
+          <code>{`curl https://www.brok.fyi/api/v1/chat/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -264,18 +264,18 @@ export default function ChatCompletionsPage() {
         <pre className="bg-muted p-4 rounded-lg">
           <code>{`# OpenAI-compatible tools such as Codex
 export OPENAI_API_KEY="brok_sk_live_your_key"
-export OPENAI_BASE_URL="https://api.brok.ai/v1"
+export OPENAI_BASE_URL="https://www.brok.fyi/api/v1"
 export OPENAI_MODEL="brok-code"
 
 # Anthropic-compatible tools
 export ANTHROPIC_API_KEY="brok_sk_live_your_key"
-export ANTHROPIC_BASE_URL="https://api.brok.ai"
+export ANTHROPIC_BASE_URL="https://www.brok.fyi/api"
 export ANTHROPIC_MODEL="brok-code"`}</code>
         </pre>
 
         <h2>Anthropic Messages Compatibility</h2>
         <pre className="bg-muted p-4 rounded-lg">
-          <code>{`curl https://api.brok.ai/v1/messages \\
+          <code>{`curl https://www.brok.fyi/api/v1/messages \\
   -H "x-api-key: brok_sk_live_your_key" \\
   -H "anthropic-version: 2023-06-01" \\
   -H "Content-Type: application/json" \\
@@ -316,7 +316,7 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
         <h2>Streaming</h2>
         <p>Enable streaming for real-time responses:</p>
         <pre className="bg-muted p-4 rounded-lg">
-          <code>{`curl https://api.brok.ai/v1/chat/completions \\
+          <code>{`curl https://www.brok.fyi/api/v1/chat/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{

@@ -18,8 +18,8 @@ Only Brok API keys are accepted by the Brok Code TUI and cloud API.
 
 - Key env var: `BROK_API_KEY`
 - Required key prefix: `brok_sk_`
-- OpenAI-compatible base URL: `https://api.brok.ai/v1`
-- Anthropic-compatible base URL: `https://api.brok.ai`
+- OpenAI-compatible base URL: `https://www.brok.fyi/api/v1`
+- Anthropic-compatible base URL: `https://www.brok.fyi/api`
 - Model: `brok-code`
 
 ## Implemented Now

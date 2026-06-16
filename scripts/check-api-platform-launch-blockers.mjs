@@ -34,6 +34,7 @@ const checks = [
   packageScriptExists('scan:secrets:local'),
   packageScriptExists('check:deploy-env'),
   packageScriptExists('check:openapi'),
+  packageScriptExists('check:api-platform-dx'),
   packageScriptExists('check:api-production-proof'),
   packageScriptExists('reconcile:usage-reservations'),
   packageScriptExists('smoke:platform'),
@@ -62,6 +63,16 @@ const checks = [
     'components/playground/chat-playground.tsx',
     'apiKey:',
     'hosted playground does not send browser-supplied API keys'
+  ),
+  fileContains(
+    'app/api/playground/run/route.ts',
+    'browser_api_key_not_allowed',
+    'hosted playground server rejects browser-supplied API keys'
+  ),
+  fileNotContains(
+    'app/api/playground/run/route.ts',
+    'return apiKey.trim()',
+    'hosted playground server does not proxy browser-supplied API keys'
   ),
   fileNotContains(
     'components/playground/chat-playground.tsx',

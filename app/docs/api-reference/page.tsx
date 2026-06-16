@@ -371,7 +371,7 @@ function buildCurlExample(endpoint: Endpoint) {
 
   const lines = [
     `curl https://www.brok.fyi${endpoint.path} \\`,
-    `  ${headers.join(' \\\n+  ')}`
+    `  ${headers.join(' \\\n  ')}`
   ]
 
   if (endpoint.method === 'POST') {

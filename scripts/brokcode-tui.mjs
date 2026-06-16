@@ -75,7 +75,7 @@ let apiKey = process.env.BROK_API_KEY || storedConfig.apiKey
 const baseUrl = (
   process.env.BROK_BASE_URL ||
   storedConfig.baseUrl ||
-  'https://api.brok.ai/v1'
+  'https://www.brok.fyi/api/v1'
 ).replace(/\/$/, '')
 const syncBaseUrl = (
   process.env.BROK_SYNC_URL ||

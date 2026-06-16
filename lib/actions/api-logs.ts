@@ -1,11 +1,7 @@
 'use server'
 
-import { desc, eq, inArray } from 'drizzle-orm'
-
 import { getCurrentUserId } from '@/lib/auth/get-current-user'
-import { db } from '@/lib/db'
 import { canUseDevDbFallback, getErrorMessage } from '@/lib/db/dev-db-fallback'
-import { usageEvents, workspaces } from '@/lib/db/schema-brok'
 
 export interface UserLogEntry {
   id: string
@@ -21,7 +17,19 @@ export interface UserLogEntry {
   status: string
 }
 
+async function getLogDependencies() {
+  const [{ desc, eq, inArray }, { db }, { usageEvents, workspaces }] =
+    await Promise.all([
+      import('drizzle-orm'),
+      import('@/lib/db'),
+      import('@/lib/db/schema-brok')
+    ])
+
+  return { desc, eq, inArray, db, usageEvents, workspaces }
+}
+
 async function resolveUserWorkspaceIds(userId: string): Promise<string[]> {
+  const { db, eq, workspaces } = await getLogDependencies()
   const owned = await db
     .select({ id: workspaces.id })
     .from(workspaces)
@@ -34,6 +42,7 @@ export async function getLogsForUser(limit = 50): Promise<UserLogEntry[]> {
   if (!userId) return []
 
   try {
+    const { db, desc, inArray, usageEvents } = await getLogDependencies()
     const workspaceIds = await resolveUserWorkspaceIds(userId)
     if (workspaceIds.length === 0) return []
 

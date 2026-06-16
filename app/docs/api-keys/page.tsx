@@ -40,7 +40,7 @@ export default function ApiKeysPage() {
         <div className="rounded-lg border p-4">
           <p className="text-sm text-muted-foreground">Endpoint</p>
           <code className="mt-2 block break-all text-sm">
-            https://api.brok.ai/v1
+            https://www.brok.fyi/api/v1
           </code>
         </div>
       </div>
@@ -214,7 +214,7 @@ export default function ApiKeysPage() {
           <code>{`# .env.local, shell profile, or CI secret store
 BROK_API_KEY="brok_sk_test_your_key_here"
 OPENAI_API_KEY="$BROK_API_KEY"
-OPENAI_BASE_URL="https://api.brok.ai/v1"
+OPENAI_BASE_URL="https://www.brok.fyi/api/v1"
 OPENAI_MODEL="brok-code"`}</code>
         </pre>
         <p>
@@ -231,8 +231,9 @@ OPENAI_MODEL="brok-code"`}</code>
           The hosted API playground does not require users to paste production
           keys into the browser. Signed-in users get an account-owned,
           server-side test session key that Brok stores encrypted for the
-          playground proxy. If a manual key is supplied, it is forwarded for the
-          current request path and must not be persisted by client code.
+          playground proxy. The hosted route rejects browser-supplied raw API
+          keys, so production secrets stay in server-side stores instead of
+          client requests.
         </p>
 
         <h2>Request IDs And Debugging</h2>
@@ -261,7 +262,7 @@ OPENAI_MODEL="brok-code"`}</code>
 
         <h2>Direct API Request</h2>
         <pre className="rounded-lg bg-muted p-4">
-          <code>{`curl https://api.brok.ai/v1/chat/completions \\
+          <code>{`curl https://www.brok.fyi/api/v1/chat/completions \\
   -H "Authorization: Bearer $BROK_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{

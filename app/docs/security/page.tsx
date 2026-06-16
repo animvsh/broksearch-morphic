@@ -87,11 +87,13 @@ The dashboard shows rotation relationships with names, prefixes, statuses, and
 timestamps only. Raw source and replacement secrets are never displayed after
 their one-time reveal.
 
-## Revocation
+## Expiration And Revocation
 
-Pause is for temporary shutdowns. Revocation is final. User-created keys do not
-yet have general persistent expiration; playground session keys are server-side
-test keys with a 24-hour TTL.
+Pause is for temporary shutdowns. User-created keys can have no expiration or a
+future expiration timestamp. Expired keys fail before scope checks, rate limits,
+usage reservations, provider calls, billing, or last-used updates. Revocation is
+final, so create and verify a replacement key before cutting over production
+traffic.
 
 ## Application Security
 
@@ -99,7 +101,7 @@ test keys with a 24-hour TTL.
 
 \`\`\`javascript
 // Bad: exposes your key to every browser user.
-await fetch('https://api.brok.ai/v1/chat/completions', {
+await fetch('https://www.brok.fyi/api/v1/chat/completions', {
   headers: { Authorization: 'Bearer ' + apiKey }
 })
 
@@ -273,11 +275,13 @@ bun run scan:secrets:local`}</code>
           never displayed after their one-time reveal.
         </p>
 
-        <h2>Revocation</h2>
+        <h2>Expiration And Revocation</h2>
         <p>
-          Pause is for temporary shutdowns. Revocation is final. User-created
-          keys do not yet have general persistent expiration; playground session
-          keys are server-side test keys with a 24-hour TTL.
+          Pause is for temporary shutdowns. User-created keys can have no
+          expiration or a future expiration timestamp. Expired keys fail before
+          scope checks, rate limits, usage reservations, provider calls,
+          billing, or last-used updates. Revocation is final, so create and
+          verify a replacement key before cutting over production traffic.
         </p>
 
         <h2>Application Security</h2>
@@ -285,7 +289,7 @@ bun run scan:secrets:local`}</code>
         <h3>Server-Side Only</h3>
         <pre className="rounded-lg bg-muted p-4">
           <code>{`// Bad: exposes your key to every browser user.
-await fetch('https://api.brok.ai/v1/chat/completions', {
+await fetch('https://www.brok.fyi/api/v1/chat/completions', {
   headers: { Authorization: 'Bearer ' + apiKey }
 })
 

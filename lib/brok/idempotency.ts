@@ -250,7 +250,7 @@ export async function completeIdempotentRequest({
   }
 }
 
-function hashIdempotencyRequest({
+export function hashIdempotencyRequest({
   route,
   body,
   stream
@@ -260,8 +260,31 @@ function hashIdempotencyRequest({
   stream: boolean
 }) {
   return createHash('sha256')
-    .update(JSON.stringify({ route, stream, body }))
+    .update(stableJsonStringify({ route, stream, body }))
     .digest('hex')
+}
+
+function stableJsonStringify(value: unknown): string {
+  return JSON.stringify(normalizeForStableJson(value))
+}
+
+function normalizeForStableJson(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(item =>
+      item === undefined ? null : normalizeForStableJson(item)
+    )
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, entryValue]) => entryValue !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entryValue]) => [key, normalizeForStableJson(entryValue)])
+  )
 }
 
 function idempotencyErrorResponse({

@@ -14,7 +14,7 @@ Add search-powered AI responses with citations to your application.
 ## Endpoint
 
 \`\`\`
-POST https://api.brok.ai/v1/search/completions
+POST https://www.brok.fyi/api/v1/search/completions
 \`\`\`
 
 ## Request Body
@@ -65,7 +65,7 @@ Citations are included in the response with:
 ## Request Example
 
 \`\`\`bash
-curl https://api.brok.ai/v1/search/completions \\
+curl https://www.brok.fyi/api/v1/search/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -128,7 +128,7 @@ curl https://api.brok.ai/v1/search/completions \\
 Search completions also support streaming:
 
 \`\`\`bash
-curl https://api.brok.ai/v1/search/completions \\
+curl https://www.brok.fyi/api/v1/search/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -245,7 +245,7 @@ export default function SearchCompletionsPage() {
 
         <h2>Endpoint</h2>
         <pre className="max-w-full overflow-x-auto rounded-lg bg-muted p-4">
-          <code>POST https://api.brok.ai/v1/search/completions</code>
+          <code>POST https://www.brok.fyi/api/v1/search/completions</code>
         </pre>
 
         <h2>Request Body</h2>
@@ -361,7 +361,7 @@ export default function SearchCompletionsPage() {
 
         <h2>Request Example</h2>
         <pre className="max-w-full overflow-x-auto rounded-lg bg-muted p-4">
-          <code>{`curl https://api.brok.ai/v1/search/completions \\
+          <code>{`curl https://www.brok.fyi/api/v1/search/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -421,7 +421,7 @@ export default function SearchCompletionsPage() {
         <h2>Streaming</h2>
         <p>Search completions also support streaming:</p>
         <pre className="max-w-full overflow-x-auto rounded-lg bg-muted p-4">
-          <code>{`curl https://api.brok.ai/v1/search/completions \\
+          <code>{`curl https://www.brok.fyi/api/v1/search/completions \\
   -H "Authorization: Bearer brok_sk_live_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{

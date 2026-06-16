@@ -1,6 +1,3 @@
-import { db } from '@/lib/db'
-import { apiKeyAuditEvents } from '@/lib/db/schema'
-
 export const API_KEY_AUDIT_EVENT_TYPES = [
   'created',
   'secret_revealed_once',
@@ -49,6 +46,15 @@ const SENSITIVE_METADATA_KEYS = [
 
 const API_KEY_VALUE_PATTERN = /brok_sk_(?:live|test)_[A-Za-z0-9_-]{8,}/g
 const REDACTED = '[redacted]'
+
+async function getApiKeyAuditDependencies() {
+  const [{ db }, { apiKeyAuditEvents }] = await Promise.all([
+    import('@/lib/db'),
+    import('@/lib/db/schema')
+  ])
+
+  return { db, apiKeyAuditEvents }
+}
 
 function isSensitiveMetadataKey(key: string) {
   const normalized = key.replace(/[^a-z0-9]/gi, '').toLowerCase()
@@ -117,6 +123,7 @@ export function buildApiKeyAuditEventValues(input: ApiKeyAuditEventInput) {
 }
 
 export async function recordApiKeyAuditEvent(input: ApiKeyAuditEventInput) {
+  const { db, apiKeyAuditEvents } = await getApiKeyAuditDependencies()
   const [event] = await db
     .insert(apiKeyAuditEvents)
     .values(buildApiKeyAuditEventValues(input))
@@ -130,6 +137,7 @@ export async function recordApiKeyAuditEvents(inputs: ApiKeyAuditEventInput[]) {
     return []
   }
 
+  const { db, apiKeyAuditEvents } = await getApiKeyAuditDependencies()
   return db
     .insert(apiKeyAuditEvents)
     .values(inputs.map(input => buildApiKeyAuditEventValues(input)))
