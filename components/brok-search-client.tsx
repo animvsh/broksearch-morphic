@@ -19,6 +19,7 @@ import type { UIMessage } from '@/lib/types/ai'
 import type { SearchMode } from '@/lib/types/search'
 
 import { recordRecentSearch } from './search/recent-searches'
+import { SourceSidePanel } from './search/source-side-panel'
 import { FollowUpChips, type FollowUpItem } from './follow-up-chips'
 import { MarkdownMessage } from './message'
 import { RelatedQuestionsPanel } from './related-questions-panel'
@@ -349,6 +350,9 @@ export function BrokSearchClient({
   const [pendingQuery, setPendingQuery] = useState<string | null>(null)
   const [answer, setAnswer] = useState('')
   const [followUps, setFollowUps] = useState<FollowUpItem[]>([])
+  const [activeSource, setActiveSource] = useState<SearchResultItem | null>(
+    null
+  )
   const [progress, setProgress] = useState<SearchProgress>({
     searchQueries: [],
     sources: [],
@@ -868,7 +872,10 @@ export function BrokSearchClient({
         {isLoading && <SearchProgressIndicator progress={progress} />}
 
         {progress.sources.length > 0 && (
-          <SourceStrip sources={progress.sources} />
+          <SourceStrip
+            sources={progress.sources}
+            onOpenSource={source => setActiveSource(toSearchResultItem(source))}
+          />
         )}
 
         {isLoading && !answer && <AnswerLoadingCard />}
@@ -893,6 +900,7 @@ export function BrokSearchClient({
             <MarkdownMessage
               message={linkedAnswer}
               citationMaps={activeCitationMaps}
+              onCitationOpen={setActiveSource}
             />
             {progress.status === 'done' && progress.sources.length === 0 && (
               <NoSourcesNotice />
@@ -901,7 +909,10 @@ export function BrokSearchClient({
         )}
 
         {progress.sources.length > 0 && (
-          <SourceList sources={progress.sources} />
+          <SourceList
+            sources={progress.sources}
+            onOpenSource={source => setActiveSource(toSearchResultItem(source))}
+          />
         )}
 
         {progress.status === 'done' && (
@@ -958,6 +969,13 @@ export function BrokSearchClient({
         onSelect={handleFollowUp}
         isLoading={isLoading}
       />
+      <SourceSidePanel
+        source={activeSource}
+        open={Boolean(activeSource)}
+        onOpenChange={open => {
+          if (!open) setActiveSource(null)
+        }}
+      />
     </div>
   )
 }
@@ -997,7 +1015,13 @@ function NoSourcesNotice() {
   )
 }
 
-function SourceStrip({ sources }: { sources: Source[] }) {
+function SourceStrip({
+  onOpenSource,
+  sources
+}: {
+  onOpenSource: (source: Source) => void
+  sources: Source[]
+}) {
   if (sources.length === 0) return null
 
   return (
@@ -1007,12 +1031,12 @@ function SourceStrip({ sources }: { sources: Source[] }) {
       data-testid="brok-source-strip"
     >
       {sources.slice(0, 6).map((source, index) => (
-        <a
+        <button
           key={getSourceIdentity(source)}
-          href={source.url}
-          target="_blank"
-          rel="noopener noreferrer"
+          type="button"
+          onClick={() => onOpenSource(source)}
           className="inline-flex h-8 max-w-[12rem] shrink-0 items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/85 px-2.5 text-xs font-medium text-zinc-700 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.2)] transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+          aria-label={`Verify source ${index + 1}: ${source.title}`}
           data-testid={`brok-source-chip-${index}`}
         >
           <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-zinc-100 font-mono text-[9px] font-semibold text-zinc-600">
@@ -1021,7 +1045,7 @@ function SourceStrip({ sources }: { sources: Source[] }) {
           <span className="truncate">
             {source.publisher ?? safeHostname(source.url)}
           </span>
-        </a>
+        </button>
       ))}
       {sources.length > 6 && (
         <span className="shrink-0 text-xs text-muted-foreground">
@@ -1134,7 +1158,13 @@ function SearchProgressIndicator({ progress }: { progress: SearchProgress }) {
   )
 }
 
-function SourceList({ sources }: { sources: Source[] }) {
+function SourceList({
+  onOpenSource,
+  sources
+}: {
+  onOpenSource: (source: Source) => void
+  sources: Source[]
+}) {
   if (sources.length === 0) return null
   return (
     <section
@@ -1151,17 +1181,24 @@ function SourceList({ sources }: { sources: Source[] }) {
             className="flex flex-col gap-1 rounded-xl border border-zinc-200/70 bg-white/90 p-3"
             data-testid={`brok-search-source-${index}`}
           >
-            <a
-              href={source.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-900 hover:underline"
-            >
-              <span className="line-clamp-1">
+            <div className="flex min-w-0 items-start justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenSource(source)}
+                className="line-clamp-1 min-w-0 text-left text-xs font-semibold text-zinc-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+              >
                 [{index + 1}] {source.title}
-              </span>
-              <ExternalLink className="size-3 shrink-0" />
-            </a>
+              </button>
+              <a
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+                aria-label={`Open ${source.title}`}
+              >
+                <ExternalLink className="size-3.5" />
+              </a>
+            </div>
             <span className="text-[11px] text-muted-foreground">
               {source.publisher ?? safeHostname(source.url)}
             </span>

@@ -10,20 +10,45 @@ vi.mock('next/navigation', () => ({
 vi.mock('../message', () => ({
   MarkdownMessage: ({
     citationMaps,
+    onCitationOpen,
     message
   }: {
     citationMaps?: Record<string, Record<number, { title: string }>>
+    onCitationOpen?: (citation: { title: string }) => void
     message: string
-  }) => (
-    <div
-      data-citation-title={
-        citationMaps?.['brok-session-search']?.[1]?.title ?? ''
-      }
-      data-testid="markdown-message"
-    >
-      {message}
-    </div>
-  )
+  }) => {
+    const citation = citationMaps?.['brok-session-search']?.[1]
+    return (
+      <div
+        data-citation-title={citation?.title ?? ''}
+        data-testid="markdown-message"
+      >
+        {message}
+        {citation && onCitationOpen && (
+          <button
+            type="button"
+            onClick={() => onCitationOpen(citation)}
+            data-testid="mock-citation-open"
+          >
+            Open citation
+          </button>
+        )}
+      </div>
+    )
+  }
+}))
+
+vi.mock('../search/source-side-panel', () => ({
+  SourceSidePanel: ({
+    source
+  }: {
+    source: { title?: string } | null
+    open: boolean
+    onOpenChange: (open: boolean) => void
+  }) =>
+    source ? (
+      <aside data-testid="source-side-panel">{source.title}</aside>
+    ) : null
 }))
 
 vi.mock('../related-questions-panel', () => ({
@@ -247,6 +272,16 @@ describe('BrokSearchClient', () => {
     ).toBeTruthy()
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent(
       'How does Brok cite sources?'
+    )
+
+    fireEvent.click(screen.getByTestId('brok-source-chip-0'))
+    expect(screen.getByTestId('source-side-panel')).toHaveTextContent(
+      'Brok docs'
+    )
+
+    fireEvent.click(screen.getByTestId('mock-citation-open'))
+    expect(screen.getByTestId('source-side-panel')).toHaveTextContent(
+      'Brok docs'
     )
 
     const persisted = JSON.parse(
