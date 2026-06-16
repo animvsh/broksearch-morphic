@@ -1055,7 +1055,7 @@ export function BrokSearchClient({
       </section>
 
       <RelatedQuestionsPanel
-        followUps={followUps}
+        followUps={displayFollowUps}
         onSelect={handleFollowUp}
         isLoading={isLoading}
       />

@@ -52,7 +52,15 @@ vi.mock('../search/source-side-panel', () => ({
 }))
 
 vi.mock('../related-questions-panel', () => ({
-  RelatedQuestionsPanel: () => <aside data-testid="related-questions" />
+  RelatedQuestionsPanel: ({
+    followUps
+  }: {
+    followUps: Array<{ label?: string; query: string }>
+  }) => (
+    <aside data-testid="related-questions">
+      {followUps.map(followUp => followUp.label ?? followUp.query).join(', ')}
+    </aside>
+  )
 }))
 
 vi.mock('../voice-input-button', () => ({
@@ -290,6 +298,9 @@ describe('BrokSearchClient', () => {
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent(
+      'How does Brok cite sources?'
+    )
+    expect(screen.getByTestId('related-questions')).toHaveTextContent(
       'How does Brok cite sources?'
     )
 
@@ -924,7 +935,13 @@ describe('BrokSearchClient', () => {
       'Brok answers with sources. [1](#brok-session-search:1)'
     )
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent('Go deeper')
+    expect(screen.getByTestId('related-questions')).toHaveTextContent(
+      'Go deeper'
+    )
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent(
+      'Compare tradeoffs'
+    )
+    expect(screen.getByTestId('related-questions')).toHaveTextContent(
       'Compare tradeoffs'
     )
   })
