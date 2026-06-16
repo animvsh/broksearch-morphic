@@ -376,6 +376,114 @@ describe('BrokSearchClient', () => {
     })
   })
 
+  it('ignores late chunks from an older search stream', async () => {
+    const firstStream = controllableStreamResponse()
+    const secondStream = controllableStreamResponse()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(firstStream.response)
+      .mockResolvedValueOnce(secondStream.response)
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="React hooks"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    fireEvent.change(screen.getByPlaceholderText('Ask anything...'), {
+      target: { value: 'Vue composables' }
+    })
+    fireEvent.submit(
+      screen.getByPlaceholderText('Ask anything...').closest('form')!
+    )
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    await act(async () => {
+      firstStream.send('answer_delta', { delta: 'Old answer should not leak.' })
+      secondStream.send('answer_delta', { delta: 'New answer wins.' })
+      secondStream.send('done', {})
+      secondStream.close()
+      firstStream.close()
+    })
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'New answer wins.'
+    )
+    expect(screen.getByTestId('brok-search-answer')).not.toHaveTextContent(
+      'Old answer should not leak.'
+    )
+  })
+
+  it('keeps distinct sources when streamed source ids are missing', async () => {
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        {
+          event: 'source_found',
+          data: {
+            source: {
+              title: 'First Brok source',
+              url: 'https://docs.example.com/one',
+              publisher: 'docs.example.com',
+              snippet: 'First source.',
+              retrievedAt: '2026-06-16T00:00:00.000Z',
+              qualityScore: 91
+            }
+          }
+        },
+        {
+          event: 'source_found',
+          data: {
+            source: {
+              title: 'Second Brok source',
+              url: 'https://docs.example.com/two',
+              publisher: 'docs.example.com',
+              snippet: 'Second source.',
+              retrievedAt: '2026-06-16T00:00:00.000Z',
+              qualityScore: 88
+            }
+          }
+        },
+        {
+          event: 'answer_delta',
+          data: { delta: 'Brok cites both. [1] [2]' }
+        },
+        {
+          event: 'done',
+          data: {}
+        }
+      ])
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="What is Brok?"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-source-0')).toHaveTextContent(
+      'First Brok source'
+    )
+    expect(screen.getByTestId('brok-search-source-1')).toHaveTextContent(
+      'Second Brok source'
+    )
+    expect(screen.getByTestId('brok-search-answer')).toHaveTextContent(
+      'Brok cites both. [1](#brok-session-search:1) [2](#brok-session-search:2)'
+    )
+  })
+
   it('labels source-free answers as model knowledge', async () => {
     const fetchMock = vi.fn(async () =>
       streamResponse([

@@ -24,7 +24,7 @@ import { RelatedQuestionsPanel } from './related-questions-panel'
 import { VoiceInputButton, VoiceOutputButton } from './voice-input-button'
 
 interface Source {
-  id: string
+  id?: string
   title: string
   url: string
   publisher?: string
@@ -83,6 +83,10 @@ function toSearchResultItem(source: Source): SearchResultItem {
     publisher: source.publisher,
     retrievedAt: source.retrievedAt
   }
+}
+
+function getSourceIdentity(source: Source) {
+  return source.id ?? source.url ?? `${source.title}:${source.publisher ?? ''}`
 }
 
 function buildCitationMaps(
@@ -222,6 +226,8 @@ export function BrokSearchClient({
   const abortRef = useRef<AbortController | null>(null)
   const durableMessagesRef = useRef<UIMessage[]>([])
   const activeTurnRef = useRef<SearchTurn | null>(null)
+  const requestIdRef = useRef(0)
+  const persistTimerRef = useRef<number | null>(null)
 
   const endpoint = useMemo(() => apiBase ?? DEFAULT_API_BASE, [apiBase])
   const activeCitationMaps = useMemo(
@@ -234,6 +240,7 @@ export function BrokSearchClient({
   )
 
   const stopSearch = useCallback(() => {
+    requestIdRef.current += 1
     abortRef.current?.abort()
     abortRef.current = null
     setPendingQuery(null)
@@ -243,6 +250,14 @@ export function BrokSearchClient({
       message: answer.trim() ? 'Stopped' : undefined
     }))
   }, [answer])
+
+  const flushPendingPersistence = useCallback(() => {
+    if (persistTimerRef.current) {
+      window.clearTimeout(persistTimerRef.current)
+      persistTimerRef.current = null
+    }
+    persistDurableMessages(searchId, durableMessagesRef.current)
+  }, [searchId])
 
   useEffect(() => {
     if (!activeQuestion.trim()) {
@@ -270,7 +285,12 @@ export function BrokSearchClient({
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
+      const requestId = requestIdRef.current + 1
+      requestIdRef.current = requestId
       commitDurableSearchUrl(searchId)
+
+      const isCurrentRequest = () =>
+        requestIdRef.current === requestId && !controller.signal.aborted
 
       const previousTurn = activeTurnRef.current
       if (previousTurn?.answer.trim()) {
@@ -320,7 +340,13 @@ export function BrokSearchClient({
         nextMessages[baseIndex] = pair[0]
         nextMessages[baseIndex + 1] = pair[1]
         durableMessagesRef.current = nextMessages
-        persistDurableMessages(searchId, nextMessages)
+        if (persistTimerRef.current) {
+          window.clearTimeout(persistTimerRef.current)
+        }
+        persistTimerRef.current = window.setTimeout(() => {
+          persistTimerRef.current = null
+          persistDurableMessages(searchId, durableMessagesRef.current)
+        }, 300)
       }
 
       writeDurableTurn({
@@ -375,6 +401,8 @@ export function BrokSearchClient({
         let buffer = ''
 
         const dispatch = (event: string, data: any) => {
+          if (!isCurrentRequest()) return
+
           switch (event) {
             case 'status':
               setProgress(prev => ({
@@ -410,12 +438,20 @@ export function BrokSearchClient({
               }))
               return
             case 'source_found':
-              if (!streamedSources.some(s => s.id === data.source.id)) {
+              if (
+                !streamedSources.some(
+                  s => getSourceIdentity(s) === getSourceIdentity(data.source)
+                )
+              ) {
                 streamedSources = [...streamedSources, data.source as Source]
                 persistSnapshot()
               }
               setProgress(prev => {
-                if (prev.sources.some(s => s.id === data.source.id)) {
+                if (
+                  prev.sources.some(
+                    s => getSourceIdentity(s) === getSourceIdentity(data.source)
+                  )
+                ) {
                   return prev
                 }
                 return {
@@ -456,6 +492,7 @@ export function BrokSearchClient({
               return
             case 'done':
               persistSnapshot()
+              flushPendingPersistence()
               setProgress(prev => ({
                 ...prev,
                 status: 'done',
@@ -477,6 +514,7 @@ export function BrokSearchClient({
 
         while (true) {
           const { done, value } = await reader.read()
+          if (!isCurrentRequest()) break
           if (done) break
           buffer += decoder.decode(value, { stream: true })
 
@@ -504,6 +542,7 @@ export function BrokSearchClient({
           }
         }
       } catch (err) {
+        if (!isCurrentRequest()) return
         if ((err as Error).name === 'AbortError') return
         console.error('Search failed:', err)
         const message =
@@ -511,10 +550,13 @@ export function BrokSearchClient({
         setError(message)
         setProgress(prev => ({ ...prev, status: 'error', message }))
       } finally {
-        setPendingQuery(null)
+        if (isCurrentRequest()) {
+          flushPendingPersistence()
+          setPendingQuery(null)
+        }
       }
     },
-    [endpoint, apiKey, initialMode, searchId]
+    [endpoint, apiKey, flushPendingPersistence, initialMode, searchId]
   )
 
   useEffect(() => {
@@ -522,7 +564,12 @@ export function BrokSearchClient({
       void runSearch(initialQuery)
     }
     return () => {
+      requestIdRef.current += 1
       abortRef.current?.abort()
+      if (persistTimerRef.current) {
+        window.clearTimeout(persistTimerRef.current)
+        persistTimerRef.current = null
+      }
     }
   }, [initialQuery, runSearch])
 
@@ -872,7 +919,7 @@ function SourceList({ sources }: { sources: Source[] }) {
       <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
         {sources.map((source, index) => (
           <li
-            key={source.id}
+            key={getSourceIdentity(source)}
             className="flex flex-col gap-1 rounded-xl border border-zinc-200/70 bg-white/90 p-3"
             data-testid={`brok-search-source-${index}`}
           >
