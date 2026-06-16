@@ -810,6 +810,61 @@ describe('BrokSearchClient', () => {
     )
   })
 
+  it('runs a fresh search when the initial query and search id change', async () => {
+    const fetchMock = vi.fn(async (_url, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { query: string }
+
+      return streamResponse([
+        {
+          event: 'answer_delta',
+          data: { delta: `Answer for ${body.query}` }
+        },
+        {
+          event: 'done',
+          data: {}
+        }
+      ])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { rerender } = render(
+      <BrokSearchClient
+        initialQuery="First question"
+        initialMode="quick"
+        searchId="search_first"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Answer for First question'
+    )
+
+    rerender(
+      <BrokSearchClient
+        initialQuery="Second question"
+        initialMode="quick"
+        searchId="search_second"
+      />
+    )
+
+    await waitFor(() => {
+      expect(getSessionSearchCalls(fetchMock)).toHaveLength(2)
+    })
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Answer for Second question'
+    )
+
+    const secondRequest = getSessionSearchCalls(fetchMock)[1] as unknown as [
+      unknown,
+      RequestInit
+    ]
+    expect(JSON.parse(String(secondRequest[1]?.body))).toMatchObject({
+      query: 'Second question',
+      mode: 'quick',
+      stream: true
+    })
+  })
+
   it('keeps distinct sources when streamed source ids are missing', async () => {
     const fetchMock = vi.fn(async () =>
       streamResponse([

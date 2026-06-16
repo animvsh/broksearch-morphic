@@ -426,7 +426,7 @@ export function BrokSearchClient({
     message: initialQueryText ? 'Planning search query...' : undefined
   }))
   const [error, setError] = useState<string | null>(null)
-  const restoredInitialQueryRef = useRef(false)
+  const restoredInitialQueryRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const durableMessagesRef = useRef<UIMessage[]>([])
   const activeTurnRef = useRef<SearchTurn | null>(null)
@@ -833,7 +833,18 @@ export function BrokSearchClient({
   )
 
   useEffect(() => {
-    if (restoredInitialQueryRef.current) return
+    const cleanup = () => {
+      requestIdRef.current += 1
+      abortRef.current?.abort()
+      if (persistTimerRef.current) {
+        window.clearTimeout(persistTimerRef.current)
+        persistTimerRef.current = null
+      }
+    }
+    const initialRunKey = `${searchId ?? 'search_session'}:${initialMode}:${
+      initialQuery?.trim() ?? ''
+    }`
+    if (restoredInitialQueryRef.current === initialRunKey) return cleanup
 
     const trimmedInitialQuery = initialQuery?.trim() ?? ''
     const storedMessages = readStoredSearchMessages(searchId)
@@ -848,7 +859,7 @@ export function BrokSearchClient({
         latestTurn.query.trim().toLowerCase() ===
           trimmedInitialQuery.toLowerCase())
     ) {
-      restoredInitialQueryRef.current = true
+      restoredInitialQueryRef.current = initialRunKey
       durableMessagesRef.current = storedMessages
       setCompletedTurns(storedTurns.slice(0, -1))
       setActiveQuestion(latestTurn.query)
@@ -865,20 +876,14 @@ export function BrokSearchClient({
       activeTurnRef.current = latestTurn
       commitDurableSearchUrl(searchId)
       recordRecentSearch(latestTurn.query, initialMode)
-      return
+      return cleanup
     }
 
     if (trimmedInitialQuery) {
+      restoredInitialQueryRef.current = initialRunKey
       void runSearch(trimmedInitialQuery)
     }
-    return () => {
-      requestIdRef.current += 1
-      abortRef.current?.abort()
-      if (persistTimerRef.current) {
-        window.clearTimeout(persistTimerRef.current)
-        persistTimerRef.current = null
-      }
-    }
+    return cleanup
   }, [initialMode, initialQuery, runSearch, searchId])
 
   const handleFollowUp = useCallback(
