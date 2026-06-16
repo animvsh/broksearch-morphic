@@ -36,6 +36,7 @@ export interface SearchRequest {
   domains?: string[]
   maxSources?: number
   onSources?: (sources: SearchResult[]) => void | Promise<void>
+  onAnswerDelta?: (delta: string) => void | Promise<void>
 }
 
 export type QuestionType =
@@ -299,7 +300,7 @@ async function runBrokWebSearch(
   numResults: number,
   maxTokens: number,
   domainHints: string[],
-  events: Pick<SearchRequest, 'onSources'>
+  events: Pick<SearchRequest, 'onSources' | 'onAnswerDelta'>
 ): Promise<SearchResponse> {
   const batches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
@@ -337,7 +338,8 @@ async function runBrokWebSearch(
     resolvedQuery,
     citations,
     maxTokens,
-    classification
+    classification,
+    events
   )
   const followUps = generateFollowUps(resolvedQuery, classification, citations)
 
@@ -362,7 +364,7 @@ async function runHtmlSearchPipeline(
   numResults: number,
   maxTokens: number,
   domainHints: string[],
-  events: Pick<SearchRequest, 'onSources'>
+  events: Pick<SearchRequest, 'onSources' | 'onAnswerDelta'>
 ): Promise<SearchResponse> {
   const resultBatches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
@@ -396,7 +398,8 @@ async function runHtmlSearchPipeline(
     resolvedQuery,
     citations,
     maxTokens,
-    classification
+    classification,
+    events
   )
   const followUps = generateFollowUps(resolvedQuery, classification, citations)
 
@@ -607,7 +610,8 @@ async function synthesizeAnswerFromResults(
   query: string,
   citations: SearchResult[],
   maxTokens: number,
-  classification: QueryClassification
+  classification: QueryClassification,
+  events: Pick<SearchRequest, 'onAnswerDelta'> = {}
 ): Promise<string> {
   if (citations.length === 0) {
     return 'No search results were available.'
@@ -637,6 +641,7 @@ async function synthesizeAnswerFromResults(
       body: JSON.stringify({
         model: BROK_PROVIDER_CHAT_MODEL,
         max_tokens: Math.min(maxTokens, 1200),
+        stream: Boolean(events.onAnswerDelta),
         messages: [
           {
             role: 'system',
@@ -657,6 +662,10 @@ async function synthesizeAnswerFromResults(
         .join('\n')
     }
 
+    if (events.onAnswerDelta && response.body) {
+      return streamAnswerResponse(response, events.onAnswerDelta)
+    }
+
     const data = await response.json()
     return stripThinkingBlocks(
       data.choices?.[0]?.message?.content || 'No answer generated.'
@@ -666,6 +675,141 @@ async function synthesizeAnswerFromResults(
     return citations
       .map(citation => `${citation.title}: ${citation.snippet}`.trim())
       .join('\n')
+  }
+}
+
+async function streamAnswerResponse(
+  response: Response,
+  onAnswerDelta: NonNullable<SearchRequest['onAnswerDelta']>
+) {
+  const reader = response.body?.getReader()
+  if (!reader) {
+    const data = await response.json()
+    return stripThinkingBlocks(
+      data.choices?.[0]?.message?.content || 'No answer generated.'
+    )
+  }
+
+  const decoder = new TextDecoder()
+  const thinkingFilter = createThinkingBlockDeltaFilter()
+  let buffer = ''
+  let answer = ''
+
+  const emit = async (delta: string) => {
+    if (!delta) return
+    answer += delta
+    await onAnswerDelta(delta)
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const frames = buffer.split('\n\n')
+    buffer = frames.pop() ?? ''
+
+    for (const frame of frames) {
+      const delta = readOpenAICompatibleDelta(frame)
+      if (delta) {
+        await emit(thinkingFilter.push(delta))
+      }
+    }
+  }
+
+  buffer += decoder.decode()
+  if (buffer.trim()) {
+    const delta = readOpenAICompatibleDelta(buffer)
+    if (delta) {
+      await emit(thinkingFilter.push(delta))
+    }
+  }
+
+  await emit(thinkingFilter.flush())
+
+  return answer.trim() || 'No answer generated.'
+}
+
+function readOpenAICompatibleDelta(frame: string) {
+  const dataLines = frame
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('data:'))
+    .map(line => line.slice(5).trim())
+
+  let delta = ''
+  for (const line of dataLines) {
+    if (!line || line === '[DONE]') continue
+    try {
+      const chunk = JSON.parse(line)
+      delta += chunk.choices?.[0]?.delta?.content ?? ''
+      delta += chunk.choices?.[0]?.message?.content ?? ''
+      delta += chunk.choices?.[0]?.text ?? ''
+    } catch {
+      // Ignore malformed provider frames; the final answer will reflect
+      // successfully parsed chunks.
+    }
+  }
+
+  return delta
+}
+
+function createThinkingBlockDeltaFilter() {
+  let pending = ''
+  let insideThinking = false
+  const visibleTailGuard = '<think'.length
+  const hiddenTailGuard = '</think>'.length
+
+  return {
+    push(delta: string) {
+      pending += delta
+      let output = ''
+
+      while (pending) {
+        if (insideThinking) {
+          const closeIndex = pending.toLowerCase().indexOf('</think>')
+          if (closeIndex === -1) {
+            pending = pending.slice(-hiddenTailGuard)
+            break
+          }
+
+          pending = pending.slice(closeIndex + '</think>'.length)
+          insideThinking = false
+          continue
+        }
+
+        const openIndex = pending.toLowerCase().indexOf('<think')
+        if (openIndex === -1) {
+          if (pending.length <= visibleTailGuard) break
+          output += pending.slice(0, -visibleTailGuard)
+          pending = pending.slice(-visibleTailGuard)
+          break
+        }
+
+        output += pending.slice(0, openIndex)
+        pending = pending.slice(openIndex)
+        const tagEnd = pending.indexOf('>')
+        if (tagEnd === -1) {
+          insideThinking = true
+          pending = ''
+          break
+        }
+
+        pending = pending.slice(tagEnd + 1)
+        insideThinking = true
+      }
+
+      return output
+    },
+    flush() {
+      if (insideThinking) {
+        pending = ''
+        return ''
+      }
+      const output = stripThinkingBlocks(pending)
+      pending = ''
+      return output
+    }
   }
 }
 

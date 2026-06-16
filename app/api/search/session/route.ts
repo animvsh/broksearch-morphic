@@ -176,6 +176,8 @@ export async function POST(req: Request) {
           }
         }
         const emittedSourceKeys = new Set<string>()
+        let streamedAnswer = ''
+        let writingStatusSent = false
 
         try {
           send('status', {
@@ -205,6 +207,22 @@ export async function POST(req: Request) {
                 emittedSourceKeys,
                 sources
               })
+            },
+            onAnswerDelta: delta => {
+              if (!delta) return
+              if (!writingStatusSent) {
+                writingStatusSent = true
+                send('status', {
+                  id: requestId,
+                  message: 'Writing answer'
+                })
+              }
+              streamedAnswer += delta
+              send('answer_delta', {
+                id: requestId,
+                delta,
+                text: delta
+              })
             }
           })
 
@@ -214,15 +232,29 @@ export async function POST(req: Request) {
             emittedSourceKeys,
             sources: result.citations
           })
-          send('status', {
-            id: requestId,
-            message: 'Writing answer'
-          })
-          send('answer_delta', {
-            id: requestId,
-            delta: result.answer,
-            text: result.answer
-          })
+          if (!writingStatusSent) {
+            writingStatusSent = true
+            send('status', {
+              id: requestId,
+              message: 'Writing answer'
+            })
+          }
+          if (!streamedAnswer) {
+            send('answer_delta', {
+              id: requestId,
+              delta: result.answer,
+              text: result.answer
+            })
+          } else if (result.answer.startsWith(streamedAnswer)) {
+            const remainingAnswer = result.answer.slice(streamedAnswer.length)
+            if (remainingAnswer) {
+              send('answer_delta', {
+                id: requestId,
+                delta: remainingAnswer,
+                text: remainingAnswer
+              })
+            }
+          }
           send('follow_ups', {
             id: requestId,
             items: result.followUps,

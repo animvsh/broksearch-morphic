@@ -137,6 +137,31 @@ describe('POST /api/search/session', () => {
     expect(mocks.checkAndEnforceOverallChatLimit).toHaveBeenCalledWith('user_1')
   })
 
+  it('streams answer deltas as the pipeline writes them', async () => {
+    mocks.runSearchPipeline.mockImplementationOnce(async request => {
+      await request.onAnswerDelta?.('Brok ')
+      await request.onAnswerDelta?.('streams.')
+      return {
+        ...result(),
+        answer: 'Brok streams.'
+      }
+    })
+
+    const response = await POST(
+      makeRequest({
+        query: 'What is Brok search?',
+        mode: 'search'
+      })
+    )
+    const stream = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(stream.match(/event: answer_delta\n/g)).toHaveLength(2)
+    expect(stream).toContain('"delta":"Brok "')
+    expect(stream).toContain('"delta":"streams."')
+    expect(stream).not.toContain('"delta":"Brok streams."')
+  })
+
   it('allows guest quick/search requests through the same gate', async () => {
     mocks.getCurrentUserIdForOptionalGuestSearch.mockResolvedValue(undefined)
     mocks.getCurrentAppAccess.mockResolvedValue({
