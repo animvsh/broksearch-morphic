@@ -39,8 +39,27 @@ describe('api platform launch blocker checker', () => {
     }
 
     expect(output).toContain('FAIL external env configured: SMOKE_SEED_TOKEN')
-    expect(output).toContain('FAIL external env configured: SMOKE_BASE_URL')
+    expect(output).toContain(
+      'PASS external env configured: SMOKE_BASE_URL (default https://www.brok.fyi)'
+    )
     expect(output).not.toContain('secret=')
     expect(output).not.toContain('token=')
+  })
+
+  it('passes external mode when seeded proof token is configured', () => {
+    const output = execFileSync(command, [script, '--require-external'], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        SMOKE_BASE_URL: '',
+        SMOKE_SEED_TOKEN: 'seed-token-present'
+      }
+    })
+
+    expect(output).toContain('PASS external env configured: SMOKE_SEED_TOKEN')
+    expect(output).toContain(
+      'PASS external env configured: SMOKE_BASE_URL (default https://www.brok.fyi)'
+    )
+    expect(output).not.toContain('seed-token-present')
   })
 })

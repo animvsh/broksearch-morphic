@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs'
 
 const args = new Set(process.argv.slice(2))
 const requireExternal = args.has('--require-external')
+const DEFAULT_SMOKE_BASE_URL = 'https://www.brok.fyi'
 
 if (args.has('--help') || args.has('-h')) {
   console.log(`API platform launch blocker checker
@@ -48,7 +49,7 @@ const checks = [
 
 if (requireExternal) {
   checks.push(envNamePresent('SMOKE_SEED_TOKEN'))
-  checks.push(envNamePresent('SMOKE_BASE_URL'))
+  checks.push(envNamePresentOrDefault('SMOKE_BASE_URL', DEFAULT_SMOKE_BASE_URL))
 }
 
 const failed = checks.filter(check => !check.ok)
@@ -109,5 +110,12 @@ function envNamePresent(name) {
   return {
     name: `external env configured: ${name}`,
     ok: Boolean(process.env[name])
+  }
+}
+
+function envNamePresentOrDefault(name, defaultValue) {
+  return {
+    name: `external env configured: ${name} (default ${defaultValue})`,
+    ok: Boolean(process.env[name] || defaultValue)
   }
 }
