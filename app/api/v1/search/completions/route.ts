@@ -27,7 +27,8 @@ import {
   checkUsageLimits,
   generateRequestId,
   recordUsage,
-  usageLimitResponse
+  usageLimitResponse,
+  UsageRecordError
 } from '@/lib/brok/usage-tracker'
 
 export const runtime = 'nodejs'
@@ -506,6 +507,20 @@ export async function POST(request: NextRequest) {
             controller.enqueue(encoder.encode('data: [DONE]\n\n'))
             controller.close()
           } catch (error) {
+            if (error instanceof UsageRecordError) {
+              send('search.error', {
+                id: requestId,
+                error: {
+                  type: 'service_unavailable',
+                  code: 'usage_storage_unavailable',
+                  message:
+                    'Usage ledger storage is temporarily unavailable. Please retry shortly.'
+                }
+              })
+              controller.close()
+              return
+            }
+
             const latencyMs = Date.now() - startTime
 
             await recordUsage({
@@ -603,6 +618,10 @@ export async function POST(request: NextRequest) {
       }
     )
   } catch (error) {
+    if (error instanceof UsageRecordError) {
+      return usageStorageUnavailableResponse(requestId)
+    }
+
     const latencyMs = Date.now() - startTime
 
     await recordUsage({
@@ -635,4 +654,23 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+function usageStorageUnavailableResponse(requestId: string) {
+  return NextResponse.json(
+    {
+      error: {
+        type: 'service_unavailable',
+        code: 'usage_storage_unavailable',
+        message:
+          'Usage ledger storage is temporarily unavailable. Please retry shortly.'
+      }
+    },
+    {
+      status: 503,
+      headers: {
+        'X-Brok-Request-Id': requestId
+      }
+    }
+  )
 }

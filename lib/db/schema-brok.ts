@@ -243,6 +243,7 @@ export const usageEvents = pgTable(
   },
   table => ({
     workspaceIdx: index('usage_events_workspace_idx').on(table.workspaceId),
+    requestIdx: index('usage_events_request_id_idx').on(table.requestId),
     apiKeyIdx: index('usage_events_api_key_idx').on(table.apiKeyId),
     surfaceIdx: index('usage_events_surface_idx').on(table.surface),
     sourceIdx: index('usage_events_source_idx').on(table.source),
@@ -318,6 +319,38 @@ export const brokCodeRuntimeKeys = pgTable(
       table.workspaceId
     ),
     userIdx: index('brokcode_runtime_keys_user_idx').on(table.userId)
+  })
+)
+
+export const playgroundSessionKeys = pgTable(
+  'playground_session_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    userId: text('user_id').notNull(),
+    apiKeyId: uuid('api_key_id').references(() => apiKeys.id),
+    keyPrefix: text('key_prefix').notNull(),
+    encryptedKey: text('encrypted_key').notNull(),
+    environment: environmentEnum('environment').default('test').notNull(),
+    scopes: jsonb('scopes').default([]).notNull(),
+    expiresAt: timestamp('expires_at').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    lastUsedAt: timestamp('last_used_at')
+  },
+  table => ({
+    workspaceUserUniqueIdx: uniqueIndex(
+      'playground_session_keys_workspace_user_unique_idx'
+    ).on(table.workspaceId, table.userId),
+    workspaceIdx: index('playground_session_keys_workspace_idx').on(
+      table.workspaceId
+    ),
+    userIdx: index('playground_session_keys_user_idx').on(table.userId),
+    expiresAtIdx: index('playground_session_keys_expires_at_idx').on(
+      table.expiresAt
+    )
   })
 )
 

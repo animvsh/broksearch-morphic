@@ -11,9 +11,13 @@ import { BrokModelId } from '@/lib/brok/models'
 import { routeToProviderResponse } from '@/lib/brok/provider-router'
 import {
   checkUsageLimits,
+  finalizeUsageReservation,
   generateRequestId,
   recordUsage,
-  usageLimitResponse
+  reserveUsage,
+  usageLimitResponse,
+  type UsageRecord,
+  UsageRecordError
 } from '@/lib/brok/usage-tracker'
 import {
   BrokCodeAuthResult,
@@ -618,7 +622,8 @@ async function recordCodeExecutionUsage({
   projectId,
   backendProvider,
   backendStatus,
-  backendProjectUrl
+  backendProjectUrl,
+  usageReservation
 }: {
   auth: SuccessfulAuth
   requestId: string
@@ -638,6 +643,7 @@ async function recordCodeExecutionUsage({
   backendProvider?: string
   backendStatus?: string
   backendProjectUrl?: string | null
+  usageReservation?: boolean
 }) {
   const inputTokens =
     usageNumber(usage, ['prompt_tokens', 'input_tokens']) ||
@@ -646,12 +652,12 @@ async function recordCodeExecutionUsage({
     usageNumber(usage, ['completion_tokens', 'output_tokens']) ||
     estimateTokensFromText(content ?? '')
 
-  await recordUsage({
+  const usageRecord: UsageRecord = {
     requestId,
     workspaceId: auth.workspace.id,
     userId: auth.apiKey.userId,
     apiKeyId: auth.isBrowserSession ? null : auth.apiKey.id,
-    endpoint: 'code',
+    endpoint: 'code' as const,
     model,
     provider,
     surface: 'brokcode',
@@ -672,6 +678,65 @@ async function recordCodeExecutionUsage({
       backendProvider,
       backendStatus,
       backendProjectUrl
+    }
+  }
+
+  if (usageReservation) {
+    await finalizeUsageReservation(usageRecord)
+  } else {
+    await recordUsage(usageRecord)
+  }
+}
+
+async function reserveCodeExecutionUsage({
+  auth,
+  requestId,
+  model,
+  provider,
+  messages,
+  source,
+  sessionId,
+  commandType,
+  projectId,
+  backendProvider,
+  backendStatus,
+  backendProjectUrl,
+  taskId
+}: {
+  auth: SuccessfulAuth
+  requestId: string
+  model: string
+  provider: string
+  messages: OpenAiMessage[]
+  source?: string
+  sessionId?: string
+  commandType?: string
+  projectId?: string | null
+  backendProvider?: string
+  backendStatus?: string
+  backendProjectUrl?: string | null
+  taskId?: string
+}) {
+  await reserveUsage({
+    requestId,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId,
+    apiKeyId: auth.isBrowserSession ? null : auth.apiKey.id,
+    endpoint: 'code',
+    model,
+    provider,
+    surface: 'brokcode',
+    runtime: provider,
+    source,
+    sessionId,
+    inputTokens: estimateInputTokens(messages),
+    metadata: {
+      commandType,
+      projectId,
+      backendProvider,
+      backendStatus,
+      backendProjectUrl,
+      taskId
     }
   })
 }
@@ -972,6 +1037,10 @@ function createExecutionStream({
     sessionId?: string
     commandType?: string
     projectId?: string | null
+    backendProvider?: string
+    backendStatus?: string
+    backendProjectUrl?: string | null
+    usageReservation?: boolean
   }
 }) {
   const encoder = new TextEncoder()
@@ -1641,6 +1710,17 @@ async function startDetachedBrokCodeExecutionJob(
         progress: 100
       }
     })
+    void recordCodeExecutionUsage({
+      ...execution.usageContext,
+      auth: execution.auth,
+      requestId: execution.requestId,
+      startTime: execution.startTime,
+      model: execution.model,
+      provider: 'BrokCode Cloud',
+      messages: execution.messages,
+      status: 'error',
+      errorCode: 'brokcode_job_timed_out'
+    })
   }, BROKCODE_JOB_TIMEOUT_MS)
 
   void (async () => {
@@ -1724,6 +1804,22 @@ async function startDetachedBrokCodeExecutionJob(
         }
       }).catch(updateError => {
         console.error('Failed to mark BrokCode job failed:', updateError)
+      })
+      await recordCodeExecutionUsage({
+        ...execution.usageContext,
+        auth: execution.auth,
+        requestId: execution.requestId,
+        startTime: execution.startTime,
+        model: execution.model,
+        provider: 'BrokCode Cloud',
+        messages: execution.messages,
+        status: 'error',
+        errorCode: message
+      }).catch(usageError => {
+        console.error(
+          'Failed to finalize BrokCode failed job usage:',
+          usageError
+        )
       })
     } finally {
       finished = true
@@ -1817,484 +1913,406 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now()
   const requestId = generateRequestId()
   const publicOrigin = resolvePublicPreviewOrigin(request)
-  const body = await request.json().catch(() => null)
-  const command =
-    typeof body?.command === 'string' ? body.command.trim() : undefined
-  const model = resolveBrokCodeModel(body?.model)
-  const inboundMessages = Array.isArray(body?.messages)
-    ? (body.messages as OpenAiMessage[])
-    : undefined
-  const codeUsageContext = {
-    source: normalizeUsageText(body?.source, 'api'),
-    sessionId: normalizeUsageText(body?.session_id, 'default'),
-    commandType: command ? classifyCommandType(command) : 'unknown',
-    projectId:
-      typeof body?.project_id === 'string' && body.project_id.trim()
-        ? body.project_id.trim()
-        : null,
-    backendProvider: normalizeUsageText(body?.backend_provider, 'none'),
-    backendStatus: normalizeUsageText(body?.backend_status, 'not_configured'),
-    backendProjectUrl:
-      typeof body?.backend_project_url === 'string' &&
-      body.backend_project_url.trim()
-        ? body.backend_project_url.trim()
+
+  try {
+    const body = await request.json().catch(() => null)
+    const command =
+      typeof body?.command === 'string' ? body.command.trim() : undefined
+    const model = resolveBrokCodeModel(body?.model)
+    const inboundMessages = Array.isArray(body?.messages)
+      ? (body.messages as OpenAiMessage[])
+      : undefined
+    const codeUsageContext = {
+      source: normalizeUsageText(body?.source, 'api'),
+      sessionId: normalizeUsageText(body?.session_id, 'default'),
+      commandType: command ? classifyCommandType(command) : 'unknown',
+      projectId:
+        typeof body?.project_id === 'string' && body.project_id.trim()
+          ? body.project_id.trim()
+          : null,
+      backendProvider: normalizeUsageText(body?.backend_provider, 'none'),
+      backendStatus: normalizeUsageText(body?.backend_status, 'not_configured'),
+      backendProjectUrl:
+        typeof body?.backend_project_url === 'string' &&
+        body.backend_project_url.trim()
+          ? body.backend_project_url.trim()
+          : null
+    }
+    const retryOfTaskId =
+      typeof body?.retry_of_task_id === 'string' && body.retry_of_task_id.trim()
+        ? body.retry_of_task_id.trim()
         : null
-  }
-  const retryOfTaskId =
-    typeof body?.retry_of_task_id === 'string' && body.retry_of_task_id.trim()
-      ? body.retry_of_task_id.trim()
-      : null
 
-  if (!command) {
-    return NextResponse.json(
-      {
-        error: {
-          type: 'invalid_request_error',
-          message: 'command is required.'
-        }
-      },
-      { status: 400 }
-    )
-  }
-
-  let authorization = request.headers.get('authorization')
-  const xApiKey = request.headers.get('x-api-key')
-  const hasExplicitCredential = Boolean(authorization || xApiKey)
-  let inboundApiKey = xApiKey ?? extractBearerToken(request)
-  let authRequest: Request = request
-  let browserSessionAuth: SuccessfulAuth | null = null
-
-  if (!hasExplicitCredential && codeUsageContext.source === 'browser') {
-    browserSessionAuth = await getBrokCodeBrowserSessionAuth()
-  }
-
-  if (!hasExplicitCredential && !browserSessionAuth) {
-    const user = await getCurrentUser()
-    if (user) {
-      const savedKey = await getLatestSavedBrokCodeRuntimeKeyForUser(
-        user.id
-      ).catch(error => {
-        console.error('BrokCode saved runtime key lookup failed:', error)
-        return null
-      })
-      if (savedKey) {
-        inboundApiKey = decryptRuntimeKey(savedKey)
-        authorization = `Bearer ${inboundApiKey}`
-        const headers = new Headers(request.headers)
-        headers.set('authorization', authorization)
-        authRequest = new Request(request.url, {
-          method: request.method,
-          headers
-        })
-      }
-    }
-  }
-
-  const rawAuthResult =
-    browserSessionAuth ?? (await verifyRequestAuth(authRequest))
-
-  if (!rawAuthResult.success) {
-    return unauthorizedResponse(rawAuthResult)
-  }
-
-  const authResult: SuccessfulAuth = rawAuthResult
-  const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
-  if (accountMismatch) return accountMismatch
-
-  if (
-    !authResult.isBrowserSession &&
-    !apiKeyHasScope(authResult.apiKey, 'code:write')
-  ) {
-    return forbiddenScopeResponse('code:write')
-  }
-  const allowedModels = authResult.apiKey.allowedModels as string[]
-  if (
-    !authResult.isBrowserSession &&
-    allowedModels.length > 0 &&
-    !allowedModels.includes(model)
-  ) {
-    return NextResponse.json(
-      {
-        error: {
-          type: 'invalid_request_error',
-          code: 'model_not_allowed',
-          message: `This API key does not have access to ${model}.`
-        }
-      },
-      { status: 403 }
-    )
-  }
-  if (!authResult.isBrowserSession) {
-    const usageLimit = await checkUsageLimits({
-      apiKey: authResult.apiKey,
-      workspace: authResult.workspace
-    })
-    if (!usageLimit.allowed) {
-      return usageLimitResponse(usageLimit)
-    }
-  }
-
-  if (isDeepSecSecurityScanCommand(command)) {
-    const baseUrl =
-      process.env.BROK_BASE_URL ||
-      process.env.NEXT_PUBLIC_BROK_API_BASE_URL ||
-      new URL('/api/v1', request.url).toString()
-    const scan = await runDeepSecSecurityScan({
-      command,
-      apiKey: inboundApiKey,
-      baseUrl
-    })
-    await recordCodeExecutionUsage({
-      ...codeUsageContext,
-      auth: authResult,
-      requestId,
-      startTime,
-      model,
-      provider: 'DeepSec',
-      messages: buildDefaultMessages(command),
-      content: scan.content,
-      status: scan.ok ? 'success' : 'error',
-      errorCode: scan.ok ? undefined : 'deepsec_scan_failed',
-      toolCalls: scan.commands.length
-    })
-
-    return NextResponse.json({
-      runtime: 'opencode',
-      model,
-      content: scan.content,
-      usage: null,
-      preview_url: null,
-      note: scan.ok
-        ? 'Executed DeepSec through BrokCode security scan runtime.'
-        : scan.phase === 'status'
-          ? 'Checked DeepSec security scan status.'
-          : 'DeepSec security scan failed. Review command output.',
-      security_scan: {
-        provider: 'deepsec',
-        phase: scan.phase,
-        ok: scan.ok,
-        cwd: scan.cwd,
-        deepsec_dir: scan.deepsecDir,
-        commands: scan.commands.map(result => ({
-          command: result.command,
-          cwd: result.cwd,
-          exit_code: result.exitCode,
-          duration_ms: result.durationMs
-        }))
-      }
-    })
-  }
-
-  const brokCodeProjectContext = await buildBrokCodeProjectContext({
-    auth: authResult,
-    projectId: codeUsageContext.projectId
-  })
-  const baseMessages =
-    inboundMessages && inboundMessages.length > 0
-      ? inboundMessages
-      : buildDefaultMessages(command)
-  const messages = brokCodeProjectContext
-    ? [
-        {
-          role: 'system' as const,
-          content: brokCodeProjectContext
-        },
-        ...baseMessages
-      ]
-    : baseMessages
-
-  const configuredOpenCodeBase = process.env.BROKCODE_OPENCODE_BASE_URL
-  const selfBrokApiEndpoint = isSelfBrokApiEndpoint(
-    configuredOpenCodeBase,
-    request.url
-  )
-  const opencodeBase = selfBrokApiEndpoint ? undefined : configuredOpenCodeBase
-  const opencodeApiKey = process.env.BROKCODE_OPENCODE_API_KEY ?? inboundApiKey
-  const preferPi =
-    body?.prefer_pi !== false && process.env.BROKCODE_PREFER_PI !== 'false'
-  const requirePi =
-    body?.require_pi === true || process.env.BROKCODE_REQUIRE_PI === 'true'
-  const requireOpenCode =
-    !preferPi &&
-    !selfBrokApiEndpoint &&
-    (body?.require_opencode === true ||
-      process.env.BROKCODE_REQUIRE_OPENCODE === 'true')
-  let piFailure: string | null = null
-  let opencodeFailure: string | null = null
-
-  if (requirePi && !preferPi) {
-    await recordCodeExecutionUsage({
-      ...codeUsageContext,
-      auth: authResult,
-      requestId,
-      startTime,
-      model,
-      provider: 'Pi',
-      messages,
-      status: 'error',
-      errorCode: 'pi_runtime_not_preferred'
-    })
-    return NextResponse.json(
-      {
-        error: {
-          type: 'runtime_error',
-          message:
-            'Pi runtime is required but BROKCODE_PREFER_PI is disabled for this deployment.'
-        }
-      },
-      { status: 503 }
-    )
-  }
-
-  if (requireOpenCode && !opencodeBase) {
-    await recordCodeExecutionUsage({
-      ...codeUsageContext,
-      auth: authResult,
-      requestId,
-      startTime,
-      model,
-      provider: 'brokcode-cloud',
-      messages,
-      status: 'error',
-      errorCode: 'brokcode_cloud_not_configured'
-    })
-    return NextResponse.json(
-      {
-        error: {
-          type: 'runtime_error',
-          message:
-            'brokcode-cloud runtime is required but BROKCODE_OPENCODE_BASE_URL is not configured.'
-        }
-      },
-      { status: 503 }
-    )
-  }
-
-  if (body?.stream === true) {
-    const task = await createBackgroundTask({
-      userId: authResult.apiKey.userId,
-      chatId:
-        typeof body?.chat_id === 'string'
-          ? body.chat_id
-          : typeof body?.session_id === 'string'
-            ? body.session_id
-            : null,
-      kind: 'brokcode',
-      title: command.slice(0, 120) || 'BrokCode run',
-      metadata: {
-        requestId,
-        model,
-        command,
-        projectId: codeUsageContext.projectId,
-        runtimePreference: preferPi
-          ? 'pi'
-          : requireOpenCode
-            ? 'brokcode-cloud'
-            : 'auto',
-        stream: true,
-        source: codeUsageContext.source,
-        sessionId: codeUsageContext.sessionId,
-        commandType: codeUsageContext.commandType,
-        retryOfTaskId,
-        phase: 'queued',
-        progress: 0,
-        lifecycle: createBrokCodeRunLifecycle(),
-        originalRequest: {
-          command,
-          model,
-          source: codeUsageContext.source,
-          sessionId: codeUsageContext.sessionId,
-          projectId: codeUsageContext.projectId,
-          backendProvider: codeUsageContext.backendProvider,
-          backendStatus: codeUsageContext.backendStatus,
-          backendProjectUrl: codeUsageContext.backendProjectUrl,
-          preferPi,
-          requirePi,
-          requireOpenCode,
-          allowBrokFallback: body?.allow_brok_fallback === true
-        },
-        events: [
-          {
-            at: new Date().toISOString(),
-            message: 'Queued BrokCode run',
-            progress: 0
-          }
-        ]
-      }
-    }).catch(error => {
-      console.error('Failed to create BrokCode background task:', error)
-      return null
-    })
-
-    if (!task) {
+    if (!command) {
       return NextResponse.json(
         {
           error: {
-            type: 'runtime_error',
-            message: 'Could not create a durable BrokCode job.'
+            type: 'invalid_request_error',
+            message: 'command is required.'
           }
         },
-        { status: 500 }
+        { status: 400 }
       )
     }
 
-    await appendBrokCodeExecutionStreamEvent({
-      taskId: task.id,
-      userId: authResult.apiKey.userId,
-      event: 'status',
-      payload: { message: 'Queued BrokCode run.' },
-      fallbackPhase: 'queued',
-      fallbackProgress: 0
-    }).catch(error => {
-      console.error('Failed to append BrokCode queued stream event:', error)
-    })
+    let authorization = request.headers.get('authorization')
+    const xApiKey = request.headers.get('x-api-key')
+    const hasExplicitCredential = Boolean(authorization || xApiKey)
+    let inboundApiKey = xApiKey ?? extractBearerToken(request)
+    let authRequest: Request = request
+    let browserSessionAuth: SuccessfulAuth | null = null
 
-    await startDetachedBrokCodeExecutionJob(task.id, {
-      auth: authResult,
-      requestId,
-      startTime,
-      command,
-      model,
-      messages,
-      authorization,
-      xApiKey,
-      opencodeBase,
-      opencodeApiKey,
-      requireOpenCode,
-      preferPi,
-      requirePi,
-      allowBrokFallback: body?.allow_brok_fallback === true,
-      taskId: task?.id,
-      requestOrigin: publicOrigin,
-      usageContext: codeUsageContext
-    })
+    if (!hasExplicitCredential && codeUsageContext.source === 'browser') {
+      browserSessionAuth = await getBrokCodeBrowserSessionAuth()
+    }
 
-    return observeBrokCodeExecutionTask({
-      taskId: task.id,
-      userId: authResult.apiKey.userId
-    })
-  }
+    if (!hasExplicitCredential && !browserSessionAuth) {
+      const user = await getCurrentUser()
+      if (user) {
+        const savedKey = await getLatestSavedBrokCodeRuntimeKeyForUser(
+          user.id
+        ).catch(error => {
+          console.error('BrokCode saved runtime key lookup failed:', error)
+          return null
+        })
+        if (savedKey) {
+          inboundApiKey = decryptRuntimeKey(savedKey)
+          authorization = `Bearer ${inboundApiKey}`
+          const headers = new Headers(request.headers)
+          headers.set('authorization', authorization)
+          authRequest = new Request(request.url, {
+            method: request.method,
+            headers
+          })
+        }
+      }
+    }
 
-  if (preferPi || requirePi) {
-    try {
-      const result = await runPiAgentPrompt({
-        mode: 'brokcode',
-        prompt: buildPiPrompt(messages),
-        tools: getPiTools()
+    const rawAuthResult =
+      browserSessionAuth ?? (await verifyRequestAuth(authRequest))
+
+    if (!rawAuthResult.success) {
+      return unauthorizedResponse(rawAuthResult)
+    }
+
+    const authResult: SuccessfulAuth = rawAuthResult
+    const accountMismatch = await enforceBrokCodeAccountOwnership(authResult)
+    if (accountMismatch) return accountMismatch
+
+    if (
+      !authResult.isBrowserSession &&
+      !apiKeyHasScope(authResult.apiKey, 'code:write')
+    ) {
+      return forbiddenScopeResponse('code:write')
+    }
+    const allowedModels = authResult.apiKey.allowedModels as string[]
+    if (
+      !authResult.isBrowserSession &&
+      allowedModels.length > 0 &&
+      !allowedModels.includes(model)
+    ) {
+      return NextResponse.json(
+        {
+          error: {
+            type: 'invalid_request_error',
+            code: 'model_not_allowed',
+            message: `This API key does not have access to ${model}.`
+          }
+        },
+        { status: 403 }
+      )
+    }
+    if (!authResult.isBrowserSession) {
+      const usageLimit = await checkUsageLimits({
+        apiKey: authResult.apiKey,
+        workspace: authResult.workspace
       })
-      const persisted = await persistGeneratedProjectOutput({
-        auth: authResult,
-        projectId: codeUsageContext.projectId,
-        origin: publicOrigin,
-        content: result.content,
-        command
-      }).catch(error => {
-        console.error('Failed to persist Pi BrokCode output:', error)
-        return null
-      })
-      const previewUrl =
-        persisted?.previewUrl ??
-        extractPreviewUrl(`${command}\n${result.content}`)
-      const builderContent =
-        persisted?.usedFallback && previewUrl
-          ? buildManagedPreviewSummary({
-              command,
-              files: persisted.files,
-              previewUrl
-            })
-          : result.content
+      if (!usageLimit.allowed) {
+        return usageLimitResponse(usageLimit)
+      }
+    }
 
+    if (isDeepSecSecurityScanCommand(command)) {
+      const baseUrl =
+        process.env.BROK_BASE_URL ||
+        process.env.NEXT_PUBLIC_BROK_API_BASE_URL ||
+        new URL('/api/v1', request.url).toString()
+      const scan = await runDeepSecSecurityScan({
+        command,
+        apiKey: inboundApiKey,
+        baseUrl
+      })
       await recordCodeExecutionUsage({
         ...codeUsageContext,
         auth: authResult,
         requestId,
         startTime,
-        model: result.model,
-        provider: 'Pi',
-        messages,
-        content: result.content,
-        usage: null,
-        status: 'success'
+        model,
+        provider: 'DeepSec',
+        messages: buildDefaultMessages(command),
+        content: scan.content,
+        status: scan.ok ? 'success' : 'error',
+        errorCode: scan.ok ? undefined : 'deepsec_scan_failed',
+        toolCalls: scan.commands.length
       })
 
       return NextResponse.json({
-        runtime: 'pi',
-        model: result.model,
-        content: builderContent,
+        runtime: 'opencode',
+        model,
+        content: scan.content,
         usage: null,
-        preview_url: previewUrl,
-        generated_files: persisted?.files.map(file => file.path) ?? [],
-        file_changes: persisted?.fileChanges ?? [],
-        note: 'Built with BrokCode Cloud.'
+        preview_url: null,
+        note: scan.ok
+          ? 'Executed DeepSec through BrokCode security scan runtime.'
+          : scan.phase === 'status'
+            ? 'Checked DeepSec security scan status.'
+            : 'DeepSec security scan failed. Review command output.',
+        security_scan: {
+          provider: 'deepsec',
+          phase: scan.phase,
+          ok: scan.ok,
+          cwd: scan.cwd,
+          deepsec_dir: scan.deepsecDir,
+          commands: scan.commands.map(result => ({
+            command: result.command,
+            cwd: result.cwd,
+            exit_code: result.exitCode,
+            duration_ms: result.durationMs
+          }))
+        }
       })
-    } catch (error) {
-      piFailure =
-        error instanceof Error
-          ? error.message
-          : 'Pi coding-agent runtime failed.'
+    }
 
-      if (requirePi) {
-        await recordCodeExecutionUsage({
-          ...codeUsageContext,
-          auth: authResult,
+    const brokCodeProjectContext = await buildBrokCodeProjectContext({
+      auth: authResult,
+      projectId: codeUsageContext.projectId
+    })
+    const baseMessages =
+      inboundMessages && inboundMessages.length > 0
+        ? inboundMessages
+        : buildDefaultMessages(command)
+    const messages = brokCodeProjectContext
+      ? [
+          {
+            role: 'system' as const,
+            content: brokCodeProjectContext
+          },
+          ...baseMessages
+        ]
+      : baseMessages
+
+    const configuredOpenCodeBase = process.env.BROKCODE_OPENCODE_BASE_URL
+    const selfBrokApiEndpoint = isSelfBrokApiEndpoint(
+      configuredOpenCodeBase,
+      request.url
+    )
+    const opencodeBase = selfBrokApiEndpoint
+      ? undefined
+      : configuredOpenCodeBase
+    const opencodeApiKey =
+      process.env.BROKCODE_OPENCODE_API_KEY ?? inboundApiKey
+    const preferPi =
+      body?.prefer_pi !== false && process.env.BROKCODE_PREFER_PI !== 'false'
+    const requirePi =
+      body?.require_pi === true || process.env.BROKCODE_REQUIRE_PI === 'true'
+    const requireOpenCode =
+      !preferPi &&
+      !selfBrokApiEndpoint &&
+      (body?.require_opencode === true ||
+        process.env.BROKCODE_REQUIRE_OPENCODE === 'true')
+    let piFailure: string | null = null
+    let opencodeFailure: string | null = null
+
+    if (requirePi && !preferPi) {
+      await recordCodeExecutionUsage({
+        ...codeUsageContext,
+        auth: authResult,
+        requestId,
+        startTime,
+        model,
+        provider: 'Pi',
+        messages,
+        status: 'error',
+        errorCode: 'pi_runtime_not_preferred'
+      })
+      return NextResponse.json(
+        {
+          error: {
+            type: 'runtime_error',
+            message:
+              'Pi runtime is required but BROKCODE_PREFER_PI is disabled for this deployment.'
+          }
+        },
+        { status: 503 }
+      )
+    }
+
+    if (requireOpenCode && !opencodeBase) {
+      await recordCodeExecutionUsage({
+        ...codeUsageContext,
+        auth: authResult,
+        requestId,
+        startTime,
+        model,
+        provider: 'brokcode-cloud',
+        messages,
+        status: 'error',
+        errorCode: 'brokcode_cloud_not_configured'
+      })
+      return NextResponse.json(
+        {
+          error: {
+            type: 'runtime_error',
+            message:
+              'brokcode-cloud runtime is required but BROKCODE_OPENCODE_BASE_URL is not configured.'
+          }
+        },
+        { status: 503 }
+      )
+    }
+
+    if (body?.stream === true) {
+      const task = await createBackgroundTask({
+        userId: authResult.apiKey.userId,
+        chatId:
+          typeof body?.chat_id === 'string'
+            ? body.chat_id
+            : typeof body?.session_id === 'string'
+              ? body.session_id
+              : null,
+        kind: 'brokcode',
+        title: command.slice(0, 120) || 'BrokCode run',
+        metadata: {
           requestId,
-          startTime,
           model,
-          provider: 'Pi',
-          messages,
-          status: 'error',
-          errorCode: piFailure
-        })
+          command,
+          projectId: codeUsageContext.projectId,
+          runtimePreference: preferPi
+            ? 'pi'
+            : requireOpenCode
+              ? 'brokcode-cloud'
+              : 'auto',
+          stream: true,
+          source: codeUsageContext.source,
+          sessionId: codeUsageContext.sessionId,
+          commandType: codeUsageContext.commandType,
+          retryOfTaskId,
+          phase: 'queued',
+          progress: 0,
+          lifecycle: createBrokCodeRunLifecycle(),
+          originalRequest: {
+            command,
+            model,
+            source: codeUsageContext.source,
+            sessionId: codeUsageContext.sessionId,
+            projectId: codeUsageContext.projectId,
+            backendProvider: codeUsageContext.backendProvider,
+            backendStatus: codeUsageContext.backendStatus,
+            backendProjectUrl: codeUsageContext.backendProjectUrl,
+            preferPi,
+            requirePi,
+            requireOpenCode,
+            allowBrokFallback: body?.allow_brok_fallback === true
+          },
+          events: [
+            {
+              at: new Date().toISOString(),
+              message: 'Queued BrokCode run',
+              progress: 0
+            }
+          ]
+        }
+      }).catch(error => {
+        console.error('Failed to create BrokCode background task:', error)
+        return null
+      })
 
+      if (!task) {
         return NextResponse.json(
           {
             error: {
               type: 'runtime_error',
-              message: piFailure
+              message: 'Could not create a durable BrokCode job.'
             }
           },
-          { status: 503 }
+          { status: 500 }
         )
       }
-    }
-  }
 
-  if (opencodeBase) {
-    try {
-      const endpoint = buildOpenCodeEndpoint(opencodeBase)
-      const opencodeResponse = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(opencodeApiKey
-            ? { Authorization: `Bearer ${opencodeApiKey}` }
-            : {}),
-          ...(xApiKey ? { 'x-api-key': xApiKey } : {})
-        },
-        body: JSON.stringify({
-          model: process.env.BROKCODE_OPENCODE_MODEL ?? model,
-          stream: false,
-          temperature: 0.2,
-          max_tokens: 1200,
-          messages
-        })
+      await appendBrokCodeExecutionStreamEvent({
+        taskId: task.id,
+        userId: authResult.apiKey.userId,
+        event: 'status',
+        payload: { message: 'Queued BrokCode run.' },
+        fallbackPhase: 'queued',
+        fallbackProgress: 0
+      }).catch(error => {
+        console.error('Failed to append BrokCode queued stream event:', error)
       })
 
-      if (opencodeResponse.ok) {
-        const payload = await opencodeResponse.json()
-        const content = extractAssistantText(payload)
+      await reserveCodeExecutionUsage({
+        ...codeUsageContext,
+        auth: authResult,
+        requestId,
+        model,
+        provider: preferPi
+          ? 'Pi'
+          : requireOpenCode
+            ? 'brokcode-cloud'
+            : 'BrokCode Cloud',
+        messages,
+        taskId: task.id
+      })
+
+      await startDetachedBrokCodeExecutionJob(task.id, {
+        auth: authResult,
+        requestId,
+        startTime,
+        command,
+        model,
+        messages,
+        authorization,
+        xApiKey,
+        opencodeBase,
+        opencodeApiKey,
+        requireOpenCode,
+        preferPi,
+        requirePi,
+        allowBrokFallback: body?.allow_brok_fallback === true,
+        taskId: task?.id,
+        requestOrigin: publicOrigin,
+        usageContext: {
+          ...codeUsageContext,
+          usageReservation: true
+        }
+      })
+
+      return observeBrokCodeExecutionTask({
+        taskId: task.id,
+        userId: authResult.apiKey.userId
+      })
+    }
+
+    if (preferPi || requirePi) {
+      try {
+        const result = await runPiAgentPrompt({
+          mode: 'brokcode',
+          prompt: buildPiPrompt(messages),
+          tools: getPiTools()
+        })
         const persisted = await persistGeneratedProjectOutput({
           auth: authResult,
           projectId: codeUsageContext.projectId,
           origin: publicOrigin,
-          content,
+          content: result.content,
           command
         }).catch(error => {
-          console.error('Failed to persist OpenCode BrokCode output:', error)
+          console.error('Failed to persist Pi BrokCode output:', error)
           return null
         })
         const previewUrl =
-          persisted?.previewUrl ?? extractPreviewUrl(`${command}\n${content}`)
+          persisted?.previewUrl ??
+          extractPreviewUrl(`${command}\n${result.content}`)
         const builderContent =
           persisted?.usedFallback && previewUrl
             ? buildManagedPreviewSummary({
@@ -2302,181 +2320,301 @@ export async function POST(request: NextRequest) {
                 files: persisted.files,
                 previewUrl
               })
-            : content
+            : result.content
+
         await recordCodeExecutionUsage({
           ...codeUsageContext,
           auth: authResult,
           requestId,
           startTime,
-          model: payload?.model ?? model,
-          provider: 'brokcode-cloud',
+          model: result.model,
+          provider: 'Pi',
           messages,
-          content,
-          usage: payload?.usage ?? null,
+          content: result.content,
+          usage: null,
           status: 'success'
         })
 
         return NextResponse.json({
-          runtime: 'opencode',
-          model: payload?.model ?? model,
-          content:
-            builderContent.length > 0
-              ? builderContent
-              : 'OpenCode completed the run but returned no text output.',
-          usage: payload?.usage ?? null,
+          runtime: 'pi',
+          model: result.model,
+          content: builderContent,
+          usage: null,
           preview_url: previewUrl,
           generated_files: persisted?.files.map(file => file.path) ?? [],
           file_changes: persisted?.fileChanges ?? [],
-          note: 'Executed through OpenCode runtime.'
+          note: 'Built with BrokCode Cloud.'
         })
-      }
+      } catch (error) {
+        piFailure =
+          error instanceof Error
+            ? error.message
+            : 'Pi coding-agent runtime failed.'
 
-      const opencodeBody = await opencodeResponse.json().catch(() => null)
-      const errorMessage =
-        opencodeBody?.error?.message ??
-        opencodeBody?.message ??
-        `OpenCode returned ${opencodeResponse.status}.`
-      opencodeFailure = errorMessage
+        if (requirePi) {
+          await recordCodeExecutionUsage({
+            ...codeUsageContext,
+            auth: authResult,
+            requestId,
+            startTime,
+            model,
+            provider: 'Pi',
+            messages,
+            status: 'error',
+            errorCode: piFailure
+          })
 
-      if (requireOpenCode) {
-        await recordCodeExecutionUsage({
-          ...codeUsageContext,
-          auth: authResult,
-          requestId,
-          startTime,
-          model,
-          provider: 'brokcode-cloud',
-          messages,
-          status: 'error',
-          errorCode: errorMessage
-        })
-        return NextResponse.json(
-          {
-            error: {
-              type: 'runtime_error',
-              message: errorMessage
-            }
-          },
-          { status: 502 }
-        )
-      }
-    } catch {
-      opencodeFailure = 'OpenCode endpoint was unreachable.'
-
-      if (requireOpenCode) {
-        await recordCodeExecutionUsage({
-          ...codeUsageContext,
-          auth: authResult,
-          requestId,
-          startTime,
-          model,
-          provider: 'brokcode-cloud',
-          messages,
-          status: 'error',
-          errorCode: opencodeFailure ?? 'brokcode_cloud_error'
-        })
-        return NextResponse.json(
-          {
-            error: {
-              type: 'runtime_error',
-              message: opencodeFailure
-            }
-          },
-          { status: 502 }
-        )
+          return NextResponse.json(
+            {
+              error: {
+                type: 'runtime_error',
+                message: piFailure
+              }
+            },
+            { status: 503 }
+          )
+        }
       }
     }
-  }
 
-  let content = ''
-  let usage: unknown = null
-  let responseModel = model
+    if (opencodeBase) {
+      try {
+        const endpoint = buildOpenCodeEndpoint(opencodeBase)
+        const opencodeResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(opencodeApiKey
+              ? { Authorization: `Bearer ${opencodeApiKey}` }
+              : {}),
+            ...(xApiKey ? { 'x-api-key': xApiKey } : {})
+          },
+          body: JSON.stringify({
+            model: process.env.BROKCODE_OPENCODE_MODEL ?? model,
+            stream: false,
+            temperature: 0.2,
+            max_tokens: 1200,
+            messages
+          })
+        })
 
-  if (
-    !canUseGenericBrokFallback({
-      source: codeUsageContext.source,
-      commandType: codeUsageContext.commandType,
-      allowBrokFallback: body?.allow_brok_fallback === true
+        if (opencodeResponse.ok) {
+          const payload = await opencodeResponse.json()
+          const content = extractAssistantText(payload)
+          const persisted = await persistGeneratedProjectOutput({
+            auth: authResult,
+            projectId: codeUsageContext.projectId,
+            origin: publicOrigin,
+            content,
+            command
+          }).catch(error => {
+            console.error('Failed to persist OpenCode BrokCode output:', error)
+            return null
+          })
+          const previewUrl =
+            persisted?.previewUrl ?? extractPreviewUrl(`${command}\n${content}`)
+          const builderContent =
+            persisted?.usedFallback && previewUrl
+              ? buildManagedPreviewSummary({
+                  command,
+                  files: persisted.files,
+                  previewUrl
+                })
+              : content
+          await recordCodeExecutionUsage({
+            ...codeUsageContext,
+            auth: authResult,
+            requestId,
+            startTime,
+            model: payload?.model ?? model,
+            provider: 'brokcode-cloud',
+            messages,
+            content,
+            usage: payload?.usage ?? null,
+            status: 'success'
+          })
+
+          return NextResponse.json({
+            runtime: 'opencode',
+            model: payload?.model ?? model,
+            content:
+              builderContent.length > 0
+                ? builderContent
+                : 'OpenCode completed the run but returned no text output.',
+            usage: payload?.usage ?? null,
+            preview_url: previewUrl,
+            generated_files: persisted?.files.map(file => file.path) ?? [],
+            file_changes: persisted?.fileChanges ?? [],
+            note: 'Executed through OpenCode runtime.'
+          })
+        }
+
+        const opencodeBody = await opencodeResponse.json().catch(() => null)
+        const errorMessage =
+          opencodeBody?.error?.message ??
+          opencodeBody?.message ??
+          `OpenCode returned ${opencodeResponse.status}.`
+        opencodeFailure = errorMessage
+
+        if (requireOpenCode) {
+          await recordCodeExecutionUsage({
+            ...codeUsageContext,
+            auth: authResult,
+            requestId,
+            startTime,
+            model,
+            provider: 'brokcode-cloud',
+            messages,
+            status: 'error',
+            errorCode: errorMessage
+          })
+          return NextResponse.json(
+            {
+              error: {
+                type: 'runtime_error',
+                message: errorMessage
+              }
+            },
+            { status: 502 }
+          )
+        }
+      } catch {
+        opencodeFailure = 'OpenCode endpoint was unreachable.'
+
+        if (requireOpenCode) {
+          await recordCodeExecutionUsage({
+            ...codeUsageContext,
+            auth: authResult,
+            requestId,
+            startTime,
+            model,
+            provider: 'brokcode-cloud',
+            messages,
+            status: 'error',
+            errorCode: opencodeFailure ?? 'brokcode_cloud_error'
+          })
+          return NextResponse.json(
+            {
+              error: {
+                type: 'runtime_error',
+                message: opencodeFailure
+              }
+            },
+            { status: 502 }
+          )
+        }
+      }
+    }
+
+    let content = ''
+    let usage: unknown = null
+    let responseModel = model
+
+    if (
+      !canUseGenericBrokFallback({
+        source: codeUsageContext.source,
+        commandType: codeUsageContext.commandType,
+        allowBrokFallback: body?.allow_brok_fallback === true
+      })
+    ) {
+      await recordCodeExecutionUsage({
+        ...codeUsageContext,
+        auth: authResult,
+        requestId,
+        startTime,
+        model,
+        provider: 'BrokCode Cloud',
+        messages,
+        status: 'error',
+        errorCode: 'runtime_unavailable'
+      })
+      return NextResponse.json(
+        {
+          error: {
+            type: 'runtime_error',
+            code: 'runtime_unavailable',
+            message:
+              'BrokCode Cloud runtime is required for browser build/edit runs.'
+          }
+        },
+        { status: 503 }
+      )
+    }
+
+    const direct = await runDirectBrokRuntime({
+      model,
+      messages,
+      stream: false
     })
-  ) {
+    content = direct.content
+    usage = direct.usage
+    const persisted = await persistGeneratedProjectOutput({
+      auth: authResult,
+      projectId: codeUsageContext.projectId,
+      origin: publicOrigin,
+      content,
+      command
+    }).catch(error => {
+      console.error('Failed to persist BrokCode output:', error)
+      return null
+    })
+    const previewUrl =
+      persisted?.previewUrl ?? extractPreviewUrl(`${command}\n${content}`)
+    const builderContent =
+      persisted?.usedFallback && previewUrl
+        ? buildManagedPreviewSummary({
+            command,
+            files: persisted.files,
+            previewUrl
+          })
+        : content
     await recordCodeExecutionUsage({
       ...codeUsageContext,
       auth: authResult,
       requestId,
       startTime,
       model,
-      provider: 'BrokCode Cloud',
+      provider: 'Brok',
       messages,
-      status: 'error',
-      errorCode: 'runtime_unavailable'
+      content,
+      usage,
+      status: 'success'
     })
-    return NextResponse.json(
-      {
-        error: {
-          type: 'runtime_error',
-          code: 'runtime_unavailable',
-          message:
-            'BrokCode Cloud runtime is required for browser build/edit runs.'
+
+    return NextResponse.json({
+      runtime: 'brok',
+      model: responseModel,
+      content:
+        builderContent.length > 0
+          ? builderContent
+          : 'Brok runtime completed the run but returned no text output.',
+      usage,
+      preview_url: previewUrl,
+      generated_files: persisted?.files.map(file => file.path) ?? [],
+      file_changes: persisted?.fileChanges ?? [],
+      note:
+        piFailure || opencodeFailure
+          ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} Routed through Brok runtime.`
+          : 'Routed through Brok runtime.'
+    })
+  } catch (error) {
+    if (error instanceof UsageRecordError) {
+      return NextResponse.json(
+        {
+          error: {
+            type: 'server_error',
+            code: 'usage_storage_unavailable',
+            message:
+              'Usage could not be recorded. Retry once platform usage storage is available.'
+          }
+        },
+        {
+          status: 503,
+          headers: { 'X-Brok-Request-Id': requestId }
         }
-      },
-      { status: 503 }
-    )
+      )
+    }
+
+    throw error
   }
-
-  const direct = await runDirectBrokRuntime({
-    model,
-    messages,
-    stream: false
-  })
-  content = direct.content
-  usage = direct.usage
-  const persisted = await persistGeneratedProjectOutput({
-    auth: authResult,
-    projectId: codeUsageContext.projectId,
-    origin: publicOrigin,
-    content,
-    command
-  }).catch(error => {
-    console.error('Failed to persist BrokCode output:', error)
-    return null
-  })
-  const previewUrl =
-    persisted?.previewUrl ?? extractPreviewUrl(`${command}\n${content}`)
-  const builderContent =
-    persisted?.usedFallback && previewUrl
-      ? buildManagedPreviewSummary({
-          command,
-          files: persisted.files,
-          previewUrl
-        })
-      : content
-  await recordCodeExecutionUsage({
-    ...codeUsageContext,
-    auth: authResult,
-    requestId,
-    startTime,
-    model,
-    provider: 'Brok',
-    messages,
-    content,
-    usage,
-    status: 'success'
-  })
-
-  return NextResponse.json({
-    runtime: 'brok',
-    model: responseModel,
-    content:
-      builderContent.length > 0
-        ? builderContent
-        : 'Brok runtime completed the run but returned no text output.',
-    usage,
-    preview_url: previewUrl,
-    generated_files: persisted?.files.map(file => file.path) ?? [],
-    file_changes: persisted?.fileChanges ?? [],
-    note:
-      piFailure || opencodeFailure
-        ? `${[piFailure, opencodeFailure].filter(Boolean).join(' ')} Routed through Brok runtime.`
-        : 'Routed through Brok runtime.'
-  })
 }

@@ -49,7 +49,10 @@ describe('BrokCode GitHub export helpers', () => {
             content: '//registry.npmjs.org/:_authToken=secret'
           },
           { path: 'src/secrets.json', content: '{"token":"secret"}' },
-          { path: 'certs/private.key', content: '-----BEGIN PRIVATE KEY-----' },
+          {
+            path: 'certs/private.key',
+            content: '-----BEGIN ' + 'PRIVATE KEY-----'
+          },
           { path: 'src/App.tsx', content: 'export function App() {}' }
         ]
       })

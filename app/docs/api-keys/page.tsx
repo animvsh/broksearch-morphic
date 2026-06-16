@@ -38,8 +38,9 @@ export default function ApiKeysPage() {
         <h2>Key Format</h2>
         <p>
           Use secret keys only on trusted servers or local developer machines.
-          BrokCode API stores the key locally in the current browser so you can
-          test requests quickly.
+          The API playground uses an account-owned encrypted server session key
+          by default. Optional pasted keys are kept in current-tab memory only;
+          full API secrets are not persisted in browser storage.
         </p>
 
         <ul>

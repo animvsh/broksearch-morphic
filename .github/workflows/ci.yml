@@ -7,6 +7,54 @@ on:
     branches: [main]
 
 jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    name: Secret Scan
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.12
+
+      - name: Scan committed secret surfaces
+        run: bun run scan:secrets -- --tracked
+
+  deploy-env:
+    runs-on: ubuntu-latest
+    name: Deploy Env Names
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.12
+
+      - name: Check documented deploy env names
+        run: bun run check:deploy-env -- --provider local --env-file .env.local.example
+
+  launch-blockers:
+    runs-on: ubuntu-latest
+    name: Launch Blocker Artifacts
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.12
+
+      - name: Check API platform launch blocker artifacts
+        run: bun run check:api-platform-launch
+
   lint:
     runs-on: ubuntu-latest
     name: Lint
