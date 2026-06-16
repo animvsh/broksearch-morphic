@@ -73,8 +73,27 @@ vi.mock('@/components/error-modal', () => ({
 import { Chat } from '@/components/chat'
 
 describe('Chat query-backed URL behavior', () => {
+  const storage = new Map<string, string>()
+
   beforeEach(() => {
     vi.clearAllMocks()
+    storage.clear()
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: vi.fn((key: string) => storage.get(key) ?? null),
+        setItem: vi.fn((key: string, value: string) => {
+          storage.set(key, value)
+        }),
+        removeItem: vi.fn((key: string) => {
+          storage.delete(key)
+        }),
+        clear: vi.fn(() => {
+          storage.clear()
+        })
+      }
+    })
+    window.localStorage.clear()
     window.history.replaceState({}, '', '/search?q=react&mode=quick')
     mocks.useRouter.mockReturnValue({
       push: vi.fn(),
@@ -111,7 +130,7 @@ describe('Chat query-backed URL behavior', () => {
     expect(window.location.search).toBe('')
   })
 
-  it('clears guest /search query URLs after auto-submitting so reload does not replay', async () => {
+  it('replaces guest /search query URLs with a durable local thread URL without replay params', async () => {
     render(<Chat query="react" initialSearchMode="quick" isGuest />)
 
     await waitFor(() => {
@@ -123,8 +142,88 @@ describe('Chat query-backed URL behavior', () => {
       )
     })
 
-    expect(window.location.pathname).toBe('/search')
+    expect(window.location.pathname).toBe('/search/chat-from-query')
     expect(window.location.search).toBe('')
+  })
+
+  it('persists guest messages locally for reloadable answer pages', async () => {
+    mocks.useChat.mockReturnValue({
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'initial question' }]
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'initial answer' }]
+        }
+      ],
+      status: 'ready',
+      setMessages: vi.fn(),
+      stop: vi.fn(),
+      sendMessage: mocks.sendMessage,
+      regenerate: vi.fn(),
+      addToolResult: vi.fn(),
+      error: null
+    })
+
+    render(<Chat id="search_local" isGuest />)
+
+    await waitFor(() => {
+      expect(
+        JSON.parse(
+          window.localStorage.getItem('brok:guest-chat:search_local') ?? '[]'
+        )
+      ).toHaveLength(2)
+    })
+  })
+
+  it('restores guest answer pages from local storage', async () => {
+    const setMessages = vi.fn()
+    window.localStorage.setItem(
+      'brok:guest-chat:search_local',
+      JSON.stringify([
+        {
+          id: 'user-1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'initial question' }]
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'initial answer' }]
+        }
+      ])
+    )
+    mocks.useChat.mockReturnValue({
+      messages: [],
+      status: 'ready',
+      setMessages,
+      stop: vi.fn(),
+      sendMessage: mocks.sendMessage,
+      regenerate: vi.fn(),
+      addToolResult: vi.fn(),
+      error: null
+    })
+
+    render(<Chat id="search_local" isGuest />)
+
+    await waitFor(() => {
+      expect(setMessages).toHaveBeenCalledWith([
+        {
+          id: 'user-1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'initial question' }]
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'initial answer' }]
+        }
+      ])
+    })
   })
 
   it('routes follow-up chips through the normal submit path', async () => {

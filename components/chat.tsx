@@ -60,6 +60,7 @@ function getMessageText(message: UIMessage) {
 }
 
 const CHAT_FETCH_RETRY_DELAY_MS = 250
+const GUEST_CHAT_STORAGE_PREFIX = 'brok:guest-chat:'
 
 function wait(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -74,6 +75,24 @@ function isTransientFetchError(error: unknown) {
     (message.includes('failed to fetch') ||
       message.includes('networkerror') ||
       message.includes('load failed'))
+  )
+}
+
+function getGuestChatStorageKey(chatId: string) {
+  return `${GUEST_CHAT_STORAGE_PREFIX}${chatId}`
+}
+
+function isRestorableGuestMessageList(value: unknown): value is UIMessage[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      message =>
+        message &&
+        typeof message === 'object' &&
+        typeof (message as { id?: unknown }).id === 'string' &&
+        typeof (message as { role?: unknown }).role === 'string' &&
+        Array.isArray((message as { parts?: unknown }).parts)
+    )
   )
 }
 
@@ -299,6 +318,37 @@ export function Chat({
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value)
   }
+
+  useEffect(() => {
+    if (!isGuest || !providedId || savedMessages.length > 0) return
+    if (typeof window === 'undefined') return
+
+    try {
+      const raw = window.localStorage.getItem(getGuestChatStorageKey(chatId))
+      if (!raw) return
+
+      const restored = JSON.parse(raw)
+      if (isRestorableGuestMessageList(restored) && restored.length > 0) {
+        setMessages(restored)
+      }
+    } catch {
+      window.localStorage.removeItem(getGuestChatStorageKey(chatId))
+    }
+  }, [chatId, isGuest, providedId, savedMessages.length, setMessages])
+
+  useEffect(() => {
+    if (!isGuest || messages.length === 0) return
+    if (typeof window === 'undefined') return
+
+    try {
+      window.localStorage.setItem(
+        getGuestChatStorageKey(chatId),
+        JSON.stringify(messages)
+      )
+    } catch {
+      // Storage can be unavailable in private browsing or low-disk states.
+    }
+  }, [chatId, isGuest, messages])
 
   useEffect(() => {
     if (!pendingUserMessage) return
@@ -638,11 +688,7 @@ export function Chat({
         window.location.pathname === '/' ||
         window.location.pathname === '/search'
       ) {
-        window.history.replaceState(
-          {},
-          '',
-          isGuest ? '/search' : `/search/${chatId}`
-        )
+        window.history.replaceState({}, '', `/search/${chatId}`)
       }
     }
   }
