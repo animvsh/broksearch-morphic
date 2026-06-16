@@ -43,6 +43,7 @@ import {
   prepareGeneratedBrokCodeFiles,
   shouldCreateFallbackGeneratedApp
 } from '@/lib/brokcode/generated-files'
+import { canUseGenericBrokFallback } from '@/lib/brokcode/fallback-policy'
 import { getBrokCodeGenerationSystemPrompt } from '@/lib/brokcode/generation-prompt'
 import {
   fetchInsForgeBackendContext,
@@ -258,25 +259,6 @@ function classifyCommandType(command: string) {
   if (/\b(test|check|lint|typecheck)\b/.test(lower)) return 'verify'
   if (/\b(fix|bug|error|broken)\b/.test(lower)) return 'fix'
   return 'build'
-}
-
-function canUseGenericBrokFallback({
-  source,
-  commandType,
-  allowBrokFallback
-}: {
-  source?: string
-  commandType?: string
-  allowBrokFallback?: boolean
-}) {
-  if (allowBrokFallback) return true
-  if (source?.toLowerCase() !== 'browser') return true
-
-  const normalizedCommandType = commandType?.toLowerCase()
-  return (
-    normalizedCommandType === 'verify' ||
-    normalizedCommandType === 'security_scan'
-  )
 }
 
 function formatBrokCodeRuntimeError(error: unknown) {
