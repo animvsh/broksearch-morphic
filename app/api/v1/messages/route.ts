@@ -6,8 +6,7 @@ import {
 } from '@/lib/brok/api-platform'
 import {
   apiKeyHasScope,
-  forbiddenScopeResponse,
-  unauthorizedResponse,
+  type AuthResult,
   verifyRequestAuth
 } from '@/lib/brok/auth'
 import {
@@ -59,16 +58,82 @@ type AnthropicMessage = {
   content: AnthropicContentBlock
 }
 
+function anthropicErrorResponse({
+  type,
+  message,
+  status
+}: {
+  type: string
+  message: string
+  status: number
+}) {
+  return NextResponse.json(
+    {
+      type: 'error',
+      error: {
+        type,
+        message
+      }
+    },
+    { status }
+  )
+}
+
+function anthropicAuthErrorResponse(
+  auth: Extract<AuthResult, { success: false }>
+) {
+  const errors: Record<
+    Extract<AuthResult, { success: false }>['error'],
+    { type: string; message: string }
+  > = {
+    missing_authorization: {
+      type: 'authentication_error',
+      message: 'Authorization Bearer token or x-api-key header is required.'
+    },
+    invalid_authorization_format: {
+      type: 'authentication_error',
+      message: 'Authorization header must be Bearer token.'
+    },
+    invalid_api_key: {
+      type: 'authentication_error',
+      message: 'Invalid API key.'
+    },
+    inactive_key: {
+      type: 'permission_error',
+      message: 'API key is inactive.'
+    },
+    workspace_inactive: {
+      type: 'permission_error',
+      message: 'Workspace is inactive.'
+    },
+    auth_storage_unavailable: {
+      type: 'api_error',
+      message:
+        'API key storage is unavailable. Check the database connection and try again.'
+    }
+  }
+  const error = errors[auth.error]
+  return anthropicErrorResponse({
+    type: error.type,
+    message: error.message,
+    status: auth.status
+  })
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
   const requestId = generateRequestId()
   const auth = await verifyRequestAuth(request)
 
   if (!auth.success) {
-    return unauthorizedResponse(auth)
+    return anthropicAuthErrorResponse(auth)
   }
   if (!apiKeyHasScope(auth.apiKey, 'code:write')) {
-    return forbiddenScopeResponse('code:write')
+    return anthropicErrorResponse({
+      type: 'permission_error',
+      message: 'This API key requires the code:write scope.',
+      status: 403
+    })
   }
 
   const parsedBody = await readJsonBody<{

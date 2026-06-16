@@ -323,6 +323,58 @@ describe('streaming usage metering', () => {
     expect(usage.billedUsd).toBeCloseTo(0.00015)
   }, 15000)
 
+  it('returns Anthropic-compatible authentication errors for messages', async () => {
+    mockVerifyRequestAuth.mockResolvedValue({
+      success: false,
+      error: 'missing_authorization',
+      status: 401
+    })
+
+    const response = await messagesPost(
+      request('/api/v1/messages', {
+        model: 'brok-code',
+        messages: [{ role: 'user', content: 'Build a dashboard' }]
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(401)
+    expect(body).toMatchObject({
+      type: 'error',
+      error: {
+        type: 'authentication_error',
+        message: 'Authorization Bearer token or x-api-key header is required.'
+      }
+    })
+    expect(mockCheckUsageLimits).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+  })
+
+  it('returns Anthropic-compatible permission errors for missing message scope', async () => {
+    mockVerifyRequestAuth.mockResolvedValue(authResult(['chat:write']))
+
+    const response = await messagesPost(
+      request('/api/v1/messages', {
+        model: 'brok-code',
+        messages: [{ role: 'user', content: 'Build a dashboard' }]
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body).toMatchObject({
+      type: 'error',
+      error: {
+        type: 'permission_error',
+        message: 'This API key requires the code:write scope.'
+      }
+    })
+    expect(mockCheckUsageLimits).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+  })
+
   it('rejects non-boolean Anthropic message stream values before provider routing', async () => {
     mockVerifyRequestAuth.mockResolvedValue(authResult(['code:write']))
 
