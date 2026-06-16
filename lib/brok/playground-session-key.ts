@@ -128,7 +128,8 @@ export async function getOrCreatePlaygroundSessionKey(userId: string) {
       allowedModels: [],
       rpmLimit: 60,
       dailyRequestLimit: 1000,
-      monthlyBudgetCents: 1000
+      monthlyBudgetCents: 1000,
+      expiresAt
     })
     .returning()
 

@@ -330,6 +330,20 @@
       "when": 1781644800000,
       "tag": "0046_brok_idempotency_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1781654400000,
+      "tag": "0047_api_key_audit_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1781658000000,
+      "tag": "0048_api_key_expiry",
+      "breakpoints": true
     }
   ]
 }

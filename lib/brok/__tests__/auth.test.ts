@@ -183,6 +183,7 @@ describe('verifyRequestAuth', () => {
       dailyRequestLimit: 5000,
       monthlyBudgetCents: 1000,
       lastUsedAt: null,
+      expiresAt: null,
       createdAt: new Date(),
       revokedAt: null
     }
@@ -254,6 +255,7 @@ describe('verifyRequestAuth', () => {
       dailyRequestLimit: 5000,
       monthlyBudgetCents: 1000,
       lastUsedAt: null,
+      expiresAt: null,
       createdAt: new Date(),
       revokedAt: null
     }
@@ -333,6 +335,7 @@ describe('verifyRequestAuth', () => {
       dailyRequestLimit: 5000,
       monthlyBudgetCents: 1000,
       lastUsedAt: null,
+      expiresAt: null,
       createdAt: new Date(),
       revokedAt: null
     }
@@ -393,6 +396,7 @@ describe('verifyRequestAuth', () => {
       dailyRequestLimit: 5000,
       monthlyBudgetCents: 1000,
       lastUsedAt: null,
+      expiresAt: null,
       createdAt: new Date(),
       revokedAt: new Date()
     }
@@ -419,6 +423,104 @@ describe('verifyRequestAuth', () => {
       expect(result.error).toBe('inactive_key')
       expect(result.status).toBe(403)
     }
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('rejects paused API keys before mutating last-used metadata', async () => {
+    const rawKey = 'brok_sk_live_paused'
+    const keyRecord = {
+      id: 'key-paused',
+      workspaceId: 'workspace-1',
+      userId: 'user-1',
+      name: 'Paused key',
+      keyPrefix: getKeyPrefix(rawKey),
+      keyHash: hashApiKey(rawKey),
+      keySalt: null,
+      environment: 'live',
+      status: 'paused',
+      scopes: ['chat:write'],
+      allowedModels: [],
+      rpmLimit: 60,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: 1000,
+      lastUsedAt: null,
+      expiresAt: null,
+      createdAt: new Date(),
+      revokedAt: null
+    }
+
+    mockSelect.mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          limit: vi.fn().mockResolvedValue([keyRecord])
+        })
+      })
+    })
+
+    const mockRequest = {
+      headers: {
+        get: (name: string) =>
+          name === 'authorization' ? `Bearer ${rawKey}` : null
+      }
+    } as unknown as Request
+
+    const result = await verifyRequestAuth(mockRequest)
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error).toBe('inactive_key')
+      expect(result.status).toBe(403)
+    }
+    expect(mockSelect).toHaveBeenCalledTimes(1)
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('rejects expired API keys before workspace lookup or last-used mutation', async () => {
+    const rawKey = 'brok_sk_live_expired'
+    const keyRecord = {
+      id: 'key-expired',
+      workspaceId: 'workspace-1',
+      userId: 'user-1',
+      name: 'Expired key',
+      keyPrefix: getKeyPrefix(rawKey),
+      keyHash: hashApiKey(rawKey),
+      keySalt: null,
+      environment: 'live',
+      status: 'active',
+      scopes: ['chat:write'],
+      allowedModels: [],
+      rpmLimit: 60,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: 1000,
+      lastUsedAt: null,
+      expiresAt: new Date(Date.now() - 60_000),
+      createdAt: new Date(),
+      revokedAt: null
+    }
+
+    mockSelect.mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          limit: vi.fn().mockResolvedValue([keyRecord])
+        })
+      })
+    })
+
+    const mockRequest = {
+      headers: {
+        get: (name: string) =>
+          name === 'authorization' ? `Bearer ${rawKey}` : null
+      }
+    } as unknown as Request
+
+    const result = await verifyRequestAuth(mockRequest)
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error).toBe('expired_key')
+      expect(result.status).toBe(403)
+    }
+    expect(mockSelect).toHaveBeenCalledTimes(1)
     expect(mockUpdate).not.toHaveBeenCalled()
   })
 

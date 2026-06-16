@@ -177,7 +177,8 @@ export async function createApiKey(
       allowedModels: validatedInput.allowedModels,
       rpmLimit: validatedInput.rpmLimit,
       dailyRequestLimit: validatedInput.dailyRequestLimit,
-      monthlyBudgetCents: validatedInput.monthlyBudgetCents
+      monthlyBudgetCents: validatedInput.monthlyBudgetCents,
+      expiresAt: validatedInput.expiresAt
     })
     .returning()
 
@@ -227,6 +228,7 @@ export async function createApiKey(
     rpmLimit: newKey.rpmLimit,
     dailyRequestLimit: newKey.dailyRequestLimit,
     monthlyBudgetCents: newKey.monthlyBudgetCents,
+    expiresAt: newKey.expiresAt,
     createdAt: newKey.createdAt
   }
 }
@@ -275,6 +277,7 @@ export async function listApiKeys(workspaceId: string) {
     dailyRequestLimit: key.dailyRequestLimit,
     monthlyBudgetCents: key.monthlyBudgetCents,
     lastUsedAt: key.lastUsedAt,
+    expiresAt: key.expiresAt,
     createdAt: key.createdAt,
     revokedAt: key.revokedAt
   }))

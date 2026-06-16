@@ -105,6 +105,10 @@ function anthropicAuthErrorResponse(
       type: 'permission_error',
       message: 'API key is inactive.'
     },
+    expired_key: {
+      type: 'permission_error',
+      message: 'API key has expired. Create or rotate to a new key.'
+    },
     workspace_inactive: {
       type: 'permission_error',
       message: 'Workspace is inactive.'

@@ -428,7 +428,7 @@
         }
       },
       "Unauthorized": {
-        "description": "Missing or invalid API key",
+        "description": "Missing, malformed, or invalid API key",
         "content": {
           "application/json": {
             "schema": {
@@ -438,7 +438,7 @@
         }
       },
       "Forbidden": {
-        "description": "Missing scope, model access, or feature access",
+        "description": "Inactive key, expired key, missing scope, model access, or feature access",
         "content": {
           "application/json": {
             "schema": {

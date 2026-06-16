@@ -38,6 +38,7 @@ interface ApiKey {
   dailyRequestLimit: number | null
   monthlyBudgetCents: number | null
   lastUsedAt: Date | null
+  expiresAt: Date | null
   createdAt: Date
   revokedAt: Date | null
 }
@@ -62,11 +63,28 @@ function getLifecycleDetail(key: ApiKey) {
     return key.revokedAt ? `Revoked ${formatDate(key.revokedAt)}` : 'Revoked'
   }
 
+  if (isExpired(key)) {
+    return key.expiresAt ? `Expired ${formatDate(key.expiresAt)}` : 'Expired'
+  }
+
   if (key.status === 'paused') {
     return 'Paused until resumed'
   }
 
   return key.lastUsedAt ? `Used ${formatDate(key.lastUsedAt)}` : 'Never used'
+}
+
+function getExpiryDetail(key: ApiKey) {
+  if (!key.expiresAt) return 'No expiration'
+  return isExpired(key)
+    ? `Expired ${formatDate(key.expiresAt)}`
+    : `Expires ${formatDate(key.expiresAt)}`
+}
+
+function isExpired(key: ApiKey) {
+  return Boolean(
+    key.expiresAt && new Date(key.expiresAt).getTime() <= Date.now()
+  )
 }
 
 export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
@@ -97,7 +115,7 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
               <TableHead>Key</TableHead>
               <TableHead>Access</TableHead>
               <TableHead>Limits</TableHead>
-              <TableHead>Last used</TableHead>
+              <TableHead>Lifecycle</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -128,7 +146,7 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1.5">
-                    <StatusBadge status={key.status} />
+                    <StatusBadge status={key.status} expired={isExpired(key)} />
                     <Badge variant="outline" className="gap-1">
                       <ShieldCheck className="size-3" />
                       {key.scopes.length || 'all'} scopes
@@ -147,6 +165,7 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
                     <Clock3 className="size-3.5" />
                     {getLifecycleDetail(key)}
                   </span>
+                  <p className="mt-1 text-xs">{getExpiryDetail(key)}</p>
                 </TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-2">
@@ -177,7 +196,7 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
                   {key.maskedKey}
                 </code>
               </div>
-              <StatusBadge status={key.status} />
+              <StatusBadge status={key.status} expired={isExpired(key)} />
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -187,7 +206,8 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
                 label="Daily"
                 value={formatLimit(key.dailyRequestLimit, '')}
               />
-              <MobileFact label="Last used" value={getLifecycleDetail(key)} />
+              <MobileFact label="Lifecycle" value={getLifecycleDetail(key)} />
+              <MobileFact label="Expires" value={getExpiryDetail(key)} />
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -217,7 +237,22 @@ export function ApiKeyTable({ keys }: { keys: ApiKey[] }) {
   )
 }
 
-function StatusBadge({ status }: { status: ApiKey['status'] }) {
+function StatusBadge({
+  status,
+  expired
+}: {
+  status: ApiKey['status']
+  expired?: boolean
+}) {
+  if (expired && status !== 'revoked') {
+    return (
+      <Badge variant="destructive" className="gap-1">
+        <Clock3 className="size-3" />
+        expired
+      </Badge>
+    )
+  }
+
   const icon =
     status === 'active' ? (
       <ShieldCheck className="size-3" />

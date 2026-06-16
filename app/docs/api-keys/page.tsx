@@ -19,6 +19,8 @@ export default function ApiKeysPage() {
           developer machines, and CLI tools. Treat every key like a password:
           Brok shows the full value once, stores only verifiers, and enforces
           scopes, status, model access, and rate limits on every API request.
+          Keys can be created with no expiration or with a future expiration
+          timestamp for temporary access.
         </p>
       </div>
 
@@ -58,11 +60,11 @@ export default function ApiKeysPage() {
           </li>
           <li>
             Use scopes, model allowlists, RPM, daily request limits, and monthly
-            budget caps to narrow blast radius.
+            budget caps, plus optional expiration, to narrow blast radius.
           </li>
           <li>
-            Pause a key for temporary shutdown, resume it when safe, or revoke
-            it permanently and replace it with a newly generated key.
+            Pause a key for temporary shutdown, let temporary keys expire, or
+            revoke a key permanently and replace it with a newly generated key.
           </li>
         </ol>
 
@@ -152,17 +154,12 @@ export default function ApiKeysPage() {
 
         <h2>Expiration, Revocation, And Rotation</h2>
         <p>
-          User-created keys currently support active, paused, and revoked
-          states. Revocation is final: revoked keys cannot be resumed, so create
-          a replacement key before cutting over production traffic. Pause is for
-          temporary shutdowns when you expect to restore the same key.
-        </p>
-        <p>
-          The dashboard can collect temporary-access intent, but persistent
-          per-key expiration is not the general lifecycle control yet. The
-          hosted playground is the exception: it uses a server-side test session
-          key that expires after 24 hours and revokes the previous backing key
-          when a new session key is issued.
+          User-created keys support no expiration or a future expiration time.
+          Expired keys are rejected before scope checks, rate limits, usage
+          reservations, provider calls, billing, or last-used mutations. Paused
+          keys can be resumed, but expiration is not extended automatically.
+          Revocation is final: revoked keys cannot be resumed, so create a
+          replacement key before cutting over production traffic.
         </p>
         <ol>
           <li>Create a new key with the same or narrower scopes.</li>
