@@ -190,14 +190,15 @@ function nodeClientSource() {
   return `
 const baseUrl = (process.env.BROK_BASE_URL || 'https://www.brok.fyi').replace(/\\/+$/, '')
 const apiKey = process.env.BROK_API_KEY || ['brok', 'sk', 'test', 'invaliddxprobe1234567890'].join('_')
+const headers = { Accept: 'application/json', 'User-Agent': 'brok-dx-node-mock/1.0' }
 
-const specResponse = await fetch(baseUrl + '/api/openapi')
+const specResponse = await fetch(baseUrl + '/api/openapi', { headers })
 if (!specResponse.ok) throw new Error('OpenAPI fetch failed: ' + specResponse.status)
 const spec = await specResponse.json()
 if (!spec.paths['/api/v1/chat/completions']) throw new Error('missing chat path')
 
 const modelsResponse = await fetch(baseUrl + '/api/v1/models', {
-  headers: { Authorization: 'Bearer ' + apiKey }
+  headers: { ...headers, Authorization: 'Bearer ' + apiKey }
 })
 const modelsText = await modelsResponse.text()
 if (!process.env.BROK_API_KEY && modelsResponse.status !== 401) {
@@ -218,15 +219,17 @@ import urllib.request
 
 base_url = os.environ.get("BROK_BASE_URL", "https://www.brok.fyi").rstrip("/")
 api_key = os.environ.get("BROK_API_KEY", "_".join(["brok", "sk", "test", "invaliddxprobe1234567890"]))
+headers = {"Accept": "application/json", "User-Agent": "brok-dx-python-mock/1.0"}
 
-with urllib.request.urlopen(base_url + "/api/openapi", timeout=15) as response:
+openapi_request = urllib.request.Request(base_url + "/api/openapi", headers=headers)
+with urllib.request.urlopen(openapi_request, timeout=15) as response:
     spec = json.loads(response.read().decode("utf-8"))
 if "/api/v1/search/completions" not in spec["paths"]:
     raise RuntimeError("missing search path")
 
 request = urllib.request.Request(
     base_url + "/api/v1/models",
-    headers={"Authorization": "Bearer " + api_key},
+    headers={**headers, "Authorization": "Bearer " + api_key},
 )
 try:
     urllib.request.urlopen(request, timeout=15)
