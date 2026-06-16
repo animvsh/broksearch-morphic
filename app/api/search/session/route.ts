@@ -1,3 +1,5 @@
+import { cookies } from 'next/headers'
+
 import {
   getCurrentAppAccess,
   hasFeatureAccess,
@@ -20,6 +22,7 @@ import { normalizeSearchMode } from '@/lib/config/search-modes'
 import { checkAndEnforceOverallChatLimit } from '@/lib/rate-limit/chat-limits'
 import { checkAndEnforceGuestLimit } from '@/lib/rate-limit/guest-limit'
 import type { SearchMode } from '@/lib/types/search'
+import { selectModel } from '@/lib/utils/model-selection'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -125,6 +128,23 @@ function getRequestIp(req: Request) {
   )
 }
 
+async function getSelectedSearchSynthesisModel(mode: SearchMode) {
+  const selected = await selectModel({
+    searchMode: mode,
+    cookieStore: await cookies()
+  })
+
+  if (selected?.providerId !== 'openai-compatible') {
+    return null
+  }
+
+  return {
+    id: selected.id,
+    name: selected.name,
+    providerId: selected.providerId
+  }
+}
+
 function sendSourceEvents({
   send,
   requestId,
@@ -221,11 +241,13 @@ export async function POST(req: Request) {
   const domains = normalizeDomains(body.domains)
   const context = normalizeContext(body.context)
   const pipelineQuery = buildPipelineQuery(query, context)
+  const selectedModel = await getSelectedSearchSynthesisModel(mode)
   const cachedResult = getCachedSearchPipelineResponse({
     query: pipelineQuery,
     depth,
     recencyDays,
-    domains
+    domains,
+    synthesisModel: selectedModel?.id
   })
 
   if (isGuest) {
@@ -283,21 +305,24 @@ export async function POST(req: Request) {
             mode,
             depth,
             classification,
-            search_queries: searchQueries
+            search_queries: searchQueries,
+            answer_model: selectedModel
           })
           send('query_resolved', {
             id: requestId,
             query,
             resolved_query: resolvedQuery,
             classification,
-            search_queries: searchQueries
+            search_queries: searchQueries,
+            answer_model: selectedModel
           })
           send('search_started', {
             id: requestId,
             depth,
             recency_days: recencyDays,
             domains: domains ?? [],
-            search_queries: searchQueries
+            search_queries: searchQueries,
+            answer_model: selectedModel
           })
 
           const result =
@@ -307,6 +332,7 @@ export async function POST(req: Request) {
               depth,
               recencyDays,
               domains,
+              synthesisModel: selectedModel?.id,
               signal: req.signal,
               onSources: sources => {
                 send('status', {
@@ -379,6 +405,7 @@ export async function POST(req: Request) {
             id: requestId,
             usage: {
               search_queries: result.searchQueries,
+              answer_model: selectedModel,
               total_tokens:
                 result.tokensUsed + Math.round(result.answer.length / 4)
             }

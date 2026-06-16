@@ -7,6 +7,7 @@ import {
   generateFollowUps,
   rankAndDedupeSources,
   resolveQuery,
+  resolveSearchSynthesisModel,
   runSearchPipeline
 } from '@/lib/brok/search-pipeline'
 
@@ -76,6 +77,17 @@ describe('Brok search pipeline helpers', () => {
         limit: 1
       })
     ).toEqual(['How does Node.js streaming work?'])
+  })
+
+  it('maps public Brok model aliases to provider synthesis model ids', () => {
+    expect(resolveSearchSynthesisModel('brok-m2-5-highspeed')).toBe(
+      'MiniMax-M2.5-highspeed'
+    )
+    expect(resolveSearchSynthesisModel('brok-fast')).toBe(
+      'MiniMax-M2.7-highspeed'
+    )
+    expect(resolveSearchSynthesisModel('MiniMax-M2.7')).toBe('MiniMax-M2.7')
+    expect(resolveSearchSynthesisModel('')).toBeNull()
   })
 
   it('falls back to an explicit domain homepage when search returns no results', async () => {

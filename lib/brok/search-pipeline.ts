@@ -6,6 +6,7 @@ import {
   BROK_PROVIDER_CHAT_MODEL
 } from '@/lib/ai/brok'
 import { searchWithBrokWebSearch } from '@/lib/brok/brok-web-search'
+import { getBrokProviderModelId } from '@/lib/brok/models'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 export interface SearchResult {
@@ -35,6 +36,7 @@ export interface SearchRequest {
   recencyDays?: number
   domains?: string[]
   maxSources?: number
+  synthesisModel?: string
   signal?: AbortSignal
   onSources?: (sources: SearchResult[]) => void | Promise<void>
   onAnswerDelta?: (delta: string) => void | Promise<void>
@@ -211,18 +213,33 @@ function buildSearchCacheKey(request: SearchRequest) {
     depth: request.depth,
     recencyDays: request.recencyDays ?? null,
     domains,
-    maxSources: request.maxSources ?? null
+    maxSources: request.maxSources ?? null,
+    synthesisModel: request.synthesisModel ?? null
   })
 }
 
 export function getCachedSearchPipelineResponse(
   request: Pick<
     SearchRequest,
-    'query' | 'depth' | 'recencyDays' | 'domains' | 'maxSources'
+    | 'query'
+    | 'depth'
+    | 'recencyDays'
+    | 'domains'
+    | 'maxSources'
+    | 'synthesisModel'
   >
 ): SearchResponse | null {
   if (getSearchCacheTtlMs() <= 0) return null
   return getCachedSearchResponse(buildSearchCacheKey(request))
+}
+
+export function resolveSearchSynthesisModel(modelId?: string | null) {
+  if (!modelId) return null
+
+  const trimmed = modelId.trim()
+  if (!trimmed) return null
+
+  return getBrokProviderModelId(trimmed) ?? trimmed
 }
 
 function getCachedSearchResponse(cacheKey: string) {
@@ -373,7 +390,10 @@ async function runBrokWebSearch(
   numResults: number,
   maxTokens: number,
   domainHints: string[],
-  events: Pick<SearchRequest, 'onSources' | 'onAnswerDelta' | 'signal'>
+  events: Pick<
+    SearchRequest,
+    'onSources' | 'onAnswerDelta' | 'signal' | 'synthesisModel'
+  >
 ): Promise<SearchResponse> {
   const batches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
@@ -441,7 +461,10 @@ async function runHtmlSearchPipeline(
   numResults: number,
   maxTokens: number,
   domainHints: string[],
-  events: Pick<SearchRequest, 'onSources' | 'onAnswerDelta' | 'signal'>
+  events: Pick<
+    SearchRequest,
+    'onSources' | 'onAnswerDelta' | 'signal' | 'synthesisModel'
+  >
 ): Promise<SearchResponse> {
   const resultBatches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
@@ -695,7 +718,10 @@ async function synthesizeAnswerFromResults(
   citations: SearchResult[],
   maxTokens: number,
   classification: QueryClassification,
-  events: Pick<SearchRequest, 'onAnswerDelta' | 'signal'> = {}
+  events: Pick<
+    SearchRequest,
+    'onAnswerDelta' | 'signal' | 'synthesisModel'
+  > = {}
 ): Promise<string> {
   if (citations.length === 0) {
     return 'No search results were available.'
@@ -715,6 +741,10 @@ async function synthesizeAnswerFromResults(
     .join('\n\n')
 
   try {
+    const synthesisModel =
+      resolveSearchSynthesisModel(events.synthesisModel) ??
+      BROK_PROVIDER_CHAT_MODEL
+
     const response = await fetch(`${BROK_PROVIDER_BASE_URL}/chat/completions`, {
       method: 'POST',
       signal: createTimeoutSignal(getAnswerSynthesisTimeoutMs(), events.signal),
@@ -723,7 +753,7 @@ async function synthesizeAnswerFromResults(
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: BROK_PROVIDER_CHAT_MODEL,
+        model: synthesisModel,
         max_tokens: Math.min(maxTokens, 1200),
         stream: Boolean(events.onAnswerDelta),
         messages: [

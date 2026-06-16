@@ -104,6 +104,7 @@ export default async function SearchPage(props: {
         initialQuery={q}
         initialMode={mode}
         searchId={id}
+        modelSelectorData={modelSelectorData}
         persistToServer={!isGuest}
       />
     )

@@ -16,12 +16,14 @@ import { toast } from 'sonner'
 
 import type { SearchResultItem } from '@/lib/types'
 import type { UIMessage } from '@/lib/types/ai'
+import type { ModelSelectorData } from '@/lib/types/model-selector'
 import type { SearchMode } from '@/lib/types/search'
 
 import { recordRecentSearch } from './search/recent-searches'
 import { SourceSidePanel } from './search/source-side-panel'
 import { FollowUpChips, type FollowUpItem } from './follow-up-chips'
 import { MarkdownMessage } from './message'
+import { ModelSelectorClient } from './model-selector-client'
 import { RelatedQuestionsPanel } from './related-questions-panel'
 import { VoiceInputButton, VoiceOutputButton } from './voice-input-button'
 
@@ -36,6 +38,11 @@ interface Source {
 }
 
 interface SearchProgress {
+  answerModel?: {
+    id: string
+    name: string
+    providerId: string
+  } | null
   resolvedQuery?: string
   classification?: string
   searchQueries: string[]
@@ -83,6 +90,7 @@ interface BrokSearchClientProps {
   apiBase?: string
   onFollowUpSelect?: (query: string) => void
   persistToServer?: boolean
+  modelSelectorData?: ModelSelectorData
 }
 
 const DEFAULT_API_BASE = '/api/search/session'
@@ -381,7 +389,8 @@ export function BrokSearchClient({
   apiKey,
   apiBase,
   onFollowUpSelect,
-  persistToServer = true
+  persistToServer = true,
+  modelSelectorData
 }: BrokSearchClientProps) {
   const [query, setQuery] = useState(initialQuery ?? '')
   const [followUpInput, setFollowUpInput] = useState('')
@@ -631,6 +640,7 @@ export function BrokSearchClient({
             case 'query':
               setProgress(prev => ({
                 ...prev,
+                answerModel: data.answer_model ?? prev.answerModel,
                 resolvedQuery: data.resolved_query ?? data.query,
                 classification: data.classification?.type,
                 searchQueries: data.search_queries ?? prev.searchQueries,
@@ -641,6 +651,7 @@ export function BrokSearchClient({
             case 'query_resolved':
               setProgress(prev => ({
                 ...prev,
+                answerModel: data.answer_model ?? prev.answerModel,
                 resolvedQuery: data.resolved_query,
                 classification: data.classification?.type,
                 searchQueries: data.search_queries ?? [],
@@ -651,6 +662,7 @@ export function BrokSearchClient({
             case 'search_started':
               setProgress(prev => ({
                 ...prev,
+                answerModel: data.answer_model ?? prev.answerModel,
                 status: 'searching',
                 message: `Running ${data.search_queries?.length ?? 0} searches...`
               }))
@@ -714,6 +726,10 @@ export function BrokSearchClient({
               flushPendingPersistence()
               setProgress(prev => ({
                 ...prev,
+                answerModel:
+                  data.usage?.answer_model ??
+                  data.answer_model ??
+                  prev.answerModel,
                 status: 'done',
                 message: 'Answer ready'
               }))
@@ -892,6 +908,11 @@ export function BrokSearchClient({
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Sparkles className="size-4" />
             <span>Brok Search</span>
+            {progress.answerModel?.name ? (
+              <span className="hidden text-xs text-muted-foreground/70 sm:inline">
+                · {progress.answerModel.name}
+              </span>
+            ) : null}
           </div>
           <form
             className="rounded-2xl border border-zinc-200/80 bg-white/90 p-2 shadow-[0_18px_55px_-42px_rgba(15,23,42,0.35)] backdrop-blur transition-colors focus-within:border-zinc-300"
@@ -909,6 +930,11 @@ export function BrokSearchClient({
                 className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none"
               />
               <div className="flex shrink-0 items-center gap-1">
+                {modelSelectorData ? (
+                  <div className="hidden sm:block">
+                    <ModelSelectorClient data={modelSelectorData} />
+                  </div>
+                ) : null}
                 <VoiceInputButton onTranscript={handleVoiceTranscript} />
                 <button
                   type={isLoading ? 'button' : 'submit'}
@@ -930,6 +956,11 @@ export function BrokSearchClient({
               </div>
             </div>
           </form>
+          {modelSelectorData ? (
+            <div className="flex justify-end sm:hidden">
+              <ModelSelectorClient data={modelSelectorData} />
+            </div>
+          ) : null}
         </header>
 
         {error && (
@@ -979,6 +1010,9 @@ export function BrokSearchClient({
                   {progress.sources.length} sources
                   {progress.classification
                     ? ` • ${progress.classification.replace(/\//g, ' ')}`
+                    : ''}
+                  {progress.answerModel?.name
+                    ? ` • ${progress.answerModel.name}`
                     : ''}
                 </span>
               </div>
