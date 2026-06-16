@@ -68,6 +68,7 @@ interface BrokSearchClientProps {
 
 const DEFAULT_API_BASE = '/api/search/session'
 const GUEST_CHAT_STORAGE_PREFIX = 'brok:guest-chat:'
+const SESSION_CITATION_TOOL_ID = 'brok-session-search'
 
 function getGuestChatStorageKey(chatId: string) {
   return `${GUEST_CHAT_STORAGE_PREFIX}${chatId}`
@@ -82,6 +83,38 @@ function toSearchResultItem(source: Source): SearchResultItem {
     publisher: source.publisher,
     retrievedAt: source.retrievedAt
   }
+}
+
+function buildCitationMaps(
+  sources: Source[]
+): Record<string, Record<number, SearchResultItem>> {
+  if (sources.length === 0) return {}
+
+  return {
+    [SESSION_CITATION_TOOL_ID]: sources.reduce<
+      Record<number, SearchResultItem>
+    >((acc, source, index) => {
+      acc[index + 1] = toSearchResultItem(source)
+      return acc
+    }, {})
+  }
+}
+
+function linkPlainCitations(message: string, sources: Source[]) {
+  if (sources.length === 0) return message
+
+  return message.replace(/\[(\d+)\](?!\()/g, (match, rawNumber) => {
+    const citationNumber = Number.parseInt(rawNumber, 10)
+    if (
+      !Number.isFinite(citationNumber) ||
+      citationNumber < 1 ||
+      citationNumber > sources.length
+    ) {
+      return match
+    }
+
+    return `[${citationNumber}](#${SESSION_CITATION_TOOL_ID}:${citationNumber})`
+  })
 }
 
 function getTurnMessageIds(searchId: string, turnIndex: number) {
@@ -191,6 +224,14 @@ export function BrokSearchClient({
   const activeTurnRef = useRef<SearchTurn | null>(null)
 
   const endpoint = useMemo(() => apiBase ?? DEFAULT_API_BASE, [apiBase])
+  const activeCitationMaps = useMemo(
+    () => buildCitationMaps(progress.sources),
+    [progress.sources]
+  )
+  const linkedAnswer = useMemo(
+    () => linkPlainCitations(answer, progress.sources),
+    [answer, progress.sources]
+  )
 
   const stopSearch = useCallback(() => {
     abortRef.current?.abort()
@@ -613,7 +654,10 @@ export function BrokSearchClient({
               </div>
               <VoiceOutputButton text={answer} />
             </div>
-            <MarkdownMessage message={answer} />
+            <MarkdownMessage
+              message={linkedAnswer}
+              citationMaps={activeCitationMaps}
+            />
             {progress.status === 'done' && progress.sources.length === 0 && (
               <NoSourcesNotice />
             )}
@@ -714,6 +758,15 @@ function NoSourcesNotice() {
 }
 
 function CompletedTurn({ turn }: { turn: SearchTurn }) {
+  const citationMaps = useMemo(
+    () => buildCitationMaps(turn.sources),
+    [turn.sources]
+  )
+  const linkedAnswer = useMemo(
+    () => linkPlainCitations(turn.answer, turn.sources),
+    [turn.answer, turn.sources]
+  )
+
   return (
     <section
       className="flex flex-col gap-3 border-b border-zinc-200/70 pb-5"
@@ -741,7 +794,7 @@ function CompletedTurn({ turn }: { turn: SearchTurn }) {
         </div>
       )}
       <article className="rounded-2xl border border-zinc-200 bg-white/80 p-4 text-sm text-zinc-900">
-        <MarkdownMessage message={turn.answer} />
+        <MarkdownMessage message={linkedAnswer} citationMaps={citationMaps} />
       </article>
     </section>
   )

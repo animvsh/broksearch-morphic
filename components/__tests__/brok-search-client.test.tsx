@@ -8,8 +8,21 @@ vi.mock('next/navigation', () => ({
 }))
 
 vi.mock('../message', () => ({
-  MarkdownMessage: ({ message }: { message: string }) => (
-    <div data-testid="markdown-message">{message}</div>
+  MarkdownMessage: ({
+    citationMaps,
+    message
+  }: {
+    citationMaps?: Record<string, Record<number, { title: string }>>
+    message: string
+  }) => (
+    <div
+      data-citation-title={
+        citationMaps?.['brok-session-search']?.[1]?.title ?? ''
+      }
+      data-testid="markdown-message"
+    >
+      {message}
+    </div>
   )
 }))
 
@@ -217,7 +230,11 @@ describe('BrokSearchClient', () => {
       'Brok docs'
     )
     expect(screen.getByTestId('markdown-message')).toHaveTextContent(
-      'Brok answers with sources. [1]'
+      'Brok answers with sources. [1](#brok-session-search:1)'
+    )
+    expect(screen.getByTestId('markdown-message')).toHaveAttribute(
+      'data-citation-title',
+      'Brok docs'
     )
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent(
       'How does Brok cite sources?'
@@ -453,7 +470,7 @@ describe('BrokSearchClient', () => {
     )
 
     expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
-      'Brok answers with sources. [1]'
+      'Brok answers with sources. [1](#brok-session-search:1)'
     )
 
     fireEvent.change(screen.getByLabelText('Ask a follow-up'), {
@@ -466,9 +483,11 @@ describe('BrokSearchClient', () => {
     })
     expect(
       await screen.findByTestId('completed-search-turn')
-    ).toHaveTextContent('Brok answers with sources. [1]')
+    ).toHaveTextContent(
+      'Brok answers with sources. [1](#brok-session-search:1)'
+    )
     expect(screen.getByTestId('brok-search-answer')).toHaveTextContent(
-      'Brok cites each answer with source cards. [1]'
+      'Brok cites each answer with source cards. [1](#brok-session-search:1)'
     )
 
     const persisted = JSON.parse(
