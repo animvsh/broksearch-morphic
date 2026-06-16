@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type {
+  BrokBuildBackendResourcePlan,
   BrokBuildBackendStatus,
   BrokBuildFilePreview,
   BrokBuildPhase,
@@ -20,6 +21,7 @@ export type BuildStreamState = {
   deploymentUrl: string | null
   opencodeSessionId: string | null
   backendStatus: BrokBuildBackendStatus
+  backendPlan: BrokBuildBackendResourcePlan | null
   errorMessage: string | null
 }
 
@@ -34,6 +36,7 @@ const INITIAL_STATE: BuildStreamState = {
   deploymentUrl: null,
   opencodeSessionId: null,
   backendStatus: 'not_started',
+  backendPlan: null,
   errorMessage: null
 }
 
@@ -80,6 +83,8 @@ function applyEvent(
       }
     case 'backend_status':
       return { ...state, events: nextEvents, backendStatus: event.status }
+    case 'backend_plan':
+      return { ...state, events: nextEvents, backendPlan: event.plan }
     case 'error':
       return {
         ...state,

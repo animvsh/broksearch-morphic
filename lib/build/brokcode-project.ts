@@ -12,11 +12,16 @@ import {
   upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
 
-import type { BrokBuildFilePreview, UserVisiblePlan } from './types'
+import type {
+  BrokBuildBackendResourcePlan,
+  BrokBuildFilePreview,
+  UserVisiblePlan
+} from './types'
 
 export type PersistBrokBuildProjectOptions = {
   prompt: string
   userPlan: UserVisiblePlan
+  backendPlan?: BrokBuildBackendResourcePlan
   workspaceId: string
   userId: string
   request: { headers: Headers; url: string }
@@ -128,6 +133,7 @@ async function runBrokCodeExecutionForBuild({
 export async function persistBrokBuildProject({
   prompt,
   userPlan,
+  backendPlan,
   workspaceId,
   userId,
   request,
@@ -195,6 +201,9 @@ export async function persistBrokBuildProject({
         quality,
         deployReadiness: readiness,
         generatedAt,
+        backendProvider: backendPlan?.provider,
+        backendPlanStatus: backendPlan?.status,
+        backendPlan,
         runtime: execution.runtime,
         note: execution.note,
         generatedFiles: execution.generated_files,
@@ -263,6 +272,9 @@ export async function persistBrokBuildProject({
       degraded: true,
       executionError,
       generatedAt,
+      backendProvider: backendPlan?.provider,
+      backendPlanStatus: backendPlan?.status,
+      backendPlan,
       hotReload: true
     }
   })

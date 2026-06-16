@@ -41,6 +41,7 @@ describe('runBuildStream', () => {
     expect(result.userPlan.bullets.length).toBeGreaterThan(2)
     expect(result.events.some(e => e.kind === 'plan')).toBe(true)
     expect(result.events.some(e => e.kind === 'internal_plan')).toBe(true)
+    expect(result.events.some(e => e.kind === 'backend_plan')).toBe(true)
     expect(result.events.some(e => e.kind === 'opencode_session')).toBe(false)
     expect(result.events.some(e => e.kind === 'backend_status')).toBe(false)
     expect(result.events.some(e => e.kind === 'files')).toBe(true)
@@ -129,6 +130,19 @@ describe('runBuildStream', () => {
         previewUrl: expect.stringContaining('/api/brokcode/previews/'),
         deploymentUrl: null
       })
+      const previewMetadata = project?.metadata?.preview as
+        | Record<string, unknown>
+        | undefined
+      expect(previewMetadata?.backendPlan).toMatchObject({
+        provider: 'insforge',
+        status: 'planned',
+        tables: expect.arrayContaining([
+          expect.objectContaining({ name: 'customers' }),
+          expect.objectContaining({ name: 'notes' }),
+          expect.objectContaining({ name: 'tasks' })
+        ])
+      })
+      expect(previewMetadata?.backendPlanStatus).toBe('planned')
 
       const files = await listBrokCodeProjectFiles({
         projectId: result.projectId,
@@ -214,7 +228,11 @@ describe('runBuildStream', () => {
         mode: 'degraded_fallback',
         source: 'brok_build_degraded_fallback',
         degraded: true,
-        executionError: 'BrokCode Cloud runtime is required.'
+        executionError: 'BrokCode Cloud runtime is required.',
+        backendPlan: expect.objectContaining({
+          provider: 'insforge',
+          status: 'planned'
+        })
       })
 
       const deployments = await listBrokCodeProjectDeployments({
@@ -269,15 +287,23 @@ describe('runBuildStream', () => {
             event.internalPlan.coding_agent
           ]
         }
+        if (event.kind === 'backend_plan') {
+          return [
+            event.plan.provider,
+            event.plan.status,
+            ...event.plan.applySteps
+          ]
+        }
         return []
       })
       .join(' ')
 
     expect(visibleText.replace(/BrokCode/g, '')).not.toMatch(/OpenCode/i)
-    expect(visibleText).not.toMatch(/InsForge/i)
     expect(visibleText).not.toMatch(/Railway/i)
     expect(visibleText).toMatch(/BrokCode/i)
-    expect(visibleText).toMatch(/starter/i)
+    expect(visibleText).toMatch(/insforge/i)
+    expect(visibleText).toMatch(/planned/i)
+    expect(visibleText).not.toMatch(/connected|provisioned|deployed/i)
   }, 15000)
 
   it('classifies non-AI prompts and still produces a build stream', async () => {

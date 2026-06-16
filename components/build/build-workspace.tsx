@@ -214,6 +214,7 @@ export function BrokBuildWorkspace({
           phase={phase}
           plan={plan}
           internalPlan={internalPlan}
+          backendPlan={state.backendPlan}
           files={state.files}
           logs={state.logs}
           backendStatus={state.backendStatus}

@@ -8,6 +8,7 @@
 // real time, plus starter file previews for signed-out/demo flows.
 
 import { classifyApp } from './app-types'
+import { buildInsForgeBackendResourcePlan } from './backend-plan'
 import {
   persistBrokBuildProject,
   type PersistBrokBuildProjectOptions,
@@ -203,6 +204,10 @@ export async function runBuildStream(
     classification
   )
   const userPlan = buildUserVisiblePlan(options.prompt, internalPlan)
+  const backendPlan = buildInsForgeBackendResourcePlan(
+    internalPlan,
+    userPlan.title
+  )
   let activeProjectId = options.projectId
   let persistedProject: PersistedBrokBuildProject | null = null
 
@@ -222,12 +227,16 @@ export async function runBuildStream(
   emit({ kind: 'internal_plan', internalPlan })
   events.push({ kind: 'internal_plan', internalPlan })
 
+  emit({ kind: 'backend_plan', plan: backendPlan })
+  events.push({ kind: 'backend_plan', plan: backendPlan })
+
   if (options.brokCodeProject) {
     try {
       persistedProject = await persistBrokBuildProject({
         ...options.brokCodeProject,
         prompt: options.prompt,
-        userPlan
+        userPlan,
+        backendPlan
       })
       activeProjectId = persistedProject.projectId
       const projectEvent: BrokStreamEvent = {
