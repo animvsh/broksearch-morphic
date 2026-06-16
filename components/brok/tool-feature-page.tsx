@@ -53,7 +53,7 @@ export const TOOL_FEATURES: ToolFeature[] = [
     subtitle:
       'Ask quick questions, run deep research, and keep sources attached so papers, labs, and projects do not turn into tab chaos.',
     priceLine: 'Included in the $7/month student plan.',
-    primaryHref: '/dashboard',
+    primaryHref: '/',
     primaryLabel: 'Open Search',
     secondaryHref: '/search/demo',
     secondaryLabel: 'View demo',
@@ -217,7 +217,7 @@ export const TOOL_FEATURES: ToolFeature[] = [
     subtitle:
       'Create keys, call chat and search endpoints, track usage, and build projects without learning a new API shape.',
     priceLine: 'API access is included in the $7/month plan.',
-    primaryHref: '/api-keys',
+    primaryHref: '/api-platform/keys',
     primaryLabel: 'Create API key',
     secondaryHref: '/docs/quickstart',
     secondaryLabel: 'Read quickstart',
@@ -253,20 +253,26 @@ export const TOOL_FEATURES: ToolFeature[] = [
   }
 ]
 
-const TOOL_FEATURE_ALIASES = {
+const FEATURE_SLUG_ALIASES: Record<string, string> = {
   'app-builder': 'brokcode',
-  'brok-presentations': 'presentations',
+  builder: 'brokcode',
+  code: 'brokcode',
+  'brok-code': 'brokcode',
   presentation: 'presentations',
-  code: 'brokcode'
-} as const
+  'brok-presentation': 'presentations',
+  'brok-presentations': 'presentations',
+  keys: 'api',
+  'api-keys': 'api',
+  platform: 'api'
+}
 
 export function resolveFeatureSlug(slug: string) {
-  return TOOL_FEATURE_ALIASES[slug as keyof typeof TOOL_FEATURE_ALIASES] ?? slug
+  return FEATURE_SLUG_ALIASES[slug] ?? slug
 }
 
 export function getToolFeature(slug: string) {
-  const canonical = resolveFeatureSlug(slug)
-  return TOOL_FEATURES.find(feature => feature.slug === canonical)
+  const resolvedSlug = resolveFeatureSlug(slug)
+  return TOOL_FEATURES.find(feature => feature.slug === resolvedSlug)
 }
 
 export function ToolFeaturePage({ feature }: { feature: ToolFeature }) {
@@ -406,7 +412,10 @@ export function FeaturesIndexPage() {
 function FeatureNav() {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-100 px-5 sm:px-7">
-      <Link href="/" className="inline-flex items-center gap-2">
+      <Link
+        href="/"
+        className="inline-flex min-h-11 min-w-11 items-center gap-2 rounded-md px-2 clicky-control"
+      >
         <span className="inline-flex size-7 items-center justify-center rounded-md border border-zinc-200 bg-white shadow-sm">
           <IconBlinkingLogo animate className="size-3.5" />
         </span>

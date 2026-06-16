@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 
 import type { User } from '@supabase/supabase-js'
-import { asc, eq } from 'drizzle-orm'
 
 import { getAppAccessForUser, hasFeatureAccess } from '@/lib/auth/app-access'
 import {
@@ -9,12 +8,7 @@ import {
   isAnonymousAuthMode
 } from '@/lib/auth/get-current-user'
 import { type AuthResult, verifyRequestAuth } from '@/lib/brok/auth'
-import {
-  decryptRuntimeKey,
-  getLatestSavedBrokCodeRuntimeKeyForUser
-} from '@/lib/brokcode/key-vault'
-import { db } from '@/lib/db'
-import { apiKeys, workspaces } from '@/lib/db/schema'
+import type { apiKeys, workspaces } from '@/lib/db/schema'
 
 const LOCAL_FALLBACK_API_KEY_ID = '00000000-0000-0000-0000-000000000001'
 const LOCAL_FALLBACK_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000'
@@ -91,6 +85,23 @@ function createLocalBrowserSessionAuth(user: User): BrokCodeAuthResult {
   })
 }
 
+async function getWorkspaceDependencies() {
+  const [{ asc, eq }, { db }, { workspaces }] = await Promise.all([
+    import('drizzle-orm'),
+    import('@/lib/db'),
+    import('@/lib/db/schema')
+  ])
+
+  return { asc, eq, db, workspaces }
+}
+
+async function getRuntimeKeyDependencies() {
+  const { decryptRuntimeKey, getLatestSavedBrokCodeRuntimeKeyForUser } =
+    await import('@/lib/brokcode/key-vault')
+
+  return { decryptRuntimeKey, getLatestSavedBrokCodeRuntimeKeyForUser }
+}
+
 export async function verifyBrokCodeRequestAuth(request: Request): Promise<{
   authResult: AuthResult
   authorization: string | null
@@ -110,6 +121,8 @@ export async function verifyBrokCodeRequestAuth(request: Request): Promise<{
   if (!hasExplicitCredential) {
     const user = await getCurrentUser()
     if (user) {
+      const { decryptRuntimeKey, getLatestSavedBrokCodeRuntimeKeyForUser } =
+        await getRuntimeKeyDependencies()
       const savedKey = await getLatestSavedBrokCodeRuntimeKeyForUser(
         user.id
       ).catch(error => {
@@ -199,6 +212,7 @@ export async function getBrokCodeBrowserSessionAuth(): Promise<BrokCodeAuthResul
   }
 
   try {
+    const { asc, eq, db, workspaces } = await getWorkspaceDependencies()
     const [existingWorkspace] = await db
       .select()
       .from(workspaces)

@@ -58,16 +58,19 @@ function normalizeOrganicResults(organic: unknown): BrokWebSearchResult[] {
 
 export async function searchWithBrokWebSearch(
   query: string,
-  count = 10
+  count = 10,
+  options: { signal?: AbortSignal } = {}
 ): Promise<BrokWebSearchResult[]> {
   const apiKey = getBrokSearchApiKey()
   if (!apiKey) {
     throw new Error('Brok provider API key not configured')
   }
 
+  const signal = createTimeoutSignal(getSearchTimeoutMs(), options.signal)
+
   const response = await fetch(getBrokSearchUrl(), {
     method: 'POST',
-    signal: AbortSignal.timeout(getSearchTimeoutMs()),
+    signal,
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
@@ -94,4 +97,9 @@ export async function searchWithBrokWebSearch(
   }
 
   return normalizeOrganicResults(data.organic)
+}
+
+function createTimeoutSignal(timeoutMs: number, parent?: AbortSignal) {
+  if (!parent) return AbortSignal.timeout(timeoutMs)
+  return AbortSignal.any([parent, AbortSignal.timeout(timeoutMs)])
 }

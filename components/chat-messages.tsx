@@ -8,6 +8,7 @@ import type { UIDataTypes, UIMessage, UITools } from '@/lib/types/ai'
 import { cn } from '@/lib/utils'
 import { extractCitationMapsFromMessages } from '@/lib/utils/citation'
 
+import { PendingAnswer } from './search/pending-answer'
 import { AnimatedLogo } from './ui/animated-logo'
 import { ChatError } from './chat-error'
 import { ChatFooterMessage } from './chat-footer-message'
@@ -26,11 +27,13 @@ interface ChatMessagesProps {
   chatId?: string
   isGuest?: boolean
   addToolResult?: (params: { toolCallId: string; result: any }) => void
+  onFollowUpSubmit?: (query: string) => void
   /** Ref for the scroll container */
   scrollContainerRef: React.RefObject<HTMLDivElement>
   onUpdateMessage?: (messageId: string, newContent: string) => Promise<void>
   reload?: (messageId: string) => Promise<void | string | null | undefined>
   error?: Error | string | null | undefined
+  hasPendingSubmission?: boolean
 }
 
 export function ChatMessages({
@@ -39,10 +42,12 @@ export function ChatMessages({
   chatId,
   isGuest = false,
   addToolResult,
+  onFollowUpSubmit,
   scrollContainerRef,
   onUpdateMessage,
   reload,
-  error
+  error,
+  hasPendingSubmission = false
 }: ChatMessagesProps) {
   // Track user-modified states (when user explicitly opens/closes)
   const [userModifiedStates, setUserModifiedStates] = useState<
@@ -50,7 +55,8 @@ export function ChatMessages({
   >({})
   // Cache tool counts for performance optimization
   const toolCountCacheRef = useRef<Map<string, number>>(new Map())
-  const isLoading = status === 'submitted' || status === 'streaming'
+  const isLoading =
+    status === 'submitted' || status === 'streaming' || hasPendingSubmission
 
   // Tool types definition - moved outside function for performance
   const toolTypes = [
@@ -85,6 +91,16 @@ export function ChatMessages({
   const latestSection = sections.at(-1)
   const showAssistantLogo = Boolean(
     latestSection && (isLoading || latestSection.assistantMessages.length > 0)
+  )
+  const latestSectionHasAnswerText = Boolean(
+    latestSection?.assistantMessages.some(message =>
+      message.parts?.some(
+        part =>
+          part.type === 'text' &&
+          typeof (part as { text?: unknown }).text === 'string' &&
+          (part as { text: string }).text.trim().length > 0
+      )
+    )
   )
 
   // Helper function to get tool count with caching
@@ -186,6 +202,7 @@ export function ChatMessages({
                 isGuest={isGuest}
                 status={status}
                 addToolResult={addToolResult}
+                onFollowUpSubmit={onFollowUpSubmit}
                 onUpdateMessage={onUpdateMessage}
                 reload={reload}
                 citationMaps={allCitationMaps}
@@ -215,6 +232,7 @@ export function ChatMessages({
                     isGuest={isGuest}
                     status={status}
                     addToolResult={addToolResult}
+                    onFollowUpSubmit={onFollowUpSubmit}
                     onUpdateMessage={onUpdateMessage}
                     reload={reload}
                     isLatestMessage={isLatestMessage}
@@ -223,6 +241,13 @@ export function ChatMessages({
                 </div>
               )
             })}
+            {isLoading &&
+              sectionIndex === sections.length - 1 &&
+              !latestSectionHasAnswerText && (
+                <div className="mt-3">
+                  <PendingAnswer />
+                </div>
+              )}
             {/* Show assistant logo and footer message after assistant messages */}
             {showAssistantLogo && sectionIndex === sections.length - 1 && (
               <div className="flex items-center gap-3 py-3">

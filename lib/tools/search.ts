@@ -14,8 +14,47 @@ import {
   SearchProviderType
 } from './search/providers'
 
-const SEARCH_UNAVAILABLE_MESSAGE =
-  'Search is temporarily unavailable for this request. Try again in a moment, or narrow the query to a specific source or domain.'
+const MODEL_KNOWLEDGE_FALLBACK_URL =
+  'https://www.brok.fyi/docs/search-completions#model-knowledge-fallback'
+
+const DEFAULT_SEARCH_PROVIDER_TIMEOUT_MS = 8_000
+
+function getSearchProviderTimeoutMs() {
+  const configured = Number.parseInt(
+    process.env.SEARCH_PROVIDER_TIMEOUT_MS || '',
+    10
+  )
+  if (Number.isFinite(configured) && configured > 0) return configured
+  return DEFAULT_SEARCH_PROVIDER_TIMEOUT_MS
+}
+
+function isSearchTimeoutError(error: unknown) {
+  return error instanceof Error && error.name === 'SearchTimeoutError'
+}
+
+async function withSearchTimeout<T>(
+  promise: Promise<T>,
+  provider: SearchProviderType,
+  timeoutMs = getSearchProviderTimeoutMs()
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error(
+        `${provider} search timed out after ${timeoutMs}ms`
+      )
+      error.name = 'SearchTimeoutError'
+      reject(error)
+    }, timeoutMs)
+  })
+
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
 
 async function runSearchProvider({
   searchAPI,
@@ -39,17 +78,20 @@ async function runSearchProvider({
   if (searchAPI === 'searxng' && effectiveSearchDepthForAPI === 'advanced') {
     const baseUrl = await getBaseUrlString()
 
-    const response = await fetch(`${baseUrl}/api/advanced-search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: filledQuery,
-        maxResults: effectiveMaxResults,
-        searchDepth: effectiveSearchDepthForAPI,
-        includeDomains,
-        excludeDomains
-      })
-    })
+    const response = await withSearchTimeout(
+      fetch(`${baseUrl}/api/advanced-search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: filledQuery,
+          maxResults: effectiveMaxResults,
+          searchDepth: effectiveSearchDepthForAPI,
+          includeDomains,
+          excludeDomains
+        })
+      }),
+      searchAPI
+    )
     if (!response.ok) {
       throw new Error(
         `Advanced search API error: ${response.status} ${response.statusText}`
@@ -61,25 +103,31 @@ async function runSearchProvider({
   const searchProvider = createSearchProvider(searchAPI)
 
   if (searchAPI === 'brave') {
-    return searchProvider.search(
+    return withSearchTimeout(
+      searchProvider.search(
+        filledQuery,
+        effectiveMaxResults,
+        effectiveSearchDepthForAPI,
+        includeDomains,
+        excludeDomains,
+        {
+          type,
+          content_types: contentTypes
+        }
+      ),
+      searchAPI
+    )
+  }
+
+  return withSearchTimeout(
+    searchProvider.search(
       filledQuery,
       effectiveMaxResults,
       effectiveSearchDepthForAPI,
       includeDomains,
-      excludeDomains,
-      {
-        type,
-        content_types: contentTypes
-      }
-    )
-  }
-
-  return searchProvider.search(
-    filledQuery,
-    effectiveMaxResults,
-    effectiveSearchDepthForAPI,
-    includeDomains,
-    excludeDomains
+      excludeDomains
+    ),
+    searchAPI
   )
 }
 
@@ -87,6 +135,26 @@ function fallbackSearchProvider(searchAPI: SearchProviderType) {
   return searchAPI === DEFAULT_PROVIDER ? null : DEFAULT_PROVIDER
 }
 
+function createModelKnowledgeFallbackResult(query: string): SearchResults {
+  return {
+    results: [
+      {
+        title: 'Model knowledge fallback',
+        url: MODEL_KNOWLEDGE_FALLBACK_URL,
+        publisher: 'Brok',
+        content: [
+          `No live web search source was available for "${query}".`,
+          'Answer from model knowledge, say that live sources were unavailable, and avoid claiming that this fallback is a current web citation.'
+        ].join(' ')
+      }
+    ],
+    images: [],
+    query,
+    number_of_results: 1,
+    error:
+      'Live search sources were unavailable. Brok returned a local fallback so the answer can continue with clear uncertainty.'
+  }
+}
 /**
  * Creates a search tool with the appropriate schema for the given model.
  */
@@ -171,7 +239,10 @@ export function createSearchTool(fullModel: string) {
           >
         })
       } catch (error) {
-        console.error(`${searchAPI} search API error:`, error)
+        console.error(
+          `${searchAPI} search ${isSearchTimeoutError(error) ? 'timeout' : 'API error'}:`,
+          error
+        )
         const fallbackProvider = fallbackSearchProvider(searchAPI)
 
         if (fallbackProvider) {
@@ -194,22 +265,10 @@ export function createSearchTool(fullModel: string) {
               `${fallbackProvider} search API error:`,
               fallbackError
             )
-            searchResult = {
-              results: [],
-              images: [],
-              query: filledQuery,
-              number_of_results: 0,
-              error: SEARCH_UNAVAILABLE_MESSAGE
-            }
+            searchResult = createModelKnowledgeFallbackResult(filledQuery)
           }
         } else {
-          searchResult = {
-            results: [],
-            images: [],
-            query: filledQuery,
-            number_of_results: 0,
-            error: SEARCH_UNAVAILABLE_MESSAGE
-          }
+          searchResult = createModelKnowledgeFallbackResult(filledQuery)
         }
       }
 

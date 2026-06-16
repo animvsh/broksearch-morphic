@@ -12,6 +12,7 @@ import {
   isDangerousShellCommand,
   isValidBrokKey,
   normalizeBrokKey,
+  normalizeUsagePeriod,
   parseSseBlock,
   parseSseEvent,
   relativeTime,
@@ -28,6 +29,8 @@ describe('Brok key validation', () => {
   it('rejects empty, wrong-prefix, and non-string values', () => {
     expect(isValidBrokKey('')).toBe(false)
     expect(isValidBrokKey('sk-abc')).toBe(false)
+    expect(isValidBrokKey(BROK_KEY_PREFIX)).toBe(false)
+    expect(isValidBrokKey(`${BROK_KEY_PREFIX}abc 123`)).toBe(false)
     expect(isValidBrokKey(undefined)).toBe(false)
     expect(isValidBrokKey(null)).toBe(false)
     expect(isValidBrokKey(42)).toBe(false)
@@ -42,6 +45,20 @@ describe('Brok key validation', () => {
   it('returns null for invalid keys', () => {
     expect(normalizeBrokKey('nope')).toBeNull()
     expect(normalizeBrokKey(null)).toBeNull()
+  })
+})
+
+describe('usage period normalization', () => {
+  it('keeps supported usage windows', () => {
+    expect(normalizeUsagePeriod('day')).toBe('day')
+    expect(normalizeUsagePeriod(' week ')).toBe('week')
+    expect(normalizeUsagePeriod('MONTH')).toBe('month')
+  })
+
+  it('falls back to day for unsupported usage windows', () => {
+    expect(normalizeUsagePeriod('year')).toBe('day')
+    expect(normalizeUsagePeriod('')).toBe('day')
+    expect(normalizeUsagePeriod(null as unknown as string)).toBe('day')
   })
 })
 

@@ -2,6 +2,7 @@ import { UIMessage } from 'ai'
 
 import { createChatWithFirstMessage, upsertMessage } from '@/lib/actions/chat'
 import { updateChatTitle } from '@/lib/db/actions'
+import { extractAnswerMetadata } from '@/lib/search/answer-metadata'
 import { SearchMode } from '@/lib/types/search'
 import { stripUploadedFileContext } from '@/lib/utils/message-utils'
 import { perfTime } from '@/lib/utils/perf-logging'
@@ -39,13 +40,20 @@ export async function persistStreamResults(
   initialUserMessage?: UIMessage
 ) {
   const sanitizedResponseMessage = sanitizeMessageTextParts(responseMessage)
+  const answerMetadata = extractAnswerMetadata(sanitizedResponseMessage)
 
   // Attach metadata to the response message
   sanitizedResponseMessage.metadata = {
     ...(sanitizedResponseMessage.metadata || {}),
     ...(parentTraceId && { traceId: parentTraceId }),
     ...(searchMode && { searchMode }),
-    ...(modelId && { modelId })
+    ...(modelId && { modelId }),
+    answer: {
+      ...((sanitizedResponseMessage.metadata as any)?.answer || {}),
+      sources: answerMetadata.sources,
+      citationCount: answerMetadata.citationCount,
+      followUps: answerMetadata.followUps
+    }
   }
 
   // Wait for title generation if it was started

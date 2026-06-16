@@ -32,11 +32,13 @@ const customComponents = {
 export function MarkdownMessage({
   message,
   className,
-  citationMaps
+  citationMaps,
+  onCitationOpen
 }: {
   message: string
   className?: string
   citationMaps?: Record<string, Record<number, SearchResultItem>>
+  onCitationOpen?: (citation: SearchResultItem) => void
 }) {
   // Process citations to replace [number](#toolCallId) with [number](actual-url)
   const processedMessage = processCitations(
@@ -57,7 +59,10 @@ export function MarkdownMessage({
   )
 
   return (
-    <CitationProvider citationMaps={citationMaps}>
+    <CitationProvider
+      citationMaps={citationMaps}
+      onCitationOpen={onCitationOpen}
+    >
       <div
         className={cn(
           'prose-sm prose-neutral prose-a:text-accent-foreground/50',

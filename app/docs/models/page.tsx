@@ -143,8 +143,8 @@ export default function ModelsPage() {
           <div>
             <h3 className="font-medium text-foreground">Download and use</h3>
             <p className="mt-1">
-              Start in <Link href="/playground">BrokCode API</Link>, then follow{' '}
-              <Link href="/docs/brokcode">Brok Code</Link> or{' '}
+              Start in <Link href="/api-platform/playground">BrokCode API</Link>
+              , then follow <Link href="/docs/brokcode">Brok Code</Link> or{' '}
               <Link href="/brokcode/tui">TUI instructions</Link> for local
               terminal use.
             </p>

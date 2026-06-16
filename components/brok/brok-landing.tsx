@@ -1,27 +1,15 @@
-import {
-  SiGithub,
-  SiGmail,
-  SiGooglecalendar,
-  SiGooglecloud,
-  SiSlack
-} from 'react-icons/si'
+import { SiGithub, SiGmail, SiGooglecalendar, SiSlack } from 'react-icons/si'
 import Link from 'next/link'
 
 import {
   ArrowRight,
   ArrowUpRight,
-  BadgeCheck,
-  BookOpen,
-  CalendarDays,
   Check,
   Code2,
   FileText,
-  KeyRound,
   Mail,
-  Presentation,
   Search,
-  Sparkles,
-  TerminalSquare
+  Sparkles
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -35,73 +23,47 @@ const GITHUB_URL = 'https://github.com/animvsh/broksearch-morphic'
 
 const NAV_LINKS = [
   { label: 'Features', href: '/features' },
-  { label: 'Search', href: '/features/search' },
-  { label: 'Code', href: '/features/brokcode' },
-  { label: 'Presentations', href: '/features/presentations' },
-  { label: 'Pricing', href: '/pricing' }
+  { label: 'BrokCode', href: '/features/brokcode' },
+  { label: 'BrokMail', href: '/features/brokmail' },
+  { label: 'Pricing', href: '#pricing' }
 ] as const
 
-const PRODUCTS = [
+const MOBILE_PRODUCTS = [
   {
     title: 'Search',
     body: 'Fast answers with sources, citations, and deep research.',
     icon: Search,
-    href: '/features/search',
-    color: 'bg-blue-50 text-blue-700 border-blue-100'
+    href: '/features/search'
   },
   {
     title: 'BrokCode',
     body: 'A coding-agent workspace for browser, cloud, and TUI.',
     icon: Code2,
-    href: '/features/brokcode',
-    color: 'bg-zinc-100 text-zinc-800 border-zinc-200'
+    href: '/features/brokcode'
   },
   {
     title: 'BrokMail',
     body: 'Connected Gmail workflows for triage and drafting.',
     icon: Mail,
-    href: '/features/brokmail',
-    color: 'bg-rose-50 text-rose-700 border-rose-100'
-  },
-  {
-    title: 'Slides',
-    body: 'Reveal.js decks from research notes, with sharing and export.',
-    icon: Presentation,
-    href: '/features/presentations',
-    color: 'bg-amber-50 text-amber-700 border-amber-100'
-  },
-  {
-    title: 'API',
-    body: 'OpenAI-compatible keys, chat, search, usage, and playgrounds.',
-    icon: KeyRound,
-    href: '/features/api',
-    color: 'bg-emerald-50 text-emerald-700 border-emerald-100'
+    href: '/features/brokmail'
   }
-] as const
-
-const OUTCOMES = [
-  'Cite research',
-  'Build assignments',
-  'Write emails',
-  'Create decks',
-  'Ship APIs'
 ] as const
 
 export function BrokLanding({ isSignedIn }: BrokLandingProps) {
   const primaryHref = isSignedIn ? '/auth/access-pending' : '/auth/login'
 
   return (
-    <main className="min-h-svh bg-[#d9d9d9] px-3 py-4 text-zinc-950 sm:px-5 sm:py-6 lg:px-8">
-      <section className="mx-auto flex min-h-[min(780px,calc(100svh-3rem))] w-full max-w-7xl flex-col overflow-hidden rounded-lg border border-white/80 bg-white shadow-[0_46px_110px_-72px_rgba(24,24,27,0.82)]">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-100 px-4 sm:px-7">
-          <Link href="/" className="inline-flex items-center gap-2">
+    <main className="min-h-svh bg-[#dcdcdc] px-4 py-8 text-zinc-950 sm:px-6 lg:px-8">
+      <section className="mx-auto flex min-h-[min(760px,calc(100svh-4rem))] w-full max-w-7xl flex-col overflow-hidden rounded-lg border border-white/80 bg-white shadow-[0_42px_90px_-58px_rgba(24,24,27,0.7)]">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-100 px-5 sm:px-7">
+          <Link href="/" className="inline-flex min-h-11 items-center gap-2">
             <span className="inline-flex size-7 items-center justify-center rounded-md border border-zinc-200 bg-white shadow-sm">
               <IconBlinkingLogo animate className="size-3.5" />
             </span>
             <span className="text-sm font-semibold tracking-tight">Brok</span>
           </Link>
 
-          <nav className="hidden items-center gap-6 lg:flex">
+          <nav className="hidden items-center gap-8 md:flex">
             {NAV_LINKS.map(link => (
               <Link
                 key={link.label}
@@ -121,7 +83,7 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
               Sign in
             </Link>
             <Button asChild size="sm" className="h-8 rounded-md px-3 text-xs">
-              <Link href={primaryHref}>Start for $7/mo</Link>
+              <Link href={primaryHref}>Request invite</Link>
             </Button>
           </div>
         </header>
@@ -129,7 +91,7 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
         <div className="relative flex flex-1 flex-col overflow-hidden bg-[#fbfbfb]">
           <div
             aria-hidden="true"
-            className="absolute inset-0 opacity-[0.28]"
+            className="absolute inset-0 opacity-[0.33]"
             style={{
               backgroundImage:
                 'radial-gradient(circle at 1px 1px, rgba(39,39,42,0.2) 1px, transparent 0)',
@@ -137,157 +99,82 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
             }}
           />
 
-          <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-8 sm:px-7 lg:px-9 lg:py-10">
-            <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-600 shadow-sm">
-                <BadgeCheck className="size-3.5 text-emerald-600" />
-                All five student AI tools for $7/month
-              </div>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 hidden lg:block"
+          >
+            <FloatingCard className="absolute left-10 top-14 w-52 -rotate-[4deg]">
+              <FloatingStickyNote />
+            </FloatingCard>
 
-              <h1 className="max-w-5xl text-4xl font-semibold leading-[0.94] tracking-tight text-zinc-950 sm:text-6xl lg:text-7xl">
-                One campus AI workspace
-                <br />
-                <span className="font-normal text-zinc-400">
-                  for the price of lunch
-                </span>
-              </h1>
-
-              <p className="mt-6 max-w-2xl text-sm leading-6 text-zinc-600 sm:text-base">
-                Brok bundles cited search, coding help, email workflows,
-                reveal.js presentations, and OpenAI-compatible APIs into one
-                simple student plan.
-              </p>
-
-              <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-                <Button
-                  asChild
-                  size="lg"
-                  className="group h-11 rounded-md px-6"
-                >
-                  <Link href={primaryHref}>
-                    Start for $7/mo
-                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  size="lg"
-                  variant="outline"
-                  className="h-11 rounded-md bg-white px-6"
-                >
-                  <Link href="/features">Explore tools</Link>
-                </Button>
-              </div>
+            <div className="absolute -left-8 top-60 -rotate-[5deg]">
+              <MiniCheckCard />
             </div>
 
-            <div className="mt-9 grid gap-4 lg:grid-cols-[0.72fr_1.28fr_0.72fr] lg:items-center">
-              <div className="hidden space-y-4 lg:block">
-                <FloatingCard>
-                  <FloatingStickyNote />
-                </FloatingCard>
-                <FloatingCard>
-                  <FloatingTasks />
-                </FloatingCard>
-              </div>
+            <FloatingCard className="absolute right-12 top-12 w-44 rotate-[7deg]">
+              <FloatingReminders />
+            </FloatingCard>
 
-              <ProductConsole />
+            <FloatingCard className="absolute bottom-8 left-9 w-72 -rotate-[1.5deg]">
+              <FloatingTasks />
+            </FloatingCard>
 
-              <div className="hidden space-y-4 lg:block">
-                <FloatingCard>
-                  <FloatingReminders />
-                </FloatingCard>
-                <FloatingCard>
-                  <FloatingIntegrations />
-                </FloatingCard>
-              </div>
+            <FloatingCard className="absolute right-16 bottom-10 w-64 rotate-[3deg]">
+              <FloatingIntegrations />
+            </FloatingCard>
+          </div>
+
+          <div className="relative z-10 mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center px-5 py-16 text-center sm:px-8">
+            <div className="mb-9 inline-flex size-16 items-center justify-center rounded-lg border border-zinc-200 bg-white shadow-[0_18px_45px_-28px_rgba(24,24,27,0.5)]">
+              <IconBlinkingLogo animate className="size-7" />
             </div>
 
-            <ul className="mt-6 grid gap-2 sm:grid-cols-5">
-              {OUTCOMES.map(outcome => (
-                <li
-                  key={outcome}
-                  className="flex items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm"
-                >
-                  <Check className="size-3.5 text-emerald-600" />
-                  {outcome}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </section>
+            <h1 className="max-w-4xl text-4xl font-semibold leading-[0.98] tracking-tight text-zinc-950 sm:text-6xl lg:text-7xl">
+              Search, code, and ship <br />
+              <span className="font-normal text-zinc-400">
+                all in one place
+              </span>
+            </h1>
 
-      <section className="mx-auto grid w-full max-w-7xl gap-4 px-1 py-5 md:grid-cols-5">
-        {PRODUCTS.map(product => (
-          <ProductCard key={product.title} {...product} />
-        ))}
-      </section>
+            <p className="mt-7 max-w-xl text-sm leading-6 text-zinc-600 sm:text-base">
+              Brok gives students AI search, BrokCode, BrokMail, and an
+              OpenAI-compatible API workspace for one simple price.
+            </p>
 
-      <section
-        id="pricing"
-        className="mx-auto grid w-full max-w-7xl gap-4 px-1 pb-6 lg:grid-cols-[1.05fr_0.95fr]"
-      >
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-[0_24px_55px_-42px_rgba(24,24,27,0.72)] sm:p-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">
-            <Sparkles className="size-3.5" />
-            Only $7/month
-          </div>
-          <h2 className="mt-5 text-2xl font-semibold tracking-tight sm:text-3xl">
-            Cheap enough for students. Useful enough for the whole semester.
-          </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-600">
-            One subscription covers research, building, communication,
-            presentations, and API projects. No separate upsells for the tools
-            students actually need.
-          </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Button asChild size="lg" className="h-11 rounded-md px-6">
-              <Link href={primaryHref}>
-                Start for $7/mo
-                <ArrowRight className="size-4" />
-              </Link>
-            </Button>
-            <Button
-              asChild
-              size="lg"
-              variant="outline"
-              className="h-11 rounded-md bg-white px-6"
+            <div
+              id="pricing"
+              className="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700"
             >
-              <Link href="/docs/quickstart">Read quickstart</Link>
-            </Button>
-          </div>
-        </div>
+              <Sparkles className="size-3.5" />
+              Only $7/month
+            </div>
 
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-[0_24px_55px_-42px_rgba(24,24,27,0.72)] sm:p-6">
-          <div className="flex items-baseline gap-2">
-            <span className="text-5xl font-semibold tracking-tight">$7</span>
-            <span className="text-sm font-medium text-zinc-500">per month</span>
+            <div className="mt-7">
+              <Button asChild size="lg" className="group h-11 rounded-md px-6">
+                <Link href={primaryHref}>
+                  Request invite
+                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                </Link>
+              </Button>
+            </div>
           </div>
-          <ul className="mt-5 grid gap-3">
-            {[
-              'AI search with citations',
-              'BrokCode builder workspace',
-              'BrokMail and calendar workflows',
-              'Reveal.js presentation builder',
-              'OpenAI-compatible API platform'
-            ].map(item => (
-              <li key={item} className="flex items-start gap-2 text-sm">
-                <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-7xl px-1 pb-6">
-        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-zinc-600">
+      <section className="mx-auto w-full max-w-7xl px-1 py-5">
+        <ul className="grid gap-3 lg:hidden">
+          {MOBILE_PRODUCTS.map(product => (
+            <ProductCardMobile key={product.title} {...product} />
+          ))}
+        </ul>
+
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-zinc-600">
           <FileText className="size-4" />
           <span>Brok API is included in the $7/month plan</span>
           <span aria-hidden="true">&middot;</span>
           <Link
             href="/docs/quickstart"
-            className="inline-flex items-center gap-1 font-medium text-zinc-950 underline-offset-4 hover:underline"
+            className="inline-flex min-h-11 items-center gap-1 font-medium text-zinc-950 underline-offset-4 hover:underline"
           >
             Read the quickstart
             <ArrowRight className="size-3.5" />
@@ -297,14 +184,17 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
         <footer className="mt-5 flex flex-col items-center justify-between gap-2 text-sm text-zinc-600 sm:flex-row">
           <span>&copy; 2026 Brok</span>
           <nav className="flex items-center gap-5">
-            <Link href="/docs" className="hover:text-zinc-950 hover:underline">
+            <Link
+              href="/docs"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-zinc-950 hover:underline"
+            >
               Docs
             </Link>
             <a
               href={GITHUB_URL}
               target="_blank"
               rel="noreferrer"
-              className="hover:text-zinc-950 hover:underline"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center hover:text-zinc-950 hover:underline"
             >
               GitHub
             </a>
@@ -312,79 +202,6 @@ export function BrokLanding({ isSignedIn }: BrokLandingProps) {
         </footer>
       </section>
     </main>
-  )
-}
-
-function ProductConsole() {
-  return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-[0_36px_75px_-52px_rgba(24,24,27,0.85)]">
-      <div className="flex items-center justify-between border-b border-zinc-100 px-2 pb-3">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex size-9 items-center justify-center rounded-md bg-zinc-950 text-white">
-            <IconBlinkingLogo animate className="size-4" />
-          </span>
-          <div>
-            <div className="text-sm font-semibold">Student workspace</div>
-            <div className="text-xs text-zinc-500">Live tools included</div>
-          </div>
-        </div>
-        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-          $7/mo
-        </span>
-      </div>
-
-      <div className="grid gap-3 p-2 sm:grid-cols-2">
-        {[
-          {
-            icon: Search,
-            title: 'Cited answer',
-            body: '8 sources ranked for a history paper',
-            color: 'bg-blue-50 text-blue-700'
-          },
-          {
-            icon: TerminalSquare,
-            title: 'Code run',
-            body: 'Tests passing after a bug fix',
-            color: 'bg-zinc-100 text-zinc-800'
-          },
-          {
-            icon: CalendarDays,
-            title: 'Mail plan',
-            body: 'Draft reply plus lab deadline reminder',
-            color: 'bg-rose-50 text-rose-700'
-          },
-          {
-            icon: BookOpen,
-            title: 'Deck outline',
-            body: 'Reveal.js slides ready to present',
-            color: 'bg-amber-50 text-amber-700'
-          }
-        ].map(item => (
-          <div
-            key={item.title}
-            className="rounded-lg border border-zinc-100 p-3"
-          >
-            <span
-              className={`inline-flex size-8 items-center justify-center rounded-md ${item.color}`}
-            >
-              <item.icon className="size-4" />
-            </span>
-            <div className="mt-3 text-sm font-semibold">{item.title}</div>
-            <p className="mt-1 text-xs leading-5 text-zinc-500">{item.body}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mx-2 mb-2 rounded-lg border border-zinc-100 bg-zinc-50 p-3">
-        <div className="flex items-center justify-between text-xs font-medium text-zinc-500">
-          <span>Today&apos;s progress</span>
-          <span>82%</span>
-        </div>
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
-          <div className="h-full w-[82%] rounded-full bg-emerald-500" />
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -411,8 +228,19 @@ function FloatingStickyNote() {
   return (
     <div className="-mx-2 -my-2 rotate-[-2deg] rounded-sm bg-[#fde68a] p-3 shadow-[0_8px_18px_-8px_rgba(120,53,15,0.25)]">
       <p className="font-['Caveat','Comic_Sans_MS',cursive] text-[13px] leading-snug text-zinc-800">
-        One plan for research, code, email, slides, and API projects.
+        Save research, code context, and email tasks in one student-friendly
+        workspace.
       </p>
+    </div>
+  )
+}
+
+function MiniCheckCard() {
+  return (
+    <div className="flex size-20 items-center justify-center rounded-lg border border-zinc-200 bg-white shadow-[0_24px_50px_-34px_rgba(24,24,27,0.5)]">
+      <span className="inline-flex size-10 items-center justify-center rounded-lg bg-blue-500 text-white shadow-sm">
+        <Check className="size-5" />
+      </span>
     </div>
   )
 }
@@ -422,13 +250,13 @@ function FloatingReminders() {
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-xs font-medium text-zinc-500">
         <Mail className="size-3.5" />
-        Class reminders
+        Reminders
       </div>
       <div className="rounded-lg border border-zinc-100 bg-zinc-50 p-2">
         <div className="truncate text-sm font-medium text-zinc-900">
           Lab due tonight
         </div>
-        <div className="text-xs text-zinc-500">Draft email, add calendar</div>
+        <div className="text-xs text-zinc-500">BrokMail can draft it</div>
       </div>
     </div>
   )
@@ -475,22 +303,21 @@ function FloatingIntegrations() {
   return (
     <div className="space-y-3">
       <div className="text-xs font-medium text-zinc-500">
-        Integrations included
+        Tools included for $7
       </div>
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         {[
           { Icon: SiGmail, color: '#EA4335' },
           { Icon: SiSlack, color: '#4A154B' },
           { Icon: SiGooglecalendar, color: '#4285F4' },
-          { Icon: SiGithub, color: '#181717' },
-          { Icon: SiGooglecloud, color: '#34A853' }
+          { Icon: SiGithub, color: '#181717' }
         ].map(({ Icon, color }) => (
           <span
             key={color}
-            className="inline-flex size-9 items-center justify-center rounded-lg border border-zinc-200 bg-white"
+            className="inline-flex size-10 items-center justify-center rounded-lg border border-zinc-200 bg-white"
             style={{ color }}
           >
-            <Icon className="size-4" />
+            <Icon className="size-5" />
           </span>
         ))}
       </div>
@@ -498,35 +325,30 @@ function FloatingIntegrations() {
   )
 }
 
-function ProductCard({
+function ProductCardMobile({
   title,
   body,
   icon: Icon,
-  href,
-  color
+  href
 }: {
   title: string
   body: string
   icon: React.ComponentType<{ className?: string }>
   href: string
-  color: string
 }) {
   return (
-    <Link
-      href={href}
-      className="group relative flex h-full min-h-44 flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-[0_18px_40px_-34px_rgba(24,24,27,0.45)] transition hover:border-zinc-300 hover:shadow-[0_24px_52px_-38px_rgba(24,24,27,0.62)]"
-    >
-      <ArrowUpRight className="absolute right-3 top-3 size-3.5 text-zinc-400 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-zinc-700" />
-      <span
-        className={`inline-flex size-10 items-center justify-center rounded-lg border ${color}`}
+    <li>
+      <Link
+        href={href}
+        className="group relative flex h-full flex-col gap-2 rounded-lg border border-zinc-200 bg-white p-4 transition-all hover:border-zinc-300 hover:shadow-[0_8px_30px_-20px_rgba(15,23,42,0.2)]"
       >
-        <Icon className="size-5" />
-      </span>
-      <div className="mt-4 text-sm font-semibold tracking-tight">{title}</div>
-      <p className="mt-2 text-xs leading-5 text-zinc-500">{body}</p>
-      <span className="mt-auto pt-4 text-xs font-medium text-zinc-950">
-        Explore
-      </span>
-    </Link>
+        <ArrowUpRight className="absolute right-3 top-3 size-3.5 text-zinc-400 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-zinc-700" />
+        <span className="inline-flex size-8 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700">
+          <Icon className="size-4" />
+        </span>
+        <div className="text-sm font-semibold tracking-tight">{title}</div>
+        <p className="text-xs leading-5 text-zinc-500">{body}</p>
+      </Link>
+    </li>
   )
 }

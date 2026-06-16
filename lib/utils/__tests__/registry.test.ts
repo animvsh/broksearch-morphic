@@ -46,7 +46,17 @@ describe('registry provider detection', () => {
     expect(isProviderEnabled('openai-compatible')).toBe(true)
   })
 
-  it('disables the OpenAI-compatible provider without either key', async () => {
+  it('accepts MINIMAX_API_KEY as the Brok provider key fallback', async () => {
+    vi.stubEnv('OPENAI_COMPATIBLE_API_KEY', '')
+    vi.stubEnv('BROK_PROVIDER_API_KEY', '')
+    vi.stubEnv('MINIMAX_API_KEY', 'minimax-key')
+
+    const { isProviderEnabled } = await loadRegistry()
+
+    expect(isProviderEnabled('openai-compatible')).toBe(true)
+  })
+
+  it('disables the OpenAI-compatible provider without any key', async () => {
     vi.stubEnv('OPENAI_COMPATIBLE_API_KEY', '')
     vi.stubEnv('BROK_PROVIDER_API_KEY', '')
     vi.stubEnv('MINIMAX_API_KEY', '')

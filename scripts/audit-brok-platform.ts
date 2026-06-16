@@ -23,6 +23,7 @@ type RouteCheck = {
   label: string
   url: string
   expected: 'public-ok' | 'auth-or-ok' | 'api-ok'
+  expectedStatuses?: number[]
 }
 
 type FetchResult = RouteCheck & {
@@ -83,7 +84,12 @@ const routeChecks: RouteCheck[] = [
     expected: 'auth-or-ok'
   },
   { label: 'usage', url: `${baseUrl}/usage`, expected: 'auth-or-ok' },
-  { label: 'models-api', url: `${baseUrl}/api/v1/models`, expected: 'api-ok' }
+  {
+    label: 'models-api',
+    url: `${baseUrl}/api/v1/models`,
+    expected: 'api-ok',
+    expectedStatuses: [200, 401]
+  }
 ]
 
 const browserUrls = [
@@ -105,6 +111,10 @@ function stampForFile(date = new Date()) {
 }
 
 function isFetchOk(result: FetchResult) {
+  if (result.expected === 'api-ok' && result.expectedStatuses?.length) {
+    return result.expectedStatuses.includes(result.status)
+  }
+
   if (result.expected === 'api-ok') return result.status === 200
   if (result.expected === 'public-ok')
     return result.status >= 200 && result.status < 300

@@ -40,9 +40,16 @@ export async function getCurrentUser() {
     return null // Supabase is not configured
   }
 
-  const supabase = await createClient()
-  const { data } = await supabase.auth.getUser()
-  return data.user ?? null
+  try {
+    const supabase = await createClient()
+    const { data } = await supabase.auth.getUser()
+    return data.user ?? null
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Supabase auth lookup failed; continuing signed out.', error)
+    }
+    return null
+  }
 }
 
 export async function getCurrentUserId() {

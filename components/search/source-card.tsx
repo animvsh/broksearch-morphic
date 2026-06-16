@@ -4,7 +4,7 @@
 
 import { useState } from 'react'
 
-import { ExternalLink, Star } from 'lucide-react'
+import { ExternalLink, PanelRightOpen, Star } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -32,94 +32,138 @@ export function SourceCard({
   onOpen,
   className
 }: SourceCardProps) {
-  const [expanded, setExpanded] = useState(false)
   const snippet = source.snippet ?? ''
-  const longSnippet = snippet.length > 220
-  const visibleSnippet =
-    longSnippet && !expanded ? `${snippet.slice(0, 220)}…` : snippet
+  const title = source.title || source.domain
 
   return (
     <article
       className={cn(
-        'group relative flex gap-3 rounded-xl border border-border/60 bg-card p-3.5 transition-all duration-200',
-        'hover:border-foreground/15 hover:shadow-sm',
+        'group relative flex min-w-0 items-start gap-2.5 rounded-lg border border-border/60 bg-card/70 px-2.5 py-2 transition-all duration-200',
+        'hover:border-foreground/15 hover:bg-card hover:shadow-sm',
         className
       )}
       data-source-index={index}
     >
-      <div className="flex shrink-0 flex-col items-center gap-1.5 pt-0.5">
-        <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-foreground/5 px-1.5 font-mono text-xs font-medium text-foreground/80">
-          {index}
-        </span>
-      </div>
+      <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] font-mono text-[10px] font-semibold text-foreground/75">
+        {index}
+      </span>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => onOpen?.(source)}
+            className={cn(
+              'line-clamp-1 min-w-0 text-left text-sm font-medium leading-5 text-foreground/90 transition-colors',
+              'hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded'
+            )}
+            title={title}
+          >
+            {title}
+          </button>
+
+          <div className="flex shrink-0 items-center gap-0.5">
+            {onOpen && (
+              <button
+                type="button"
+                onClick={() => onOpen(source)}
+                className={cn(
+                  'inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors',
+                  'hover:bg-foreground/5 hover:text-foreground',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                )}
+                aria-label={`Verify ${title}`}
+                title="Verify source"
+              >
+                <PanelRightOpen className="size-3.5" />
+              </button>
+            )}
             <a
               href={source.url}
               target="_blank"
               rel="noreferrer noopener"
-              onClick={() => onOpen?.(source)}
               className={cn(
-                'line-clamp-2 text-sm font-medium leading-snug text-foreground/90 transition-colors',
-                'hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded'
+                'inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors',
+                'hover:bg-foreground/5 hover:text-foreground',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
               )}
+              aria-label={`Open ${source.domain} in new tab`}
+              title="Open original"
             >
-              {source.title || source.domain}
+              <ExternalLink className="size-3.5" />
             </a>
-            <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <SourceFavicon domain={source.domain} favicon={source.favicon} />
-              <span className="truncate">{source.domain}</span>
-              {source.publishedAt && (
-                <>
-                  <span aria-hidden>·</span>
-                  <span className="shrink-0">{source.publishedAt}</span>
-                </>
-              )}
-              {typeof source.relevanceScore === 'number' && (
-                <>
-                  <span aria-hidden>·</span>
-                  <span className="inline-flex items-center gap-0.5 text-amber-600/80">
-                    <Star className="size-2.5 fill-current" />
-                    <span>{Math.round(source.relevanceScore * 100)}%</span>
-                  </span>
-                </>
-              )}
-            </div>
           </div>
-          <a
-            href={source.url}
-            target="_blank"
-            rel="noreferrer noopener"
-            onClick={() => onOpen?.(source)}
-            className={cn(
-              'inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors',
-              'hover:bg-foreground/5 hover:text-foreground',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-            )}
-            aria-label={`Open ${source.domain} in new tab`}
-          >
-            <ExternalLink className="size-3.5" />
-          </a>
         </div>
 
-        {visibleSnippet && (
-          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-            {visibleSnippet}
-            {longSnippet && (
-              <button
-                type="button"
-                onClick={() => setExpanded(v => !v)}
-                className="ml-1 font-medium text-foreground/70 hover:text-foreground"
-              >
-                {expanded ? 'less' : 'more'}
-              </button>
-            )}
+        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-4 text-muted-foreground">
+          <SourceFavicon domain={source.domain} favicon={source.favicon} />
+          <span className="max-w-[13rem] truncate">{source.domain}</span>
+          {source.publishedAt && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="shrink-0">{source.publishedAt}</span>
+            </>
+          )}
+          {typeof source.relevanceScore === 'number' && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-0.5 text-amber-600/80">
+                <Star className="size-2.5 fill-current" />
+                <span>{Math.round(source.relevanceScore * 100)}%</span>
+              </span>
+            </>
+          )}
+        </div>
+
+        {snippet && (
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+            {snippet}
           </p>
         )}
       </div>
     </article>
+  )
+}
+
+export function SourceCompactChip({
+  source,
+  index,
+  onOpen
+}: {
+  source: SourceCardData
+  index: number
+  onOpen?: (source: SourceCardData) => void
+}) {
+  const title = source.title || source.domain
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen?.(source)}
+      className={cn(
+        'inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-card px-2.5 text-xs text-foreground/85 transition-colors',
+        'hover:border-foreground/15 hover:bg-foreground/[0.035]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+      )}
+      aria-label={`Verify source ${index}: ${title}`}
+      title={title}
+    >
+      <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-foreground/[0.07] font-mono text-[9px] font-semibold text-foreground/75">
+        {index}
+      </span>
+      <SourceFavicon domain={source.domain} favicon={source.favicon} />
+      <span className="truncate">{source.domain}</span>
+      {source.publishedAt && (
+        <>
+          <span aria-hidden className="text-muted-foreground/70">
+            ·
+          </span>
+          <span className="shrink-0 text-muted-foreground">
+            {source.publishedAt}
+          </span>
+        </>
+      )}
+    </button>
   )
 }
 
@@ -160,12 +204,14 @@ function SourceFavicon({
 interface SourcesPanelProps {
   sources: SourceCardData[]
   defaultExpanded?: boolean
+  onOpenSource?: (source: SourceCardData) => void
   className?: string
 }
 
 export function SourcesPanel({
   sources,
   defaultExpanded = true,
+  onOpenSource,
   className
 }: SourcesPanelProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
@@ -173,12 +219,12 @@ export function SourcesPanel({
   if (sources.length === 0) return null
 
   return (
-    <section className={cn('space-y-2.5', className)}>
+    <section className={cn('space-y-2', className)}>
       <button
         type="button"
         onClick={() => setExpanded(v => !v)}
         className={cn(
-          'group flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1 text-left transition-colors',
+          'group flex w-full items-center justify-between gap-2 rounded-lg px-1 py-0.5 text-left transition-colors',
           'hover:bg-foreground/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded'
         )}
         aria-expanded={expanded}
@@ -196,10 +242,28 @@ export function SourcesPanel({
         </span>
       </button>
 
+      {!expanded && (
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
+          {sources.slice(0, 6).map((src, idx) => (
+            <SourceCompactChip
+              key={src.id}
+              source={src}
+              index={idx + 1}
+              onOpen={onOpenSource}
+            />
+          ))}
+        </div>
+      )}
+
       {expanded && (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-1.5 sm:grid-cols-2">
           {sources.map((src, idx) => (
-            <SourceCard key={src.id} source={src} index={idx + 1} />
+            <SourceCard
+              key={src.id}
+              source={src}
+              index={idx + 1}
+              onOpen={onOpenSource}
+            />
           ))}
         </div>
       )}

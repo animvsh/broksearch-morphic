@@ -4,6 +4,8 @@ import Script from 'next/script'
 
 import { Analytics } from '@vercel/analytics/next'
 
+import { requireAdminAccess } from '@/lib/auth/admin'
+import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
 import { UserProvider } from '@/lib/contexts/user-context'
 import { createClient } from '@/lib/supabase/server'
 import { cn } from '@/lib/utils'
@@ -82,13 +84,31 @@ export default async function RootLayout({
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (supabaseUrl && supabaseAnonKey) {
-    const supabase = await createClient()
-    const {
-      data: { user: supabaseUser }
-    } = await supabase.auth.getUser()
-    user = supabaseUser
+  if (!isAnonymousAuthMode() && supabaseUrl && supabaseAnonKey) {
+    try {
+      const supabase = await createClient()
+      const {
+        data: { user: supabaseUser }
+      } = await supabase.auth.getUser()
+      user = supabaseUser
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Supabase auth lookup failed in root layout.', error)
+      }
+      user = null
+    }
   }
+
+  const adminAccess = await requireAdminAccess().catch(error => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Admin lookup failed in root layout.', error)
+    }
+    return {
+      ok: false as const,
+      status: 401 as const,
+      error: 'Authentication unavailable'
+    }
+  })
 
   const publicEnvScript =
     supabaseUrl && supabaseAnonKey
@@ -120,7 +140,9 @@ export default async function RootLayout({
             />
           ) : null}
           <UserProvider hasUser={!!user}>
-            <AppChrome user={user}>{children}</AppChrome>
+            <AppChrome user={user} isAdmin={adminAccess.ok}>
+              {children}
+            </AppChrome>
           </UserProvider>
           <Toaster />
           {enableVercelAnalytics ? <Analytics /> : null}

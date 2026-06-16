@@ -35,6 +35,17 @@ function readStringField(payload: unknown, field: string) {
   return typeof value === 'string' ? value : undefined
 }
 
+function createConnectionFailureMessage(toolkit: string) {
+  return `Could not create a Composio connection link for ${toolkit}. Check that the auth config is enabled and has a valid callback URL.`
+}
+
+function readSearchParam(request: NextRequest, field: string) {
+  return (
+    request.nextUrl?.searchParams.get(field) ||
+    new URL(request.url).searchParams.get(field)
+  )
+}
+
 function resolveSafeRedirectUrl(
   origin: string,
   value: unknown,
@@ -67,7 +78,7 @@ export async function POST(
   const redirectUrl = resolveSafeRedirectUrl(
     origin,
     readStringField(body, 'redirectUrl') ||
-      request.nextUrl.searchParams.get('redirectUrl'),
+      readSearchParam(request, 'redirectUrl'),
     defaultRedirectUrl
   )
 
@@ -150,8 +161,7 @@ export async function POST(
           toolkit,
           connectionUrl: null,
           redirectUrl,
-          raw: link.raw,
-          message: `Composio did not return a connection URL for ${toolkit}. Check that the auth config is enabled and has a valid callback URL.`
+          message: createConnectionFailureMessage(toolkit)
         },
         { status: 502 }
       )
@@ -173,10 +183,7 @@ export async function POST(
         toolkit,
         connectionUrl: null,
         redirectUrl,
-        message:
-          error instanceof Error
-            ? error.message
-            : `Could not create the ${toolkit} connection link.`
+        message: createConnectionFailureMessage(toolkit)
       },
       { status: 502 }
     )
