@@ -22,7 +22,7 @@ describe('WorkspaceHeader', () => {
       />
     )
 
-    const deployButton = screen.getByRole('button', { name: 'Deploy' })
+    const deployButton = screen.getByRole('button', { name: 'Publish' })
     fireEvent.click(deployButton)
 
     expect(deployButton).toBeDisabled()
@@ -51,13 +51,11 @@ describe('WorkspaceHeader', () => {
       />
     )
 
-    const deployButton = screen.getByRole('button', { name: 'Deploy' })
+    const deployButton = screen.getByRole('button', { name: 'Publish' })
     fireEvent.click(deployButton)
 
     expect(onDeploy).toHaveBeenCalledTimes(1)
-    expect(
-      screen.queryByRole('link', { name: 'Live' })
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Published app' })).not.toBeInTheDocument()
   })
 
   it('shows a separate live link only after deploy returns a URL', () => {
@@ -77,9 +75,31 @@ describe('WorkspaceHeader', () => {
     )
 
     expect(screen.getByRole('button', { name: 'Published' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Live' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Published app' })).toHaveAttribute(
       'href',
       '/brokcode/apps/project-1/'
+    )
+  })
+
+  it('shows deploy failures inline instead of only in a tooltip', () => {
+    render(
+      <WorkspaceHeader
+        projectName="CRM Builder"
+        phase="ready"
+        progress={100}
+        previewUrl="/api/brokcode/previews/project-1"
+        deploymentUrl={null}
+        deployStatus="failed"
+        deployMessage="Project files are missing."
+        projectId="project-1"
+        onDeploy={() => undefined}
+        onRestart={() => undefined}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: 'Retry publish' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Project files are missing.'
     )
   })
 })

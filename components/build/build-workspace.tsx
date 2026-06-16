@@ -8,6 +8,7 @@ import type {
   InternalPlan,
   UserVisiblePlan
 } from '@/lib/build/types'
+import { cn } from '@/lib/utils'
 
 import { BuildChatPanel } from './build-chat-panel'
 import { BuildConsole } from './build-console'
@@ -105,7 +106,7 @@ export function BrokBuildWorkspace({
     setDeployState({
       status: 'publishing',
       url: null,
-      message: 'Publishing managed app...'
+      message: 'Publishing Brok-managed app...'
     })
 
     try {
@@ -137,7 +138,7 @@ export function BrokBuildWorkspace({
           ? body.deploymentUrl
           : typeof body?.deploymentPreviewUrl === 'string'
             ? body.deploymentPreviewUrl
-            : typeof body?.previewUrl === 'string'
+          : typeof body?.previewUrl === 'string'
               ? body.previewUrl
               : null
       setDeployState({
@@ -146,7 +147,7 @@ export function BrokBuildWorkspace({
         message:
           typeof body?.message === 'string'
             ? body.message
-            : 'Managed app published.'
+            : 'Brok-managed app published.'
       })
     } catch (error) {
       setDeployState({
@@ -307,8 +308,8 @@ export function WorkspaceHeader({
             : deployStatus === 'live'
               ? 'Published'
               : deployStatus === 'failed'
-                ? 'Retry deploy'
-                : 'Deploy'}
+                ? 'Retry publish'
+                : 'Publish'}
         </button>
         {deploymentUrl ? (
           <a
@@ -317,8 +318,21 @@ export function WorkspaceHeader({
             rel="noreferrer"
             className="rounded-md border border-border/60 bg-background px-2.5 py-1 transition hover:border-foreground/30 hover:text-foreground"
           >
-            Live
+            Published app
           </a>
+        ) : null}
+        {deployMessage ? (
+          <span
+            role={deployStatus === 'failed' ? 'alert' : 'status'}
+            className={cn(
+              'max-w-[220px] truncate text-[11px]',
+              deployStatus === 'failed'
+                ? 'text-rose-600 dark:text-rose-400'
+                : 'text-muted-foreground'
+            )}
+          >
+            {deployMessage}
+          </span>
         ) : null}
         <a
           href={brokCodeProjectUrl ?? '#'}
