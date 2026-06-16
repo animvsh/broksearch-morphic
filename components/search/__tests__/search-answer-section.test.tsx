@@ -139,6 +139,34 @@ describe('SearchAnswerSection actions', () => {
     )
   })
 
+  it('does not generate fallback follow-ups from leaked thinking text', () => {
+    renderAnswer({
+      content: '<think>The user asked about iOS 26 beta. I should search first.'
+    })
+
+    expect(screen.queryByTestId('answer-toolbar')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('markdown-message')).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId('follow-up-suggestions')
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/<think>/i)).not.toBeInTheDocument()
+  })
+
+  it('renders the public answer after a closed thinking block', () => {
+    renderAnswer({
+      content:
+        '<think>The private planning stays hidden.</think>Public answer is here.'
+    })
+
+    expect(screen.getByTestId('markdown-message')).toHaveTextContent(
+      'Public answer is here.'
+    )
+    expect(screen.getByTestId('follow-up-suggestions')).toHaveTextContent(
+      'What would a skeptic say about: Public answer is here?'
+    )
+    expect(screen.queryByText(/private planning/i)).not.toBeInTheDocument()
+  })
+
   it('labels completed answers without attached sources as model knowledge', () => {
     renderAnswer({ content: 'This answer has no attached source cards.' })
 

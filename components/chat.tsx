@@ -632,15 +632,17 @@ export function Chat({
       setUploadedFiles([])
       sendMessage(outgoingMessage)
 
-      // Commit query-backed and root submissions to their durable thread URL
-      // immediately, so a browser reload does not replay /search?q=...
-      // as a brand-new question.
+      // Commit query-backed and root submissions away from /search?q=...
+      // immediately, so a browser reload does not replay the prompt.
       if (
-        !isGuest &&
-        (window.location.pathname === '/' ||
-          window.location.pathname === '/search')
+        window.location.pathname === '/' ||
+        window.location.pathname === '/search'
       ) {
-        window.history.replaceState({}, '', `/search/${chatId}`)
+        window.history.replaceState(
+          {},
+          '',
+          isGuest ? '/search' : `/search/${chatId}`
+        )
       }
     }
   }

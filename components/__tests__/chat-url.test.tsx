@@ -111,6 +111,22 @@ describe('Chat query-backed URL behavior', () => {
     expect(window.location.search).toBe('')
   })
 
+  it('clears guest /search query URLs after auto-submitting so reload does not replay', async () => {
+    render(<Chat query="react" initialSearchMode="quick" isGuest />)
+
+    await waitFor(() => {
+      expect(mocks.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'user',
+          parts: [{ type: 'text', text: 'react' }]
+        })
+      )
+    })
+
+    expect(window.location.pathname).toBe('/search')
+    expect(window.location.search).toBe('')
+  })
+
   it('routes follow-up chips through the normal submit path', async () => {
     mocks.useChat.mockReturnValue({
       messages: [
