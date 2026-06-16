@@ -35,7 +35,8 @@
     "check:deploy-env": "bun run scripts/check-deploy-env.mjs",
     "check:openapi": "bun run scripts/check-openapi-spec.mjs",
     "check:api-platform-launch": "bun run scripts/check-api-platform-launch-blockers.mjs",
-    "check:railway-production": "bun run scripts/verify-railway-production.mjs"
+    "check:railway-production": "bun run scripts/verify-railway-production.mjs",
+    "check:api-production-proof": "bun run scripts/verify-railway-production.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.68",
