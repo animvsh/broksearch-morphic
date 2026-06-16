@@ -8,6 +8,9 @@ The remaining work for production is:
 3. Ensure both `www.brok.fyi` and `docs.brok.fyi` DNS + TLS are set.
 4. Validate the deployment with the production check script.
 
+For the current API-platform blocker handoff, also follow
+[`docs/api-platform-launch-blockers.md`](../api-platform-launch-blockers.md).
+
 ## Recommended production environment variables
 
 Set these in Railway (Project → Settings → Variables):
@@ -54,6 +57,21 @@ Railway uses:
 
 - `railway.json` for start command and migrations
 - `railway.toml` for nixpacks/runtime vars
+
+Before pushing deploy changes, scan the repository for committed secret-looking
+values:
+
+```bash
+bun run scan:secrets
+bun run scan:secrets:local
+```
+
+The scanner intentionally prints only file names, line numbers, and rule names.
+Use `scan:secrets:local` during rotation incidents to include ignored local env
+files without printing matched values. If it flags a real value, rotate that
+value in the provider dashboard, replace the committed text with a placeholder,
+and redeploy with the replacement stored only in
+Railway/Vercel/Supabase/provider secret storage.
 
 ## Deployment verification
 
@@ -114,6 +132,13 @@ SMOKE_BASE_URL=https://www.brok.fyi \\
 SMOKE_SEED_TOKEN="$SMOKE_SEED_TOKEN" \\
 bun run stress:platform
 ```
+
+The same proof is available as the GitHub Actions workflow
+`API Platform Production Proof`. Configure the repository secret
+`SMOKE_SEED_TOKEN`, then run the workflow manually with the production base URL
+or let the scheduled run verify `https://www.brok.fyi`. The workflow fails
+explicitly when the seed token is absent so release proof cannot silently degrade
+to contract-only coverage.
 
 A report is written to:
 

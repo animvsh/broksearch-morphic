@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { createId } from '@paralleldrive/cuid2'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, lt, sql } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
 import { apiKeys, usageEvents, workspaces } from '@/lib/db/schema-brok'
@@ -30,6 +30,41 @@ export interface UsageRecord {
   status: 'success' | 'error' | 'aborted'
   errorCode?: string
   metadata?: Record<string, unknown>
+}
+
+export interface UsageReservationRecord
+  extends Omit<
+    UsageRecord,
+    | 'outputTokens'
+    | 'cachedTokens'
+    | 'searchQueries'
+    | 'pagesFetched'
+    | 'toolCalls'
+    | 'providerCostUsd'
+    | 'billedUsd'
+    | 'latencyMs'
+    | 'status'
+    | 'errorCode'
+  > {
+  outputTokens?: number
+  cachedTokens?: number
+  searchQueries?: number
+  pagesFetched?: number
+  toolCalls?: number
+  providerCostUsd?: number
+  billedUsd?: number
+  latencyMs?: number
+  metadata?: Record<string, unknown>
+}
+
+export class UsageRecordError extends Error {
+  constructor(
+    message: string,
+    readonly cause?: unknown
+  ) {
+    super(message)
+    this.name = 'UsageRecordError'
+  }
 }
 
 const LOCAL_FALLBACK_API_KEY_ID = '00000000-0000-0000-0000-000000000001'
@@ -141,9 +176,158 @@ export async function recordUsage(record: UsageRecord): Promise<void> {
     } else {
       console.error('[usage-tracker] Failed to record usage:', error)
     }
-    // Do not throw — usage tracking must not break the user request, but
-    // we surface the failure in the logs for operator action.
+    if (
+      process.env.BROK_CLOUD_DEPLOYMENT === 'true' &&
+      record.status !== 'error'
+    ) {
+      throw new UsageRecordError(
+        'Usage ledger write failed for a billable request.',
+        error
+      )
+    }
+
+    // In self-hosted/local deployments we preserve the historical fail-open
+    // behavior. Error records also stay best-effort to avoid recursive failures
+    // while returning the original provider/auth/quota error.
   }
+}
+
+/**
+ * Reserve a usage event before an expensive streaming job starts.
+ *
+ * In cloud, inability to create the reservation fails closed so a runtime does
+ * not begin work that cannot be metered. Local/self-hosted deployments retain
+ * best-effort behavior.
+ */
+export async function reserveUsage(
+  record: UsageReservationRecord
+): Promise<void> {
+  if (isLocalFallbackIdentity(record.apiKeyId, record.workspaceId)) {
+    return
+  }
+
+  try {
+    await db.insert(usageEvents).values({
+      requestId: record.requestId,
+      workspaceId: record.workspaceId,
+      userId: record.userId,
+      apiKeyId: record.apiKeyId,
+      endpoint: record.endpoint,
+      model: record.model,
+      provider: record.provider,
+      surface: record.surface ?? 'api',
+      runtime: record.runtime,
+      source: record.source,
+      sessionId: record.sessionId,
+      inputTokens: record.inputTokens,
+      outputTokens: record.outputTokens ?? 0,
+      cachedTokens: record.cachedTokens ?? 0,
+      searchQueries: record.searchQueries ?? 0,
+      pagesFetched: record.pagesFetched ?? 0,
+      toolCalls: record.toolCalls ?? 0,
+      providerCostUsd: (record.providerCostUsd ?? 0).toString(),
+      billedUsd: (record.billedUsd ?? 0).toString(),
+      latencyMs: record.latencyMs ?? 0,
+      status: 'reserved',
+      metadata: {
+        ...(record.metadata ?? {}),
+        reservationStatus: 'pending',
+        reservedAt: new Date().toISOString()
+      }
+    })
+  } catch (error) {
+    console.error('[usage-tracker] Failed to reserve usage:', error)
+    if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') {
+      throw new UsageRecordError(
+        'Usage ledger reservation failed for a billable streaming request.',
+        error
+      )
+    }
+  }
+}
+
+/**
+ * Finalize a prior usage reservation. If no reservation exists, fall back to a
+ * normal insert so non-reserved callers can share the same completion path.
+ */
+export async function finalizeUsageReservation(
+  record: UsageRecord
+): Promise<void> {
+  if (isLocalFallbackIdentity(record.apiKeyId, record.workspaceId)) {
+    return
+  }
+
+  try {
+    const updated = await db
+      .update(usageEvents)
+      .set({
+        model: record.model,
+        provider: record.provider,
+        surface: record.surface ?? 'api',
+        runtime: record.runtime,
+        source: record.source,
+        sessionId: record.sessionId,
+        inputTokens: record.inputTokens,
+        outputTokens: record.outputTokens,
+        cachedTokens: record.cachedTokens ?? 0,
+        searchQueries: record.searchQueries ?? 0,
+        pagesFetched: record.pagesFetched ?? 0,
+        toolCalls: record.toolCalls ?? 0,
+        providerCostUsd: record.providerCostUsd.toString(),
+        billedUsd: record.billedUsd.toString(),
+        latencyMs: record.latencyMs,
+        status: record.status,
+        errorCode: record.errorCode,
+        metadata: {
+          ...(record.metadata ?? {}),
+          reservationStatus: 'finalized',
+          finalizedAt: new Date().toISOString()
+        }
+      })
+      .where(eq(usageEvents.requestId, record.requestId))
+      .returning({ id: usageEvents.id })
+
+    if (updated.length === 0) {
+      await recordUsage(record)
+    }
+  } catch (error) {
+    console.error(
+      '[usage-tracker] Failed to finalize usage reservation:',
+      error
+    )
+    if (
+      process.env.BROK_CLOUD_DEPLOYMENT === 'true' &&
+      record.status !== 'error'
+    ) {
+      throw new UsageRecordError(
+        'Usage ledger reservation finalization failed for a billable request.',
+        error
+      )
+    }
+  }
+}
+
+export async function expireStaleUsageReservations({
+  before
+}: {
+  before: Date
+}): Promise<number> {
+  const expired = await db
+    .update(usageEvents)
+    .set({
+      status: 'expired',
+      errorCode: 'usage_reservation_expired',
+      metadata: {
+        reservationStatus: 'expired',
+        expiredAt: new Date().toISOString()
+      }
+    })
+    .where(
+      and(eq(usageEvents.status, 'reserved'), lt(usageEvents.createdAt, before))
+    )
+    .returning({ id: usageEvents.id })
+
+  return expired.length
 }
 
 function dollarsToCents(value: unknown) {

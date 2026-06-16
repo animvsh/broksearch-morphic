@@ -14,6 +14,8 @@
     "migrate": "bun run lib/db/migrate.ts",
     "test": "NODE_ENV=test vitest run",
     "test:watch": "vitest --watch",
+    "scan:secrets": "bun run scripts/scan-secrets.ts",
+    "scan:secrets:local": "bun run scripts/scan-secrets.ts --env-file .env.local",
     "brokcode": "bun scripts/brokcode-tui.mjs",
     "chat": "bun run scripts/chat-cli.ts",
     "smoke:brokcode": "npx --yes tsx --env-file=.env.local scripts/smoke-brokcode.ts",
@@ -30,7 +32,9 @@
     "smoke:mobile-platform:all": "bun scripts/mobile-route-smoke.mjs",
     "smoke:mobile-touch-target": "bun scripts/mobile-touch-target-smoke.mjs",
     "stress:platform": "bun run --env-file=.env.local scripts/stress-platform.ts",
+    "reconcile:usage-reservations": "bun run --env-file=.env.local scripts/reconcile-usage-reservations.ts",
     "check:deploy-env": "bun run scripts/check-deploy-env.mjs",
+    "check:api-platform-launch": "bun run scripts/check-api-platform-launch-blockers.mjs",
     "check:railway-production": "bun run scripts/verify-railway-production.mjs"
   },
   "dependencies": {

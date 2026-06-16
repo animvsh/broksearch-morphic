@@ -1,6 +1,7 @@
 # Configuration Guide
 
-This guide covers the optional features and their configuration in Morphic.
+This guide covers Brok local development, self-hosted deployments, and cloud
+API platform readiness.
 
 ## Table of Contents
 
@@ -8,19 +9,23 @@ This guide covers the optional features and their configuration in Morphic.
 - [AI Providers](#ai-providers)
 - [Search Providers](#search-providers)
 - [Authentication](#authentication)
+- [API Platform Readiness](#api-platform-readiness)
 - [Guest Mode](#guest-mode)
 - [Other Features](#other-features)
 
 ## Database
 
-Morphic uses PostgreSQL for chat history storage. A database is **optional** for basic usage — without it, Morphic runs in a stateless mode where chat history is not persisted.
+Brok uses PostgreSQL for chat history, API keys, workspaces, usage events,
+BrokCode sessions, and admin state. A database is required for production API
+platform features.
 
 ### Setting Up PostgreSQL
 
 Set the connection string in `.env.local`:
 
 ```bash
-DATABASE_URL=postgresql://user:password@localhost:5432/morphic
+DATABASE_URL=postgresql://user:password@localhost:5432/brok
+DATABASE_RESTRICTED_URL=postgresql://restricted:password@localhost:5432/brok
 ```
 
 Any PostgreSQL provider works: [Neon](https://neon.tech/), [Supabase](https://supabase.com/), or a local PostgreSQL instance.
@@ -41,11 +46,14 @@ This command applies all migrations from the `drizzle/` directory. Docker runs m
 
 ### Model Selection
 
-Morphic dynamically detects available AI providers based on your API keys and displays a model selector in the UI. Set at least one provider API key to get started.
+Brok dynamically detects available AI providers based on your API keys and
+displays a model selector in the UI. Set at least one provider API key to get
+started.
 
 In **Local/Docker** mode, the selected model is persisted in a cookie and used for all chat interactions including related question generation.
 
-In **Cloud** mode (`MORPHIC_CLOUD_DEPLOYMENT=true`), models are fixed by `config/models/cloud.json` and the model selector is not shown.
+In **Cloud** mode (`BROK_CLOUD_DEPLOYMENT=true`), models are fixed by
+`config/models/cloud.json` and the model selector is not shown.
 
 ### Supported Providers
 
@@ -140,7 +148,8 @@ If not configured, `type="general"` searches fall back to your configured search
 
 ## Authentication
 
-By default, Morphic runs in **anonymous mode** (`ENABLE_AUTH=false`). This is ideal for personal, single-user environments.
+By default, local Brok can run in **anonymous mode** (`ENABLE_AUTH=false`). This
+is only for personal, single-user environments.
 
 ### Anonymous Mode (Default)
 
@@ -169,9 +178,74 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=[YOUR_SUPABASE_ANON_KEY]
    - **Project URL**: Settings > API > Project URL
    - **Anon Key**: Settings > API > Project API keys > anon/public
 
+## API Platform Readiness
+
+Run the readiness checker before relying on a local, preview, or production
+environment as an API platform:
+
+```bash
+bun run check:deploy-env -- --local
+bun run check:deploy-env -- --provider railway --environment production --service brok
+```
+
+The checker validates variable names only and never prints raw secret values.
+
+Run the repository secret scanner before opening a pull request or copying
+configuration snippets into docs:
+
+```bash
+bun run scan:secrets
+bun run scan:secrets -- --staged
+bun run scan:secrets:local
+```
+
+The scanner checks tracked files and untracked, non-ignored files by default. It
+reports only file, line, and rule names, never the matched value.
+`scan:secrets:local` opts into scanning ignored `.env.local` values for rotation
+audits while keeping the same redacted output. Real production values belong in
+Railway, Vercel, Supabase, and provider secret stores, not in
+`.env.local.example`, docs, tests, or committed scripts. If a real value appears
+in a local checkout, treat it as exposed and rotate it at the provider before
+reusing that account.
+
+### Required API Platform Variables
+
+```bash
+DATABASE_URL=[YOUR_DATABASE_URL]
+DATABASE_RESTRICTED_URL=[YOUR_RESTRICTED_DATABASE_URL]
+API_KEY_SALT=[YOUR_LONG_RANDOM_API_KEY_SALT]
+OPENAI_COMPATIBLE_API_KEY=[YOUR_PROVIDER_KEY]
+OPENAI_COMPATIBLE_API_BASE_URL=[YOUR_PROVIDER_BASE_URL]
+TAVILY_API_KEY=[YOUR_TAVILY_API_KEY]
+ENABLE_AUTH=true
+NEXT_PUBLIC_SUPABASE_URL=[YOUR_SUPABASE_PROJECT_URL]
+NEXT_PUBLIC_SUPABASE_ANON_KEY=[YOUR_SUPABASE_ANON_KEY]
+BROK_CLOUD_DEPLOYMENT=true
+NEXT_PUBLIC_APP_URL=https://www.brok.fyi
+NEXT_PUBLIC_BASE_URL=https://www.brok.fyi
+BASE_URL=https://www.brok.fyi
+```
+
+For local development, `BROK_CLOUD_DEPLOYMENT=false` and localhost URLs are
+acceptable. For production, keep real values in the deployment provider secret
+store and do not commit `.env.local`.
+
+### Production Proof Commands
+
+```bash
+SMOKE_BASE_URL=https://www.brok.fyi STRESS_PLATFORM_CONTRACTS_ONLY=true bun run stress:platform
+SMOKE_BASE_URL=https://www.brok.fyi SMOKE_SEED_TOKEN=... bun run smoke:platform
+SMOKE_BASE_URL=https://www.brok.fyi SMOKE_SEED_TOKEN=... bun run stress:platform
+```
+
+The first command checks public contracts. The seeded commands prove
+authenticated key creation, chat/search calls, usage metering, and stress
+behavior.
+
 ## Guest Mode
 
-Guest mode allows users to try Morphic without creating an account. Guest sessions are ephemeral — no chat history is stored.
+Guest mode allows users to try Brok without creating an account. Guest sessions
+are ephemeral — no chat history is stored.
 
 ### Enabling Guest Mode
 
@@ -196,7 +270,7 @@ UPSTASH_REDIS_REST_URL=[YOUR_UPSTASH_URL]
 UPSTASH_REDIS_REST_TOKEN=[YOUR_UPSTASH_TOKEN]
 ```
 
-Rate limiting only applies when `MORPHIC_CLOUD_DEPLOYMENT=true`.
+Rate limiting only applies when `BROK_CLOUD_DEPLOYMENT=true`.
 
 ### Recommended Setup
 

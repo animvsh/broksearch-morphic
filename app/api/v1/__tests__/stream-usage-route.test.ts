@@ -47,6 +47,7 @@ vi.mock('@/lib/brok/usage-tracker', () => ({
   checkUsageLimits: mockCheckUsageLimits,
   generateRequestId: () => 'req_stream_usage',
   recordUsage: mockRecordUsage,
+  UsageRecordError: class UsageRecordError extends Error {},
   usageLimitResponse: () =>
     Response.json(
       { error: { code: 'usage_storage_unavailable' } },

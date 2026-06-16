@@ -22,12 +22,13 @@ export default function QuickstartPage() {
 
         <pre className="bg-muted p-4 rounded-lg">
           <code>{`# OpenAI-compatible tools such as Codex
-export OPENAI_API_KEY="brok_sk_live_your_key_here"
+export BROK_API_KEY="brok_sk_live_your_key_here"
+export OPENAI_API_KEY="$BROK_API_KEY"
 export OPENAI_BASE_URL="https://api.brok.ai/v1"
 export OPENAI_MODEL="brok-code"
 
 # Anthropic-compatible tools
-export ANTHROPIC_API_KEY="brok_sk_live_your_key_here"
+export ANTHROPIC_API_KEY="$BROK_API_KEY"
 export ANTHROPIC_BASE_URL="https://api.brok.ai"
 export ANTHROPIC_MODEL="brok-code"`}</code>
         </pre>
@@ -36,7 +37,7 @@ export ANTHROPIC_MODEL="brok-code"`}</code>
 
         <pre className="bg-muted p-4 rounded-lg">
           <code>{`curl https://api.brok.ai/v1/chat/completions \\
-  -H "Authorization: Bearer brok_sk_live_your_key_here" \\
+  -H "Authorization: Bearer $BROK_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "brok-code",

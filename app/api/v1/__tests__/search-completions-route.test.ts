@@ -59,6 +59,7 @@ vi.mock('@/lib/brok/usage-tracker', () => ({
   checkUsageLimits: mockCheckUsageLimits,
   generateRequestId: () => 'req_test',
   recordUsage: mockRecordUsage,
+  UsageRecordError: class UsageRecordError extends Error {},
   usageLimitResponse: () =>
     Response.json(
       { error: { code: 'usage_storage_unavailable' } },
@@ -216,6 +217,29 @@ describe('POST /api/v1/search/completions', () => {
       1,
       false
     )
+  })
+
+  it('returns usage_storage_unavailable when a non-stream ledger write fails closed', async () => {
+    const { UsageRecordError } = await import('@/lib/brok/usage-tracker')
+    mockRecordUsage.mockRejectedValueOnce(
+      new UsageRecordError('usage ledger unavailable')
+    )
+
+    const response = await POST(
+      searchRequest({
+        query: 'What is Brok?',
+        model: 'brok-lite',
+        stream: false
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(response.headers.get('X-Brok-Request-Id')).toBe('req_test')
+    expect(body.error).toMatchObject({
+      type: 'service_unavailable',
+      code: 'usage_storage_unavailable'
+    })
   })
 
   it('streams canonical PRD search events alongside compatibility events', async () => {
