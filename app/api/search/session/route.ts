@@ -9,6 +9,9 @@ import {
   isGuestSearchMode
 } from '@/lib/auth/guest-search'
 import {
+  buildSearchQueries,
+  classifyQuery,
+  resolveQuery,
   runSearchPipeline,
   type SearchResult
 } from '@/lib/brok/search-pipeline'
@@ -160,6 +163,16 @@ export async function POST(req: Request) {
   const recencyDays =
     typeof body.recency_days === 'number' ? body.recency_days : undefined
   const domains = normalizeDomains(body.domains)
+  const classification = classifyQuery(query)
+  const resolvedQuery = resolveQuery(query, classification)
+  const searchQueries = buildSearchQueries({
+    query,
+    classification,
+    depth,
+    limit: depth === 'deep' ? 5 : depth === 'lite' ? 1 : 3,
+    recencyDays,
+    domains
+  })
   const requestId = `session_${crypto.randomUUID()}`
   const encoder = new TextEncoder()
 
@@ -187,8 +200,25 @@ export async function POST(req: Request) {
           send('query', {
             id: requestId,
             query,
+            resolved_query: resolvedQuery,
             mode,
-            depth
+            depth,
+            classification,
+            search_queries: searchQueries
+          })
+          send('query_resolved', {
+            id: requestId,
+            query,
+            resolved_query: resolvedQuery,
+            classification,
+            search_queries: searchQueries
+          })
+          send('search_started', {
+            id: requestId,
+            depth,
+            recency_days: recencyDays,
+            domains: domains ?? [],
+            search_queries: searchQueries
           })
 
           const result = await runSearchPipeline({

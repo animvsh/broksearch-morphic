@@ -87,6 +87,34 @@ function deferredStreamResponse(
   return { response, flush: () => flush?.() }
 }
 
+function controllableStreamResponse() {
+  const encoder = new TextEncoder()
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined
+  const response = new Response(
+    new ReadableStream({
+      start(controller) {
+        controllerRef = controller
+      }
+    }),
+    {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' }
+    }
+  )
+
+  return {
+    response,
+    send(event: string, data: unknown) {
+      controllerRef?.enqueue(
+        encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      )
+    },
+    close() {
+      controllerRef?.close()
+    }
+  }
+}
+
 describe('BrokSearchClient', () => {
   const storage = new Map<string, string>()
 
@@ -252,6 +280,45 @@ describe('BrokSearchClient', () => {
     expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
       'Brok answers with sources.'
     )
+  })
+
+  it('shows resolved query planning chips while search is running', async () => {
+    const stream = controllableStreamResponse()
+    const fetchMock = vi.fn(async () => stream.response)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { unmount } = render(
+      <BrokSearchClient
+        initialQuery="React hooks"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('search-progress')).toBeVisible()
+
+    stream.send('query_resolved', {
+      query: 'React hooks',
+      resolved_query: 'React hooks',
+      classification: {
+        type: 'evergreen/explainer',
+        needsSearch: true,
+        reason: 'test'
+      },
+      search_queries: ['React hooks', 'React hooks official docs']
+    })
+    stream.send('search_started', {
+      search_queries: ['React hooks', 'React hooks official docs']
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('search-progress')).toHaveTextContent(
+        'React hooks official docs'
+      )
+    })
+
+    unmount()
+    stream.close()
   })
 
   it('labels source-free answers as model knowledge', async () => {

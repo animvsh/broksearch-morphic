@@ -26,6 +26,13 @@ vi.mock('@/lib/auth/guest-search', () => ({
 }))
 
 vi.mock('@/lib/brok/search-pipeline', () => ({
+  buildSearchQueries: vi.fn(() => ['What is Brok search?']),
+  classifyQuery: vi.fn(() => ({
+    type: 'evergreen/explainer',
+    needsSearch: true,
+    reason: 'test'
+  })),
+  resolveQuery: vi.fn((query: string) => query),
   runSearchPipeline: mocks.runSearchPipeline
 }))
 
@@ -120,8 +127,18 @@ describe('POST /api/search/session', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('text/event-stream')
     expect(stream).toContain('event: status')
+    expect(stream).toContain('event: query_resolved')
+    expect(stream).toContain('event: search_started')
+    expect(stream).toContain('"classification":{"type":"evergreen/explainer"')
+    expect(stream).toContain('"search_queries":["What is Brok search?"]')
     expect(stream).toContain('event: source')
     expect(stream).toContain('event: answer_delta')
+    expect(stream.indexOf('event: query_resolved')).toBeLessThan(
+      stream.indexOf('event: source')
+    )
+    expect(stream.indexOf('event: search_started')).toBeLessThan(
+      stream.indexOf('event: source')
+    )
     expect(stream.indexOf('event: source')).toBeLessThan(
       stream.indexOf('event: answer_delta')
     )
