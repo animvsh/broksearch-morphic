@@ -212,12 +212,14 @@ export const apiKeys = pgTable(
     dailyRequestLimit: integer('daily_request_limit').default(5000),
     monthlyBudgetCents: integer('monthly_budget_cents').default(0),
     lastUsedAt: timestamp('last_used_at'),
+    expiresAt: timestamp('expires_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     revokedAt: timestamp('revoked_at')
   },
   table => ({
     workspaceIdx: index('api_keys_workspace_idx').on(table.workspaceId),
     keyPrefixIdx: index('api_keys_key_prefix_idx').on(table.keyPrefix),
+    expiresAtIdx: index('api_keys_expires_at_idx').on(table.expiresAt),
     keyHashIdx: index('api_keys_key_hash_idx').on(table.keyHash)
   })
 )

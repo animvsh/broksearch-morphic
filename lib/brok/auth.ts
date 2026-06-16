@@ -15,6 +15,7 @@ export type AuthResult =
         | 'invalid_authorization_format'
         | 'invalid_api_key'
         | 'inactive_key'
+        | 'expired_key'
         | 'workspace_inactive'
         | 'auth_storage_unavailable'
       status: number
@@ -188,6 +189,10 @@ export async function verifyRequestAuth(request: Request): Promise<AuthResult> {
     return { success: false, error: 'inactive_key', status: 403 }
   }
 
+  if (isApiKeyExpired(keyRecord.expiresAt)) {
+    return { success: false, error: 'expired_key', status: 403 }
+  }
+
   let workspace: typeof workspaces.$inferSelect | undefined
 
   try {
@@ -222,6 +227,15 @@ function getApiKeyLookupPrefixes(
     prefixes.add(key.slice(0, 12))
   }
   return Array.from(prefixes)
+}
+
+function isApiKeyExpired(expiresAt: Date | string | null | undefined) {
+  if (!expiresAt) return false
+  const expiresAtMs =
+    expiresAt instanceof Date
+      ? expiresAt.getTime()
+      : new Date(expiresAt).getTime()
+  return Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()
 }
 
 function hasBrokApiKeyShape(key: string) {
@@ -319,6 +333,7 @@ async function createLocalFallbackAuth(
       dailyRequestLimit: 1000,
       monthlyBudgetCents: 0,
       lastUsedAt: now,
+      expiresAt: null,
       createdAt: now,
       revokedAt: null
     },
@@ -354,6 +369,7 @@ function getErrorMessage(error: string): string {
     invalid_authorization_format: 'Authorization header must be Bearer token.',
     invalid_api_key: 'Invalid API key.',
     inactive_key: 'API key is inactive.',
+    expired_key: 'API key has expired. Create or rotate to a new key.',
     workspace_inactive: 'Workspace is inactive.',
     auth_storage_unavailable:
       'API key storage is unavailable. Check the database connection and try again.'

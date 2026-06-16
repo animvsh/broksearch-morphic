@@ -17,6 +17,7 @@ type ApiKeyInsert = {
   rpm_limit: number
   daily_request_limit: number
   monthly_budget_cents: number
+  expires_at?: string | null
 }
 
 type ApiKeyRow = ApiKeyInsert & {

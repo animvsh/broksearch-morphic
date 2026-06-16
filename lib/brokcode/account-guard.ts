@@ -63,6 +63,7 @@ function createBrowserSessionAuth({
       dailyRequestLimit: 5000,
       monthlyBudgetCents: 0,
       lastUsedAt: null,
+      expiresAt: null,
       createdAt: new Date(),
       revokedAt: null
     } satisfies typeof apiKeys.$inferSelect,

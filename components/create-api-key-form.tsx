@@ -3,6 +3,7 @@
 import { useState } from 'react'
 
 import {
+  CalendarClock,
   Check,
   CheckCircle2,
   Clipboard,
@@ -98,6 +99,8 @@ const AVAILABLE_SCOPES = [
   }
 ]
 
+type ExpiryMode = 'none' | '7d' | '30d' | '90d' | 'custom'
+
 export function CreateApiKeyForm({
   action,
   userId,
@@ -110,6 +113,8 @@ export function CreateApiKeyForm({
   const [rpmLimit, setRpmLimit] = useState(60)
   const [dailyLimit, setDailyLimit] = useState(5000)
   const [monthlyBudgetDollars, setMonthlyBudgetDollars] = useState(0)
+  const [expiryMode, setExpiryMode] = useState<ExpiryMode>('none')
+  const [customExpiresAt, setCustomExpiresAt] = useState('')
   const [createdKey, setCreatedKey] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -120,6 +125,11 @@ export function CreateApiKeyForm({
     if (!name.trim()) return
     if (selectedScopes.length === 0) {
       setError('Select at least one scope for this key.')
+      return
+    }
+    const expiresAt = resolveExpiresAt(expiryMode, customExpiresAt)
+    if (expiryMode === 'custom' && !expiresAt) {
+      setError('Choose a future expiration date or use no expiration.')
       return
     }
 
@@ -134,7 +144,8 @@ export function CreateApiKeyForm({
         allowedModels: selectedModels,
         rpmLimit,
         dailyRequestLimit: dailyLimit,
-        monthlyBudgetCents: Math.round(monthlyBudgetDollars * 100)
+        monthlyBudgetCents: Math.round(monthlyBudgetDollars * 100),
+        expiresAt
       })
       setCreatedKey(result)
     } catch (error) {
@@ -216,6 +227,10 @@ export function CreateApiKeyForm({
             <SummaryItem
               label="Budget"
               value={formatBudget(createdKey.monthlyBudgetCents)}
+            />
+            <SummaryItem
+              label="Expiration"
+              value={formatExpiration(createdKey.expiresAt)}
             />
           </div>
         </div>
@@ -435,6 +450,37 @@ export function CreateApiKeyForm({
                   className="mt-2 h-11"
                 />
               </div>
+              <div>
+                <Label htmlFor="expiry">Expiration</Label>
+                <Select
+                  value={expiryMode}
+                  onValueChange={value => setExpiryMode(value as ExpiryMode)}
+                >
+                  <SelectTrigger id="expiry" className="mt-2 h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No expiration</SelectItem>
+                    <SelectItem value="7d">7 days</SelectItem>
+                    <SelectItem value="30d">30 days</SelectItem>
+                    <SelectItem value="90d">90 days</SelectItem>
+                    <SelectItem value="custom">Custom</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {expiryMode === 'custom' ? (
+                <div>
+                  <Label htmlFor="expires-at">Expires at</Label>
+                  <Input
+                    id="expires-at"
+                    type="datetime-local"
+                    value={customExpiresAt}
+                    onChange={e => setCustomExpiresAt(e.target.value)}
+                    min={datetimeLocalMin()}
+                    className="mt-2 h-11"
+                  />
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
@@ -448,6 +494,7 @@ export function CreateApiKeyForm({
 
       <div className="flex flex-col gap-3 border-t bg-muted/20 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <p className="text-sm text-muted-foreground">
+          <CalendarClock className="mr-1 inline size-4 align-[-2px]" />
           This key will be tied to your current Brok workspace.
         </p>
         <Button
@@ -481,4 +528,37 @@ function formatBudget(cents: number | null) {
     currency: 'USD',
     maximumFractionDigits: 0
   }).format(cents / 100)
+}
+
+function resolveExpiresAt(mode: ExpiryMode, customValue: string) {
+  const daysByMode: Partial<Record<ExpiryMode, number>> = {
+    '7d': 7,
+    '30d': 30,
+    '90d': 90
+  }
+
+  if (mode === 'none') return null
+  if (mode === 'custom') {
+    if (!customValue) return null
+    return new Date(customValue).toISOString()
+  }
+
+  const days = daysByMode[mode]
+  if (!days) return null
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+}
+
+function datetimeLocalMin() {
+  return new Date(Date.now() + 60 * 1000).toISOString().slice(0, 16)
+}
+
+function formatExpiration(value: string | Date | null | undefined) {
+  if (!value) return 'No expiration'
+  return new Date(value).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
 }

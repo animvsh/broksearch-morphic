@@ -47,6 +47,14 @@ export interface CreateApiKeyInput {
   rpmLimit: number
   dailyRequestLimit: number
   monthlyBudgetCents: number
+  expiresAt?: string | Date | null
+}
+
+export type ValidatedCreateApiKeyInput = Omit<
+  CreateApiKeyInput,
+  'expiresAt'
+> & {
+  expiresAt: Date | null
 }
 
 const apiKeyEnvironmentSet = new Set<string>(API_KEY_ENVIRONMENTS)
@@ -105,9 +113,32 @@ function validateIntegerLimit(
   return numeric
 }
 
+function validateApiKeyExpiresAt(value: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return null
+  }
+
+  const expiresAt =
+    value instanceof Date
+      ? new Date(value.getTime())
+      : typeof value === 'string'
+        ? new Date(value)
+        : null
+
+  if (!expiresAt || Number.isNaN(expiresAt.getTime())) {
+    throw new Error('API key expiration must be a valid date.')
+  }
+
+  if (expiresAt.getTime() <= Date.now()) {
+    throw new Error('API key expiration must be in the future.')
+  }
+
+  return expiresAt
+}
+
 export function validateCreateApiKeyInput(
   input: CreateApiKeyInput
-): CreateApiKeyInput {
+): ValidatedCreateApiKeyInput {
   if (!input || typeof input !== 'object') {
     throw new Error('API key input is required.')
   }
@@ -170,7 +201,8 @@ export function validateCreateApiKeyInput(
       'Monthly budget',
       API_KEY_LIMITS.monthlyBudgetMinCents,
       API_KEY_LIMITS.monthlyBudgetMaxCents
-    )
+    ),
+    expiresAt: validateApiKeyExpiresAt(input.expiresAt)
   }
 }
 

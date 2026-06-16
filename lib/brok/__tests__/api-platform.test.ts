@@ -27,8 +27,26 @@ describe('validateCreateApiKeyInput', () => {
       allowedModels: ['brok-search', 'brok-lite'],
       rpmLimit: 60,
       dailyRequestLimit: 5000,
-      monthlyBudgetCents: 2000
+      monthlyBudgetCents: 2000,
+      expiresAt: null
     })
+  })
+
+  it('accepts bounded future expiration and rejects past expiration', () => {
+    const future = new Date(Date.now() + 60 * 60 * 1000)
+    expect(
+      validateCreateApiKeyInput({
+        ...validInput,
+        expiresAt: future.toISOString()
+      }).expiresAt?.toISOString()
+    ).toBe(future.toISOString())
+
+    expect(() =>
+      validateCreateApiKeyInput({
+        ...validInput,
+        expiresAt: new Date(Date.now() - 60 * 1000).toISOString()
+      })
+    ).toThrow('API key expiration must be in the future.')
   })
 
   it('requires at least one supported scope', () => {

@@ -43,10 +43,10 @@ vi.mock('@/lib/brok/auth', () => ({
       },
       { status: 403 }
     ),
-  unauthorizedResponse: () =>
+  unauthorizedResponse: (error: { error?: string; status?: number } = {}) =>
     Response.json(
-      { error: { code: 'missing_authorization' } },
-      { status: 401 }
+      { error: { code: error.error ?? 'missing_authorization' } },
+      { status: error.status ?? 401 }
     ),
   verifyRequestAuth: mockVerifyRequestAuth
 }))
@@ -77,6 +77,21 @@ describe('GET /api/v1/usage', () => {
 
     expect(response.status).toBe(403)
     expect(body.error.code).toBe('missing_scope')
+    expect(mockSelect).not.toHaveBeenCalled()
+  })
+
+  it('stops expired keys before scope checks or usage storage reads', async () => {
+    mockVerifyRequestAuth.mockResolvedValue({
+      success: false,
+      error: 'expired_key',
+      status: 403
+    })
+
+    const response = await GET(usageRequest())
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body.error.code).toBe('expired_key')
     expect(mockSelect).not.toHaveBeenCalled()
   })
 
