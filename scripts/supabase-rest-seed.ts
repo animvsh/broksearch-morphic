@@ -94,6 +94,18 @@ export async function ensureWorkspaceForUserViaSupabaseRest(userId: string) {
   }
 }
 
+export async function updateWorkspaceMonthlyBudgetViaSupabaseRest(
+  workspaceId: string,
+  monthlyBudgetCents: number
+) {
+  await supabaseRest(`workspaces?id=eq.${workspaceId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      monthly_budget_cents: monthlyBudgetCents
+    })
+  })
+}
+
 export async function createApiKeyViaSupabaseRest(input: ApiKeyInsert) {
   const [created] = await supabaseRest<ApiKeyRow[]>('api_keys', {
     method: 'POST',

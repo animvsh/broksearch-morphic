@@ -8,8 +8,10 @@ import {
   createApiKeyViaSupabaseRest,
   createUsageEventViaSupabaseRest,
   ensureWorkspaceForUserViaSupabaseRest,
-  updateApiKeyStatusViaSupabaseRest
-} from './supabase-rest-seed'
+  updateApiKeyStatusViaSupabaseRest,
+  updateWorkspaceMonthlyBudgetViaSupabaseRest} from './supabase-rest-seed'
+
+const seedMonthlyBudgetCents = 100
 
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3001'
 const stressUserId =
@@ -100,14 +102,17 @@ function readPositiveIntegerEnv(name: string, fallback: number) {
 }
 
 async function getDrizzleSeedDeps() {
-  const [{ ensureWorkspaceForUser }, { db }, { apiKeys, usageEvents }] =
-    await Promise.all([
-      import('../lib/actions/api-keys'),
-      import('../lib/db'),
-      import('../lib/db/schema')
-    ])
+  const [
+    { ensureWorkspaceForUser },
+    { db },
+    { apiKeys, usageEvents, workspaces }
+  ] = await Promise.all([
+    import('../lib/actions/api-keys'),
+    import('../lib/db'),
+    import('../lib/db/schema')
+  ])
 
-  return { ensureWorkspaceForUser, db, apiKeys, usageEvents }
+  return { ensureWorkspaceForUser, db, apiKeys, usageEvents, workspaces }
 }
 
 async function gotoForSmoke(page: Page, path: string) {
@@ -179,6 +184,10 @@ async function createStressKeys() {
 async function createStressKeysWithDrizzle() {
   const deps = await getDrizzleSeedDeps()
   const workspace = await deps.ensureWorkspaceForUser(stressUserId)
+  await deps.db
+    .update(deps.workspaces)
+    .set({ monthlyBudgetCents: seedMonthlyBudgetCents })
+    .where(eq(deps.workspaces.id, workspace.id))
 
   const mainKey = await createStressKey(deps, workspace.id, {
     name: 'Stress Main Key',
@@ -187,7 +196,7 @@ async function createStressKeysWithDrizzle() {
     allowedModels: [],
     rpmLimit: 5,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   const lowRpmKey = await createStressKey(deps, workspace.id, {
@@ -197,7 +206,7 @@ async function createStressKeysWithDrizzle() {
     allowedModels: ['brok-lite'],
     rpmLimit: 1,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   const dailyLimitedKey = await createStressKey(deps, workspace.id, {
@@ -303,6 +312,10 @@ async function createStressKeysWithDrizzle() {
 
 async function createStressKeysWithSupabaseRest() {
   const workspace = await ensureWorkspaceForUserViaSupabaseRest(stressUserId)
+  await updateWorkspaceMonthlyBudgetViaSupabaseRest(
+    workspace.id,
+    seedMonthlyBudgetCents
+  )
 
   const mainKey = await createStressKeyViaSupabaseRest(workspace.id, {
     name: 'Stress Main Key',
@@ -311,7 +324,7 @@ async function createStressKeysWithSupabaseRest() {
     allowedModels: [],
     rpmLimit: 5,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   const lowRpmKey = await createStressKeyViaSupabaseRest(workspace.id, {
@@ -321,7 +334,7 @@ async function createStressKeysWithSupabaseRest() {
     allowedModels: ['brok-lite'],
     rpmLimit: 1,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   const dailyLimitedKey = await createStressKeyViaSupabaseRest(workspace.id, {
