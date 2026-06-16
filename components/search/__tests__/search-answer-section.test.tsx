@@ -121,6 +121,32 @@ describe('SearchAnswerSection actions', () => {
     ).toBeInTheDocument()
   })
 
+  it('places source chips before the answer for faster verification', () => {
+    renderAnswer({
+      content: 'Answer text.',
+      metadata: {
+        answer: {
+          sources: [
+            source({
+              title: 'Primary source',
+              url: 'https://primary.example/report'
+            })
+          ]
+        }
+      }
+    })
+
+    const sourceChip = screen.getByRole('button', {
+      name: /verify source 1: primary source/i
+    })
+    const answer = screen.getByTestId('answer-section')
+
+    expect(
+      sourceChip.compareDocumentPosition(answer) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
   it('hides toolbar and fallback follow-ups when answer actions are disabled', () => {
     renderAnswer({ content: 'Brok searches and cites sources.' }, false)
 

@@ -360,6 +360,14 @@ export function SearchAnswerSection({
 
         {isStreaming && sources.length === 0 && <SourceSkeletonStrip />}
 
+        {sources.length > 0 && (
+          <SourcesPanel
+            sources={sources}
+            defaultExpanded={false}
+            onOpenSource={setActiveSource}
+          />
+        )}
+
         {displayContent ? (
           <div className="flex flex-col gap-1" data-testid="answer-section">
             <MarkdownMessage
@@ -374,14 +382,6 @@ export function SearchAnswerSection({
 
         {!isStreaming && displayContent && sources.length === 0 && (
           <KnowledgeFallbackNotice />
-        )}
-
-        {sources.length > 0 && (
-          <SourcesPanel
-            sources={sources}
-            defaultExpanded={false}
-            onOpenSource={setActiveSource}
-          />
         )}
 
         {!isStreaming && displayContent && showActions && (
