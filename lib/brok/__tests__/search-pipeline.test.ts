@@ -209,6 +209,89 @@ describe('Brok search pipeline helpers', () => {
     ).toHaveLength(1)
   })
 
+  it('keeps shared in-flight searches alive when the first caller aborts', async () => {
+    let resolveSearch: ((response: Response) => void) | undefined
+    const searchResponse = new Promise<Response>(resolve => {
+      resolveSearch = resolve
+    })
+    const firstController = new AbortController()
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+
+        if (url.startsWith('https://html.duckduckgo.com/html/')) {
+          expect((init?.signal as AbortSignal | undefined)?.aborted).toBe(false)
+          return searchResponse
+        }
+
+        return new Response('not found', { status: 404 })
+      })
+    )
+
+    const first = runSearchPipeline({
+      query: 'compare Raycast vs Alfred',
+      depth: 'lite',
+      signal: firstController.signal
+    })
+    const second = runSearchPipeline({
+      query: 'Compare Raycast vs Alfred',
+      depth: 'lite'
+    })
+
+    firstController.abort()
+    resolveSearch?.(
+      new Response(
+        '<html><body><div class="result"><h2 class="result__title"><a href="https://example.com/raycast-alfred">Raycast vs Alfred</a></h2><a class="result__snippet">A comparison of app launchers.</a></div></body></html>',
+        {
+          status: 200,
+          headers: { 'content-type': 'text/html' }
+        }
+      )
+    )
+
+    const [firstResult, secondResult] = await Promise.all([first, second])
+
+    expect(firstResult.answer).toContain('Raycast')
+    expect(secondResult.answer).toEqual(firstResult.answer)
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.filter(([input]) =>
+          String(input).startsWith('https://html.duckduckgo.com/html/')
+        )
+    ).toHaveLength(1)
+  })
+
+  it('does not cache unavailable fallback responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new DOMException('The operation was aborted.', 'AbortError')
+      })
+    )
+
+    const first = await runSearchPipeline({
+      query: 'latest impossible provider outage check',
+      depth: 'lite'
+    })
+    const second = await runSearchPipeline({
+      query: 'latest impossible provider outage check',
+      depth: 'lite'
+    })
+
+    expect(first.answer).toContain('Search is temporarily unavailable')
+    expect(second.answer).toContain('Search is temporarily unavailable')
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.filter(([input]) =>
+          String(input).startsWith('https://html.duckduckgo.com/html/')
+        )
+    ).toHaveLength(2)
+  })
+
   it('dedupes sources and ranks primary sources ahead of weak domains', () => {
     const sources = rankAndDedupeSources(
       [

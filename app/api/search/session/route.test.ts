@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentUserIdForOptionalGuestSearch: vi.fn(),
   isGuestSearchEnabled: vi.fn(),
   isGuestSearchMode: vi.fn(),
+  getCachedSearchPipelineResponse: vi.fn(),
   runSearchPipeline: vi.fn(),
   checkAndEnforceOverallChatLimit: vi.fn(),
   checkAndEnforceGuestLimit: vi.fn()
@@ -32,6 +33,7 @@ vi.mock('@/lib/brok/search-pipeline', () => ({
     needsSearch: true,
     reason: 'test'
   })),
+  getCachedSearchPipelineResponse: mocks.getCachedSearchPipelineResponse,
   resolveQuery: vi.fn((query: string) => query),
   runSearchPipeline: mocks.runSearchPipeline
 }))
@@ -104,6 +106,7 @@ describe('POST /api/search/session', () => {
     mocks.hasFeatureAccess.mockReturnValue(true)
     mocks.isGuestSearchEnabled.mockReturnValue(true)
     mocks.isGuestSearchMode.mockReturnValue(true)
+    mocks.getCachedSearchPipelineResponse.mockReturnValue(null)
     mocks.checkAndEnforceOverallChatLimit.mockResolvedValue(null)
     mocks.checkAndEnforceGuestLimit.mockResolvedValue(null)
     mocks.runSearchPipeline.mockResolvedValue(result())
@@ -201,6 +204,48 @@ describe('POST /api/search/session', () => {
     expect(mocks.runSearchPipeline).toHaveBeenCalledWith(
       expect.objectContaining({ depth: 'lite' })
     )
+  })
+
+  it('serves cached guest quick searches without charging the guest limit', async () => {
+    mocks.getCurrentUserIdForOptionalGuestSearch.mockResolvedValue(undefined)
+    mocks.getCurrentAppAccess.mockResolvedValue({
+      allowed: false,
+      user: null,
+      reason: 'unauthenticated'
+    })
+    mocks.getCachedSearchPipelineResponse.mockReturnValue(result())
+
+    const response = await POST(
+      makeRequest({
+        query: 'What is Brok search?',
+        mode: 'quick'
+      })
+    )
+    const stream = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(stream).toContain('event: source')
+    expect(stream).toContain('event: answer_delta')
+    expect(mocks.checkAndEnforceGuestLimit).not.toHaveBeenCalled()
+    expect(mocks.checkAndEnforceOverallChatLimit).not.toHaveBeenCalled()
+    expect(mocks.runSearchPipeline).not.toHaveBeenCalled()
+  })
+
+  it('serves cached signed-in searches without charging the chat limit', async () => {
+    mocks.getCachedSearchPipelineResponse.mockReturnValue(result())
+
+    const response = await POST(
+      makeRequest({
+        query: 'What is Brok search?',
+        mode: 'search'
+      })
+    )
+    await response.text()
+
+    expect(response.status).toBe(200)
+    expect(mocks.checkAndEnforceOverallChatLimit).not.toHaveBeenCalled()
+    expect(mocks.checkAndEnforceGuestLimit).not.toHaveBeenCalled()
+    expect(mocks.runSearchPipeline).not.toHaveBeenCalled()
   })
 
   it('requires auth when guest search is not allowed', async () => {

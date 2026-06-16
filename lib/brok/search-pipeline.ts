@@ -113,14 +113,21 @@ export async function runSearchPipeline(
     }
   }
 
-  const runPromise = runUncachedSearchPipeline(request)
+  const runRequest =
+    cacheTtlMs > 0
+      ? {
+          ...request,
+          signal: undefined
+        }
+      : request
+  const runPromise = runUncachedSearchPipeline(runRequest)
   if (cacheTtlMs > 0) {
     inFlightSearches.set(cacheKey, runPromise)
   }
 
   try {
     const response = await runPromise
-    if (cacheTtlMs > 0) {
+    if (cacheTtlMs > 0 && !isUnavailableSearchResponse(response)) {
       setCachedSearchResponse(cacheKey, response, cacheTtlMs)
     }
     return cloneSearchResponse(response)
@@ -206,6 +213,16 @@ function buildSearchCacheKey(request: SearchRequest) {
   })
 }
 
+export function getCachedSearchPipelineResponse(
+  request: Pick<
+    SearchRequest,
+    'query' | 'depth' | 'recencyDays' | 'domains' | 'maxSources'
+  >
+): SearchResponse | null {
+  if (getSearchCacheTtlMs() <= 0) return null
+  return getCachedSearchResponse(buildSearchCacheKey(request))
+}
+
 function getCachedSearchResponse(cacheKey: string) {
   const cached = searchResponseCache.get(cacheKey)
   if (!cached) return null
@@ -235,6 +252,13 @@ function setCachedSearchResponse(
     if (!oldestKey) break
     searchResponseCache.delete(oldestKey)
   }
+}
+
+function isUnavailableSearchResponse(response: SearchResponse) {
+  return (
+    response.citations.length === 0 &&
+    response.answer.startsWith('Search is temporarily unavailable')
+  )
 }
 
 function cloneSearchResponse(response: SearchResponse): SearchResponse {

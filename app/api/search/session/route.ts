@@ -11,6 +11,7 @@ import {
 import {
   buildSearchQueries,
   classifyQuery,
+  getCachedSearchPipelineResponse,
   resolveQuery,
   runSearchPipeline,
   type SearchResult
@@ -149,20 +150,31 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Authentication required' }, { status: 401 })
   }
 
-  if (isGuest) {
-    const guestLimitResponse = await checkAndEnforceGuestLimit(
-      getRequestIp(req)
-    )
-    if (guestLimitResponse) return guestLimitResponse
-  } else {
-    const overallLimitResponse = await checkAndEnforceOverallChatLimit(userId)
-    if (overallLimitResponse) return overallLimitResponse
-  }
-
   const depth = normalizeDepth(mode, body.depth)
   const recencyDays =
     typeof body.recency_days === 'number' ? body.recency_days : undefined
   const domains = normalizeDomains(body.domains)
+  const cachedResult = getCachedSearchPipelineResponse({
+    query,
+    depth,
+    recencyDays,
+    domains
+  })
+
+  if (isGuest) {
+    if (!cachedResult) {
+      const guestLimitResponse = await checkAndEnforceGuestLimit(
+        getRequestIp(req)
+      )
+      if (guestLimitResponse) return guestLimitResponse
+    }
+  } else {
+    if (!cachedResult) {
+      const overallLimitResponse = await checkAndEnforceOverallChatLimit(userId)
+      if (overallLimitResponse) return overallLimitResponse
+    }
+  }
+
   const classification = classifyQuery(query)
   const resolvedQuery = resolveQuery(query, classification)
   const searchQueries = buildSearchQueries({
@@ -221,41 +233,43 @@ export async function POST(req: Request) {
             search_queries: searchQueries
           })
 
-          const result = await runSearchPipeline({
-            query,
-            depth,
-            recencyDays,
-            domains,
-            signal: req.signal,
-            onSources: sources => {
-              send('status', {
-                id: requestId,
-                message: `Reading ${sources.length} source${sources.length === 1 ? '' : 's'}`
-              })
-              sendSourceEvents({
-                send,
-                requestId,
-                emittedSourceKeys,
-                sources
-              })
-            },
-            onAnswerDelta: delta => {
-              if (!delta) return
-              if (!writingStatusSent) {
-                writingStatusSent = true
+          const result =
+            cachedResult ??
+            (await runSearchPipeline({
+              query,
+              depth,
+              recencyDays,
+              domains,
+              signal: req.signal,
+              onSources: sources => {
                 send('status', {
                   id: requestId,
-                  message: 'Writing answer'
+                  message: `Reading ${sources.length} source${sources.length === 1 ? '' : 's'}`
+                })
+                sendSourceEvents({
+                  send,
+                  requestId,
+                  emittedSourceKeys,
+                  sources
+                })
+              },
+              onAnswerDelta: delta => {
+                if (!delta) return
+                if (!writingStatusSent) {
+                  writingStatusSent = true
+                  send('status', {
+                    id: requestId,
+                    message: 'Writing answer'
+                  })
+                }
+                streamedAnswer += delta
+                send('answer_delta', {
+                  id: requestId,
+                  delta,
+                  text: delta
                 })
               }
-              streamedAnswer += delta
-              send('answer_delta', {
-                id: requestId,
-                delta,
-                text: delta
-              })
-            }
-          })
+            }))
 
           sendSourceEvents({
             send,
