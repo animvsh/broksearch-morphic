@@ -238,15 +238,15 @@ export function VoiceOutputButton({
       aria-label={isSpeaking ? 'Stop read-aloud' : 'Read answer aloud'}
       aria-pressed={isSpeaking}
       className={cn(
-        'inline-flex size-7 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 disabled:cursor-not-allowed disabled:opacity-60',
+        'inline-flex size-11 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 disabled:cursor-not-allowed disabled:opacity-60',
         className
       )}
       data-testid="voice-output-button"
     >
       {isSpeaking ? (
-        <VolumeX className="size-3.5" />
+        <VolumeX className="size-4" />
       ) : (
-        <Volume2 className="size-3.5" />
+        <Volume2 className="size-4" />
       )}
     </button>
   )
