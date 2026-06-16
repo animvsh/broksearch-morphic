@@ -99,6 +99,7 @@ export function Chat({
   id: providedId,
   savedMessages = [],
   query,
+  initialQueryMessageId,
   initialSearchMode,
   isGuest = false,
   isCloudDeployment = false,
@@ -107,6 +108,7 @@ export function Chat({
   id?: string
   savedMessages?: UIMessage[]
   query?: string
+  initialQueryMessageId?: string
   initialSearchMode?: SearchMode
   isGuest?: boolean
   isCloudDeployment?: boolean
@@ -146,7 +148,7 @@ export function Chat({
       if (!initialQuery || savedMessages.length > 0) return null
 
       return {
-        id: generateId(),
+        id: initialQueryMessageId ?? generateId(),
         role: 'user',
         parts: [{ type: 'text', text: initialQuery }]
       } as UIMessage
@@ -616,8 +618,11 @@ export function Chat({
         })
       })
 
+      const isInitialQuerySubmit =
+        promptOverride?.trim() === query?.trim() &&
+        Boolean(initialQueryMessageId)
       const outgoingMessage = {
-        id: generateId(),
+        id: isInitialQuerySubmit ? initialQueryMessageId! : generateId(),
         role: 'user',
         parts
       } as UIMessage
@@ -627,10 +632,15 @@ export function Chat({
       setUploadedFiles([])
       sendMessage(outgoingMessage)
 
-      // Push URL state immediately after sending message (for new chats)
-      // Check if we're on the root path (new chat)
-      if (!isGuest && window.location.pathname === '/') {
-        window.history.pushState({}, '', `/search/${chatId}`)
+      // Commit query-backed and root submissions to their durable thread URL
+      // immediately, so a browser reload does not replay /search?q=...
+      // as a brand-new question.
+      if (
+        !isGuest &&
+        (window.location.pathname === '/' ||
+          window.location.pathname === '/search')
+      ) {
+        window.history.replaceState({}, '', `/search/${chatId}`)
       }
     }
   }
@@ -645,12 +655,25 @@ export function Chat({
     if (!initialQuery) return
     if (submittedInitialQueryRef.current === initialQuery) return
 
+    const hasExistingQueryMessage = messages.some(
+      message =>
+        message.role === 'user' &&
+        (message.id === initialQueryMessageId ||
+          getMessageText(message).trim() === initialQuery)
+    )
+
+    if (hasExistingQueryMessage) {
+      submittedInitialQueryRef.current = initialQuery
+      setPendingUserMessage(null)
+      return
+    }
+
     submittedInitialQueryRef.current = initialQuery
     submitToSearch(initialQuery)
     // submitToSearch intentionally remains local to this component; including
     // it would resubmit whenever chat UI state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query])
+  }, [query, initialQueryMessageId, messages])
 
   const {
     isDragging,

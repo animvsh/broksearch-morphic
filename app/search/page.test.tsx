@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   redirect: vi.fn(),
+  loadChat: vi.fn(),
   requireFeatureAccess: vi.fn(),
+  getCurrentUserId: vi.fn(),
   getModelSelectorData: vi.fn(),
   generateUUID: vi.fn()
 }))
@@ -12,8 +14,16 @@ vi.mock('next/navigation', () => ({
   redirect: mocks.redirect
 }))
 
+vi.mock('@/lib/actions/chat', () => ({
+  loadChat: mocks.loadChat
+}))
+
 vi.mock('@/lib/auth/app-access', () => ({
   requireFeatureAccess: mocks.requireFeatureAccess
+}))
+
+vi.mock('@/lib/auth/get-current-user', () => ({
+  getCurrentUserId: mocks.getCurrentUserId
 }))
 
 vi.mock('@/lib/model-selector/get-model-selector-data', () => ({
@@ -29,16 +39,18 @@ vi.mock('@/components/chat', () => ({
     id,
     query,
     savedMessages,
+    initialQueryMessageId,
     initialSearchMode
   }: {
     id: string
     query?: string
     savedMessages?: Array<{ role: string; parts?: Array<{ text?: string }> }>
+    initialQueryMessageId?: string
     initialSearchMode?: string
   }) => (
     <div data-testid="chat">
-      {id}:{query}:{initialSearchMode}:{savedMessages?.length ?? 0}:
-      {savedMessages?.[1]?.parts?.[0]?.text ?? ''}
+      {id}:{query}:{initialQueryMessageId}:{initialSearchMode}:
+      {savedMessages?.length ?? 0}:{savedMessages?.[1]?.parts?.[0]?.text ?? ''}
     </div>
   )
 }))
@@ -64,6 +76,8 @@ import SearchPage from './page'
 describe('app/search/page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.getCurrentUserId.mockResolvedValue('user-1')
+    mocks.loadChat.mockResolvedValue(null)
   })
 
   it('renders the search landing surface for bare /search requests', async () => {
@@ -84,7 +98,6 @@ describe('app/search/page', () => {
 
   it('renders chat for query-backed search requests with the requested mode', async () => {
     mocks.requireFeatureAccess.mockResolvedValue({})
-    mocks.generateUUID.mockReturnValue('chat-id')
     mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
 
     render(
@@ -100,16 +113,17 @@ describe('app/search/page', () => {
       '/search?q=latest+ai+funding&mode=search',
       'search'
     )
-    expect(mocks.generateUUID).toHaveBeenCalledOnce()
+    expect(mocks.loadChat).toHaveBeenCalledOnce()
     expect(mocks.getModelSelectorData).toHaveBeenCalledOnce()
-    expect(screen.getByTestId('chat')).toHaveTextContent(
-      'chat-id:latest ai funding:search'
-    )
+    const chatText = screen.getByTestId('chat').textContent ?? ''
+    expect(chatText).toContain(':latest ai funding:')
+    expect(chatText).toContain(':search:')
+    expect(chatText).toMatch(/^search_[a-f0-9]{48}:/)
+    expect(chatText).toMatch(/:search_[a-f0-9]{48}_user:/)
   })
 
   it('normalizes invalid search modes before auth redirects', async () => {
     mocks.requireFeatureAccess.mockResolvedValue({})
-    mocks.generateUUID.mockReturnValue('chat-id')
     mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
 
     render(
@@ -125,15 +139,13 @@ describe('app/search/page', () => {
       '/search?q=latest+ai+funding&mode=quick',
       'search'
     )
-    expect(screen.getByTestId('chat')).toHaveTextContent(
-      'chat-id:latest ai funding:quick'
-    )
+    expect(screen.getByTestId('chat')).toHaveTextContent(':latest ai funding:')
+    expect(screen.getByTestId('chat')).toHaveTextContent(':quick:')
   })
 
   it('server-seeds tiny utility answers instead of waiting for client auto-submit', async () => {
     mocks.requireFeatureAccess.mockResolvedValue({})
     mocks.generateUUID
-      .mockReturnValueOnce('chat-id')
       .mockReturnValueOnce('user-id')
       .mockReturnValueOnce('assistant-id')
     mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
@@ -148,8 +160,42 @@ describe('app/search/page', () => {
       '/search?q=jo&mode=quick',
       'search'
     )
+    expect(screen.getByTestId('chat')).toHaveTextContent('::search_')
     expect(screen.getByTestId('chat')).toHaveTextContent(
-      'chat-id::quick:2:I need a little more to search well.'
+      ':quick:2:I need a little more to search well.'
+    )
+  })
+
+  it('loads an existing query-backed chat instead of passing query for replay', async () => {
+    mocks.requireFeatureAccess.mockResolvedValue({})
+    mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
+    mocks.loadChat.mockResolvedValue({
+      messages: [
+        {
+          id: 'stable-user-message',
+          role: 'user',
+          parts: [{ type: 'text', text: 'latest ai funding' }]
+        },
+        {
+          id: 'assistant-message',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Existing answer' }]
+        }
+      ]
+    })
+
+    render(
+      await SearchPage({
+        searchParams: Promise.resolve({
+          q: 'latest ai funding',
+          mode: 'search'
+        })
+      })
+    )
+
+    expect(screen.getByTestId('chat')).toHaveTextContent('::search_')
+    expect(screen.getByTestId('chat')).toHaveTextContent(
+      ':search:2:Existing answer'
     )
   })
 

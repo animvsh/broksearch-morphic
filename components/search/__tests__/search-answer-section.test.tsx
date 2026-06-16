@@ -93,9 +93,10 @@ describe('SearchAnswerSection actions', () => {
   it('shows immediate progress and skeletons while an answer is starting', () => {
     renderAnswer({ status: 'submitted' })
 
-    expect(screen.getByRole('status')).toHaveTextContent('Reading sources')
+    expect(screen.getByRole('status')).toHaveTextContent('Searching sources')
     expect(screen.getByTestId('source-skeleton-strip')).toBeInTheDocument()
     expect(screen.getByTestId('answer-skeleton')).toBeInTheDocument()
+    expect(screen.getByText(/drafting the answer/i)).toBeInTheDocument()
   })
 
   it('keeps sources visible while the answer is still streaming', () => {
@@ -114,7 +115,7 @@ describe('SearchAnswerSection actions', () => {
       }
     })
 
-    expect(screen.getByRole('status')).toHaveTextContent('Synthesizing answer')
+    expect(screen.getByRole('status')).toHaveTextContent('Writing answer')
     expect(
       screen.getByRole('button', { name: /verify source 1: streaming source/i })
     ).toBeInTheDocument()

@@ -36,7 +36,11 @@ describe('ChatMessages loading state', () => {
     )
 
     expect(screen.getByTestId('pending-answer')).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Reading sources')
+    expect(screen.getByRole('status')).toHaveTextContent('Searching sources')
+    expect(screen.getByTestId('pending-step-search')).toHaveTextContent(
+      'Search'
+    )
+    expect(screen.getByText(/drafting the answer/i)).toBeInTheDocument()
   })
 
   it('hides the central pending answer once answer text is streaming', () => {
