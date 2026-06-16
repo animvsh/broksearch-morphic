@@ -406,21 +406,25 @@ export function BrokSearchClient({
   persistToServer = true,
   modelSelectorData
 }: BrokSearchClientProps) {
+  const initialQueryText = initialQuery?.trim() ?? ''
   const [query, setQuery] = useState(initialQuery ?? '')
   const [followUpInput, setFollowUpInput] = useState('')
-  const [activeQuestion, setActiveQuestion] = useState(initialQuery ?? '')
+  const [activeQuestion, setActiveQuestion] = useState(initialQueryText)
   const [completedTurns, setCompletedTurns] = useState<SearchTurn[]>([])
-  const [pendingQuery, setPendingQuery] = useState<string | null>(null)
+  const [pendingQuery, setPendingQuery] = useState<string | null>(
+    initialQueryText || null
+  )
   const [answer, setAnswer] = useState('')
   const [followUps, setFollowUps] = useState<FollowUpItem[]>([])
   const [activeSource, setActiveSource] = useState<SearchResultItem | null>(
     null
   )
-  const [progress, setProgress] = useState<SearchProgress>({
+  const [progress, setProgress] = useState<SearchProgress>(() => ({
     searchQueries: [],
     sources: [],
-    status: 'idle'
-  })
+    status: initialQueryText ? 'planning' : 'idle',
+    message: initialQueryText ? 'Planning search query...' : undefined
+  }))
   const [error, setError] = useState<string | null>(null)
   const restoredInitialQueryRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
