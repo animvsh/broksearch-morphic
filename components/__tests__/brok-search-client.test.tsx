@@ -236,6 +236,15 @@ describe('BrokSearchClient', () => {
       'data-citation-title',
       'Brok docs'
     )
+    expect(screen.getByTestId('brok-source-strip')).toHaveTextContent(
+      'docs.example.com'
+    )
+    expect(
+      screen
+        .getByTestId('brok-search-answer')
+        .compareDocumentPosition(screen.getByTestId('brok-search-sources')) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent(
       'How does Brok cite sources?'
     )
@@ -616,6 +625,53 @@ describe('BrokSearchClient', () => {
     expect(
       await screen.findByTestId('brok-no-sources-notice')
     ).toHaveTextContent('No web sources were attached')
+    expect(screen.getByTestId('follow-up-chips')).toHaveTextContent('Go deeper')
+  })
+
+  it('suggests fallback follow-ups when the stream omits them', async () => {
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        {
+          event: 'source_found',
+          data: {
+            source: {
+              id: 'src_1',
+              title: 'Brok docs',
+              url: 'https://docs.example.com/search',
+              publisher: 'docs.example.com',
+              snippet: 'Brok search docs.',
+              retrievedAt: '2026-06-16T00:00:00.000Z',
+              qualityScore: 91
+            }
+          }
+        },
+        {
+          event: 'answer_delta',
+          data: { delta: 'Brok answers with sources. [1]' }
+        },
+        {
+          event: 'done',
+          data: {}
+        }
+      ])
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="What is Brok?"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Brok answers with sources. [1](#brok-session-search:1)'
+    )
+    expect(screen.getByTestId('follow-up-chips')).toHaveTextContent('Go deeper')
+    expect(screen.getByTestId('follow-up-chips')).toHaveTextContent(
+      'Compare tradeoffs'
+    )
   })
 
   it('asks follow-ups in the same durable search thread', async () => {

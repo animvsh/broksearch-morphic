@@ -133,6 +133,32 @@ function linkPlainCitations(message: string, sources: Source[]) {
   })
 }
 
+function buildFallbackFollowUps(query: string, answer: string): FollowUpItem[] {
+  const topic =
+    query.trim() ||
+    answer
+      .replace(/\s+/g, ' ')
+      .split(/[.!?\n]/)[0]
+      .slice(0, 80)
+      .trim() ||
+    'this answer'
+
+  return [
+    {
+      label: 'Go deeper',
+      query: `Go deeper on ${topic}`
+    },
+    {
+      label: 'Compare tradeoffs',
+      query: `Compare the strongest and weakest parts of ${topic}`
+    },
+    {
+      label: 'Find risks',
+      query: `What are the risks and edge cases for ${topic}?`
+    }
+  ]
+}
+
 function getTurnMessageIds(searchId: string, turnIndex: number) {
   const suffix = turnIndex === 1 ? '' : `_${turnIndex}`
   return {
@@ -345,6 +371,13 @@ export function BrokSearchClient({
     () => linkPlainCitations(answer, progress.sources),
     [answer, progress.sources]
   )
+  const displayFollowUps = useMemo(
+    () =>
+      progress.status === 'done' && answer.trim() && followUps.length === 0
+        ? buildFallbackFollowUps(activeQuestion, answer)
+        : followUps,
+    [activeQuestion, answer, followUps, progress.status]
+  )
 
   const stopSearch = useCallback(() => {
     requestIdRef.current += 1
@@ -393,9 +426,9 @@ export function BrokSearchClient({
       query: activeQuestion,
       answer,
       sources: progress.sources,
-      followUps
+      followUps: displayFollowUps
     }
-  }, [activeQuestion, answer, followUps, progress.sources, searchId])
+  }, [activeQuestion, answer, displayFollowUps, progress.sources, searchId])
 
   const runSearch = useCallback(
     async (q: string) => {
@@ -835,7 +868,7 @@ export function BrokSearchClient({
         {isLoading && <SearchProgressIndicator progress={progress} />}
 
         {progress.sources.length > 0 && (
-          <SourceList sources={progress.sources} />
+          <SourceStrip sources={progress.sources} />
         )}
 
         {isLoading && !answer && <AnswerLoadingCard />}
@@ -867,9 +900,13 @@ export function BrokSearchClient({
           </article>
         )}
 
+        {progress.sources.length > 0 && (
+          <SourceList sources={progress.sources} />
+        )}
+
         {progress.status === 'done' && (
           <FollowUpChips
-            followUps={followUps}
+            followUps={displayFollowUps}
             onSelect={handleFollowUp}
             disabled={isLoading}
             isLoading={isLoading}
@@ -957,6 +994,41 @@ function NoSourcesNotice() {
         and verify important details before relying on it.
       </span>
     </div>
+  )
+}
+
+function SourceStrip({ sources }: { sources: Source[] }) {
+  if (sources.length === 0) return null
+
+  return (
+    <section
+      className="flex items-center gap-2 overflow-x-auto pb-1"
+      aria-label="Sources found"
+      data-testid="brok-source-strip"
+    >
+      {sources.slice(0, 6).map((source, index) => (
+        <a
+          key={getSourceIdentity(source)}
+          href={source.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-8 max-w-[12rem] shrink-0 items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/85 px-2.5 text-xs font-medium text-zinc-700 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.2)] transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+          data-testid={`brok-source-chip-${index}`}
+        >
+          <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-zinc-100 font-mono text-[9px] font-semibold text-zinc-600">
+            {index + 1}
+          </span>
+          <span className="truncate">
+            {source.publisher ?? safeHostname(source.url)}
+          </span>
+        </a>
+      ))}
+      {sources.length > 6 && (
+        <span className="shrink-0 text-xs text-muted-foreground">
+          +{sources.length - 6} more
+        </span>
+      )}
+    </section>
   )
 }
 
