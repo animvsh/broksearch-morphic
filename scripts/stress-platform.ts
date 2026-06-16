@@ -8,8 +8,10 @@ import {
   createApiKeyViaSupabaseRest,
   createUsageEventViaSupabaseRest,
   ensureWorkspaceForUserViaSupabaseRest,
-  updateApiKeyStatusViaSupabaseRest
-} from './supabase-rest-seed'
+  updateApiKeyStatusViaSupabaseRest,
+  updateWorkspaceMonthlyBudgetViaSupabaseRest} from './supabase-rest-seed'
+
+const seedMonthlyBudgetCents = 100
 
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3001'
 const stressUserId =
@@ -100,14 +102,17 @@ function readPositiveIntegerEnv(name: string, fallback: number) {
 }
 
 async function getDrizzleSeedDeps() {
-  const [{ ensureWorkspaceForUser }, { db }, { apiKeys, usageEvents }] =
-    await Promise.all([
-      import('../lib/actions/api-keys'),
-      import('../lib/db'),
-      import('../lib/db/schema')
-    ])
+  const [
+    { ensureWorkspaceForUser },
+    { db },
+    { apiKeys, usageEvents, workspaces }
+  ] = await Promise.all([
+    import('../lib/actions/api-keys'),
+    import('../lib/db'),
+    import('../lib/db/schema')
+  ])
 
-  return { ensureWorkspaceForUser, db, apiKeys, usageEvents }
+  return { ensureWorkspaceForUser, db, apiKeys, usageEvents, workspaces }
 }
 
 async function gotoForSmoke(page: Page, path: string) {
@@ -153,7 +158,8 @@ async function createStressKeys() {
         dailyLimitedKey: body.dailyLimitedKey as string,
         monthlyBudgetKey: body.monthlyBudgetKey as string,
         pausedKey: body.pausedKey as string,
-        revokedKey: body.revokedKey as string
+        revokedKey: body.revokedKey as string,
+        expiredKey: body.expiredKey as string
       }
     }
 
@@ -178,6 +184,10 @@ async function createStressKeys() {
 async function createStressKeysWithDrizzle() {
   const deps = await getDrizzleSeedDeps()
   const workspace = await deps.ensureWorkspaceForUser(stressUserId)
+  await deps.db
+    .update(deps.workspaces)
+    .set({ monthlyBudgetCents: seedMonthlyBudgetCents })
+    .where(eq(deps.workspaces.id, workspace.id))
 
   const mainKey = await createStressKey(deps, workspace.id, {
     name: 'Stress Main Key',
@@ -186,7 +196,7 @@ async function createStressKeysWithDrizzle() {
     allowedModels: [],
     rpmLimit: 5,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   const lowRpmKey = await createStressKey(deps, workspace.id, {
@@ -196,7 +206,7 @@ async function createStressKeysWithDrizzle() {
     allowedModels: ['brok-lite'],
     rpmLimit: 1,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   const dailyLimitedKey = await createStressKey(deps, workspace.id, {
@@ -277,6 +287,17 @@ async function createStressKeysWithDrizzle() {
     .set({ status: 'revoked', revokedAt: new Date() })
     .where(eq(deps.apiKeys.id, revokedKey.id))
 
+  const expiredKey = await createStressKey(deps, workspace.id, {
+    name: 'Stress Expired Key',
+    environment: 'test',
+    scopes: ['usage:read'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0,
+    expiresAt: new Date(Date.now() - 60_000)
+  })
+
   return {
     workspaceId: workspace.id,
     mainKey: mainKey.key,
@@ -284,12 +305,17 @@ async function createStressKeysWithDrizzle() {
     dailyLimitedKey: dailyLimitedKey.key,
     monthlyBudgetKey: monthlyBudgetKey.key,
     pausedKey: pausedKey.key,
-    revokedKey: revokedKey.key
+    revokedKey: revokedKey.key,
+    expiredKey: expiredKey.key
   }
 }
 
 async function createStressKeysWithSupabaseRest() {
   const workspace = await ensureWorkspaceForUserViaSupabaseRest(stressUserId)
+  await updateWorkspaceMonthlyBudgetViaSupabaseRest(
+    workspace.id,
+    seedMonthlyBudgetCents
+  )
 
   const mainKey = await createStressKeyViaSupabaseRest(workspace.id, {
     name: 'Stress Main Key',
@@ -298,7 +324,7 @@ async function createStressKeysWithSupabaseRest() {
     allowedModels: [],
     rpmLimit: 5,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   const lowRpmKey = await createStressKeyViaSupabaseRest(workspace.id, {
@@ -308,7 +334,7 @@ async function createStressKeysWithSupabaseRest() {
     allowedModels: ['brok-lite'],
     rpmLimit: 1,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   const dailyLimitedKey = await createStressKeyViaSupabaseRest(workspace.id, {
@@ -383,6 +409,17 @@ async function createStressKeysWithSupabaseRest() {
   })
   await updateApiKeyStatusViaSupabaseRest(revokedKey.id, 'revoked')
 
+  const expiredKey = await createStressKeyViaSupabaseRest(workspace.id, {
+    name: 'Stress Expired Key',
+    environment: 'test',
+    scopes: ['usage:read'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0,
+    expiresAt: new Date(Date.now() - 60_000)
+  })
+
   return {
     workspaceId: workspace.id,
     mainKey: mainKey.key,
@@ -390,7 +427,8 @@ async function createStressKeysWithSupabaseRest() {
     dailyLimitedKey: dailyLimitedKey.key,
     monthlyBudgetKey: monthlyBudgetKey.key,
     pausedKey: pausedKey.key,
-    revokedKey: revokedKey.key
+    revokedKey: revokedKey.key,
+    expiredKey: expiredKey.key
   }
 }
 
@@ -404,6 +442,7 @@ async function createStressKeyViaSupabaseRest(
     rpmLimit: number
     dailyRequestLimit: number
     monthlyBudgetCents: number
+    expiresAt?: Date | null
   }
 ) {
   const rawKey = generateApiKey(input.environment)
@@ -420,7 +459,8 @@ async function createStressKeyViaSupabaseRest(
     allowed_models: input.allowedModels,
     rpm_limit: input.rpmLimit,
     daily_request_limit: input.dailyRequestLimit,
-    monthly_budget_cents: input.monthlyBudgetCents
+    monthly_budget_cents: input.monthlyBudgetCents,
+    expires_at: input.expiresAt?.toISOString() ?? null
   })
 
   return { ...created, key: rawKey }
@@ -437,6 +477,7 @@ async function createStressKey(
     rpmLimit: number
     dailyRequestLimit: number
     monthlyBudgetCents: number
+    expiresAt?: Date | null
   }
 ) {
   const rawKey = generateApiKey(input.environment)
@@ -455,7 +496,8 @@ async function createStressKey(
       allowedModels: input.allowedModels,
       rpmLimit: input.rpmLimit,
       dailyRequestLimit: input.dailyRequestLimit,
-      monthlyBudgetCents: input.monthlyBudgetCents
+      monthlyBudgetCents: input.monthlyBudgetCents,
+      expiresAt: input.expiresAt ?? null
     })
     .returning()
 
@@ -582,6 +624,17 @@ async function runApiStress(
     throw new Error('revoked key did not return inactive_key')
   }
   console.log('stress api ok revoked key rejection')
+
+  const expiredResponse = await fetch(`${baseUrl}/api/v1/usage`, {
+    headers: {
+      Authorization: `Bearer ${keys.expiredKey}`
+    }
+  })
+  const expiredBody = await expectJson(expiredResponse, 403)
+  if (expiredBody?.error?.code !== 'expired_key') {
+    throw new Error('expired key did not return expired_key')
+  }
+  console.log('stress api ok expired key rejection')
 
   const missingScopeResponse = await fetch(
     `${baseUrl}/api/v1/search/completions`,

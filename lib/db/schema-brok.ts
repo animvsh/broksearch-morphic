@@ -1,5 +1,6 @@
 import { relations } from 'drizzle-orm'
 import {
+  AnyPgColumn,
   boolean,
   decimal,
   index,
@@ -53,6 +54,22 @@ export const keyStatusEnum = pgEnum('key_status', [
   'revoked'
 ])
 export const environmentEnum = pgEnum('environment', ['test', 'live'])
+export const apiKeyAuditActorTypeEnum = pgEnum('api_key_audit_actor_type', [
+  'user',
+  'admin',
+  'system'
+])
+export const apiKeyAuditEventTypeEnum = pgEnum('api_key_audit_event_type', [
+  'created',
+  'secret_revealed_once',
+  'secret_acknowledged',
+  'paused',
+  'resumed',
+  'revoked',
+  'rotated',
+  'expiry_updated',
+  'denied_expired_key_usage'
+])
 export const endpointEnum = pgEnum('endpoint', [
   'chat',
   'search',
@@ -196,13 +213,61 @@ export const apiKeys = pgTable(
     dailyRequestLimit: integer('daily_request_limit').default(5000),
     monthlyBudgetCents: integer('monthly_budget_cents').default(0),
     lastUsedAt: timestamp('last_used_at'),
+    expiresAt: timestamp('expires_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-    revokedAt: timestamp('revoked_at')
+    revokedAt: timestamp('revoked_at'),
+    rotatedFromKeyId: uuid('rotated_from_key_id').references(
+      (): AnyPgColumn => apiKeys.id
+    ),
+    rotatedToKeyId: uuid('rotated_to_key_id').references(
+      (): AnyPgColumn => apiKeys.id
+    ),
+    rotatedAt: timestamp('rotated_at')
   },
   table => ({
     workspaceIdx: index('api_keys_workspace_idx').on(table.workspaceId),
     keyPrefixIdx: index('api_keys_key_prefix_idx').on(table.keyPrefix),
-    keyHashIdx: index('api_keys_key_hash_idx').on(table.keyHash)
+    expiresAtIdx: index('api_keys_expires_at_idx').on(table.expiresAt),
+    keyHashIdx: index('api_keys_key_hash_idx').on(table.keyHash),
+    rotatedFromIdx: index('api_keys_rotated_from_idx').on(
+      table.rotatedFromKeyId
+    ),
+    rotatedToIdx: index('api_keys_rotated_to_idx').on(table.rotatedToKeyId)
+  })
+)
+
+export const apiKeyAuditEvents = pgTable(
+  'api_key_audit_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    apiKeyId: uuid('api_key_id').references(() => apiKeys.id),
+    actorUserId: text('actor_user_id'),
+    actorType: apiKeyAuditActorTypeEnum('actor_type').default('user').notNull(),
+    eventType: apiKeyAuditEventTypeEnum('event_type').notNull(),
+    keyPrefix: text('key_prefix').notNull(),
+    requestId: text('request_id'),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  table => ({
+    workspaceCreatedIdx: index('api_key_audit_events_workspace_created_idx').on(
+      table.workspaceId,
+      table.createdAt.desc()
+    ),
+    apiKeyCreatedIdx: index('api_key_audit_events_api_key_created_idx').on(
+      table.apiKeyId,
+      table.createdAt.desc()
+    ),
+    actorCreatedIdx: index('api_key_audit_events_actor_created_idx').on(
+      table.actorUserId,
+      table.createdAt.desc()
+    ),
+    eventTypeIdx: index('api_key_audit_events_type_idx').on(table.eventType)
   })
 )
 
@@ -249,6 +314,44 @@ export const usageEvents = pgTable(
     sourceIdx: index('usage_events_source_idx').on(table.source),
     sessionIdx: index('usage_events_session_idx').on(table.sessionId),
     createdAtIdx: index('usage_events_created_at_idx').on(table.createdAt)
+  })
+)
+
+export const brokIdempotencyKeys = pgTable(
+  'brok_idempotency_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .references(() => workspaces.id)
+      .notNull(),
+    apiKeyId: uuid('api_key_id')
+      .references(() => apiKeys.id)
+      .notNull(),
+    key: text('key').notNull(),
+    route: text('route').notNull(),
+    requestHash: text('request_hash').notNull(),
+    status: text('status').default('processing').notNull(),
+    requestId: text('request_id'),
+    responseStatus: integer('response_status'),
+    responseBody: jsonb('response_body').$type<Record<string, unknown>>(),
+    responseHeaders: jsonb('response_headers').$type<Record<string, string>>(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    expiresAt: timestamp('expires_at').notNull()
+  },
+  table => ({
+    keyUniqueIdx: uniqueIndex('brok_idempotency_keys_unique_idx').on(
+      table.workspaceId,
+      table.apiKeyId,
+      table.route,
+      table.key
+    ),
+    workspaceIdx: index('brok_idempotency_keys_workspace_idx').on(
+      table.workspaceId
+    ),
+    expiresAtIdx: index('brok_idempotency_keys_expires_at_idx').on(
+      table.expiresAt
+    )
   })
 )
 
@@ -697,6 +800,7 @@ export const connectorActionEvents = pgTable(
 // Relations
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
   apiKeys: many(apiKeys),
+  apiKeyAuditEvents: many(apiKeyAuditEvents),
   usageEvents: many(usageEvents),
   brokCodeRuntimeKeys: many(brokCodeRuntimeKeys),
   brokCodeSessions: many(brokCodeSessions),
@@ -714,8 +818,33 @@ export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
     fields: [apiKeys.workspaceId],
     references: [workspaces.id]
   }),
+  auditEvents: many(apiKeyAuditEvents),
+  rotatedFrom: one(apiKeys, {
+    fields: [apiKeys.rotatedFromKeyId],
+    references: [apiKeys.id],
+    relationName: 'api_key_rotated_from'
+  }),
+  rotatedTo: one(apiKeys, {
+    fields: [apiKeys.rotatedToKeyId],
+    references: [apiKeys.id],
+    relationName: 'api_key_rotated_to'
+  }),
   usageEvents: many(usageEvents)
 }))
+
+export const apiKeyAuditEventsRelations = relations(
+  apiKeyAuditEvents,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [apiKeyAuditEvents.workspaceId],
+      references: [workspaces.id]
+    }),
+    apiKey: one(apiKeys, {
+      fields: [apiKeyAuditEvents.apiKeyId],
+      references: [apiKeys.id]
+    })
+  })
+)
 
 export const connectorActionRunsRelations = relations(
   connectorActionRuns,

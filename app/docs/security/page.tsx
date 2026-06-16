@@ -6,69 +6,106 @@ import { CopyButton } from '@/components/copy-button'
 
 const pageContent = `# Security Best Practices
 
-Keep your Brok API keys and applications secure.
+Keep Brok API keys server-side, scoped, monitored, and easy to rotate.
 
-## API Key Best Practices
+## API Key Posture
+
+### One-Time Reveal
+
+Brok shows a full user-created API key only once, during creation. After that,
+the dashboard displays a prefix or masked value only. If you lose the secret,
+create a replacement key and revoke the old one.
+
+### Storage Model
+
+Brok stores a lookup prefix plus a salted verifier, not the raw key. New keys
+use a per-key random salt and the deployment-wide API_KEY_SALT. Request auth
+uses prefix lookup, salted verification, constant-time comparison, active key
+status, and active workspace checks before scopes and rate limits are evaluated.
+
+### Prefixes
+
+| Prefix | Environment | Use Case |
+|--------|-------------|----------|
+| \`brok_sk_live_\` | Production | Real traffic and actual usage |
+| \`brok_sk_test_\` | Testing | Development, smoke tests, and playground sessions |
+
+### Scopes
+
+Grant the smallest useful scope set. Common scopes are \`chat:write\`,
+\`search:write\`, \`code:write\`, \`agents:write\`, \`usage:read\`, and
+\`logs:read\`. Pair scopes with model allowlists, RPM limits, daily request
+limits, and monthly budget caps.
+
+## Secret Handling
 
 ### Browser Storage
 
 Do not store full Brok API secrets in localStorage, sessionStorage, IndexedDB,
-analytics payloads, or client-visible app state. The hosted playground uses an
-account-owned encrypted server session key by default; optional manual keys stay
-in current-tab memory only. Production apps should call Brok from trusted server
-code.
+client-readable cookies, analytics payloads, or client-visible app state. The
+hosted playground uses an account-owned server-side test session key by default.
+Production apps should call Brok from trusted server code.
 
-### Store Keys Securely
+### Server-Side Storage
 
-Never hardcode API keys in your source code. Use environment variables:
+Use environment variables or managed secret stores:
 
 \`\`\`bash
-# .env file (never commit this!)
-BROK_API_KEY=brok_sk_live_your_key_here
+# .env.local, shell profile, or CI secret store
+BROK_API_KEY=brok_sk_test_your_key_here
 \`\`\`
 
-\`\`\`javascript
-// Use environment variables
-const apiKey = process.env.BROK_API_KEY
+Never place Brok secrets in \`NEXT_PUBLIC_*\`, \`VITE_*\`, generated browser
+source, screenshots, logs, issue trackers, or documentation examples.
+
+### CI And Local Scans
+
+Use repository secrets for CI and run redacted scanners before sharing output:
+
+\`\`\`bash
+bun run scan:secrets
+bun run scan:secrets -- --staged
+bun run scan:secrets:local
 \`\`\`
 
-### Key Environments
+The scanner reports file, line, and rule names only. If a real value appears in
+a local checkout, treat it as exposed and rotate it at the provider.
 
-| Prefix | Environment | Use Case |
-|--------|-------------|----------|
-| \`brok_sk_live_\` | Production | Real requests, actual costs |
-| \`brok_sk_test_\` | Testing | Development, no charges |
+## Zero-Downtime Rotation
 
-### Key Rotation
+1. Rotate from the active key row in the API key table.
+2. Review the inherited scopes, model allowlist, RPM, daily limit, and monthly
+   budget, then narrow anything that should change.
+3. Copy the replacement secret immediately. Brok reveals it once.
+4. Deploy the replacement through your server-side secret store while the source
+   key stays active.
+5. Verify it with a low-risk request and save the returned request ID.
+6. Move traffic and monitor usage.
+7. Revoke the source key.
 
-Rotate your API keys regularly:
+The dashboard shows rotation relationships with names, prefixes, statuses, and
+timestamps only. Raw source and replacement secrets are never displayed after
+their one-time reveal.
 
-1. Create a new key in the dashboard
-2. Update your application with the new key
-3. Verify the new key works
-4. Revoke the old key
+## Expiration And Revocation
 
-### Key Permissions
-
-When creating keys, only grant necessary permissions:
-
-- Restrict to specific models
-- Set rate limits appropriate for your use
-- Set expiration dates for temporary access
+Pause is for temporary shutdowns. User-created keys can have no expiration or a
+future expiration timestamp. Expired keys fail before scope checks, rate limits,
+usage reservations, provider calls, billing, or last-used updates. Revocation is
+final, so create and verify a replacement key before cutting over production
+traffic.
 
 ## Application Security
 
 ### Server-Side Only
 
-Always make API calls from your server, never from client-side code:
-
 \`\`\`javascript
-// BAD - Exposes your key
-const response = await fetch('https://api.brok.ai/v1/chat/completions', {
-  headers: { 'Authorization': 'Bearer ' + apiKey } // Key exposed!
+// Bad: exposes your key to every browser user.
+await fetch('https://www.brok.fyi/api/v1/chat/completions', {
+  headers: { Authorization: 'Bearer ' + apiKey }
 })
 
-// GOOD - Server handles the call
+// Good: your server reads BROK_API_KEY from a secret store.
 app.post('/api/chat', async (req, res) => {
   const response = await brok.chat.completions.create({
     messages: req.body.messages
@@ -77,185 +114,186 @@ app.post('/api/chat', async (req, res) => {
 })
 \`\`\`
 
-### Input Validation
+### Request IDs
 
-Always validate user input before sending to the API:
+Capture \`X-Brok-Request-Id\` or proxied \`x-request-id\` values when debugging.
+Share request IDs with support, not raw API keys.
 
-\`\`\`javascript
-function validateInput(messages) {
-  for (const msg of messages) {
-    if (!msg.role || !msg.content) {
-      throw new Error('Invalid message format')
-    }
-    if (msg.content.length > MAX_INPUT_LENGTH) {
-      throw new Error('Input too long')
-    }
-  }
-  return true
-}
-\`\`\`
+### What Brok Never Stores Or Exposes
 
-### Rate Limiting
-
-Implement rate limiting in your application:
-
-\`\`\`javascript
-const rateLimit = new Map()
-
-function checkRateLimit(apiKey) {
-  const now = Date.now()
-  const limit = rateLimit.get(apiKey) || { count: 0, reset: now + 60000 }
-
-  if (now > limit.reset) {
-    limit.count = 0
-    limit.reset = now + 60000
-  }
-
-  if (limit.count >= 60) {
-    throw new Error('Rate limit exceeded')
-  }
-
-  limit.count++
-  rateLimit.set(apiKey, limit)
-}
-\`\`\`
-
-## Monitoring and Alerts
-
-### Set Up Usage Alerts
-
-Configure alerts in the dashboard:
-
-- Daily usage threshold
-- Monthly budget limits
-- Unusual activity detection
-
-### Audit Logs
-
-Regularly review:
-- API key usage in dashboard
-- Failed authentication attempts
-- Unusual request patterns
+- Raw user-created API keys after one-time reveal.
+- Full API secrets in key lists or admin logs.
+- Browser-local copies of hosted playground session keys.
+- Raw secret values from deployment checks or secret scans.
 
 ## Security Checklist
 
-- [ ] API key stored in environment variable
-- [ ] Using test keys for development
-- [ ] Keys have appropriate rate limits
-- [ ] Server-side API calls only
-- [ ] Input validation implemented
-- [ ] Usage alerts configured
-- [ ] Old keys revoked after rotation
-- [ ] HTTPS only for all requests
+- [ ] API keys live only in server-side secret stores or ignored local env files.
+- [ ] Browser code never reads or persists full API keys.
+- [ ] Keys use explicit scopes, model allowlists, RPM, daily, and budget limits.
+- [ ] Test keys are used for development and playground work.
+- [ ] Request IDs are captured for debugging.
+- [ ] Old keys are revoked after rotation.
+- [ ] Secret scans run before PRs and incident handoffs.
+- [ ] HTTPS is used for every production request.
 
 ## Reporting Security Issues
 
-If you discover a security vulnerability:
-
-1. Email security@brok.ai immediately
-2. Do not disclose publicly
-3. We&apos;ll acknowledge within 24 hours
-4. We&apos;ll fix and credit you (with permission)
+Email security@brok.ai. Do not disclose publicly or include raw secret values in
+the report.
 
 ## Next Steps
 
-- [API Keys](/docs/api-keys) - Create and manage keys
-- [Chat Completions](/docs/chat-completions) - Make secure API calls
-- [Rate Limits](/docs/rate-limits) - Understand your limits`
+- [API Keys](/docs/api-keys) - Create, store, rotate, and revoke keys
+- [Rate Limits](/docs/rate-limits) - Understand limit and retry behavior
+- [Errors](/docs/errors) - Handle auth and permission errors`
 
 export default function SecurityPage() {
   return (
-    <div className="container py-8 max-w-3xl">
-      <div className="flex items-center justify-between mb-6">
+    <div className="container max-w-3xl py-8">
+      <div className="mb-6 flex items-center justify-between">
         <h1 className="text-4xl font-bold">Security Best Practices</h1>
         <CopyButton content={pageContent} />
       </div>
 
       <div className="prose prose-neutral dark:prose-invert">
         <p className="text-xl text-muted-foreground">
-          Keep your Brok API keys and applications secure.
+          Keep Brok API keys server-side, scoped, monitored, and easy to rotate.
         </p>
 
-        <h2>API Key Best Practices</h2>
+        <h2>API Key Posture</h2>
 
-        <h3>Browser Storage</h3>
+        <h3>One-Time Reveal</h3>
         <p>
-          Do not store full Brok API secrets in localStorage, sessionStorage,
-          IndexedDB, analytics payloads, or client-visible app state. The hosted
-          playground uses an account-owned encrypted server session key by
-          default; optional manual keys stay in current-tab memory only.
-          Production apps should call Brok from trusted server code.
+          Brok shows a full user-created API key only once, during creation.
+          After that, the dashboard displays a prefix or masked value only. If
+          you lose the secret, create a replacement key and revoke the old one.
         </p>
 
-        <h3>Store Keys Securely</h3>
+        <h3>Storage Model</h3>
         <p>
-          Never hardcode API keys in your source code. Use environment
-          variables:
+          Brok stores a lookup prefix plus a salted verifier, not the raw key.
+          New keys use a per-key random salt and the deployment-wide{' '}
+          <code>API_KEY_SALT</code>. Request auth uses prefix lookup, salted
+          verification, constant-time comparison, active key status, and active
+          workspace checks before scopes and rate limits are evaluated.
         </p>
-        <pre className="bg-muted p-4 rounded-lg">
-          <code>{`# .env file (never commit this!)
-BROK_API_KEY=brok_sk_live_your_key_here`}</code>
-        </pre>
-        <pre className="bg-muted p-4 rounded-lg">
-          <code>{`// Use environment variables
-const apiKey = process.env.BROK_API_KEY`}</code>
-        </pre>
 
-        <h3>Key Environments</h3>
+        <h3>Prefixes</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b">
-                <th className="text-left py-2 px-3">Prefix</th>
-                <th className="text-left py-2 px-3">Environment</th>
-                <th className="text-left py-2 px-3">Use Case</th>
+                <th className="px-3 py-2 text-left">Prefix</th>
+                <th className="px-3 py-2 text-left">Environment</th>
+                <th className="px-3 py-2 text-left">Use Case</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-b">
-                <td className="py-2 px-3 font-mono">brok_sk_live_</td>
-                <td className="py-2 px-3">Production</td>
-                <td className="py-2 px-3">Real requests, actual costs</td>
+                <td className="px-3 py-2 font-mono">brok_sk_live_</td>
+                <td className="px-3 py-2">Production</td>
+                <td className="px-3 py-2">Real traffic and actual usage</td>
               </tr>
               <tr>
-                <td className="py-2 px-3 font-mono">brok_sk_test_</td>
-                <td className="py-2 px-3">Testing</td>
-                <td className="py-2 px-3">Development, no charges</td>
+                <td className="px-3 py-2 font-mono">brok_sk_test_</td>
+                <td className="px-3 py-2">Testing</td>
+                <td className="px-3 py-2">
+                  Development, smoke tests, and playground sessions
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        <h3>Key Rotation</h3>
-        <p>Rotate your API keys regularly:</p>
-        <ol>
-          <li>Create a new key in the dashboard</li>
-          <li>Update your application with the new key</li>
-          <li>Verify the new key works</li>
-          <li>Revoke the old key</li>
-        </ol>
+        <h3>Scopes</h3>
+        <p>
+          Grant the smallest useful scope set. Common scopes are{' '}
+          <code>chat:write</code>, <code>search:write</code>,{' '}
+          <code>code:write</code>, <code>agents:write</code>,{' '}
+          <code>usage:read</code>, and <code>logs:read</code>. Pair scopes with
+          model allowlists, RPM limits, daily request limits, and monthly budget
+          caps.
+        </p>
 
-        <h3>Key Permissions</h3>
-        <p>When creating keys, only grant necessary permissions:</p>
-        <ul>
-          <li>Restrict to specific models</li>
-          <li>Set rate limits appropriate for your use</li>
-          <li>Set expiration dates for temporary access</li>
-        </ul>
+        <h2>Secret Handling</h2>
+
+        <h3>Browser Storage</h3>
+        <p>
+          Do not store full Brok API secrets in localStorage, sessionStorage,
+          IndexedDB, client-readable cookies, analytics payloads, or
+          client-visible app state. The hosted playground uses an account-owned
+          server-side test session key by default. Production apps should call
+          Brok from trusted server code.
+        </p>
+
+        <h3>Server-Side Storage</h3>
+        <p>Use environment variables or managed secret stores:</p>
+        <pre className="rounded-lg bg-muted p-4">
+          <code>{`# .env.local, shell profile, or CI secret store
+BROK_API_KEY=brok_sk_test_your_key_here`}</code>
+        </pre>
+        <p>
+          Never place Brok secrets in <code>NEXT_PUBLIC_*</code>,{' '}
+          <code>VITE_*</code>, generated browser source, screenshots, logs,
+          issue trackers, or documentation examples.
+        </p>
+
+        <h3>CI And Local Scans</h3>
+        <p>Use repository secrets for CI and run redacted scanners:</p>
+        <pre className="rounded-lg bg-muted p-4">
+          <code>{`bun run scan:secrets
+bun run scan:secrets -- --staged
+bun run scan:secrets:local`}</code>
+        </pre>
+        <p>
+          The scanner reports file, line, and rule names only. If a real value
+          appears in a local checkout, treat it as exposed and rotate it at the
+          provider.
+        </p>
+
+        <h2>Zero-Downtime Rotation</h2>
+        <ol>
+          <li>Rotate from the active key row in the API key table.</li>
+          <li>
+            Review the inherited scopes, model allowlist, RPM, daily limit, and
+            monthly budget, then narrow anything that should change.
+          </li>
+          <li>
+            Copy the replacement secret immediately. Brok reveals it once.
+          </li>
+          <li>Deploy the new key through your server-side secret store.</li>
+          <li>
+            Verify it with a low-risk request and save the returned request ID.
+          </li>
+          <li>Move traffic and monitor usage.</li>
+          <li>Revoke the source key.</li>
+        </ol>
+        <p>
+          The dashboard shows rotation relationships with names, prefixes,
+          statuses, and timestamps only. Raw source and replacement secrets are
+          never displayed after their one-time reveal.
+        </p>
+
+        <h2>Expiration And Revocation</h2>
+        <p>
+          Pause is for temporary shutdowns. User-created keys can have no
+          expiration or a future expiration timestamp. Expired keys fail before
+          scope checks, rate limits, usage reservations, provider calls,
+          billing, or last-used updates. Revocation is final, so create and
+          verify a replacement key before cutting over production traffic.
+        </p>
 
         <h2>Application Security</h2>
 
         <h3>Server-Side Only</h3>
-        <p>
-          Always make API calls from your server, never from client-side code:
-        </p>
-        <pre className="bg-muted p-4 rounded-lg">
-          <code>{`// BAD - Exposes your key
-const response = await fetch('https://api.brok.ai/v1/chat/completions', {
-  headers: { 'Authorization': 'Bearer ' + apiKey } // Key exposed!
+        <pre className="rounded-lg bg-muted p-4">
+          <code>{`// Bad: exposes your key to every browser user.
+await fetch('https://www.brok.fyi/api/v1/chat/completions', {
+  headers: { Authorization: 'Bearer ' + apiKey }
 })
 
-// GOOD - Server handles the call
+// Good: your server reads BROK_API_KEY from a secret store.
 app.post('/api/chat', async (req, res) => {
   const response = await brok.chat.completions.create({
     messages: req.body.messages
@@ -264,96 +302,58 @@ app.post('/api/chat', async (req, res) => {
 })`}</code>
         </pre>
 
-        <h3>Input Validation</h3>
-        <p>Always validate user input before sending to the API:</p>
-        <pre className="bg-muted p-4 rounded-lg">
-          <code>{`function validateInput(messages) {
-  for (const msg of messages) {
-    if (!msg.role || !msg.content) {
-      throw new Error('Invalid message format')
-    }
-    if (msg.content.length > MAX_INPUT_LENGTH) {
-      throw new Error('Input too long')
-    }
-  }
-  return true
-}`}</code>
-        </pre>
+        <h3>Request IDs</h3>
+        <p>
+          Capture <code>X-Brok-Request-Id</code> or proxied{' '}
+          <code>x-request-id</code> values when debugging. Share request IDs
+          with support, not raw API keys.
+        </p>
 
-        <h3>Rate Limiting</h3>
-        <p>Implement rate limiting in your application:</p>
-        <pre className="bg-muted p-4 rounded-lg">
-          <code>{`const rateLimit = new Map()
-
-function checkRateLimit(apiKey) {
-  const now = Date.now()
-  const limit = rateLimit.get(apiKey) || { count: 0, reset: now + 60000 }
-
-  if (now > limit.reset) {
-    limit.count = 0
-    limit.reset = now + 60000
-  }
-
-  if (limit.count >= 60) {
-    throw new Error('Rate limit exceeded')
-  }
-
-  limit.count++
-  rateLimit.set(apiKey, limit)
-}`}</code>
-        </pre>
-
-        <h2>Monitoring and Alerts</h2>
-
-        <h3>Set Up Usage Alerts</h3>
-        <p>Configure alerts in the dashboard:</p>
+        <h3>What Brok Never Stores Or Exposes</h3>
         <ul>
-          <li>Daily usage threshold</li>
-          <li>Monthly budget limits</li>
-          <li>Unusual activity detection</li>
-        </ul>
-
-        <h3>Audit Logs</h3>
-        <p>Regularly review:</p>
-        <ul>
-          <li>API key usage in dashboard</li>
-          <li>Failed authentication attempts</li>
-          <li>Unusual request patterns</li>
+          <li>Raw user-created API keys after one-time reveal.</li>
+          <li>Full API secrets in key lists or admin logs.</li>
+          <li>Browser-local copies of hosted playground session keys.</li>
+          <li>Raw secret values from deployment checks or secret scans.</li>
         </ul>
 
         <h2>Security Checklist</h2>
         <ul>
-          <li>[ ] API key stored in environment variable</li>
-          <li>[ ] Using test keys for development</li>
-          <li>[ ] Keys have appropriate rate limits</li>
-          <li>[ ] Server-side API calls only</li>
-          <li>[ ] Input validation implemented</li>
-          <li>[ ] Usage alerts configured</li>
-          <li>[ ] Old keys revoked after rotation</li>
-          <li>[ ] HTTPS only for all requests</li>
+          <li>
+            [ ] API keys live only in server-side secret stores or ignored local
+            env files.
+          </li>
+          <li>[ ] Browser code never reads or persists full API keys.</li>
+          <li>
+            [ ] Keys use explicit scopes, model allowlists, RPM, daily, and
+            budget limits.
+          </li>
+          <li>[ ] Test keys are used for development and playground work.</li>
+          <li>[ ] Request IDs are captured for debugging.</li>
+          <li>[ ] Old keys are revoked after rotation.</li>
+          <li>[ ] Secret scans run before PRs and incident handoffs.</li>
+          <li>[ ] HTTPS is used for every production request.</li>
         </ul>
 
         <h2>Reporting Security Issues</h2>
-        <p>If you discover a security vulnerability:</p>
-        <ol>
-          <li>Email security@brok.ai immediately</li>
-          <li>Do not disclose publicly</li>
-          <li>We&apos;ll acknowledge within 24 hours</li>
-          <li>We&apos;ll fix and credit you (with permission)</li>
-        </ol>
+        <p>
+          Email security@brok.ai. Do not disclose publicly or include raw secret
+          values in the report.
+        </p>
 
         <h2>Next Steps</h2>
         <ul>
           <li>
-            <Link href="/docs/api-keys">API Keys</Link> - Create and manage keys
+            <Link href="/docs/api-keys">API Keys</Link> - Create, store, rotate,
+            and revoke keys
           </li>
           <li>
-            <Link href="/docs/chat-completions">Chat Completions</Link> - Make
-            secure API calls
+            <Link href="/docs/rate-limits">Rate Limits</Link> - Understand limit
+            and retry behavior
           </li>
           <li>
-            <Link href="/docs/rate-limits">Rate Limits</Link> - Understand your
-            limits
+            <Link href="/docs/errors">Errors</Link> - Handle auth and permission
+            errors
           </li>
         </ul>
       </div>

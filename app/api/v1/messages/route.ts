@@ -6,8 +6,7 @@ import {
 } from '@/lib/brok/api-platform'
 import {
   apiKeyHasScope,
-  forbiddenScopeResponse,
-  unauthorizedResponse,
+  type AuthResult,
   verifyRequestAuth
 } from '@/lib/brok/auth'
 import {
@@ -15,6 +14,11 @@ import {
   invalidRequestResponse,
   readJsonBody
 } from '@/lib/brok/http'
+import {
+  beginIdempotentRequest,
+  completeIdempotentRequest,
+  idempotencyHeaders
+} from '@/lib/brok/idempotency'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import { applyBrokMarkup } from '@/lib/brok/pricing'
 import {
@@ -54,23 +58,90 @@ type AnthropicMessage = {
   content: AnthropicContentBlock
 }
 
+function anthropicErrorResponse({
+  code,
+  type,
+  message,
+  status
+}: {
+  code?: string
+  type: string
+  message: string
+  status: number
+}) {
+  return NextResponse.json(
+    {
+      type: 'error',
+      error: {
+        ...(code ? { code } : {}),
+        type,
+        message
+      }
+    },
+    { status }
+  )
+}
+
+function anthropicAuthErrorResponse(
+  auth: Extract<AuthResult, { success: false }>
+) {
+  const errors: Record<
+    Extract<AuthResult, { success: false }>['error'],
+    { type: string; message: string }
+  > = {
+    missing_authorization: {
+      type: 'authentication_error',
+      message: 'Authorization Bearer token or x-api-key header is required.'
+    },
+    invalid_authorization_format: {
+      type: 'authentication_error',
+      message: 'Authorization header must be Bearer token.'
+    },
+    invalid_api_key: {
+      type: 'authentication_error',
+      message: 'Invalid API key.'
+    },
+    inactive_key: {
+      type: 'permission_error',
+      message: 'API key is inactive.'
+    },
+    expired_key: {
+      type: 'permission_error',
+      message: 'API key has expired. Create or rotate to a new key.'
+    },
+    workspace_inactive: {
+      type: 'permission_error',
+      message: 'Workspace is inactive.'
+    },
+    auth_storage_unavailable: {
+      type: 'api_error',
+      message:
+        'API key storage is unavailable. Check the database connection and try again.'
+    }
+  }
+  const error = errors[auth.error]
+  return anthropicErrorResponse({
+    code: auth.error,
+    type: error.type,
+    message: error.message,
+    status: auth.status
+  })
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
   const requestId = generateRequestId()
   const auth = await verifyRequestAuth(request)
 
   if (!auth.success) {
-    return unauthorizedResponse(auth)
+    return anthropicAuthErrorResponse(auth)
   }
   if (!apiKeyHasScope(auth.apiKey, 'code:write')) {
-    return forbiddenScopeResponse('code:write')
-  }
-  const usageLimit = await checkUsageLimits({
-    apiKey: auth.apiKey,
-    workspace: auth.workspace
-  })
-  if (!usageLimit.allowed) {
-    return usageLimitResponse(usageLimit)
+    return anthropicErrorResponse({
+      type: 'permission_error',
+      message: 'This API key requires the code:write scope.',
+      status: 403
+    })
   }
 
   const parsedBody = await readJsonBody<{
@@ -145,6 +216,31 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  const idempotency = await beginIdempotentRequest({
+    request,
+    workspaceId: auth.workspace.id,
+    apiKeyId: auth.apiKey.id,
+    route: '/api/v1/messages',
+    body,
+    stream: shouldStream
+  })
+  if (idempotency.kind === 'replay' || idempotency.kind === 'blocked') {
+    return idempotency.response
+  }
+
+  const usageLimit = await checkUsageLimits({
+    apiKey: auth.apiKey,
+    workspace: auth.workspace
+  })
+  if (!usageLimit.allowed) {
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      status: 'failed'
+    })
+    return usageLimitResponse(usageLimit)
+  }
+
   const rpmLimit = auth.apiKey.rpmLimit ?? 60
   const rateLimit = await checkRateLimit(
     auth.apiKey.id,
@@ -154,6 +250,11 @@ export async function POST(request: NextRequest) {
 
   if (!rateLimit.allowed) {
     if (rateLimit.reason === 'rate_limit_check_failed') {
+      await completeIdempotentRequest({
+        idempotency,
+        requestId,
+        status: 'failed'
+      })
       return NextResponse.json(
         {
           type: 'error',
@@ -176,6 +277,11 @@ export async function POST(request: NextRequest) {
       true
     )
 
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      status: 'failed'
+    })
     return NextResponse.json(
       {
         type: 'error',
@@ -256,6 +362,11 @@ export async function POST(request: NextRequest) {
                 usageSource: usage ? 'provider' : 'estimated'
               }
             })
+            await completeIdempotentRequest({
+              idempotency,
+              requestId,
+              status: 'completed'
+            })
           },
           onAbort: async ({ content, usage }) => {
             const latencyMs = Date.now() - startTime
@@ -289,6 +400,11 @@ export async function POST(request: NextRequest) {
                 aborted: true
               }
             })
+            await completeIdempotentRequest({
+              idempotency,
+              requestId,
+              status: 'failed'
+            })
           }
         }),
         {
@@ -297,6 +413,9 @@ export async function POST(request: NextRequest) {
             'Cache-Control': 'no-cache, no-transform',
             Connection: 'keep-alive',
             'X-Brok-Request-Id': requestId,
+            ...idempotencyHeaders({
+              key: idempotency.kind === 'reserved' ? idempotency.key : undefined
+            }),
             ...brokRateLimitHeaders({
               limit: rateLimit.limit,
               current: rateLimit.current + 1,
@@ -341,36 +460,51 @@ export async function POST(request: NextRequest) {
       providerResponse.choices?.[0]?.message?.content ?? ''
     )
 
-    return NextResponse.json(
-      {
-        id: requestId,
-        type: 'message',
-        role: 'assistant',
-        model: modelId,
-        content: [{ type: 'text', text }],
-        stop_reason:
-          providerResponse.choices?.[0]?.finish_reason === 'length'
-            ? 'max_tokens'
-            : 'end_turn',
-        stop_sequence: null,
-        usage: {
-          input_tokens: inputTokens,
-          output_tokens: outputTokens
-        }
-      },
-      {
-        headers: {
-          'X-Brok-Request-Id': requestId,
-          ...brokRateLimitHeaders({
-            limit: rateLimit.limit,
-            current: rateLimit.current + 1,
-            resetAt: rateLimit.resetAt
-          })
-        }
+    const brokResponse = {
+      id: requestId,
+      type: 'message',
+      role: 'assistant',
+      model: modelId,
+      content: [{ type: 'text', text }],
+      stop_reason:
+        providerResponse.choices?.[0]?.finish_reason === 'length'
+          ? 'max_tokens'
+          : 'end_turn',
+      stop_sequence: null,
+      usage: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens
       }
-    )
+    }
+    const responseHeaders = {
+      'X-Brok-Request-Id': requestId,
+      ...idempotencyHeaders({
+        key: idempotency.kind === 'reserved' ? idempotency.key : undefined
+      }),
+      ...brokRateLimitHeaders({
+        limit: rateLimit.limit,
+        current: rateLimit.current + 1,
+        resetAt: rateLimit.resetAt
+      })
+    }
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      responseStatus: 200,
+      responseBody: brokResponse,
+      responseHeaders
+    })
+
+    return NextResponse.json(brokResponse, {
+      headers: responseHeaders
+    })
   } catch (error) {
     if (error instanceof UsageRecordError) {
+      await completeIdempotentRequest({
+        idempotency,
+        requestId,
+        status: 'failed'
+      })
       return NextResponse.json(
         {
           type: 'error',
@@ -406,6 +540,11 @@ export async function POST(request: NextRequest) {
       latencyMs,
       status: 'error',
       errorCode: error instanceof Error ? error.message : 'unknown_error'
+    })
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      status: 'failed'
     })
 
     return NextResponse.json(
@@ -551,9 +690,6 @@ function createAnthropicStream(
         let emittedDelta = false
         for (const line of lines) {
           usageAccumulator.trackSseLine(line)
-          if (emitProviderLine(line, controller, encoder)) {
-            emittedDelta = true
-          }
           if (emitProviderLine(line, controller, encoder)) {
             emittedDelta = true
           }

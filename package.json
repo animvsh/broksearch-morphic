@@ -19,7 +19,6 @@
     "brokcode": "bun scripts/brokcode-tui.mjs",
     "chat": "bun run scripts/chat-cli.ts",
     "smoke:brokcode": "npx --yes tsx --env-file=.env.local scripts/smoke-brokcode.ts",
-    "smoke:brokcode:no-fallback": "SMOKE_BROKCODE_NO_FALLBACK=true npx --yes tsx --env-file=.env.local scripts/smoke-brokcode.ts",
     "smoke:brokcode:matrix": "SMOKE_BROKCODE_MATRIX=true npx --yes tsx --env-file=.env.local scripts/smoke-brokcode.ts",
     "smoke:brokcode:browser": "bun run scripts/smoke-brokcode-browser.ts",
     "smoke:brokcode:error-surface": "bun run scripts/smoke-brokcode-error-surface.ts",
@@ -34,8 +33,11 @@
     "stress:platform": "bun run --env-file=.env.local scripts/stress-platform.ts",
     "reconcile:usage-reservations": "bun run --env-file=.env.local scripts/reconcile-usage-reservations.ts",
     "check:deploy-env": "bun run scripts/check-deploy-env.mjs",
+    "check:openapi": "bun run scripts/check-openapi-spec.mjs",
+    "check:api-platform-dx": "bun run scripts/check-api-platform-dx.mjs",
     "check:api-platform-launch": "bun run scripts/check-api-platform-launch-blockers.mjs",
-    "check:railway-production": "bun run scripts/verify-railway-production.mjs"
+    "check:railway-production": "bun run scripts/verify-railway-production.mjs",
+    "check:api-production-proof": "bun run scripts/verify-railway-production.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.68",

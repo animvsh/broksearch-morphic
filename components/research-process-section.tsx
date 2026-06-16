@@ -545,8 +545,12 @@ export function ResearchProcessSection({
   })
   const isStreaming = status === 'submitted' || status === 'streaming'
   const suppressReasoningPreview = isStreaming && progressSteps.length > 0
+  const displayParts =
+    progressSteps.length > 0
+      ? filteredParts.filter(part => !isReasoningPart(part))
+      : filteredParts
 
-  const segments = partsOverride ? [filteredParts] : splitByText(filteredParts)
+  const segments = partsOverride ? [displayParts] : splitByText(displayParts)
 
   // Use custom hook for accordion state management
   const { openSectionId, handleAccordionChange } =
@@ -564,8 +568,12 @@ export function ResearchProcessSection({
     Record<string, boolean>
   >({})
 
-  if (segments.length === 0 || segments.every(seg => seg.length === 0))
+  if (
+    progressSteps.length === 0 &&
+    (segments.length === 0 || segments.every(seg => seg.length === 0))
+  ) {
     return null
+  }
 
   return (
     <div className="space-y-2" data-testid="research-process">

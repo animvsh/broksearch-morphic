@@ -121,6 +121,32 @@ describe('SearchAnswerSection actions', () => {
     ).toBeInTheDocument()
   })
 
+  it('places source chips before the answer for faster verification', () => {
+    renderAnswer({
+      content: 'Answer text.',
+      metadata: {
+        answer: {
+          sources: [
+            source({
+              title: 'Primary source',
+              url: 'https://primary.example/report'
+            })
+          ]
+        }
+      }
+    })
+
+    const sourceChip = screen.getByRole('button', {
+      name: /verify source 1: primary source/i
+    })
+    const answer = screen.getByTestId('answer-section')
+
+    expect(
+      sourceChip.compareDocumentPosition(answer) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
   it('hides toolbar and fallback follow-ups when answer actions are disabled', () => {
     renderAnswer({ content: 'Brok searches and cites sources.' }, false)
 
@@ -137,6 +163,34 @@ describe('SearchAnswerSection actions', () => {
     expect(screen.getByTestId('follow-up-suggestions')).toHaveTextContent(
       'Go deeper on the most surprising point'
     )
+  })
+
+  it('does not generate fallback follow-ups from leaked thinking text', () => {
+    renderAnswer({
+      content: '<think>The user asked about iOS 26 beta. I should search first.'
+    })
+
+    expect(screen.queryByTestId('answer-toolbar')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('markdown-message')).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId('follow-up-suggestions')
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/<think>/i)).not.toBeInTheDocument()
+  })
+
+  it('renders the public answer after a closed thinking block', () => {
+    renderAnswer({
+      content:
+        '<think>The private planning stays hidden.</think>Public answer is here.'
+    })
+
+    expect(screen.getByTestId('markdown-message')).toHaveTextContent(
+      'Public answer is here.'
+    )
+    expect(screen.getByTestId('follow-up-suggestions')).toHaveTextContent(
+      'What would a skeptic say about: Public answer is here?'
+    )
+    expect(screen.queryByText(/private planning/i)).not.toBeInTheDocument()
   })
 
   it('labels completed answers without attached sources as model knowledge', () => {

@@ -22,6 +22,8 @@ export default function DocsPage() {
         <PathCard
           title="Build on the API"
           items={[
+            ['API Reference', '/docs/api-reference'],
+            ['OpenAPI Spec', '/api/openapi'],
             ['Chat Completions', '/docs/chat-completions'],
             ['Search Completions', '/docs/search-completions'],
             ['Errors', '/docs/errors']
@@ -62,6 +64,16 @@ SMOKE_BASE_URL=https://www.brok.fyi SMOKE_SEED_TOKEN=... bun run stress:platform
           title="API Keys"
           description="Create and manage your Brok API keys"
           href="/docs/api-keys"
+        />
+        <DocCard
+          title="API Reference"
+          description="Browse every public v1 endpoint from the OpenAPI contract"
+          href="/docs/api-reference"
+        />
+        <DocCard
+          title="OpenAPI Spec"
+          description="Download the machine-readable Brok v1 API contract"
+          href="/api/openapi"
         />
         <DocCard
           title="Chat Completions"

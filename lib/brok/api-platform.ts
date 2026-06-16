@@ -47,6 +47,33 @@ export interface CreateApiKeyInput {
   rpmLimit: number
   dailyRequestLimit: number
   monthlyBudgetCents: number
+  expiresAt?: string | Date | null
+}
+
+export type ValidatedCreateApiKeyInput = Omit<
+  CreateApiKeyInput,
+  'expiresAt'
+> & {
+  expiresAt: Date | null
+}
+
+export interface RotateApiKeyInput {
+  name?: string
+  scopes?: string[]
+  allowedModels?: string[]
+  rpmLimit?: number | null
+  dailyRequestLimit?: number | null
+  monthlyBudgetCents?: number | null
+}
+
+export interface ApiKeyRotationDefaults {
+  name: string
+  environment: ApiKeyEnvironment
+  scopes: unknown
+  allowedModels: unknown
+  rpmLimit: number | null
+  dailyRequestLimit: number | null
+  monthlyBudgetCents: number | null
 }
 
 const apiKeyEnvironmentSet = new Set<string>(API_KEY_ENVIRONMENTS)
@@ -105,9 +132,32 @@ function validateIntegerLimit(
   return numeric
 }
 
+function validateApiKeyExpiresAt(value: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return null
+  }
+
+  const expiresAt =
+    value instanceof Date
+      ? new Date(value.getTime())
+      : typeof value === 'string'
+        ? new Date(value)
+        : null
+
+  if (!expiresAt || Number.isNaN(expiresAt.getTime())) {
+    throw new Error('API key expiration must be a valid date.')
+  }
+
+  if (expiresAt.getTime() <= Date.now()) {
+    throw new Error('API key expiration must be in the future.')
+  }
+
+  return expiresAt
+}
+
 export function validateCreateApiKeyInput(
   input: CreateApiKeyInput
-): CreateApiKeyInput {
+): ValidatedCreateApiKeyInput {
   if (!input || typeof input !== 'object') {
     throw new Error('API key input is required.')
   }
@@ -170,8 +220,52 @@ export function validateCreateApiKeyInput(
       'Monthly budget',
       API_KEY_LIMITS.monthlyBudgetMinCents,
       API_KEY_LIMITS.monthlyBudgetMaxCents
-    )
+    ),
+    expiresAt: validateApiKeyExpiresAt(input.expiresAt)
   }
+}
+
+function defaultRotatedKeyName(name: string) {
+  const replacementName = `${name.trim() || 'API key'} replacement`
+  return replacementName.slice(0, API_KEY_LIMITS.nameMaxLength)
+}
+
+function inheritedIntegerLimit(
+  override: number | null | undefined,
+  inherited: number | null,
+  fallback: number
+) {
+  if (override !== undefined && override !== null) return override
+  return inherited ?? fallback
+}
+
+export function buildRotatedApiKeyInput(
+  source: ApiKeyRotationDefaults,
+  input: RotateApiKeyInput = {}
+): CreateApiKeyInput {
+  return validateCreateApiKeyInput({
+    name: input.name ?? defaultRotatedKeyName(source.name),
+    environment: source.environment,
+    scopes:
+      input.scopes ??
+      (Array.isArray(source.scopes) ? (source.scopes as string[]) : []),
+    allowedModels:
+      input.allowedModels ??
+      (Array.isArray(source.allowedModels)
+        ? (source.allowedModels as string[])
+        : []),
+    rpmLimit: inheritedIntegerLimit(input.rpmLimit, source.rpmLimit, 60),
+    dailyRequestLimit: inheritedIntegerLimit(
+      input.dailyRequestLimit,
+      source.dailyRequestLimit,
+      5000
+    ),
+    monthlyBudgetCents: inheritedIntegerLimit(
+      input.monthlyBudgetCents,
+      source.monthlyBudgetCents,
+      0
+    )
+  })
 }
 
 export function validateApiKeyStatusTransition(

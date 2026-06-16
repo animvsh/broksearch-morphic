@@ -275,6 +275,12 @@ export function ChatPanel({
     }
   }, [isGuest, isLoading, loadRecentTasks])
 
+  useEffect(() => {
+    if (initialSearchMode) {
+      setCookie('searchMode', initialSearchMode)
+    }
+  }, [initialSearchMode])
+
   const getActiveToolLabel = () => {
     if (!messages.length) return null
 
@@ -424,7 +430,7 @@ export function ChatPanel({
       className={cn(
         'w-full group/form-container shrink-0',
         messages.length > 0
-          ? 'sticky bottom-0 bg-gradient-to-t from-[#f7f7f8] via-[#f7f7f8]/96 to-transparent px-4 pb-4 pt-4 md:px-6'
+          ? 'sticky bottom-0 bg-gradient-to-t from-[#f7f7f8] via-[#f7f7f8]/96 to-transparent px-3 pb-[calc(env(safe-area-inset-bottom)+4.75rem)] pt-2 md:px-6 md:pb-4 md:pt-4'
           : 'mx-auto flex w-full max-w-3xl flex-col px-4 pb-8 pt-12 sm:px-6 md:pt-20'
       )}
     >
@@ -590,6 +596,7 @@ export function ChatPanel({
         <div
           className={cn(
             'smooth-composer morphic-surface relative flex w-full flex-col gap-2 overflow-hidden rounded-2xl backdrop-blur-xl transition-all duration-200',
+            isLoading && 'gap-1.5 md:gap-2',
             isLoading &&
               'border-zinc-300/90 shadow-[0_18px_48px_-40px_rgba(15,23,42,0.28)]',
             isInputFocused &&
@@ -621,7 +628,12 @@ export function ChatPanel({
             value={input}
             readOnly={isLoading || hasActiveToolInvocation}
             aria-busy={isLoading || hasActiveToolInvocation}
-            className="min-h-14 w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-7 placeholder:text-zinc-400 focus-visible:outline-hidden read-only:cursor-default md:min-h-16 md:p-5"
+            className={cn(
+              'w-full resize-none border-0 bg-transparent text-[15px] leading-7 placeholder:text-zinc-400 focus-visible:outline-hidden read-only:cursor-default',
+              isLoading
+                ? 'min-h-10 p-3 md:min-h-16 md:p-5'
+                : 'min-h-14 p-4 md:min-h-16 md:p-5'
+            )}
             onChange={handleInputChange}
             onKeyDown={e => {
               if (isLoading || hasActiveToolInvocation) {
@@ -671,13 +683,20 @@ export function ChatPanel({
               ) : null}
             </div>
           )}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100/90 bg-white/48 p-2.5 md:p-3">
+          <div
+            className={cn(
+              'flex items-center justify-between gap-2 border-t border-zinc-100/90 bg-white/48 md:p-3',
+              isLoading ? 'p-2' : 'flex-wrap p-2.5'
+            )}
+          >
             <div className="flex items-center gap-2">
-              <FileUploadButton
-                onFileSelect={files => {
-                  void onFilesSelected(files)
-                }}
-              />
+              {!isLoading && (
+                <FileUploadButton
+                  onFileSelect={files => {
+                    void onFilesSelected(files)
+                  }}
+                />
+              )}
               <SearchModeSelector />
               {!isGuest && input.trim().length > 0 && !isDeepResearchMode && (
                 <Button
@@ -700,10 +719,10 @@ export function ChatPanel({
               <span className="hidden text-[11px] text-muted-foreground md:inline">
                 {selectedMode?.label || 'Quick'} mode
               </span>
-              {modelSelectorData && (
+              {modelSelectorData && !isLoading && (
                 <ModelSelectorClient data={modelSelectorData} />
               )}
-              {messages.length > 0 && (
+              {messages.length > 0 && !isLoading && (
                 <Button
                   variant="outline"
                   size="icon"
@@ -724,11 +743,11 @@ export function ChatPanel({
                   'size-8 rounded-xl md:size-10'
                 )}
                 disabled={
-                  (!isLoading &&
-                    input.trim().length === 0 &&
-                    !hasUploadedFiles) ||
-                  hasUploadingFiles ||
-                  (!hasAvailableModels && !canSubmitWithoutModel)
+                  isLoading
+                    ? false
+                    : (input.trim().length === 0 && !hasUploadedFiles) ||
+                      hasUploadingFiles ||
+                      (!hasAvailableModels && !canSubmitWithoutModel)
                 }
                 onClick={isLoading ? stop : undefined}
                 aria-label={isLoading ? 'Stop response' : 'Send message'}

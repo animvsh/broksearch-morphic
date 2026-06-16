@@ -243,26 +243,28 @@ describe('POST /api/v1/search/completions', () => {
   })
 
   it('streams canonical PRD search events alongside compatibility events', async () => {
-    mockRunSearchPipeline.mockResolvedValueOnce({
-      ...searchResult(),
-      answer: 'Brok cites sources as it writes.',
-      citations: [
-        {
-          id: 'src_1',
-          title: 'Brok Docs',
-          url: 'https://docs.example.com/brok',
-          publisher: 'docs.example.com',
-          snippet: 'Brok documentation',
-          retrievedAt: '2026-06-01T00:00:00.000Z',
-          qualityScore: 91
-        }
-      ],
-      followUps: [
-        {
-          label: 'How does Brok cite sources?',
-          query: 'How does Brok cite sources?'
-        }
-      ]
+    const earlySource = {
+      id: 'src_1',
+      title: 'Brok Docs',
+      url: 'https://docs.example.com/brok',
+      publisher: 'docs.example.com',
+      snippet: 'Brok documentation',
+      retrievedAt: '2026-06-01T00:00:00.000Z',
+      qualityScore: 91
+    }
+    mockRunSearchPipeline.mockImplementationOnce(async request => {
+      await request.onSources?.([earlySource])
+      return {
+        ...searchResult(),
+        answer: 'Brok cites sources as it writes.',
+        citations: [earlySource],
+        followUps: [
+          {
+            label: 'How does Brok cite sources?',
+            query: 'How does Brok cite sources?'
+          }
+        ]
+      }
     })
 
     const response = await POST(
@@ -280,6 +282,10 @@ describe('POST /api/v1/search/completions', () => {
     expect(stream).toContain('event: query')
     expect(stream).toContain('event: source')
     expect(stream).toContain('event: answer_delta')
+    expect(stream.indexOf('event: source')).toBeLessThan(
+      stream.indexOf('event: answer_delta')
+    )
+    expect(stream.match(/event: source\n/g)).toHaveLength(1)
     expect(stream).toContain('"text":"Brok cites sources as it writes."')
     expect(stream).toContain('event: citation')
     expect(stream).toContain('"citation_number":1')
@@ -289,6 +295,32 @@ describe('POST /api/v1/search/completions', () => {
     expect(stream).toContain('event: search.step')
     expect(stream).toContain('event: follow_ups_generated')
     expect(stream).toContain('data: [DONE]')
+  })
+
+  it('streams incremental answer deltas without duplicating the final answer', async () => {
+    mockRunSearchPipeline.mockImplementationOnce(async request => {
+      await request.onAnswerDelta?.('Brok ')
+      await request.onAnswerDelta?.('streams answers.')
+      return {
+        ...searchResult(),
+        answer: 'Brok streams answers.'
+      }
+    })
+
+    const response = await POST(
+      searchRequest({
+        query: 'What is Brok?',
+        model: 'brok-lite',
+        stream: true
+      })
+    )
+    const stream = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(stream.match(/event: answer_delta\n/g)).toHaveLength(2)
+    expect(stream).toContain('"delta":"Brok "')
+    expect(stream).toContain('"delta":"streams answers."')
+    expect(stream).not.toContain('"delta":"Brok streams answers."')
   })
 
   it('records blocked rate-limit attempts before returning 429', async () => {

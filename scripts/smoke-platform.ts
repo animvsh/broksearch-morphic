@@ -5,12 +5,13 @@ import { chromium } from 'playwright'
 import { ensureWorkspaceForUser } from '../lib/actions/api-keys'
 import { generateApiKey, getKeyPrefix, hashNewApiKey } from '../lib/api-key'
 import { db } from '../lib/db'
-import { apiKeys, chats, messages, parts } from '../lib/db/schema'
+import { apiKeys, chats, messages, parts, workspaces } from '../lib/db/schema'
 
 import {
   createApiKeyViaSupabaseRest,
   ensureWorkspaceForUserViaSupabaseRest,
-  supabaseRest
+  supabaseRest,
+  updateWorkspaceMonthlyBudgetViaSupabaseRest
 } from './supabase-rest-seed'
 
 type UiCheck = {
@@ -42,9 +43,10 @@ const browserNavigationTimeoutMs = readPositiveIntegerEnv(
   'SMOKE_PLATFORM_BROWSER_TIMEOUT_MS',
   120_000
 )
+const seedMonthlyBudgetCents = 100
 
 const uiChecks: UiCheck[] = [
-  { path: '/', expectedText: 'Save research, code context' },
+  { path: '/', expectedText: 'Fast answers with sources' },
   { path: '/docs', expectedText: 'Brok Documentation' },
   { path: '/docs/quickstart', expectedText: 'Quickstart' },
   { path: '/docs/api-keys', expectedText: 'API Keys' }
@@ -372,6 +374,10 @@ async function createSmokeTestKey() {
 
   try {
     const workspace = await ensureWorkspaceForUser(smokeUserId)
+    await db
+      .update(workspaces)
+      .set({ monthlyBudgetCents: seedMonthlyBudgetCents })
+      .where(eq(workspaces.id, workspace.id))
 
     await db.insert(apiKeys).values({
       workspaceId: workspace.id,
@@ -385,7 +391,7 @@ async function createSmokeTestKey() {
       allowedModels: [],
       rpmLimit: 60,
       dailyRequestLimit: 5000,
-      monthlyBudgetCents: 0
+      monthlyBudgetCents: seedMonthlyBudgetCents
     })
 
     return { workspaceId: workspace.id, apiKey: rawKey, dbBacked: true }
@@ -396,6 +402,10 @@ async function createSmokeTestKey() {
       }`
     )
     const workspace = await ensureWorkspaceForUserViaSupabaseRest(smokeUserId)
+    await updateWorkspaceMonthlyBudgetViaSupabaseRest(
+      workspace.id,
+      seedMonthlyBudgetCents
+    )
     await createApiKeyViaSupabaseRest({
       workspace_id: workspace.id,
       user_id: smokeUserId,
@@ -408,7 +418,7 @@ async function createSmokeTestKey() {
       allowed_models: [],
       rpm_limit: 60,
       daily_request_limit: 5000,
-      monthly_budget_cents: 0
+      monthly_budget_cents: seedMonthlyBudgetCents
     })
 
     return { workspaceId: workspace.id, apiKey: rawKey, dbBacked: false }

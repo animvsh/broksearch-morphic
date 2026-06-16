@@ -142,7 +142,7 @@ function formatDate(input?: string | Date): string | undefined {
 }
 
 function generateFollowUps(content: string): FollowUp[] {
-  const trimmed = content.trim()
+  const trimmed = getFollowUpTopicSource(content)
   if (!trimmed) return []
   const topic = trimmed.split(/[.!?\n]/)[0].slice(0, 80) || 'this topic'
   return [
@@ -167,6 +167,23 @@ function generateFollowUps(content: string): FollowUp[] {
       query: `Compare the strongest and weakest parts of that answer`
     }
   ]
+}
+
+function stripThinkingText(content: string): string {
+  const withoutClosedThinking = content.replace(
+    /<think\b[^>]*>[\s\S]*?<\/think>/gi,
+    ''
+  )
+
+  return withoutClosedThinking.replace(/<think\b[^>]*>[\s\S]*$/gi, '').trim()
+}
+
+function getFollowUpTopicSource(content: string): string {
+  return stripThinkingText(content)
+    .replace(/```spec[\s\S]*?```/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function getMetadataSources(
@@ -235,12 +252,13 @@ export function SearchAnswerSection({
     : sources.length > 0
       ? 'gathering'
       : 'reading'
+  const displayContent = useMemo(() => stripThinkingText(content), [content])
   const [activeSource, setActiveSource] = useState<
     SearchResultItem | SourceCardData | null
   >(null)
   const generatedFollowUps = useMemo(
-    () => extractFollowUpsFromText(content, messageId),
-    [content, messageId]
+    () => extractFollowUpsFromText(displayContent, messageId),
+    [displayContent, messageId]
   )
   const metadataFollowUps = useMemo(
     () => getMetadataFollowUps(metadata),
@@ -253,8 +271,8 @@ export function SearchAnswerSection({
         ? []
         : metadataFollowUps.length > 0
           ? metadataFollowUps
-          : generateFollowUps(content),
-    [content, generatedFollowUps.length, isStreaming, metadataFollowUps]
+          : generateFollowUps(displayContent),
+    [displayContent, generatedFollowUps.length, isStreaming, metadataFollowUps]
   )
 
   const handleReload = () => {
@@ -283,7 +301,7 @@ export function SearchAnswerSection({
     }
     const synth = window.speechSynthesis
     synth.cancel()
-    const utter = new SpeechSynthesisUtterance(content)
+    const utter = new SpeechSynthesisUtterance(displayContent)
     synth.speak(utter)
   }
 
@@ -342,22 +360,6 @@ export function SearchAnswerSection({
 
         {isStreaming && sources.length === 0 && <SourceSkeletonStrip />}
 
-        {content ? (
-          <div className="flex flex-col gap-1" data-testid="answer-section">
-            <MarkdownMessage
-              message={content}
-              citationMaps={citationMaps}
-              onCitationOpen={setActiveSource}
-            />
-          </div>
-        ) : isStreaming ? (
-          <AnswerSkeleton />
-        ) : null}
-
-        {!isStreaming && content && sources.length === 0 && (
-          <KnowledgeFallbackNotice />
-        )}
-
         {sources.length > 0 && (
           <SourcesPanel
             sources={sources}
@@ -366,10 +368,26 @@ export function SearchAnswerSection({
           />
         )}
 
-        {!isStreaming && content && showActions && (
+        {displayContent ? (
+          <div className="flex flex-col gap-1" data-testid="answer-section">
+            <MarkdownMessage
+              message={displayContent}
+              citationMaps={citationMaps}
+              onCitationOpen={setActiveSource}
+            />
+          </div>
+        ) : isStreaming ? (
+          <AnswerSkeleton />
+        ) : null}
+
+        {!isStreaming && displayContent && sources.length === 0 && (
+          <KnowledgeFallbackNotice />
+        )}
+
+        {!isStreaming && displayContent && showActions && (
           <div className="flex flex-col gap-4">
             <AnswerToolbar
-              answerText={content}
+              answerText={displayContent}
               onShare={handleShare}
               onRegenerate={handleReload}
               onReadAloud={handleReadAloud}

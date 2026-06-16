@@ -7,6 +7,7 @@ import {
   generateFollowUps,
   rankAndDedupeSources,
   resolveQuery,
+  resolveSearchSynthesisModel,
   runSearchPipeline
 } from '@/lib/brok/search-pipeline'
 
@@ -76,6 +77,17 @@ describe('Brok search pipeline helpers', () => {
         limit: 1
       })
     ).toEqual(['How does Node.js streaming work?'])
+  })
+
+  it('maps public Brok model aliases to provider synthesis model ids', () => {
+    expect(resolveSearchSynthesisModel('brok-m2-5-highspeed')).toBe(
+      'MiniMax-M2.5-highspeed'
+    )
+    expect(resolveSearchSynthesisModel('brok-fast')).toBe(
+      'MiniMax-M2.7-highspeed'
+    )
+    expect(resolveSearchSynthesisModel('MiniMax-M2.7')).toBe('MiniMax-M2.7')
+    expect(resolveSearchSynthesisModel('')).toBeNull()
   })
 
   it('falls back to an explicit domain homepage when search returns no results', async () => {
@@ -207,6 +219,115 @@ describe('Brok search pipeline helpers', () => {
           String(input).startsWith('https://html.duckduckgo.com/html/')
         )
     ).toHaveLength(1)
+  })
+
+  it('keeps shared in-flight searches alive when the first caller aborts', async () => {
+    let resolveSearch: ((response: Response) => void) | undefined
+    const searchResponse = new Promise<Response>(resolve => {
+      resolveSearch = resolve
+    })
+    const firstController = new AbortController()
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+
+        if (url.startsWith('https://html.duckduckgo.com/html/')) {
+          expect((init?.signal as AbortSignal | undefined)?.aborted).toBe(false)
+          return searchResponse
+        }
+
+        return new Response('not found', { status: 404 })
+      })
+    )
+
+    const first = runSearchPipeline({
+      query: 'compare Raycast vs Alfred',
+      depth: 'lite',
+      signal: firstController.signal
+    })
+    const second = runSearchPipeline({
+      query: 'Compare Raycast vs Alfred',
+      depth: 'lite'
+    })
+
+    firstController.abort()
+    resolveSearch?.(
+      new Response(
+        '<html><body><div class="result"><h2 class="result__title"><a href="https://example.com/raycast-alfred">Raycast vs Alfred</a></h2><a class="result__snippet">A comparison of app launchers.</a></div></body></html>',
+        {
+          status: 200,
+          headers: { 'content-type': 'text/html' }
+        }
+      )
+    )
+
+    const [firstResult, secondResult] = await Promise.all([first, second])
+
+    expect(firstResult.answer).toContain('Raycast')
+    expect(secondResult.answer).toEqual(firstResult.answer)
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.filter(([input]) =>
+          String(input).startsWith('https://html.duckduckgo.com/html/')
+        )
+    ).toHaveLength(1)
+  })
+
+  it('returns an honest local fallback without caching provider outages', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new DOMException('The operation was aborted.', 'AbortError')
+      })
+    )
+
+    const first = await runSearchPipeline({
+      query: 'latest impossible provider outage check',
+      depth: 'lite'
+    })
+    const second = await runSearchPipeline({
+      query: 'latest impossible provider outage check',
+      depth: 'lite'
+    })
+
+    expect(first.answer).toContain('Live web search was unavailable')
+    expect(first.answer).toContain('model knowledge')
+    expect(first.answer).toContain('[1]')
+    expect(first.citations[0]).toMatchObject({
+      id: 'fallback_local_1',
+      title: 'Brok local fallback knowledge',
+      publisher: 'Brok local fallback',
+      qualityScore: 15
+    })
+    expect(first.citations[0]?.snippet).toContain('not verified web evidence')
+    expect(first.followUps).toEqual([
+      {
+        label: 'Retry with live sources',
+        query:
+          'Search the web again for latest impossible provider outage check'
+      },
+      {
+        label: 'Limit to primary sources',
+        query:
+          'Find primary sources for latest impossible provider outage check'
+      },
+      {
+        label: 'Make a verification checklist',
+        query:
+          'What should I verify before trusting an answer about latest impossible provider outage check?'
+      }
+    ])
+    expect(second.answer).toContain('Live web search was unavailable')
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.filter(([input]) =>
+          String(input).startsWith('https://html.duckduckgo.com/html/')
+        )
+    ).toHaveLength(2)
   })
 
   it('dedupes sources and ranks primary sources ahead of weak domains', () => {

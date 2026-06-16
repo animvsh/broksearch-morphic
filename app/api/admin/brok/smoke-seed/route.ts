@@ -6,6 +6,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 type SeedKind = 'smoke' | 'stress' | 'share' | 'share-cleanup'
+const seedMonthlyBudgetCents = 100
 
 function isAuthorized(request: NextRequest) {
   const token = process.env.SMOKE_SEED_TOKEN
@@ -60,7 +61,7 @@ async function ensureSeedWorkspaceBudget(workspaceId: string) {
 
   await db
     .update(workspaces)
-    .set({ monthlyBudgetCents: 100 })
+    .set({ monthlyBudgetCents: seedMonthlyBudgetCents })
     .where(eq(workspaces.id, workspaceId))
 }
 
@@ -75,6 +76,7 @@ async function createKey(
     rpmLimit: number
     dailyRequestLimit: number
     monthlyBudgetCents: number
+    expiresAt?: Date | null
   }
 ) {
   const { apiKeys, db, generateApiKey, getKeyPrefix, hashNewApiKey } =
@@ -95,7 +97,8 @@ async function createKey(
       allowedModels: input.allowedModels,
       rpmLimit: input.rpmLimit,
       dailyRequestLimit: input.dailyRequestLimit,
-      monthlyBudgetCents: input.monthlyBudgetCents
+      monthlyBudgetCents: input.monthlyBudgetCents,
+      expiresAt: input.expiresAt ?? null
     })
     .returning()
 
@@ -113,7 +116,7 @@ async function seedSmoke(userId: string) {
     allowedModels: [],
     rpmLimit: 60,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 100
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   return {
@@ -136,7 +139,7 @@ async function seedStress(userId: string) {
     allowedModels: [],
     rpmLimit: 5,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 100
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   const lowRpmKey = await createKey(workspace.id, userId, {
@@ -146,7 +149,7 @@ async function seedStress(userId: string) {
     allowedModels: ['brok-lite'],
     rpmLimit: 1,
     dailyRequestLimit: 5000,
-    monthlyBudgetCents: 0
+    monthlyBudgetCents: seedMonthlyBudgetCents
   })
 
   const dailyLimitedKey = await createKey(workspace.id, userId, {
@@ -227,6 +230,17 @@ async function seedStress(userId: string) {
     .set({ status: 'revoked', revokedAt: new Date() })
     .where(eq(apiKeys.id, revokedKey.id))
 
+  const expiredKey = await createKey(workspace.id, userId, {
+    name: 'Stress Expired Key',
+    environment: 'test',
+    scopes: ['usage:read'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0,
+    expiresAt: new Date(Date.now() - 60_000)
+  })
+
   return {
     kind: 'stress' as const,
     workspaceId: workspace.id,
@@ -235,7 +249,8 @@ async function seedStress(userId: string) {
     dailyLimitedKey: dailyLimitedKey.key,
     monthlyBudgetKey: monthlyBudgetKey.key,
     pausedKey: pausedKey.key,
-    revokedKey: revokedKey.key
+    revokedKey: revokedKey.key,
+    expiredKey: expiredKey.key
   }
 }
 

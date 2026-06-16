@@ -37,8 +37,21 @@ const INITIAL: StreamingState = {
   error: null
 }
 
+function createActiveInitialState(): StreamingState {
+  return {
+    phase: 'reading',
+    sourceCount: 0,
+    sources: [],
+    elapsedMs: 0,
+    startedAt: Date.now(),
+    error: null
+  }
+}
+
 export function useStreamingPhases(isActive: boolean) {
-  const [state, setState] = useState<StreamingState>(INITIAL)
+  const [state, setState] = useState<StreamingState>(() =>
+    isActive ? createActiveInitialState() : INITIAL
+  )
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -49,20 +62,13 @@ export function useStreamingPhases(isActive: boolean) {
       }
       return
     }
-    let firstTick = true
+    setState(prev =>
+      prev.startedAt && prev.phase !== 'idle'
+        ? prev
+        : createActiveInitialState()
+    )
     intervalRef.current = setInterval(() => {
       setState(prev => {
-        if (firstTick) {
-          firstTick = false
-          return {
-            phase: 'reading',
-            sourceCount: 0,
-            sources: [],
-            elapsedMs: 0,
-            startedAt: Date.now(),
-            error: null
-          }
-        }
         if (!prev.startedAt) return prev
         return { ...prev, elapsedMs: Date.now() - prev.startedAt }
       })

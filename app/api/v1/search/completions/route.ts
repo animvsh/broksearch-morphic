@@ -11,6 +11,11 @@ import {
   invalidRequestResponse,
   readJsonBody
 } from '@/lib/brok/http'
+import {
+  beginIdempotentRequest,
+  completeIdempotentRequest,
+  idempotencyHeaders
+} from '@/lib/brok/idempotency'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import {
   applyBrokMarkup,
@@ -35,6 +40,10 @@ export const runtime = 'nodejs'
 
 function sseEvent(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+}
+
+function sourceEventKey(citation: { id?: string; url?: string }) {
+  return citation.id || citation.url || ''
 }
 
 function usagePayload(
@@ -122,13 +131,6 @@ export async function POST(request: NextRequest) {
   if (!apiKeyHasScope(auth.apiKey, 'search:write')) {
     return forbiddenScopeResponse('search:write')
   }
-  const usageLimit = await checkUsageLimits({
-    apiKey: auth.apiKey,
-    workspace: auth.workspace
-  })
-  if (!usageLimit.allowed) {
-    return usageLimitResponse(usageLimit)
-  }
 
   // Parse body
   const parsedBody = await readJsonBody<{
@@ -206,6 +208,31 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  const idempotency = await beginIdempotentRequest({
+    request,
+    workspaceId: auth.workspace.id,
+    apiKeyId: auth.apiKey.id,
+    route: '/api/v1/search/completions',
+    body,
+    stream: shouldStream
+  })
+  if (idempotency.kind === 'replay' || idempotency.kind === 'blocked') {
+    return idempotency.response
+  }
+
+  const usageLimit = await checkUsageLimits({
+    apiKey: auth.apiKey,
+    workspace: auth.workspace
+  })
+  if (!usageLimit.allowed) {
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      status: 'failed'
+    })
+    return usageLimitResponse(usageLimit)
+  }
+
   // Check rate limit
   const rateLimit = await checkRateLimit(
     auth.apiKey.id,
@@ -215,6 +242,11 @@ export async function POST(request: NextRequest) {
 
   if (!rateLimit.allowed) {
     if (rateLimit.reason === 'rate_limit_check_failed') {
+      await completeIdempotentRequest({
+        idempotency,
+        requestId,
+        status: 'failed'
+      })
       return NextResponse.json(
         {
           error: {
@@ -236,6 +268,11 @@ export async function POST(request: NextRequest) {
       true
     )
 
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      status: 'failed'
+    })
     return NextResponse.json(
       {
         error: {
@@ -277,6 +314,58 @@ export async function POST(request: NextRequest) {
         async start(controller) {
           const send = (event: string, data: unknown) => {
             controller.enqueue(encoder.encode(sseEvent(event, data)))
+          }
+          const emittedSourceKeys = new Set<string>()
+          let streamedAnswer = ''
+          let writingStatusSent = false
+          const sendSourceEvents = (
+            citations: Awaited<
+              ReturnType<typeof runSearchPipeline>
+            >['citations']
+          ) => {
+            citations.forEach((citation, index) => {
+              const key = sourceEventKey(citation)
+              if (key && emittedSourceKeys.has(key)) return
+              if (key) emittedSourceKeys.add(key)
+
+              const citationNumber = index + 1
+
+              send('source_found', {
+                id: requestId,
+                index: citationNumber,
+                source: citation
+              })
+              send('source', {
+                id: requestId,
+                source_id: citation.id,
+                citation_number: citationNumber,
+                title: citation.title,
+                url: citation.url,
+                domain: citation.publisher,
+                snippet: citation.snippet,
+                retrieved_at: citation.retrievedAt,
+                quality_score: citation.qualityScore
+              })
+              send('source_read', {
+                id: requestId,
+                source_id: citation.id,
+                url: citation.url,
+                title: citation.title,
+                quality_score: citation.qualityScore
+              })
+              send('citation_added', {
+                id: requestId,
+                citation_id: citation.id,
+                marker: `[${citationNumber}]`,
+                url: citation.url
+              })
+              send('citation', {
+                id: requestId,
+                source_id: citation.id,
+                citation_number: citationNumber,
+                url: citation.url
+              })
+            })
           }
 
           const classification = classifyQuery(query)
@@ -336,7 +425,37 @@ export async function POST(request: NextRequest) {
               query,
               depth,
               recencyDays: recency_days,
-              domains: searchDomains
+              domains: searchDomains,
+              signal: request.signal,
+              onSources: sources => {
+                send('search.step', {
+                  id: requestId,
+                  message: `Found ${sources.length} source${sources.length === 1 ? '' : 's'}`,
+                  status: 'running',
+                  citations: sources.length
+                })
+                send('status', {
+                  id: requestId,
+                  message: 'Reading sources'
+                })
+                sendSourceEvents(sources)
+              },
+              onAnswerDelta: delta => {
+                if (!delta) return
+                if (!writingStatusSent) {
+                  writingStatusSent = true
+                  send('status', {
+                    id: requestId,
+                    message: 'Writing answer'
+                  })
+                }
+                streamedAnswer += delta
+                send('answer_delta', {
+                  id: requestId,
+                  delta,
+                  text: delta
+                })
+              }
             })
 
             const latencyMs = Date.now() - startTime
@@ -361,57 +480,40 @@ export async function POST(request: NextRequest) {
               latencyMs,
               status: 'success'
             })
-
-            searchResult.citations.forEach((citation, index) => {
-              const citationNumber = index + 1
-
-              send('source_found', {
-                id: requestId,
-                index: citationNumber,
-                source: citation
-              })
-              send('source', {
-                id: requestId,
-                source_id: citation.id,
-                citation_number: citationNumber,
-                title: citation.title,
-                url: citation.url,
-                domain: citation.publisher,
-                snippet: citation.snippet,
-                retrieved_at: citation.retrievedAt,
-                quality_score: citation.qualityScore
-              })
-              send('source_read', {
-                id: requestId,
-                source_id: citation.id,
-                url: citation.url,
-                title: citation.title,
-                quality_score: citation.qualityScore
-              })
-              send('citation_added', {
-                id: requestId,
-                citation_id: citation.id,
-                marker: `[${citationNumber}]`,
-                url: citation.url
-              })
-              send('citation', {
-                id: requestId,
-                source_id: citation.id,
-                citation_number: citationNumber,
-                url: citation.url
-              })
+            await completeIdempotentRequest({
+              idempotency,
+              requestId,
+              status: 'completed'
             })
 
-            send('status', {
-              id: requestId,
-              message: 'Writing answer'
-            })
+            sendSourceEvents(searchResult.citations)
 
-            send('answer_delta', {
-              id: requestId,
-              delta: searchResult.answer,
-              text: searchResult.answer
-            })
+            if (!writingStatusSent) {
+              writingStatusSent = true
+              send('status', {
+                id: requestId,
+                message: 'Writing answer'
+              })
+            }
+
+            if (!streamedAnswer) {
+              send('answer_delta', {
+                id: requestId,
+                delta: searchResult.answer,
+                text: searchResult.answer
+              })
+            } else if (searchResult.answer.startsWith(streamedAnswer)) {
+              const remainingAnswer = searchResult.answer.slice(
+                streamedAnswer.length
+              )
+              if (remainingAnswer) {
+                send('answer_delta', {
+                  id: requestId,
+                  delta: remainingAnswer,
+                  text: remainingAnswer
+                })
+              }
+            }
             send('follow_ups_generated', {
               id: requestId,
               follow_ups: searchResult.followUps
@@ -444,6 +546,11 @@ export async function POST(request: NextRequest) {
             controller.close()
           } catch (error) {
             if (error instanceof UsageRecordError) {
+              await completeIdempotentRequest({
+                idempotency,
+                requestId,
+                status: 'failed'
+              })
               send('search.error', {
                 id: requestId,
                 error: {
@@ -477,6 +584,11 @@ export async function POST(request: NextRequest) {
               errorCode:
                 error instanceof Error ? error.message : 'unknown_error'
             })
+            await completeIdempotentRequest({
+              idempotency,
+              requestId,
+              status: 'failed'
+            })
 
             send('search.error', {
               id: requestId,
@@ -497,6 +609,9 @@ export async function POST(request: NextRequest) {
           'Cache-Control': 'no-cache, no-transform',
           Connection: 'keep-alive',
           'X-Brok-Request-Id': requestId,
+          ...idempotencyHeaders({
+            key: idempotency.kind === 'reserved' ? idempotency.key : undefined
+          }),
           ...brokRateLimitHeaders({
             limit: rateLimit.limit,
             current: rateLimit.current + 1,
@@ -540,21 +655,36 @@ export async function POST(request: NextRequest) {
       status: 'success'
     })
 
-    return NextResponse.json(
-      completionPayload({ requestId, model, searchResult }),
-      {
-        headers: {
-          'X-Brok-Request-Id': requestId,
-          ...brokRateLimitHeaders({
-            limit: rateLimit.limit,
-            current: rateLimit.current + 1,
-            resetAt: rateLimit.resetAt
-          })
-        }
-      }
-    )
+    const brokResponse = completionPayload({ requestId, model, searchResult })
+    const responseHeaders = {
+      'X-Brok-Request-Id': requestId,
+      ...idempotencyHeaders({
+        key: idempotency.kind === 'reserved' ? idempotency.key : undefined
+      }),
+      ...brokRateLimitHeaders({
+        limit: rateLimit.limit,
+        current: rateLimit.current + 1,
+        resetAt: rateLimit.resetAt
+      })
+    }
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      responseStatus: 200,
+      responseBody: brokResponse,
+      responseHeaders
+    })
+
+    return NextResponse.json(brokResponse, {
+      headers: responseHeaders
+    })
   } catch (error) {
     if (error instanceof UsageRecordError) {
+      await completeIdempotentRequest({
+        idempotency,
+        requestId,
+        status: 'failed'
+      })
       return usageStorageUnavailableResponse(requestId)
     }
 
@@ -576,6 +706,11 @@ export async function POST(request: NextRequest) {
       latencyMs,
       status: 'error',
       errorCode: error instanceof Error ? error.message : 'unknown_error'
+    })
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      status: 'failed'
     })
 
     return NextResponse.json(

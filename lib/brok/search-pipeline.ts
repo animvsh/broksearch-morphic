@@ -6,6 +6,7 @@ import {
   BROK_PROVIDER_CHAT_MODEL
 } from '@/lib/ai/brok'
 import { searchWithBrokWebSearch } from '@/lib/brok/brok-web-search'
+import { getBrokProviderModelId } from '@/lib/brok/models'
 import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 
 export interface SearchResult {
@@ -35,6 +36,10 @@ export interface SearchRequest {
   recencyDays?: number
   domains?: string[]
   maxSources?: number
+  synthesisModel?: string
+  signal?: AbortSignal
+  onSources?: (sources: SearchResult[]) => void | Promise<void>
+  onAnswerDelta?: (delta: string) => void | Promise<void>
 }
 
 export type QuestionType =
@@ -97,22 +102,34 @@ export async function runSearchPipeline(
 
   if (cacheTtlMs > 0) {
     const cached = getCachedSearchResponse(cacheKey)
-    if (cached) return cached
+    if (cached) {
+      await emitSourcePreview(request, cached.citations)
+      return cached
+    }
 
     const inFlight = inFlightSearches.get(cacheKey)
     if (inFlight) {
-      return cloneSearchResponse(await inFlight)
+      const response = cloneSearchResponse(await inFlight)
+      await emitSourcePreview(request, response.citations)
+      return response
     }
   }
 
-  const runPromise = runUncachedSearchPipeline(request)
+  const runRequest =
+    cacheTtlMs > 0
+      ? {
+          ...request,
+          signal: undefined
+        }
+      : request
+  const runPromise = runUncachedSearchPipeline(runRequest)
   if (cacheTtlMs > 0) {
     inFlightSearches.set(cacheKey, runPromise)
   }
 
   try {
     const response = await runPromise
-    if (cacheTtlMs > 0) {
+    if (cacheTtlMs > 0 && !isUnavailableSearchResponse(response)) {
       setCachedSearchResponse(cacheKey, response, cacheTtlMs)
     }
     return cloneSearchResponse(response)
@@ -147,7 +164,8 @@ async function runUncachedSearchPipeline(
       searchQueryList,
       maxSources,
       config.maxTokens,
-      domainHints
+      domainHints,
+      request
     )
   } catch (error) {
     console.warn('Falling back to HTML search pipeline:', error)
@@ -158,18 +176,21 @@ async function runUncachedSearchPipeline(
         searchQueryList,
         maxSources,
         config.maxTokens,
-        domainHints
+        domainHints,
+        request
       )
     } catch (fallbackError) {
       console.warn('Search providers unavailable; returning fallback:', {
         primaryError: error,
         fallbackError
       })
-      return buildUnavailableSearchResponse(
+      const response = buildLocalFallbackSearchResponse(
         resolvedQuery,
         classification,
         searchQueryList
       )
+      await emitSourcePreview(request, response.citations)
+      return response
     }
   }
 }
@@ -192,8 +213,33 @@ function buildSearchCacheKey(request: SearchRequest) {
     depth: request.depth,
     recencyDays: request.recencyDays ?? null,
     domains,
-    maxSources: request.maxSources ?? null
+    maxSources: request.maxSources ?? null,
+    synthesisModel: request.synthesisModel ?? null
   })
+}
+
+export function getCachedSearchPipelineResponse(
+  request: Pick<
+    SearchRequest,
+    | 'query'
+    | 'depth'
+    | 'recencyDays'
+    | 'domains'
+    | 'maxSources'
+    | 'synthesisModel'
+  >
+): SearchResponse | null {
+  if (getSearchCacheTtlMs() <= 0) return null
+  return getCachedSearchResponse(buildSearchCacheKey(request))
+}
+
+export function resolveSearchSynthesisModel(modelId?: string | null) {
+  if (!modelId) return null
+
+  const trimmed = modelId.trim()
+  if (!trimmed) return null
+
+  return getBrokProviderModelId(trimmed) ?? trimmed
 }
 
 function getCachedSearchResponse(cacheKey: string) {
@@ -227,8 +273,25 @@ function setCachedSearchResponse(
   }
 }
 
+function isUnavailableSearchResponse(response: SearchResponse) {
+  return (
+    response.answer.startsWith('Live web search was unavailable') ||
+    response.citations.some(citation => citation.id === 'fallback_local_1')
+  )
+}
+
 function cloneSearchResponse(response: SearchResponse): SearchResponse {
   return JSON.parse(JSON.stringify(response)) as SearchResponse
+}
+
+async function emitSourcePreview(
+  request: Pick<SearchRequest, 'onSources'>,
+  citations: SearchResult[]
+) {
+  if (!request.onSources || citations.length === 0) return
+  await request.onSources(
+    JSON.parse(JSON.stringify(citations)) as SearchResult[]
+  )
 }
 
 export function clearSearchPipelineCache() {
@@ -249,28 +312,74 @@ function clampSourceCount(
   return rounded
 }
 
-function buildUnavailableSearchResponse(
+function buildLocalFallbackSearchResponse(
   resolvedQuery: string,
   classification: QueryClassification,
   searchQueryList: string[]
 ): SearchResponse {
-  const answer =
-    'Search is temporarily unavailable for this request. Try again in a moment, or narrow the query to a specific source or domain.'
+  const fallbackSource: SearchResult = {
+    id: 'fallback_local_1',
+    title: 'Brok local fallback knowledge',
+    url: 'https://www.brok.fyi/search#local-fallback',
+    publisher: 'Brok local fallback',
+    snippet:
+      'Generated locally because live search providers were unavailable. Treat this as model knowledge, not verified web evidence.',
+    retrievedAt: new Date().toISOString(),
+    qualityScore: 15
+  }
+  const answer = buildLocalFallbackAnswer(resolvedQuery, classification)
 
   return {
     answer,
-    citations: [],
+    citations: [fallbackSource],
     searchQueries: searchQueryList.length,
     searchQueryList,
-    tokensUsed: Math.round((resolvedQuery.length + answer.length) / 4),
+    tokensUsed: Math.round(
+      (resolvedQuery.length + answer.length + fallbackSource.snippet.length) / 4
+    ),
     resolvedQuery,
     classification,
     followUps: [
       {
-        label: 'Try the same search again',
-        query: resolvedQuery
+        label: 'Retry with live sources',
+        query: `Search the web again for ${resolvedQuery}`
+      },
+      {
+        label: 'Limit to primary sources',
+        query: `Find primary sources for ${resolvedQuery}`
+      },
+      {
+        label: 'Make a verification checklist',
+        query: `What should I verify before trusting an answer about ${resolvedQuery}?`
       }
     ]
+  }
+}
+
+function buildLocalFallbackAnswer(
+  resolvedQuery: string,
+  classification: QueryClassification
+) {
+  const prefix =
+    'Live web search was unavailable, so this is a fast local fallback based on model knowledge rather than verified web results [1].'
+
+  switch (classification.type) {
+    case 'fresh/current':
+    case 'news':
+    case 'shopping-ish':
+    case 'local':
+      return `${prefix}\n\nFor "${resolvedQuery}", I should not invent current facts. The useful next move is to check primary sources, official pages, recent announcements, pricing pages, or local listings once search is back. If you rerun this in a moment or add a specific domain, Brok can replace this fallback with sourced results.`
+    case 'comparison':
+      return `${prefix}\n\nFor "${resolvedQuery}", compare the options on: purpose, core features, reliability, pricing, integration effort, switching costs, and the risks that matter to your use case. Treat any time-sensitive claims like current price, availability, benchmark results, or policy changes as unverified until live sources return.`
+    case 'technical':
+    case 'code':
+      return `${prefix}\n\nFor "${resolvedQuery}", start by isolating the expected behavior, the failing behavior, the smallest repro, logs/errors, and the boundary between client, server, and external services. Then make one narrow fix, add a regression test around the failure mode, and verify the real user path.`
+    case 'recommendation':
+      return `${prefix}\n\nFor "${resolvedQuery}", define the decision criteria first: must-haves, budget/time constraints, integration needs, durability, and failure cost. Then shortlist options against those criteria and verify recent reviews, docs, and pricing with live sources before deciding.`
+    case 'academic':
+      return `${prefix}\n\nFor "${resolvedQuery}", use this only as a starting frame: define the key terms, look for primary papers or canonical references, compare claims across sources, and note where evidence is weak or contested before treating the answer as reliable.`
+    default:
+      return `${prefix}\n\nFor "${resolvedQuery}", the safest general answer is to clarify the core question, separate stable background from facts that may have changed, and verify any names, dates, numbers, prices, or policies with live sources when search is available again.`
   }
 }
 
@@ -280,11 +389,17 @@ async function runBrokWebSearch(
   searchQueryList: string[],
   numResults: number,
   maxTokens: number,
-  domainHints: string[]
+  domainHints: string[],
+  events: Pick<
+    SearchRequest,
+    'onSources' | 'onAnswerDelta' | 'signal' | 'synthesisModel'
+  >
 ): Promise<SearchResponse> {
   const batches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
-      searchWithBrokWebSearch(searchQuery, numResults)
+      searchWithBrokWebSearch(searchQuery, numResults, {
+        signal: events.signal
+      })
     )
   )
   const rankedSourceInputs = batches
@@ -304,7 +419,9 @@ async function runBrokWebSearch(
     })
 
   if (domainHints.length && rankedSourceInputs.length < 2) {
-    rankedSourceInputs.push(...(await fetchDomainHomepageSources(domainHints)))
+    rankedSourceInputs.push(
+      ...(await fetchDomainHomepageSources(domainHints, events.signal))
+    )
   }
 
   const citations = rankAndDedupeSources(
@@ -312,12 +429,14 @@ async function runBrokWebSearch(
     resolvedQuery,
     numResults
   )
+  await emitSourcePreview(events, citations)
 
   const answer = await synthesizeAnswerFromResults(
     resolvedQuery,
     citations,
     maxTokens,
-    classification
+    classification,
+    events
   )
   const followUps = generateFollowUps(resolvedQuery, classification, citations)
 
@@ -341,11 +460,15 @@ async function runHtmlSearchPipeline(
   searchQueryList: string[],
   numResults: number,
   maxTokens: number,
-  domainHints: string[]
+  domainHints: string[],
+  events: Pick<
+    SearchRequest,
+    'onSources' | 'onAnswerDelta' | 'signal' | 'synthesisModel'
+  >
 ): Promise<SearchResponse> {
   const resultBatches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
-      searchDuckDuckGo(searchQuery, numResults)
+      searchDuckDuckGo(searchQuery, numResults, events.signal)
     )
   ).catch(error => {
     if (domainHints.length) {
@@ -362,7 +485,9 @@ async function runHtmlSearchPipeline(
   > = resultBatches.flat()
 
   if (domainHints.length && rankedSourceInputs.length < 2) {
-    rankedSourceInputs.push(...(await fetchDomainHomepageSources(domainHints)))
+    rankedSourceInputs.push(
+      ...(await fetchDomainHomepageSources(domainHints, events.signal))
+    )
   }
 
   const citations = rankAndDedupeSources(
@@ -370,11 +495,13 @@ async function runHtmlSearchPipeline(
     resolvedQuery,
     numResults
   )
+  await emitSourcePreview(events, citations)
   const answer = await synthesizeAnswerFromResults(
     resolvedQuery,
     citations,
     maxTokens,
-    classification
+    classification,
+    events
   )
   const followUps = generateFollowUps(resolvedQuery, classification, citations)
 
@@ -418,12 +545,13 @@ async function settleSearchBatches<T>(
 
 async function searchDuckDuckGo(
   query: string,
-  numResults: number
+  numResults: number,
+  signal?: AbortSignal
 ): Promise<SearchResult[]> {
   const response = await fetch(
     `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
     {
-      signal: AbortSignal.timeout(getSearchFetchTimeoutMs()),
+      signal: createTimeoutSignal(getSearchFetchTimeoutMs(), signal),
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; BrokSearch/1.0)'
       }
@@ -500,14 +628,17 @@ function getHost(url: string): string | undefined {
 }
 
 async function fetchDomainHomepageSources(
-  domains: string[]
+  domains: string[],
+  signal?: AbortSignal
 ): Promise<Array<Omit<SearchResult, 'id' | 'qualityScore'>>> {
   const sources: Array<Omit<SearchResult, 'id' | 'qualityScore'>> = []
 
   for (const domain of domains.slice(0, 3)) {
     if (!isPublicDomainHint(domain)) continue
 
-    const source = await fetchDomainHomepageSource(domain).catch(() => null)
+    const source = await fetchDomainHomepageSource(domain, signal).catch(
+      () => null
+    )
     if (source) {
       sources.push(source)
     }
@@ -517,11 +648,12 @@ async function fetchDomainHomepageSources(
 }
 
 async function fetchDomainHomepageSource(
-  domain: string
+  domain: string,
+  signal?: AbortSignal
 ): Promise<Omit<SearchResult, 'id' | 'qualityScore'> | null> {
   const url = `https://${domain}`
   const response = await fetch(url, {
-    signal: AbortSignal.timeout(5000),
+    signal: createTimeoutSignal(5000, signal),
     headers: {
       Accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
       'User-Agent': 'Mozilla/5.0 (compatible; BrokSearch/1.0)'
@@ -585,7 +717,11 @@ async function synthesizeAnswerFromResults(
   query: string,
   citations: SearchResult[],
   maxTokens: number,
-  classification: QueryClassification
+  classification: QueryClassification,
+  events: Pick<
+    SearchRequest,
+    'onAnswerDelta' | 'signal' | 'synthesisModel'
+  > = {}
 ): Promise<string> {
   if (citations.length === 0) {
     return 'No search results were available.'
@@ -605,16 +741,21 @@ async function synthesizeAnswerFromResults(
     .join('\n\n')
 
   try {
+    const synthesisModel =
+      resolveSearchSynthesisModel(events.synthesisModel) ??
+      BROK_PROVIDER_CHAT_MODEL
+
     const response = await fetch(`${BROK_PROVIDER_BASE_URL}/chat/completions`, {
       method: 'POST',
-      signal: AbortSignal.timeout(getAnswerSynthesisTimeoutMs()),
+      signal: createTimeoutSignal(getAnswerSynthesisTimeoutMs(), events.signal),
       headers: {
         Authorization: `Bearer ${BROK_PROVIDER_API_KEY}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: BROK_PROVIDER_CHAT_MODEL,
+        model: synthesisModel,
         max_tokens: Math.min(maxTokens, 1200),
+        stream: Boolean(events.onAnswerDelta),
         messages: [
           {
             role: 'system',
@@ -635,6 +776,10 @@ async function synthesizeAnswerFromResults(
         .join('\n')
     }
 
+    if (events.onAnswerDelta && response.body) {
+      return streamAnswerResponse(response, events.onAnswerDelta)
+    }
+
     const data = await response.json()
     return stripThinkingBlocks(
       data.choices?.[0]?.message?.content || 'No answer generated.'
@@ -645,6 +790,146 @@ async function synthesizeAnswerFromResults(
       .map(citation => `${citation.title}: ${citation.snippet}`.trim())
       .join('\n')
   }
+}
+
+async function streamAnswerResponse(
+  response: Response,
+  onAnswerDelta: NonNullable<SearchRequest['onAnswerDelta']>
+) {
+  const reader = response.body?.getReader()
+  if (!reader) {
+    const data = await response.json()
+    return stripThinkingBlocks(
+      data.choices?.[0]?.message?.content || 'No answer generated.'
+    )
+  }
+
+  const decoder = new TextDecoder()
+  const thinkingFilter = createThinkingBlockDeltaFilter()
+  let buffer = ''
+  let answer = ''
+
+  const emit = async (delta: string) => {
+    if (!delta) return
+    answer += delta
+    await onAnswerDelta(delta)
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const frames = buffer.split('\n\n')
+    buffer = frames.pop() ?? ''
+
+    for (const frame of frames) {
+      const delta = readOpenAICompatibleDelta(frame)
+      if (delta) {
+        await emit(thinkingFilter.push(delta))
+      }
+    }
+  }
+
+  buffer += decoder.decode()
+  if (buffer.trim()) {
+    const delta = readOpenAICompatibleDelta(buffer)
+    if (delta) {
+      await emit(thinkingFilter.push(delta))
+    }
+  }
+
+  await emit(thinkingFilter.flush())
+
+  return answer.trim() || 'No answer generated.'
+}
+
+function readOpenAICompatibleDelta(frame: string) {
+  const dataLines = frame
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('data:'))
+    .map(line => line.slice(5).trim())
+
+  let delta = ''
+  for (const line of dataLines) {
+    if (!line || line === '[DONE]') continue
+    try {
+      const chunk = JSON.parse(line)
+      delta += chunk.choices?.[0]?.delta?.content ?? ''
+      delta += chunk.choices?.[0]?.message?.content ?? ''
+      delta += chunk.choices?.[0]?.text ?? ''
+    } catch {
+      // Ignore malformed provider frames; the final answer will reflect
+      // successfully parsed chunks.
+    }
+  }
+
+  return delta
+}
+
+function createThinkingBlockDeltaFilter() {
+  let pending = ''
+  let insideThinking = false
+  const visibleTailGuard = '<think'.length
+  const hiddenTailGuard = '</think>'.length
+
+  return {
+    push(delta: string) {
+      pending += delta
+      let output = ''
+
+      while (pending) {
+        if (insideThinking) {
+          const closeIndex = pending.toLowerCase().indexOf('</think>')
+          if (closeIndex === -1) {
+            pending = pending.slice(-hiddenTailGuard)
+            break
+          }
+
+          pending = pending.slice(closeIndex + '</think>'.length)
+          insideThinking = false
+          continue
+        }
+
+        const openIndex = pending.toLowerCase().indexOf('<think')
+        if (openIndex === -1) {
+          if (pending.length <= visibleTailGuard) break
+          output += pending.slice(0, -visibleTailGuard)
+          pending = pending.slice(-visibleTailGuard)
+          break
+        }
+
+        output += pending.slice(0, openIndex)
+        pending = pending.slice(openIndex)
+        const tagEnd = pending.indexOf('>')
+        if (tagEnd === -1) {
+          insideThinking = true
+          pending = ''
+          break
+        }
+
+        pending = pending.slice(tagEnd + 1)
+        insideThinking = true
+      }
+
+      return output
+    },
+    flush() {
+      if (insideThinking) {
+        pending = ''
+        return ''
+      }
+      const output = stripThinkingBlocks(pending)
+      pending = ''
+      return output
+    }
+  }
+}
+
+function createTimeoutSignal(timeoutMs: number, parent?: AbortSignal) {
+  if (!parent) return AbortSignal.timeout(timeoutMs)
+  return AbortSignal.any([parent, AbortSignal.timeout(timeoutMs)])
 }
 
 export function classifyQuery(query: string): QueryClassification {

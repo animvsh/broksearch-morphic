@@ -4,8 +4,17 @@ import { revalidatePath } from 'next/cache'
 
 import { getCurrentAppAccess, hasFeatureAccess } from '@/lib/auth/app-access'
 import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
-import type { CreateApiKeyInput } from '@/lib/brok/api-platform'
 import {
+  type ApiKeyAuditRequestContext,
+  recordApiKeyAuditEvent,
+  recordApiKeyAuditEvents
+} from '@/lib/brok/api-key-audit'
+import type {
+  CreateApiKeyInput,
+  RotateApiKeyInput
+} from '@/lib/brok/api-platform'
+import {
+  buildRotatedApiKeyInput,
   validateApiKeyStatusTransition,
   validateCreateApiKeyInput
 } from '@/lib/brok/api-platform'
@@ -32,13 +41,17 @@ function localWorkspaceForUser(userId: string) {
 }
 
 async function getApiKeyDependencies() {
-  const [{ asc, eq }, { db }, { apiKeys, workspaces }] = await Promise.all([
+  const [
+    { asc, desc, eq },
+    { db },
+    { apiKeys, apiKeyAuditEvents, workspaces }
+  ] = await Promise.all([
     import('drizzle-orm'),
     import('@/lib/db'),
     import('@/lib/db/schema')
   ])
 
-  return { asc, eq, db, apiKeys, workspaces }
+  return { asc, desc, eq, db, apiKeys, apiKeyAuditEvents, workspaces }
 }
 
 async function getApiKeyCrypto() {
@@ -46,6 +59,33 @@ async function getApiKeyCrypto() {
     await import('@/lib/api-key')
 
   return { generateApiKey, getKeyPrefix, hashNewApiKey, maskApiKey }
+}
+
+function revalidateApiKeyPages() {
+  revalidatePath('/api-keys')
+  revalidatePath('/api-platform/audit')
+  revalidatePath('/api-platform/keys')
+}
+
+async function getApiKeyAuditRequestContext(): Promise<ApiKeyAuditRequestContext> {
+  try {
+    const { headers } = await import('next/headers')
+    const headerList = await headers()
+    const forwardedFor = headerList.get('x-forwarded-for')
+    const ipAddress =
+      forwardedFor?.split(',')[0]?.trim() ||
+      headerList.get('x-real-ip') ||
+      headerList.get('cf-connecting-ip')
+
+    return {
+      requestId:
+        headerList.get('x-request-id') || headerList.get('x-vercel-id') || null,
+      ipAddress,
+      userAgent: headerList.get('user-agent')
+    }
+  } catch {
+    return {}
+  }
 }
 
 export async function ensureWorkspaceForUser(userId: string) {
@@ -125,6 +165,7 @@ export async function createApiKey(
   const rawKey = generateApiKey(validatedInput.environment)
   const { hash: keyHash, salt: keySalt } = hashNewApiKey(rawKey)
   const keyPrefix = getKeyPrefix(rawKey)
+  const requestContext = await getApiKeyAuditRequestContext()
 
   const [newKey] = await db
     .insert(apiKeys)
@@ -140,9 +181,44 @@ export async function createApiKey(
       allowedModels: validatedInput.allowedModels,
       rpmLimit: validatedInput.rpmLimit,
       dailyRequestLimit: validatedInput.dailyRequestLimit,
-      monthlyBudgetCents: validatedInput.monthlyBudgetCents
+      monthlyBudgetCents: validatedInput.monthlyBudgetCents,
+      expiresAt: validatedInput.expiresAt
     })
     .returning()
+
+  await recordApiKeyAuditEvents([
+    {
+      workspaceId,
+      apiKeyId: newKey.id,
+      actorUserId: user.id,
+      actorType: 'user',
+      eventType: 'created',
+      keyPrefix: newKey.keyPrefix,
+      ...requestContext,
+      metadata: {
+        name: newKey.name,
+        environment: newKey.environment,
+        scopes: newKey.scopes,
+        allowedModels: newKey.allowedModels,
+        rpmLimit: newKey.rpmLimit,
+        dailyRequestLimit: newKey.dailyRequestLimit,
+        monthlyBudgetCents: newKey.monthlyBudgetCents
+      }
+    },
+    {
+      workspaceId,
+      apiKeyId: newKey.id,
+      actorUserId: user.id,
+      actorType: 'user',
+      eventType: 'secret_revealed_once',
+      keyPrefix: newKey.keyPrefix,
+      ...requestContext,
+      metadata: {
+        delivery: 'create_response',
+        rawValuePersisted: false
+      }
+    }
+  ])
 
   return {
     id: newKey.id,
@@ -156,6 +232,7 @@ export async function createApiKey(
     rpmLimit: newKey.rpmLimit,
     dailyRequestLimit: newKey.dailyRequestLimit,
     monthlyBudgetCents: newKey.monthlyBudgetCents,
+    expiresAt: newKey.expiresAt,
     createdAt: newKey.createdAt
   }
 }
@@ -191,6 +268,21 @@ export async function listApiKeys(workspaceId: string) {
     }
   }
 
+  const keySummaryById = new Map(
+    keys.map(key => [
+      key.id,
+      {
+        id: key.id,
+        name: key.name,
+        keyPrefix: key.keyPrefix,
+        maskedKey: maskApiKey(key.keyPrefix + 'xxxxxxxx'),
+        status: key.status,
+        createdAt: key.createdAt,
+        revokedAt: key.revokedAt
+      }
+    ])
+  )
+
   return keys.map(key => ({
     id: key.id,
     name: key.name,
@@ -204,8 +296,65 @@ export async function listApiKeys(workspaceId: string) {
     dailyRequestLimit: key.dailyRequestLimit,
     monthlyBudgetCents: key.monthlyBudgetCents,
     lastUsedAt: key.lastUsedAt,
-    createdAt: key.createdAt
+    expiresAt: key.expiresAt,
+    createdAt: key.createdAt,
+    revokedAt: key.revokedAt,
+    rotatedFromKeyId: key.rotatedFromKeyId,
+    rotatedToKeyId: key.rotatedToKeyId,
+    rotatedAt: key.rotatedAt,
+    rotatedFromKey: key.rotatedFromKeyId
+      ? (keySummaryById.get(key.rotatedFromKeyId) ?? null)
+      : null,
+    rotatedToKey: key.rotatedToKeyId
+      ? (keySummaryById.get(key.rotatedToKeyId) ?? null)
+      : null
   }))
+}
+
+export async function listApiKeyAuditEvents(workspaceId: string, limit = 100) {
+  const user = await requireApiPlatformUser()
+  const { desc, eq, db, apiKeyAuditEvents, workspaces } =
+    await getApiKeyDependencies()
+
+  try {
+    const [workspace] = await db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .limit(1)
+
+    if (!workspace || workspace.ownerUserId !== user.id) {
+      throw new Error('This workspace does not belong to your Brok account.')
+    }
+
+    const events = await db
+      .select()
+      .from(apiKeyAuditEvents)
+      .where(eq(apiKeyAuditEvents.workspaceId, workspaceId))
+      .orderBy(desc(apiKeyAuditEvents.createdAt))
+      .limit(Math.min(Math.max(limit, 1), 200))
+
+    return events.map(event => ({
+      id: event.id,
+      apiKeyId: event.apiKeyId,
+      actorUserId: event.actorUserId,
+      actorType: event.actorType,
+      eventType: event.eventType,
+      keyPrefix: event.keyPrefix,
+      requestId: event.requestId,
+      ipAddress: event.ipAddress,
+      userAgent: event.userAgent,
+      metadata: event.metadata,
+      createdAt: event.createdAt
+    }))
+  } catch (error) {
+    if (canUseLocalApiPlatformFallback()) {
+      console.error('API key audit lookup failed; using empty list:', error)
+      return []
+    }
+
+    throw error
+  }
 }
 
 async function requireOwnedApiKey(keyId: string) {
@@ -241,37 +390,205 @@ export async function revokeApiKey(keyId: string) {
   const key = await requireOwnedApiKey(keyId)
   validateApiKeyStatusTransition(key.status, 'revoke')
   const { eq, db, apiKeys } = await getApiKeyDependencies()
+  const requestContext = await getApiKeyAuditRequestContext()
 
   await db
     .update(apiKeys)
     .set({ status: 'revoked', revokedAt: new Date() })
     .where(eq(apiKeys.id, keyId))
 
-  revalidatePath('/api-keys')
+  await recordApiKeyAuditEvent({
+    workspaceId: key.workspaceId,
+    apiKeyId: key.id,
+    actorUserId: key.userId,
+    actorType: 'user',
+    eventType: 'revoked',
+    keyPrefix: key.keyPrefix,
+    ...requestContext,
+    metadata: {
+      previousStatus: key.status,
+      newStatus: 'revoked'
+    }
+  })
+
+  revalidateApiKeyPages()
+}
+
+export async function rotateApiKey(
+  keyId: string,
+  input: RotateApiKeyInput = {}
+) {
+  const sourceKey = await requireOwnedApiKey(keyId)
+  if (sourceKey.status !== 'active') {
+    throw new Error('Only active API keys can be rotated.')
+  }
+  if (sourceKey.rotatedToKeyId) {
+    throw new Error('This API key already has a rotation replacement.')
+  }
+
+  const validatedInput = buildRotatedApiKeyInput(sourceKey, input)
+  const { eq, db, apiKeys } = await getApiKeyDependencies()
+  const { generateApiKey, getKeyPrefix, hashNewApiKey, maskApiKey } =
+    await getApiKeyCrypto()
+  const requestContext = await getApiKeyAuditRequestContext()
+
+  const rawKey = generateApiKey(validatedInput.environment)
+  const { hash: keyHash, salt: keySalt } = hashNewApiKey(rawKey)
+  const keyPrefix = getKeyPrefix(rawKey)
+  const rotatedAt = new Date()
+
+  const [newKey] = await db
+    .insert(apiKeys)
+    .values({
+      workspaceId: sourceKey.workspaceId,
+      userId: sourceKey.userId,
+      name: validatedInput.name,
+      keyPrefix,
+      keyHash,
+      keySalt,
+      environment: validatedInput.environment,
+      scopes: validatedInput.scopes,
+      allowedModels: validatedInput.allowedModels,
+      rpmLimit: validatedInput.rpmLimit,
+      dailyRequestLimit: validatedInput.dailyRequestLimit,
+      monthlyBudgetCents: validatedInput.monthlyBudgetCents,
+      rotatedFromKeyId: sourceKey.id,
+      rotatedAt
+    })
+    .returning()
+
+  await db
+    .update(apiKeys)
+    .set({
+      rotatedToKeyId: newKey.id,
+      rotatedAt
+    })
+    .where(eq(apiKeys.id, sourceKey.id))
+
+  await recordApiKeyAuditEvents([
+    {
+      workspaceId: sourceKey.workspaceId,
+      apiKeyId: newKey.id,
+      actorUserId: sourceKey.userId,
+      actorType: 'user',
+      eventType: 'created',
+      keyPrefix: newKey.keyPrefix,
+      ...requestContext,
+      metadata: {
+        name: newKey.name,
+        environment: newKey.environment,
+        scopes: newKey.scopes,
+        allowedModels: newKey.allowedModels,
+        rpmLimit: newKey.rpmLimit,
+        dailyRequestLimit: newKey.dailyRequestLimit,
+        monthlyBudgetCents: newKey.monthlyBudgetCents,
+        rotatedFromKeyId: sourceKey.id,
+        rotatedFromKeyPrefix: sourceKey.keyPrefix
+      }
+    },
+    {
+      workspaceId: sourceKey.workspaceId,
+      apiKeyId: newKey.id,
+      actorUserId: sourceKey.userId,
+      actorType: 'user',
+      eventType: 'secret_revealed_once',
+      keyPrefix: newKey.keyPrefix,
+      ...requestContext,
+      metadata: {
+        delivery: 'rotation_response',
+        rawValuePersisted: false,
+        rotatedFromKeyId: sourceKey.id
+      }
+    },
+    {
+      workspaceId: sourceKey.workspaceId,
+      apiKeyId: sourceKey.id,
+      actorUserId: sourceKey.userId,
+      actorType: 'user',
+      eventType: 'rotated',
+      keyPrefix: sourceKey.keyPrefix,
+      ...requestContext,
+      metadata: {
+        replacementKeyId: newKey.id,
+        replacementKeyPrefix: newKey.keyPrefix,
+        sourceStatus: sourceKey.status,
+        sourceRemainsActive: true
+      }
+    }
+  ])
+
+  revalidateApiKeyPages()
+
+  return {
+    id: newKey.id,
+    name: newKey.name,
+    key: rawKey, // Only returned once!
+    maskedKey: maskApiKey(rawKey),
+    keyPrefix: newKey.keyPrefix,
+    environment: newKey.environment,
+    scopes: newKey.scopes,
+    allowedModels: newKey.allowedModels,
+    rpmLimit: newKey.rpmLimit,
+    dailyRequestLimit: newKey.dailyRequestLimit,
+    monthlyBudgetCents: newKey.monthlyBudgetCents,
+    createdAt: newKey.createdAt,
+    rotatedFromKeyId: sourceKey.id,
+    rotatedAt
+  }
 }
 
 export async function pauseApiKey(keyId: string) {
   const key = await requireOwnedApiKey(keyId)
   validateApiKeyStatusTransition(key.status, 'pause')
   const { eq, db, apiKeys } = await getApiKeyDependencies()
+  const requestContext = await getApiKeyAuditRequestContext()
 
   await db
     .update(apiKeys)
     .set({ status: 'paused' })
     .where(eq(apiKeys.id, keyId))
 
-  revalidatePath('/api-keys')
+  await recordApiKeyAuditEvent({
+    workspaceId: key.workspaceId,
+    apiKeyId: key.id,
+    actorUserId: key.userId,
+    actorType: 'user',
+    eventType: 'paused',
+    keyPrefix: key.keyPrefix,
+    ...requestContext,
+    metadata: {
+      previousStatus: key.status,
+      newStatus: 'paused'
+    }
+  })
+
+  revalidateApiKeyPages()
 }
 
 export async function resumeApiKey(keyId: string) {
   const key = await requireOwnedApiKey(keyId)
   validateApiKeyStatusTransition(key.status, 'resume')
   const { eq, db, apiKeys } = await getApiKeyDependencies()
+  const requestContext = await getApiKeyAuditRequestContext()
 
   await db
     .update(apiKeys)
     .set({ status: 'active', revokedAt: null })
     .where(eq(apiKeys.id, keyId))
 
-  revalidatePath('/api-keys')
+  await recordApiKeyAuditEvent({
+    workspaceId: key.workspaceId,
+    apiKeyId: key.id,
+    actorUserId: key.userId,
+    actorType: 'user',
+    eventType: 'resumed',
+    keyPrefix: key.keyPrefix,
+    ...requestContext,
+    metadata: {
+      previousStatus: key.status,
+      newStatus: 'active'
+    }
+  })
+
+  revalidateApiKeyPages()
 }

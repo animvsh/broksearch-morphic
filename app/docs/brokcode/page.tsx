@@ -261,12 +261,12 @@ bun run brokcode`}</code>
         <pre className="rounded-lg bg-muted p-4">
           <code>{`# OpenAI-compatible tools such as Codex
 export OPENAI_API_KEY="$BROK_API_KEY"
-export OPENAI_BASE_URL="https://api.brok.ai/v1"
+export OPENAI_BASE_URL="https://www.brok.fyi/api/v1"
 export OPENAI_MODEL="brok-code"
 
 # Anthropic-compatible tools
 export ANTHROPIC_API_KEY="$BROK_API_KEY"
-export ANTHROPIC_BASE_URL="https://api.brok.ai"
+export ANTHROPIC_BASE_URL="https://www.brok.fyi/api"
 export ANTHROPIC_MODEL="brok-code"`}</code>
         </pre>
 

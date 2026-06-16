@@ -17,6 +17,19 @@ vi.mock('@/lib/brok/playground-session-key', () => ({
   getOrCreatePlaygroundSessionKey: mockGetOrCreatePlaygroundSessionKey
 }))
 
+const BROWSER_SUPPLIED_TEST_KEY = [
+  'brok',
+  'sk',
+  'test',
+  'shouldnotleavebrowser'
+].join('_')
+const PLAYGROUND_SESSION_TEST_KEY = [
+  'brok',
+  'sk',
+  'test',
+  'accountsession'
+].join('_')
+
 describe('/api/playground/run', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -24,7 +37,7 @@ describe('/api/playground/run', () => {
     mockGetOrCreatePlaygroundSessionKey.mockReset()
   })
 
-  it('rejects invalid manual API keys before proxying', async () => {
+  it('rejects browser-supplied API keys before proxying', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     const { POST } = await import('../route')
 
@@ -33,7 +46,7 @@ describe('/api/playground/run', () => {
         method: 'POST',
         body: JSON.stringify({
           mode: 'chat',
-          apiKey: 'not-a-key',
+          apiKey: BROWSER_SUPPLIED_TEST_KEY,
           payload: { model: 'brok-code', messages: [] }
         })
       })
@@ -42,14 +55,14 @@ describe('/api/playground/run', () => {
     expect(response.status).toBe(400)
     expect(fetchSpy).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'invalid_api_key' }
+      error: { code: 'browser_api_key_not_allowed' }
     })
   })
 
   it('uses a server-side account session key when no manual key is provided', async () => {
     mockGetCurrentUser.mockResolvedValueOnce({ id: 'user_playground' })
     mockGetOrCreatePlaygroundSessionKey.mockResolvedValueOnce({
-      rawKey: 'brok_sk_test_account_session',
+      rawKey: PLAYGROUND_SESSION_TEST_KEY,
       keyPrefix: 'brok_sk_test_acc',
       expiresAt: new Date(),
       workspace: { id: 'workspace_1' }
@@ -78,11 +91,18 @@ describe('/api/playground/run', () => {
     )
     const [, init] = fetchSpy.mock.calls[0]!
     expect((init?.headers as Record<string, string>).Authorization).toBe(
-      'Bearer brok_sk_test_account_session'
+      `Bearer ${PLAYGROUND_SESSION_TEST_KEY}`
     )
   })
 
   it('forwards chat requests to the server-side v1 route with the API key header', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce({ id: 'user_playground' })
+    mockGetOrCreatePlaygroundSessionKey.mockResolvedValueOnce({
+      rawKey: PLAYGROUND_SESSION_TEST_KEY,
+      keyPrefix: 'brok_sk_test_acc',
+      expiresAt: new Date(),
+      workspace: { id: 'workspace_1' }
+    })
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response('data: [DONE]\n\n', {
         status: 200,
@@ -99,7 +119,6 @@ describe('/api/playground/run', () => {
         method: 'POST',
         body: JSON.stringify({
           mode: 'chat',
-          apiKey: 'brok_sk_test_proxy',
           payload: {
             model: 'brok-code',
             messages: [{ role: 'user', content: 'hi' }],
@@ -121,7 +140,7 @@ describe('/api/playground/run', () => {
       cache: 'no-store'
     })
     expect((init?.headers as Record<string, string>).Authorization).toBe(
-      'Bearer brok_sk_test_proxy'
+      `Bearer ${PLAYGROUND_SESSION_TEST_KEY}`
     )
     expect(JSON.parse(String(init?.body))).toMatchObject({
       model: 'brok-code',
@@ -130,6 +149,13 @@ describe('/api/playground/run', () => {
   })
 
   it('forwards search requests to the search completions route', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce({ id: 'user_playground' })
+    mockGetOrCreatePlaygroundSessionKey.mockResolvedValueOnce({
+      rawKey: PLAYGROUND_SESSION_TEST_KEY,
+      keyPrefix: 'brok_sk_test_acc',
+      expiresAt: new Date(),
+      workspace: { id: 'workspace_1' }
+    })
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response('{}', { status: 200 }))
@@ -140,7 +166,6 @@ describe('/api/playground/run', () => {
         method: 'POST',
         body: JSON.stringify({
           mode: 'search',
-          apiKey: 'brok_sk_test_proxy',
           payload: {
             model: 'brok-search',
             query: 'latest api docs',

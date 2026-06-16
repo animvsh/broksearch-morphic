@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs'
 
 const args = new Set(process.argv.slice(2))
 const requireExternal = args.has('--require-external')
+const DEFAULT_SMOKE_BASE_URL = 'https://www.brok.fyi'
 
 if (args.has('--help') || args.has('-h')) {
   console.log(`API platform launch blocker checker
@@ -24,11 +25,17 @@ const checks = [
   fileExists('scripts/scan-secrets.ts'),
   fileExists('scripts/secret-scan-core.ts'),
   fileExists('scripts/reconcile-usage-reservations.ts'),
+  fileExists('docs/openapi/brok-v1.openapi.json'),
+  fileExists('scripts/check-openapi-spec.mjs'),
   fileExists('drizzle/0044_usage_events_request_id_idx.sql'),
   fileExists('drizzle/0045_playground_session_keys.sql'),
+  fileExists('drizzle/0046_brok_idempotency_keys.sql'),
   packageScriptExists('scan:secrets'),
   packageScriptExists('scan:secrets:local'),
   packageScriptExists('check:deploy-env'),
+  packageScriptExists('check:openapi'),
+  packageScriptExists('check:api-platform-dx'),
+  packageScriptExists('check:api-production-proof'),
   packageScriptExists('reconcile:usage-reservations'),
   packageScriptExists('smoke:platform'),
   packageScriptExists('stress:platform'),
@@ -43,12 +50,70 @@ const checks = [
   fileContains('docs/api-platform-launch-blockers.md', 'BRO-163'),
   fileContains('docs/api-platform-launch-blockers.md', 'BRO-165'),
   fileContains('docs/api-platform-launch-blockers.md', 'BRO-168'),
-  fileContains('docs/api-platform-launch-blockers.md', 'BRO-182')
+  fileContains('docs/api-platform-launch-blockers.md', 'BRO-182'),
+  fileContains('docs/api-platform-launch-blockers.md', 'BRO-192'),
+  fileContains('docs/api-platform-launch-blockers.md', 'BRO-156'),
+  fileContains('docs/openapi/brok-v1.openapi.json', '/api/v1/chat/completions'),
+  fileContains(
+    'docs/openapi/brok-v1.openapi.json',
+    '/api/v1/search/completions'
+  ),
+  fileContains('docs/openapi/brok-v1.openapi.json', 'x-brok-sse-events'),
+  fileNotContains(
+    'components/playground/chat-playground.tsx',
+    'apiKey:',
+    'hosted playground does not send browser-supplied API keys'
+  ),
+  fileContains(
+    'app/api/playground/run/route.ts',
+    'browser_api_key_not_allowed',
+    'hosted playground server rejects browser-supplied API keys'
+  ),
+  fileNotContains(
+    'app/api/playground/run/route.ts',
+    'return apiKey.trim()',
+    'hosted playground server does not proxy browser-supplied API keys'
+  ),
+  fileNotContains(
+    'components/playground/chat-playground.tsx',
+    'brok_sk_',
+    'hosted playground does not render API key placeholders'
+  ),
+  fileNotContains(
+    'components/playground/chat-playground.tsx',
+    'localStorage.setItem',
+    'hosted playground does not persist API keys'
+  ),
+  fileNotContains(
+    'components/playground/chat-playground.tsx',
+    'sessionStorage',
+    'hosted playground does not persist API keys in session storage'
+  ),
+  fileNotContains(
+    'components/brokcode/brokcode-app.tsx',
+    'apiKeyInput',
+    'BrokCode browser UI does not collect API keys'
+  ),
+  fileNotContains(
+    'components/brokcode/brokcode-app.tsx',
+    'localStorage.getItem(BROK_KEY_STORAGE)',
+    'BrokCode browser UI does not read legacy stored API keys'
+  ),
+  fileNotContains(
+    'components/brokcode/brokcode-app.tsx',
+    'localStorage.setItem(BROK_KEY_STORAGE',
+    'BrokCode browser UI does not persist API keys'
+  ),
+  fileNotContains(
+    'components/brokcode/brokcode-app.tsx',
+    'SavedBrokCodeKey',
+    'BrokCode browser UI does not hold saved API-key metadata state'
+  )
 ]
 
 if (requireExternal) {
   checks.push(envNamePresent('SMOKE_SEED_TOKEN'))
-  checks.push(envNamePresent('SMOKE_BASE_URL'))
+  checks.push(envNamePresentOrDefault('SMOKE_BASE_URL', DEFAULT_SMOKE_BASE_URL))
 }
 
 const failed = checks.filter(check => !check.ok)
@@ -90,6 +155,20 @@ function fileContains(path, expected) {
   }
 }
 
+function fileNotContains(path, forbidden, label) {
+  let ok = false
+  try {
+    ok = !readFileSync(path, 'utf8').includes(forbidden)
+  } catch {
+    ok = false
+  }
+
+  return {
+    name: `${label}: ${path}`,
+    ok
+  }
+}
+
 function packageScriptExists(scriptName) {
   let ok = false
   try {
@@ -109,5 +188,12 @@ function envNamePresent(name) {
   return {
     name: `external env configured: ${name}`,
     ok: Boolean(process.env[name])
+  }
+}
+
+function envNamePresentOrDefault(name, defaultValue) {
+  return {
+    name: `external env configured: ${name} (default ${defaultValue})`,
+    ok: Boolean(process.env[name] || defaultValue)
   }
 }

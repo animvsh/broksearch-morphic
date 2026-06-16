@@ -2,6 +2,10 @@ import { and, asc, eq, lt } from 'drizzle-orm'
 
 import { generateApiKey, getKeyPrefix, hashNewApiKey } from '@/lib/api-key'
 import {
+  recordApiKeyAuditEvent,
+  recordApiKeyAuditEvents
+} from '@/lib/brok/api-key-audit'
+import {
   decryptBrokCodeSecret,
   encryptBrokCodeSecret
 } from '@/lib/brokcode/key-vault'
@@ -32,16 +36,45 @@ async function ensurePlaygroundWorkspace(userId: string) {
   return created
 }
 
-async function revokePreviousSessionKey(apiKeyId: string | null | undefined) {
+async function revokePreviousSessionKey(
+  apiKeyId: string | null | undefined,
+  reason: 'expired' | 'rotated'
+) {
   if (!apiKeyId) return
 
-  await db
-    .update(apiKeys)
-    .set({ status: 'revoked', revokedAt: new Date() })
-    .where(eq(apiKeys.id, apiKeyId))
-    .catch(error => {
-      console.error('Failed to revoke expired playground session key:', error)
+  try {
+    const [key] = await db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.id, apiKeyId))
+      .limit(1)
+
+    if (!key || key.status === 'revoked') {
+      return
+    }
+
+    await db
+      .update(apiKeys)
+      .set({ status: 'revoked', revokedAt: new Date() })
+      .where(eq(apiKeys.id, apiKeyId))
+
+    await recordApiKeyAuditEvent({
+      workspaceId: key.workspaceId,
+      apiKeyId: key.id,
+      actorUserId: key.userId,
+      actorType: 'system',
+      eventType: 'revoked',
+      keyPrefix: key.keyPrefix,
+      metadata: {
+        previousStatus: key.status,
+        newStatus: 'revoked',
+        source: 'playground_session_key',
+        reason
+      }
     })
+  } catch (error) {
+    console.error('Failed to revoke expired playground session key:', error)
+  }
 }
 
 export async function getOrCreatePlaygroundSessionKey(userId: string) {
@@ -75,7 +108,7 @@ export async function getOrCreatePlaygroundSessionKey(userId: string) {
     }
   }
 
-  await revokePreviousSessionKey(existing?.apiKeyId)
+  await revokePreviousSessionKey(existing?.apiKeyId, 'rotated')
 
   const rawKey = generateApiKey('test')
   const { hash: keyHash, salt: keySalt } = hashNewApiKey(rawKey)
@@ -95,9 +128,39 @@ export async function getOrCreatePlaygroundSessionKey(userId: string) {
       allowedModels: [],
       rpmLimit: 60,
       dailyRequestLimit: 1000,
-      monthlyBudgetCents: 1000
+      monthlyBudgetCents: 1000,
+      expiresAt
     })
     .returning()
+
+  await recordApiKeyAuditEvents([
+    {
+      workspaceId: workspace.id,
+      apiKeyId: apiKey.id,
+      actorUserId: userId,
+      actorType: 'system',
+      eventType: 'created',
+      keyPrefix: apiKey.keyPrefix,
+      metadata: {
+        source: 'playground_session_key',
+        environment: apiKey.environment,
+        scopes: apiKey.scopes,
+        expiresAt
+      }
+    },
+    {
+      workspaceId: workspace.id,
+      apiKeyId: apiKey.id,
+      actorUserId: userId,
+      actorType: 'system',
+      eventType: 'expiry_updated',
+      keyPrefix: apiKey.keyPrefix,
+      metadata: {
+        source: 'playground_session_key',
+        expiresAt
+      }
+    }
+  ])
 
   const encryptedKey = encryptBrokCodeSecret(rawKey)
   await db
@@ -144,7 +207,7 @@ export async function expirePlaygroundSessionKeys() {
     .where(lt(playgroundSessionKeys.expiresAt, now))
 
   for (const row of expired) {
-    await revokePreviousSessionKey(row.apiKeyId)
+    await revokePreviousSessionKey(row.apiKeyId, 'expired')
   }
 
   return expired.length

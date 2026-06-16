@@ -46,6 +46,7 @@ All errors follow a consistent format:
 | missing_authorization | Authorization is missing | No Bearer token or x-api-key header was sent |
 | invalid_authorization_format | Authorization format is invalid | The Authorization header is not a Bearer token |
 | inactive_key | API key is inactive | Key is paused or revoked |
+| expired_key | API key has expired | Key has passed its configured expiration time |
 | auth_storage_unavailable | API key storage unavailable | The key database could not be reached |
 
 **How to handle:**
@@ -112,7 +113,7 @@ All errors follow a consistent format:
 \`\`\`javascript
 async function makeBrokRequest(payload) {
   try {
-    const response = await fetch('https://api.brok.ai/v1/chat/completions', {
+    const response = await fetch('https://www.brok.fyi/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': \`Bearer \${process.env.BROK_API_KEY}\`,
@@ -280,6 +281,11 @@ export default function ErrorsPage() {
                   'inactive_key',
                   'API key is inactive',
                   'Key is paused or revoked'
+                ],
+                [
+                  'expired_key',
+                  'API key has expired',
+                  'Key has passed its configured expiration time'
                 ],
                 [
                   'auth_storage_unavailable',
@@ -490,7 +496,7 @@ export default function ErrorsPage() {
         <pre className="bg-muted p-4 rounded-lg">
           <code>{`async function makeBrokRequest(payload) {
   try {
-    const response = await fetch('https://api.brok.ai/v1/chat/completions', {
+    const response = await fetch('https://www.brok.fyi/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': \`Bearer \${process.env.BROK_API_KEY}\`,

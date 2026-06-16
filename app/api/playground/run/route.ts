@@ -17,19 +17,7 @@ function isPlaygroundMode(value: unknown): value is PlaygroundMode {
   return value === 'chat' || value === 'search'
 }
 
-function isValidBrokKey(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().startsWith('brok_sk_')
-}
-
-async function resolvePlaygroundApiKey(apiKey: unknown) {
-  if (isValidBrokKey(apiKey)) {
-    return apiKey.trim()
-  }
-
-  if (apiKey !== undefined && apiKey !== null && apiKey !== '') {
-    return null
-  }
-
+async function resolvePlaygroundApiKey() {
   const user = await getCurrentUser()
   if (!user) {
     return null
@@ -57,11 +45,18 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const resolvedApiKey = await resolvePlaygroundApiKey(apiKey)
+  if (apiKey !== undefined && apiKey !== null && apiKey !== '') {
+    return invalidRequestResponse(
+      'browser_api_key_not_allowed',
+      'The hosted playground uses an account-owned server-side session key. Do not send raw API keys from browser code.'
+    )
+  }
+
+  const resolvedApiKey = await resolvePlaygroundApiKey()
   if (!resolvedApiKey) {
     return invalidRequestResponse(
-      'invalid_api_key',
-      'Sign in or provide a Brok API key that starts with brok_sk_.'
+      'playground_session_required',
+      'Sign in to use the hosted playground session key.'
     )
   }
 

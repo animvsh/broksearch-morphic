@@ -17,6 +17,11 @@ import {
   invalidRequestResponse,
   readJsonBody
 } from '@/lib/brok/http'
+import {
+  beginIdempotentRequest,
+  completeIdempotentRequest,
+  idempotencyHeaders
+} from '@/lib/brok/idempotency'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import { applyBrokMarkup } from '@/lib/brok/pricing'
 import {
@@ -52,13 +57,6 @@ export async function POST(request: NextRequest) {
   }
   if (!apiKeyHasScope(auth.apiKey, 'chat:write')) {
     return forbiddenScopeResponse('chat:write')
-  }
-  const usageLimit = await checkUsageLimits({
-    apiKey: auth.apiKey,
-    workspace: auth.workspace
-  })
-  if (!usageLimit.allowed) {
-    return usageLimitResponse(usageLimit)
   }
 
   // Parse body
@@ -162,6 +160,31 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  const idempotency = await beginIdempotentRequest({
+    request,
+    workspaceId: auth.workspace.id,
+    apiKeyId: auth.apiKey.id,
+    route: '/api/v1/chat/completions',
+    body,
+    stream: shouldStream
+  })
+  if (idempotency.kind === 'replay' || idempotency.kind === 'blocked') {
+    return idempotency.response
+  }
+
+  const usageLimit = await checkUsageLimits({
+    apiKey: auth.apiKey,
+    workspace: auth.workspace
+  })
+  if (!usageLimit.allowed) {
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      status: 'failed'
+    })
+    return usageLimitResponse(usageLimit)
+  }
+
   // Check rate limit
   const rpmLimit = auth.apiKey.rpmLimit ?? 60
   const rateLimit = await checkRateLimit(
@@ -172,6 +195,11 @@ export async function POST(request: NextRequest) {
 
   if (!rateLimit.allowed) {
     if (rateLimit.reason === 'rate_limit_check_failed') {
+      await completeIdempotentRequest({
+        idempotency,
+        requestId,
+        status: 'failed'
+      })
       return NextResponse.json(
         {
           error: {
@@ -194,6 +222,11 @@ export async function POST(request: NextRequest) {
       true
     )
 
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      status: 'failed'
+    })
     return NextResponse.json(
       {
         error: {
@@ -266,6 +299,11 @@ export async function POST(request: NextRequest) {
       })
 
       if (shouldStream) {
+        await completeIdempotentRequest({
+          idempotency,
+          requestId,
+          status: 'completed'
+        })
         return new Response(
           createSearchToolStream(requestId, modelId, searchResult),
           {
@@ -274,6 +312,10 @@ export async function POST(request: NextRequest) {
               'Cache-Control': 'no-cache, no-transform',
               Connection: 'keep-alive',
               'X-Brok-Request-Id': requestId,
+              ...idempotencyHeaders({
+                key:
+                  idempotency.kind === 'reserved' ? idempotency.key : undefined
+              }),
               ...brokRateLimitHeaders({
                 limit: rateLimit.limit,
                 current: rateLimit.current + 1,
@@ -284,40 +326,50 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      return NextResponse.json(
-        {
-          id: requestId,
-          object: 'chat.completion',
-          model: modelId,
-          choices: [
-            {
-              message: {
-                role: 'assistant',
-                content: searchResult.answer
-              },
-              finish_reason: 'stop'
-            }
-          ],
-          citations: searchResult.citations,
-          follow_ups: searchResult.followUps,
-          search_queries: searchResult.searchQueryList,
-          usage: {
-            prompt_tokens: inputTokens,
-            completion_tokens: outputTokens,
-            total_tokens: inputTokens + outputTokens
+      const brokResponse = {
+        id: requestId,
+        object: 'chat.completion',
+        model: modelId,
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: searchResult.answer
+            },
+            finish_reason: 'stop'
           }
-        },
-        {
-          headers: {
-            'X-Brok-Request-Id': requestId,
-            ...brokRateLimitHeaders({
-              limit: rateLimit.limit,
-              current: rateLimit.current + 1,
-              resetAt: rateLimit.resetAt
-            })
-          }
+        ],
+        citations: searchResult.citations,
+        follow_ups: searchResult.followUps,
+        search_queries: searchResult.searchQueryList,
+        usage: {
+          prompt_tokens: inputTokens,
+          completion_tokens: outputTokens,
+          total_tokens: inputTokens + outputTokens
         }
-      )
+      }
+      const responseHeaders = {
+        'X-Brok-Request-Id': requestId,
+        ...idempotencyHeaders({
+          key: idempotency.kind === 'reserved' ? idempotency.key : undefined
+        }),
+        ...brokRateLimitHeaders({
+          limit: rateLimit.limit,
+          current: rateLimit.current + 1,
+          resetAt: rateLimit.resetAt
+        })
+      }
+      await completeIdempotentRequest({
+        idempotency,
+        requestId,
+        responseStatus: 200,
+        responseBody: brokResponse,
+        responseHeaders
+      })
+
+      return NextResponse.json(brokResponse, {
+        headers: responseHeaders
+      })
     }
 
     if (shouldStream) {
@@ -369,6 +421,11 @@ export async function POST(request: NextRequest) {
                 usageSource: usage ? 'provider' : 'estimated'
               }
             })
+            await completeIdempotentRequest({
+              idempotency,
+              requestId,
+              status: 'completed'
+            })
           },
           onAbort: async ({ content, usage }) => {
             const latencyMs = Date.now() - startTime
@@ -402,6 +459,11 @@ export async function POST(request: NextRequest) {
                 aborted: true
               }
             })
+            await completeIdempotentRequest({
+              idempotency,
+              requestId,
+              status: 'failed'
+            })
           }
         }),
         {
@@ -410,6 +472,9 @@ export async function POST(request: NextRequest) {
             'Cache-Control': 'no-cache, no-transform',
             Connection: 'keep-alive',
             'X-Brok-Request-Id': requestId,
+            ...idempotencyHeaders({
+              key: idempotency.kind === 'reserved' ? idempotency.key : undefined
+            }),
             ...brokRateLimitHeaders({
               limit: rateLimit.limit,
               current: rateLimit.current + 1,
@@ -476,19 +541,35 @@ export async function POST(request: NextRequest) {
       })),
       usage: providerResponse.usage
     }
+    const responseHeaders = {
+      'X-Brok-Request-Id': requestId,
+      ...idempotencyHeaders({
+        key: idempotency.kind === 'reserved' ? idempotency.key : undefined
+      }),
+      ...brokRateLimitHeaders({
+        limit: rateLimit.limit,
+        current: rateLimit.current + 1,
+        resetAt: rateLimit.resetAt
+      })
+    }
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      responseStatus: 200,
+      responseBody: brokResponse,
+      responseHeaders
+    })
 
     return NextResponse.json(brokResponse, {
-      headers: {
-        'X-Brok-Request-Id': requestId,
-        ...brokRateLimitHeaders({
-          limit: rateLimit.limit,
-          current: rateLimit.current + 1,
-          resetAt: rateLimit.resetAt
-        })
-      }
+      headers: responseHeaders
     })
   } catch (error) {
     if (error instanceof UsageRecordError) {
+      await completeIdempotentRequest({
+        idempotency,
+        requestId,
+        status: 'failed'
+      })
       return usageStorageUnavailableResponse(requestId)
     }
 
@@ -509,6 +590,11 @@ export async function POST(request: NextRequest) {
       latencyMs,
       status: 'error',
       errorCode: error instanceof Error ? error.message : 'unknown_error'
+    })
+    await completeIdempotentRequest({
+      idempotency,
+      requestId,
+      status: 'failed'
     })
 
     return NextResponse.json(

@@ -63,10 +63,6 @@ const SEARCH_STREAM_STEPS = [
   'Writing cited answer'
 ]
 
-function isValidBrokKey(value: string) {
-  return value.trim().startsWith('brok_sk_')
-}
-
 function formatTokens(value: number) {
   return value.toLocaleString('en-US')
 }
@@ -84,9 +80,6 @@ export function ChatPlayground() {
   const [maxTokens, setMaxTokens] = useState(1000)
   const [stream, setStream] = useState(true)
   const [loading, setLoading] = useState(false)
-  const [apiKeyInput, setApiKeyInput] = useState('')
-  const [savedApiKey, setSavedApiKey] = useState<string | null>(null)
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null)
   const [response, setResponse] = useState<{
     content: string
     usage?: any
@@ -137,39 +130,12 @@ export function ChatPlayground() {
     }
   }, [mode, selectedModelDetails.supportsSearch])
 
-  function saveApiKey() {
-    const trimmed = apiKeyInput.trim()
-    if (!isValidBrokKey(trimmed)) {
-      setApiKeyError('Enter a Brok API key that starts with brok_sk_.')
-      return
-    }
-
-    setSavedApiKey(trimmed)
-    setApiKeyError(null)
-  }
-
-  function clearApiKey() {
-    for (const key of LEGACY_KEY_STORAGE_KEYS) {
-      localStorage.removeItem(key)
-    }
-    setSavedApiKey(null)
-    setApiKeyInput('')
-    setApiKeyError(null)
-  }
-
   async function handleSubmit() {
     if (!promptValue.trim()) return
-
-    const apiKey = savedApiKey || apiKeyInput.trim()
-    if (apiKey && !isValidBrokKey(apiKey)) {
-      setApiKeyError('Use a Brok API key that starts with brok_sk_.')
-      return
-    }
 
     setLoading(true)
     setError(null)
     setResponse(null)
-    setApiKeyError(null)
 
     try {
       const payload =
@@ -198,7 +164,6 @@ export function ChatPlayground() {
         },
         body: JSON.stringify({
           mode,
-          apiKey: apiKey || undefined,
           payload
         })
       })
@@ -365,43 +330,14 @@ export function ChatPlayground() {
                 <p className="truncate text-sm font-semibold">Credentials</p>
               </div>
               <span className="rounded-md border px-2 py-0.5 text-[11px] text-muted-foreground">
-                {savedApiKey ? 'Manual key' : 'Account session'}
+                Account session
               </span>
             </div>
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-              <Input
-                id="playground-key"
-                value={apiKeyInput}
-                onChange={event => {
-                  setApiKeyInput(event.target.value)
-                  if (apiKeyError) setApiKeyError(null)
-                }}
-                placeholder="brok_sk_..."
-                type="password"
-                autoComplete="off"
-                className="h-11"
-              />
-              <Button size="sm" className="h-11" onClick={saveApiKey}>
-                Save
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-11"
-                onClick={clearApiKey}
-              >
-                Clear
-              </Button>
-            </div>
-            {apiKeyError && (
-              <p className="mt-2 text-xs text-destructive">{apiKeyError}</p>
-            )}
-            {!apiKeyError && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Signed-in playground runs use an account-owned server session
-                key. Manual keys are optional and kept in this tab only.
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              Signed-in playground runs are proxied with an account-owned server
+              session key. Paste long-lived API keys only into server-side code
+              or local environment variables.
+            </p>
           </section>
 
           <section className="dashboard-card p-3">

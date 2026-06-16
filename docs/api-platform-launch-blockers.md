@@ -6,12 +6,40 @@ do not paste them into Linear, docs, commits, terminal output, or chat.
 
 ## Current External Blockers
 
-| Linear  | Owner surface                                        | Required proof                                                                                                              |
-| ------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| BRO-163 | Provider dashboards and local operator env           | Rotate every value flagged by `bun run scan:secrets:local`, then rerun it and confirm no live-looking local secrets remain. |
-| BRO-165 | Railway/Vercel/Supabase/provider secret stores       | Confirm required production env names and rotated values exist, then redeploy the production app.                           |
-| BRO-168 | Production database and seeded API traffic           | Apply the usage-ledger migrations and run seeded smoke/stress so usage reservations finalize under live traffic.            |
-| BRO-182 | GitHub Actions repository secrets and production app | Add `SMOKE_SEED_TOKEN`, run `API Platform Production Proof`, and attach the passing run to release notes.                   |
+| Linear  | Owner surface                                        | Required proof                                                                                                                 |
+| ------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| BRO-163 | Provider dashboards and local operator env           | Rotate every value flagged by `bun run scan:secrets:local`, then rerun it and confirm no live-looking local secrets remain.    |
+| BRO-165 | Railway/Vercel/Supabase/provider secret stores       | Confirm required production env names and rotated values exist, then redeploy the production app.                              |
+| BRO-168 | Production database and seeded API traffic           | Apply the usage-ledger migrations and run seeded smoke/stress so usage reservations finalize under live traffic.               |
+| BRO-182 | GitHub Actions repository secrets and production app | Add `SMOKE_SEED_TOKEN`, run `API Platform Production Proof`, and attach the passing run to release notes.                      |
+| BRO-192 | Production migration and live API platform proof     | Confirm `API_KEY_SALT`, apply through `drizzle/0046_brok_idempotency_keys.sql`, then run live API/docs/auth/idempotency proof. |
+
+## Repo-Side Evidence Matrix
+
+| Linear  | Repo-side status | Evidence                                                                                                                                                                                                                                                                                                |
+| ------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRO-156 | Implemented      | `docs/openapi/brok-v1.openapi.json` publishes the public v1 contract, `/api/openapi` serves it, and `bun run check:openapi` verifies expected public paths, bearer auth, request IDs, reusable errors, response schemas, and SSE extensions.                                                            |
+| BRO-163 | Implemented      | `scripts/scan-secrets.ts` and `scripts/secret-scan-core.ts` scan committed/staged/local env surfaces without printing secret values; CI runs `bun run scan:secrets -- --tracked`; this checklist documents the rotation incident response and prohibits copying secret values into issue trackers/docs. |
+| BRO-164 | Implemented      | `components/playground/chat-playground.tsx` no longer accepts browser-supplied API keys, `/api/playground/run` resolves an account-owned server session key, and `bun run check:api-platform-launch` now guards against playground key placeholders, `apiKey:` request bodies, and storage writes.      |
+| BRO-165 | Implemented      | `.env.local.example`, `docs/CONFIGURATION.md`, and `docs/deployment/railway-to-brok-fyi.md` document required env names; `bun run check:deploy-env -- --provider local --env-file .env.local.example` passes; CI includes the Deploy Env Names gate.                                                    |
+| BRO-168 | Implemented      | `lib/brok/usage-tracker.ts` provides fail-closed `recordUsage`, preflight `reserveUsage`, finalization, and stale reservation expiry; API/chat/search/messages/BrokCode routes call it; `scripts/reconcile-usage-reservations.ts` provides the reconciliation command.                                  |
+| BRO-182 | Implemented      | `.github/workflows/api-platform-production-proof.yml` runs public contract stress, requires `SMOKE_SEED_TOKEN`, then runs seeded smoke and stress; `bun run check:api-platform-launch -- --require-external` validates the required seeded-proof inputs without printing values.                        |
+| BRO-188 | Done             | BrokCode streaming execution reserves usage before runtime work, finalizes success/error outcomes, fails closed in cloud when reservation creation fails, and has stale reservation reconciliation coverage in `lib/brok/__tests__/usage-tracker.test.ts`.                                              |
+| BRO-192 | In progress      | `drizzle/0046_brok_idempotency_keys.sql` is present, `bun run check:api-production-proof` exercises live docs/OpenAPI/API auth contracts, and production operators must still prove `API_KEY_SALT`, migration application, seeded API auth, usage, and idempotency replay against the deployed domain.  |
+
+The launch checker also guards the BrokCode browser UI itself:
+`components/brokcode/brokcode-app.tsx` must not collect API keys, read legacy
+stored API keys, persist API keys, or hold saved key metadata in React state.
+Old `brok_code_api_key` browser storage is deleted rather than migrated through
+the client.
+
+## Current PR/CI Caveat
+
+PR #143 is the repo-side blocker implementation branch. GitHub Actions may show
+red checks even when no job ran. Check the failed job annotations: if they say
+`The job was not started because your account is locked due to a billing issue`,
+the failure is account-level and must be cleared in GitHub billing before CI can
+execute. Do not treat that as proof that lint/typecheck/tests ran and failed.
 
 ## Required Operator Sequence
 
@@ -57,18 +85,22 @@ do not paste them into Linear, docs, commits, terminal output, or chat.
    Production must include the usage reservation request-id index and playground
    session key migrations before seeded proof is meaningful.
 
-4. Configure the GitHub Actions repository secret:
+4. Configure the production smoke seed token in the provider that will run
+   seeded proof:
 
    ```text
    SMOKE_SEED_TOKEN
    ```
 
-   This token is required by `.github/workflows/api-platform-production-proof.yml`.
-   The workflow fails explicitly when it is absent.
+   This token is required for seeded proof. GitHub Actions are currently
+   disabled manually while local/live checks are authoritative, so do not rely
+   on Actions until they are explicitly re-enabled.
 
 5. Run contract-only public production proof:
 
    ```bash
+   bun run check:api-production-proof -- --url https://www.brok.fyi --docs-url https://www.brok.fyi
+
    SMOKE_BASE_URL=https://www.brok.fyi \
    STRESS_PLATFORM_CONTRACTS_ONLY=true \
    bun run stress:platform
@@ -86,24 +118,32 @@ do not paste them into Linear, docs, commits, terminal output, or chat.
    bun run stress:platform
    ```
 
-7. Run the GitHub Actions workflow:
+7. If GitHub Actions are explicitly re-enabled later, run the workflow:
 
    ```text
    API Platform Production Proof
    ```
 
-   Attach the successful workflow URL and local command output summaries to
-   BRO-163, BRO-165, BRO-168, and BRO-182.
+   Until then, attach local/live command output summaries and production report
+   paths to BRO-163, BRO-165, BRO-168, BRO-182, and BRO-192.
 
 ## Done Criteria
 
 - `bun run scan:secrets` passes for committed surfaces.
+- `bun run check:openapi` passes for the public v1 API contract.
 - `bun run check:api-platform-launch` passes for repo-side blocker artifacts.
 - `bun run check:api-platform-launch -- --require-external` passes after
   production secret setup.
 - `bun run scan:secrets:local` is clean after rotation.
 - Production required env names pass provider checks.
-- Production migrations are applied.
-- `API Platform Production Proof` passes with seeded smoke and stress.
+- Production migrations are applied through
+  `drizzle/0046_brok_idempotency_keys.sql`.
+- `API_KEY_SALT` is set in production and no development-default API-key salt
+  warning appears in runtime logs.
+- `bun run check:api-production-proof` passes against the deployed domain.
+- Seeded API auth, usage, and idempotency replay proof passes against the
+  deployed domain.
+- `API Platform Production Proof` passes with seeded smoke and stress if
+  Actions are explicitly re-enabled.
 - Linear has the workflow URL or equivalent proof artifact attached to every
   started urgent blocker.

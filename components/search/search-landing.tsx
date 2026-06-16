@@ -7,7 +7,6 @@ import type { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
 
 import { Hero } from '@/components/search/hero'
-import { recordRecentSearch } from '@/components/search/recent-searches'
 
 interface SearchLandingProps {
   defaultMode?: SearchMode
@@ -28,7 +27,6 @@ export function SearchLanding({
   const handleSubmit = (query: string, mode: string, _files: File[]) => {
     if (submittingRef.current) return
     submittingRef.current = true
-    recordRecentSearch(query, mode)
     const params = new URLSearchParams({
       q: query,
       mode

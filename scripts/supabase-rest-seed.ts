@@ -17,6 +17,7 @@ type ApiKeyInsert = {
   rpm_limit: number
   daily_request_limit: number
   monthly_budget_cents: number
+  expires_at?: string | null
 }
 
 type ApiKeyRow = ApiKeyInsert & {
@@ -91,6 +92,18 @@ export async function ensureWorkspaceForUserViaSupabaseRest(userId: string) {
     name: created.name,
     ownerUserId: created.owner_user_id
   }
+}
+
+export async function updateWorkspaceMonthlyBudgetViaSupabaseRest(
+  workspaceId: string,
+  monthlyBudgetCents: number
+) {
+  await supabaseRest(`workspaces?id=eq.${workspaceId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      monthly_budget_cents: monthlyBudgetCents
+    })
+  })
 }
 
 export async function createApiKeyViaSupabaseRest(input: ApiKeyInsert) {
