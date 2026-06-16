@@ -41,6 +41,9 @@ export const CitationLink = memo(function CitationLink({
   const childrenText = children?.toString() || ''
   // Match domain names (alphanumeric and hyphens) or numbers for backward compatibility
   const isCitation = /^[\w-]+$/.test(childrenText)
+  const citationLabel = /^\d+$/.test(childrenText)
+    ? `[${childrenText}]`
+    : children
 
   const linkClasses = cn(
     isCitation
@@ -51,7 +54,7 @@ export const CitationLink = memo(function CitationLink({
 
   if (!citationData) {
     if (isCitation && href.startsWith('#')) {
-      return <span className={linkClasses}>{children}</span>
+      return <span className={linkClasses}>{citationLabel}</span>
     }
 
     return (
@@ -61,7 +64,7 @@ export const CitationLink = memo(function CitationLink({
         rel="noopener noreferrer"
         className={linkClasses}
       >
-        {children}
+        {isCitation ? citationLabel : children}
       </a>
     )
   }
@@ -85,8 +88,10 @@ export const CitationLink = memo(function CitationLink({
             }}
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
+            aria-label={`Source ${childrenText}: ${citationData.title}`}
+            title={`Source ${childrenText}: ${citationData.title}`}
           >
-            {children}
+            {citationLabel}
           </a>
         </PopoverTrigger>
         <PopoverContent

@@ -126,10 +126,14 @@ describe('RenderMessage', () => {
       'Final answer with citations.'
     )
     expect(screen.getByText(/Early cited chunk/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '1' })).toHaveAttribute(
+    const citationLink = screen.getByRole('link', {
+      name: 'Source 1: Brok docs'
+    })
+    expect(citationLink).toHaveAttribute(
       'href',
       'https://docs.brok.ai/search'
     )
+    expect(citationLink).toHaveTextContent('[1]')
     expect(screen.getAllByText('Sources')).toHaveLength(1)
   })
 })
