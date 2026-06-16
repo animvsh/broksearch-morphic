@@ -64,14 +64,16 @@ vi.mock('@/components/brok-search-client', () => ({
   BrokSearchClient: ({
     initialQuery,
     initialMode,
+    persistToServer,
     searchId
   }: {
     initialQuery?: string
     initialMode?: string
+    persistToServer?: boolean
     searchId?: string
   }) => (
     <div data-testid="brok-search-client">
-      {searchId}:{initialQuery}:{initialMode}
+      {searchId}:{initialQuery}:{initialMode}:{String(persistToServer)}
     </div>
   )
 }))
@@ -146,7 +148,7 @@ describe('app/search/page', () => {
     expect(mocks.getModelSelectorData).toHaveBeenCalledOnce()
     const clientText =
       screen.getByTestId('brok-search-client').textContent ?? ''
-    expect(clientText).toContain(':latest ai funding:search')
+    expect(clientText).toContain(':latest ai funding:search:true')
     expect(clientText).toMatch(/^search_[a-f0-9]{48}:/)
   })
 
@@ -168,7 +170,7 @@ describe('app/search/page', () => {
       'search'
     )
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      ':latest ai funding:quick'
+      ':latest ai funding:quick:true'
     )
   })
 
@@ -264,7 +266,7 @@ describe('app/search/page', () => {
     expect(mocks.requireFeatureAccess).not.toHaveBeenCalled()
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      ':latest ai funding:search'
+      ':latest ai funding:search:false'
     )
   })
 
@@ -285,7 +287,7 @@ describe('app/search/page', () => {
     expect(mocks.requireFeatureAccess).not.toHaveBeenCalled()
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      ':latest ai funding:search'
+      ':latest ai funding:search:false'
     )
   })
 
@@ -309,7 +311,7 @@ describe('app/search/page', () => {
     expect(mocks.requireFeatureAccess).not.toHaveBeenCalled()
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      ':what is react in one sentence:quick'
+      ':what is react in one sentence:quick:false'
     )
   })
 

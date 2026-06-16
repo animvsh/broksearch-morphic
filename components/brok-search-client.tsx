@@ -82,6 +82,7 @@ interface BrokSearchClientProps {
   apiKey?: string
   apiBase?: string
   onFollowUpSelect?: (query: string) => void
+  persistToServer?: boolean
 }
 
 const DEFAULT_API_BASE = '/api/search/session'
@@ -379,7 +380,8 @@ export function BrokSearchClient({
   searchId,
   apiKey,
   apiBase,
-  onFollowUpSelect
+  onFollowUpSelect,
+  persistToServer = true
 }: BrokSearchClientProps) {
   const [query, setQuery] = useState(initialQuery ?? '')
   const [followUpInput, setFollowUpInput] = useState('')
@@ -454,12 +456,13 @@ export function BrokSearchClient({
       persistTimerRef.current = null
     }
     persistDurableMessages(searchId, durableMessagesRef.current)
+    if (!persistToServer) return
     const serverSnapshot = JSON.stringify(durableMessagesRef.current)
     if (serverPersistSnapshotRef.current !== serverSnapshot) {
       serverPersistSnapshotRef.current = serverSnapshot
       persistDurableMessagesToServer(searchId, durableMessagesRef.current)
     }
-  }, [searchId])
+  }, [persistToServer, searchId])
 
   useEffect(() => {
     completedTurnsRef.current = completedTurns

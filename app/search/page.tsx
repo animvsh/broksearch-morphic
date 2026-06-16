@@ -100,7 +100,12 @@ export default async function SearchPage(props: {
 
   if (!existingChat?.messages.length && simpleUtilityReply === null) {
     return (
-      <BrokSearchClient initialQuery={q} initialMode={mode} searchId={id} />
+      <BrokSearchClient
+        initialQuery={q}
+        initialMode={mode}
+        searchId={id}
+        persistToServer={!isGuest}
+      />
     )
   }
 

@@ -417,6 +417,40 @@ describe('BrokSearchClient', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('keeps guest search persistence local when server persistence is disabled', async () => {
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        {
+          event: 'answer_delta',
+          data: { delta: 'Guest answer stays local.' }
+        },
+        {
+          event: 'done',
+          data: {}
+        }
+      ])
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="What is Brok?"
+        initialMode="quick"
+        searchId="search_test"
+        persistToServer={false}
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Guest answer stays local.'
+    )
+    expect(getSessionSearchCalls(fetchMock)).toHaveLength(1)
+    expect(getSessionPersistCalls(fetchMock)).toHaveLength(0)
+    expect(
+      window.localStorage.getItem('brok:guest-chat:search_test')
+    ).toContain('Guest answer stays local.')
+  })
+
   it('restores a completed durable search from the rewritten search id route', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)

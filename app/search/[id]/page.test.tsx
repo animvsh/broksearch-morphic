@@ -48,8 +48,16 @@ vi.mock('@/components/chat', () => ({
 }))
 
 vi.mock('@/components/brok-search-client', () => ({
-  BrokSearchClient: ({ searchId }: { searchId?: string }) => (
-    <div data-testid="brok-search-client">{searchId}</div>
+  BrokSearchClient: ({
+    persistToServer,
+    searchId
+  }: {
+    persistToServer?: boolean
+    searchId?: string
+  }) => (
+    <div data-testid="brok-search-client">
+      {searchId}:{String(persistToServer)}
+    </div>
   )
 }))
 
