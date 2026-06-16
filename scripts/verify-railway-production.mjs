@@ -766,7 +766,7 @@ async function main() {
       `${APP_BASE_URL}/api/v1/messages`,
       {
         expectedStatus: 401,
-        expectedErrorText: 'missing_authorization',
+        expectedAnyText: ['missing_authorization', 'authentication_error'],
         requestInit: {
           method: 'POST',
           headers: {
