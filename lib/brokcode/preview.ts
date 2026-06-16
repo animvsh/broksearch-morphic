@@ -121,6 +121,17 @@ function normalizeOrigin(value: unknown) {
   }
 }
 
+function isLocalPreviewOrigin(origin: string | null) {
+  if (!origin) return false
+
+  try {
+    const { hostname } = new URL(origin)
+    return hostname === 'localhost' || hostname === '127.0.0.1'
+  } catch {
+    return false
+  }
+}
+
 export function resolvePublicPreviewOrigin(request: {
   headers: Headers
   url: string
@@ -130,8 +141,6 @@ export function resolvePublicPreviewOrigin(request: {
     normalizeOrigin(process.env.NEXT_PUBLIC_BASE_URL) ??
     normalizeOrigin(process.env.BASE_URL) ??
     normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL)
-  if (configured) return configured
-
   const forwardedHost =
     request.headers.get('x-forwarded-host') ??
     request.headers.get('x-host') ??
@@ -142,6 +151,16 @@ export function resolvePublicPreviewOrigin(request: {
     'https'
   const forwardedOrigin =
     forwardedHost && normalizeOrigin(`${forwardedProto}://${forwardedHost}`)
+  if (
+    forwardedOrigin &&
+    isLocalPreviewOrigin(configured) &&
+    isLocalPreviewOrigin(forwardedOrigin)
+  ) {
+    return forwardedOrigin
+  }
+
+  if (configured) return configured
+
   if (forwardedOrigin) return forwardedOrigin
 
   const directOrigin = normalizeOrigin(new URL(request.url).origin)

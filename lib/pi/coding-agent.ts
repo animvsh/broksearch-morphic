@@ -44,6 +44,20 @@ const DEFAULT_MODELS = {
 }
 
 function getOpenAiCompatiblePiConfig() {
+  const explicitProvider = process.env.PI_AGENT_PROVIDER?.trim()
+  const hasPiCompatibleConfig = Boolean(
+    process.env.PI_AGENT_OPENAI_COMPATIBLE_BASE_URL?.trim() ||
+      process.env.PI_AGENT_OPENAI_COMPATIBLE_API_KEY?.trim()
+  )
+
+  if (
+    explicitProvider &&
+    ['anthropic', 'openai', 'google'].includes(explicitProvider) &&
+    !hasPiCompatibleConfig
+  ) {
+    return null
+  }
+
   const baseUrl =
     process.env.PI_AGENT_OPENAI_COMPATIBLE_BASE_URL ??
     process.env.OPENAI_COMPATIBLE_API_BASE_URL
@@ -56,7 +70,7 @@ function getOpenAiCompatiblePiConfig() {
   }
 
   return {
-    provider: process.env.PI_AGENT_PROVIDER ?? 'brok-pi',
+    provider: explicitProvider ?? 'brok-pi',
     model:
       process.env.PI_AGENT_MODEL ??
       process.env.BROK_PI_MODEL ??
@@ -224,6 +238,42 @@ function formatPiAgentPromptError({
   return error instanceof Error ? error : new Error(message)
 }
 
+function extractAssistantTextFromSessionState(session: {
+  state?: { messages?: unknown[] }
+}) {
+  const messages = Array.isArray(session.state?.messages)
+    ? session.state.messages
+    : []
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index] as
+      | {
+          role?: string
+          content?: Array<{ type?: string; text?: string }>
+          stopReason?: string
+          errorMessage?: string
+        }
+      | undefined
+
+    if (message?.role !== 'assistant') continue
+
+    if (message.stopReason === 'error' || message.stopReason === 'aborted') {
+      throw new Error(
+        message.errorMessage || `Pi coding-agent request ${message.stopReason}.`
+      )
+    }
+
+    return (
+      message.content
+        ?.filter(part => part?.type === 'text' && typeof part.text === 'string')
+        .map(part => part.text)
+        .join('\n') ?? ''
+    )
+  }
+
+  return ''
+}
+
 async function withPiAgentTimeout<T>({
   promise,
   timeoutMs,
@@ -358,7 +408,9 @@ export async function runPiAgentPrompt({
       })
     }
 
-    const finalContent = stripThinkingBlocks(content).trim()
+    const finalContent = stripThinkingBlocks(
+      content || extractAssistantTextFromSessionState(session)
+    ).trim()
     if (!finalContent) {
       throw new Error('Pi coding-agent completed without assistant output.')
     }

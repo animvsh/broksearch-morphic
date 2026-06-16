@@ -18,6 +18,14 @@ const project = {
   slug: 'coffee-shop'
 }
 
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name]
+  } else {
+    process.env[name] = value
+  }
+}
+
 describe('BrokCode managed preview', () => {
   it('serves saved index.html as a managed preview asset', () => {
     const asset = getManagedPreviewAsset({
@@ -220,5 +228,31 @@ describe('BrokCode managed preview', () => {
         })
       })
     ).toBe('https://www.brok.fyi')
+  })
+
+  it('uses the active localhost request origin over configured localhost defaults', () => {
+    const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL
+    const previousBaseUrl = process.env.NEXT_PUBLIC_BASE_URL
+    const previousBaseUrlPrivate = process.env.BASE_URL
+
+    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000'
+    process.env.NEXT_PUBLIC_BASE_URL = 'http://localhost:3000'
+    process.env.BASE_URL = 'http://localhost:3000'
+
+    try {
+      expect(
+        resolvePublicPreviewOrigin({
+          url: 'http://127.0.0.1:3001/api/brokcode/execute',
+          headers: new Headers({
+            host: '127.0.0.1:3001',
+            'x-forwarded-proto': 'http'
+          })
+        })
+      ).toBe('http://127.0.0.1:3001')
+    } finally {
+      restoreEnv('NEXT_PUBLIC_APP_URL', previousAppUrl)
+      restoreEnv('NEXT_PUBLIC_BASE_URL', previousBaseUrl)
+      restoreEnv('BASE_URL', previousBaseUrlPrivate)
+    }
   })
 })
