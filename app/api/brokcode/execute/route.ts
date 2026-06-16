@@ -2499,6 +2499,12 @@ export async function POST(request: NextRequest) {
         allowBrokFallback: body?.allow_brok_fallback === true
       })
     ) {
+      const runtimeFailureDetails = [piFailure, opencodeFailure]
+        .filter(Boolean)
+        .join(' ')
+      const runtimeUnavailableMessage = runtimeFailureDetails
+        ? `${runtimeFailureDetails} BrokCode Cloud runtime is required for browser build/edit runs.`
+        : 'BrokCode Cloud runtime is required for browser build/edit runs.'
       await recordCodeExecutionUsage({
         ...codeUsageContext,
         auth: authResult,
@@ -2515,8 +2521,7 @@ export async function POST(request: NextRequest) {
           error: {
             type: 'runtime_error',
             code: 'runtime_unavailable',
-            message:
-              'BrokCode Cloud runtime is required for browser build/edit runs.'
+            message: runtimeUnavailableMessage
           }
         },
         { status: 503 }
