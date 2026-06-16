@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -980,6 +980,33 @@ function getPiTools() {
   return tools
 }
 
+async function readScratchGeneratedFileFences(cwd: string) {
+  const candidates = [
+    { path: 'index.html', language: 'html' },
+    { path: 'styles.css', language: 'css' },
+    { path: 'app.js', language: 'js' }
+  ]
+  const fences: string[] = []
+
+  for (const candidate of candidates) {
+    const content = await readFile(
+      path.join(cwd, candidate.path),
+      'utf8'
+    ).catch(() => null)
+    if (!content?.trim()) continue
+
+    fences.push(
+      [
+        `\`\`\`${candidate.language} path=${candidate.path}`,
+        content.trim(),
+        '```'
+      ].join('\n')
+    )
+  }
+
+  return fences
+}
+
 async function runBrokCodePiPrompt({
   messages,
   piNoTools,
@@ -994,13 +1021,22 @@ async function runBrokCodePiPrompt({
     : undefined
 
   try {
-    return await runPiAgentPrompt({
+    const result = await runPiAgentPrompt({
       mode: 'brokcode',
       prompt: buildPiPrompt(messages),
       cwd,
       tools: getPiTools(),
       noTools: piNoTools
     })
+    if (!cwd) return result
+
+    const scratchFileFences = await readScratchGeneratedFileFences(cwd)
+    if (scratchFileFences.length === 0) return result
+
+    return {
+      ...result,
+      content: [result.content, ...scratchFileFences].join('\n\n')
+    }
   } finally {
     if (cwd) {
       await rm(cwd, { recursive: true, force: true }).catch(error => {

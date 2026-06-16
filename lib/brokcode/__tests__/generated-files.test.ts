@@ -165,6 +165,23 @@ console.log("ok")
     expect(inspectGeneratedBrokCodeAppQuality(files).issues).toEqual([])
   })
 
+  it('builds a domain-specific CRM fallback app', () => {
+    const files = buildFallbackGeneratedAppFiles({
+      command:
+        'Build me a CRM with login, customers, notes, tasks, file attachments, and admin reporting.',
+      fallbackTitle: 'Sales CRM'
+    })
+    const html = files.find(file => file.path === 'index.html')?.content ?? ''
+    const js = files.find(file => file.path === 'app.js')?.content ?? ''
+
+    expect(html).toContain('Customer workspace')
+    expect(html).toContain('Acme Supply')
+    expect(html).toContain('attachments')
+    expect(html).toContain('Mock login and admin status')
+    expect(js).toContain('applyFilters')
+    expect(inspectGeneratedBrokCodeAppQuality(files).issues).toEqual([])
+  })
+
   it('reports generated app quality issues', () => {
     const weak = inspectGeneratedBrokCodeAppQuality([
       {

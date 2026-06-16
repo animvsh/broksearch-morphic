@@ -127,8 +127,13 @@ describe('runBuildStream', () => {
       expect(executionPrompt).toContain('Do not install packages')
       expect(executionPrompt).toContain('Write the complete file contents')
       expect(executionPrompt).toContain(
-        'Create a polished CRM Login Customers Notes Tasks app prototype.'
+        'Create a compact CRM Login Customers Notes Tasks app prototype.'
       )
+      expect(executionPrompt).toContain(
+        'Build one responsive dashboard-style app screen'
+      )
+      expect(executionPrompt).toContain('mock account/status panel')
+      expect(executionPrompt).toContain('attachment/file list UI')
       expect(executionPrompt).toContain('Tables: users, customers, notes, tasks')
       expect(result.projectId).not.toBe('brok-test-persist')
       expect(result.projectId).toBeTruthy()

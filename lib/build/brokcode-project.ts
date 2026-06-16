@@ -74,7 +74,60 @@ function cloneExecutionHeaders(request: PersistBrokBuildProjectOptions['request'
   return headers
 }
 
-async function readBrokCodeExecutionStream(response: Response) {
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function recoverBrokCodeExecutionFromProject({
+  projectId,
+  workspaceId,
+  userId
+}: {
+  projectId: string
+  workspaceId: string
+  userId: string
+}) {
+  const deadline = Date.now() + 90_000
+
+  while (Date.now() < deadline) {
+    const [project, files] = await Promise.all([
+      getBrokCodeProject({ id: projectId, workspaceId, userId }),
+      listBrokCodeProjectFiles({ projectId, workspaceId })
+    ])
+    if (project?.previewUrl && files.length > 0) {
+      const previewMetadata = project.metadata?.preview as
+        | Record<string, unknown>
+        | undefined
+      const fileChanges = Array.isArray(previewMetadata?.fileChanges)
+        ? previewMetadata.fileChanges
+        : []
+
+      return {
+        preview_url: project.previewUrl,
+        generated_files: files.map(file => file.path),
+        file_changes: fileChanges,
+        runtime: 'pi',
+        note: 'Recovered from completed BrokCode project.'
+      }
+    }
+
+    await sleep(2000)
+  }
+
+  throw new Error('BrokCode execution stream completed without a result.')
+}
+
+async function readBrokCodeExecutionStream({
+  response,
+  projectId,
+  workspaceId,
+  userId
+}: {
+  response: Response
+  projectId: string
+  workspaceId: string
+  userId: string
+}) {
   if (!response.body) {
     throw new Error('BrokCode execution stream did not include a response body.')
   }
@@ -132,7 +185,11 @@ async function readBrokCodeExecutionStream(response: Response) {
   }
 
   if (!result) {
-    throw new Error('BrokCode execution stream completed without a result.')
+    return recoverBrokCodeExecutionFromProject({
+      projectId,
+      workspaceId,
+      userId
+    })
   }
 
   return result
@@ -185,7 +242,6 @@ async function runBrokCodeExecutionForBuild({
       command_type: 'build',
       stream: true,
       prefer_pi: true,
-      pi_no_tools: 'all',
       pi_scratch_cwd: true,
       allow_brok_fallback: false
     })
@@ -200,7 +256,12 @@ async function runBrokCodeExecutionForBuild({
     throw new Error(message)
   }
 
-  return readBrokCodeExecutionStream(response)
+  return readBrokCodeExecutionStream({
+    response,
+    projectId,
+    workspaceId,
+    userId
+  })
 }
 
 function buildBrokCodeExecutionPrompt({
@@ -218,6 +279,36 @@ function buildBrokCodeExecutionPrompt({
     backendPlan?.storageBuckets.map(bucket => bucket.name).filter(Boolean) ?? []
   const functions =
     backendPlan?.functions.map(fn => fn.slug).filter(Boolean) ?? []
+  const complexBackend = tables.length > 3 || buckets.length > 0
+
+  if (complexBackend) {
+    return [
+      `Create a compact ${userPlan.title} app prototype.`,
+      'Return named files for index.html, styles.css, and app.js.',
+      '',
+      `Original user request: ${prompt}`,
+      `Use this positioning: ${userPlan.oneLiner}`,
+      `Visual direction: ${userPlan.designDirection}`,
+      '',
+      'Acceptance requirements for this generated app:',
+      '- Save these files: index.html, styles.css, app.js.',
+      '- Build one responsive dashboard-style app screen, not a full multi-page product.',
+      '- Include realistic sample data sections for the planned backend resources.',
+      '- Include visible controls for search/filtering and at least one working form or status update.',
+      '- If login/auth is requested, represent it as a mock account/status panel.',
+      '- If files or storage buckets are requested, include an attachment/file list UI.',
+      '- Do not install packages, start servers, use shell commands, or create framework scaffolds.',
+      '- Write the complete file contents in your final answer with clear filename headings.',
+      '',
+      'Required visible product features:',
+      ...userPlan.bullets.slice(0, 6).map(bullet => `- ${bullet}`),
+      '',
+      'Backend resources to reflect in UI labels and sample data:',
+      `- Tables: ${tables.length ? tables.join(', ') : 'none'}`,
+      `- Storage buckets: ${buckets.length ? buckets.join(', ') : 'none'}`,
+      `- Functions: ${functions.length ? functions.join(', ') : 'none'}`
+    ].join('\n')
+  }
 
   return [
     `Create a polished ${userPlan.title} app prototype.`,
