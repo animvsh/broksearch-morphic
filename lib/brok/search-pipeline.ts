@@ -35,6 +35,7 @@ export interface SearchRequest {
   recencyDays?: number
   domains?: string[]
   maxSources?: number
+  signal?: AbortSignal
   onSources?: (sources: SearchResult[]) => void | Promise<void>
   onAnswerDelta?: (delta: string) => void | Promise<void>
 }
@@ -300,11 +301,13 @@ async function runBrokWebSearch(
   numResults: number,
   maxTokens: number,
   domainHints: string[],
-  events: Pick<SearchRequest, 'onSources' | 'onAnswerDelta'>
+  events: Pick<SearchRequest, 'onSources' | 'onAnswerDelta' | 'signal'>
 ): Promise<SearchResponse> {
   const batches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
-      searchWithBrokWebSearch(searchQuery, numResults)
+      searchWithBrokWebSearch(searchQuery, numResults, {
+        signal: events.signal
+      })
     )
   )
   const rankedSourceInputs = batches
@@ -324,7 +327,9 @@ async function runBrokWebSearch(
     })
 
   if (domainHints.length && rankedSourceInputs.length < 2) {
-    rankedSourceInputs.push(...(await fetchDomainHomepageSources(domainHints)))
+    rankedSourceInputs.push(
+      ...(await fetchDomainHomepageSources(domainHints, events.signal))
+    )
   }
 
   const citations = rankAndDedupeSources(
@@ -364,11 +369,11 @@ async function runHtmlSearchPipeline(
   numResults: number,
   maxTokens: number,
   domainHints: string[],
-  events: Pick<SearchRequest, 'onSources' | 'onAnswerDelta'>
+  events: Pick<SearchRequest, 'onSources' | 'onAnswerDelta' | 'signal'>
 ): Promise<SearchResponse> {
   const resultBatches = await settleSearchBatches(
     searchQueryList.map(searchQuery =>
-      searchDuckDuckGo(searchQuery, numResults)
+      searchDuckDuckGo(searchQuery, numResults, events.signal)
     )
   ).catch(error => {
     if (domainHints.length) {
@@ -385,7 +390,9 @@ async function runHtmlSearchPipeline(
   > = resultBatches.flat()
 
   if (domainHints.length && rankedSourceInputs.length < 2) {
-    rankedSourceInputs.push(...(await fetchDomainHomepageSources(domainHints)))
+    rankedSourceInputs.push(
+      ...(await fetchDomainHomepageSources(domainHints, events.signal))
+    )
   }
 
   const citations = rankAndDedupeSources(
@@ -443,12 +450,13 @@ async function settleSearchBatches<T>(
 
 async function searchDuckDuckGo(
   query: string,
-  numResults: number
+  numResults: number,
+  signal?: AbortSignal
 ): Promise<SearchResult[]> {
   const response = await fetch(
     `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
     {
-      signal: AbortSignal.timeout(getSearchFetchTimeoutMs()),
+      signal: createTimeoutSignal(getSearchFetchTimeoutMs(), signal),
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; BrokSearch/1.0)'
       }
@@ -525,14 +533,17 @@ function getHost(url: string): string | undefined {
 }
 
 async function fetchDomainHomepageSources(
-  domains: string[]
+  domains: string[],
+  signal?: AbortSignal
 ): Promise<Array<Omit<SearchResult, 'id' | 'qualityScore'>>> {
   const sources: Array<Omit<SearchResult, 'id' | 'qualityScore'>> = []
 
   for (const domain of domains.slice(0, 3)) {
     if (!isPublicDomainHint(domain)) continue
 
-    const source = await fetchDomainHomepageSource(domain).catch(() => null)
+    const source = await fetchDomainHomepageSource(domain, signal).catch(
+      () => null
+    )
     if (source) {
       sources.push(source)
     }
@@ -542,11 +553,12 @@ async function fetchDomainHomepageSources(
 }
 
 async function fetchDomainHomepageSource(
-  domain: string
+  domain: string,
+  signal?: AbortSignal
 ): Promise<Omit<SearchResult, 'id' | 'qualityScore'> | null> {
   const url = `https://${domain}`
   const response = await fetch(url, {
-    signal: AbortSignal.timeout(5000),
+    signal: createTimeoutSignal(5000, signal),
     headers: {
       Accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
       'User-Agent': 'Mozilla/5.0 (compatible; BrokSearch/1.0)'
@@ -611,7 +623,7 @@ async function synthesizeAnswerFromResults(
   citations: SearchResult[],
   maxTokens: number,
   classification: QueryClassification,
-  events: Pick<SearchRequest, 'onAnswerDelta'> = {}
+  events: Pick<SearchRequest, 'onAnswerDelta' | 'signal'> = {}
 ): Promise<string> {
   if (citations.length === 0) {
     return 'No search results were available.'
@@ -633,7 +645,7 @@ async function synthesizeAnswerFromResults(
   try {
     const response = await fetch(`${BROK_PROVIDER_BASE_URL}/chat/completions`, {
       method: 'POST',
-      signal: AbortSignal.timeout(getAnswerSynthesisTimeoutMs()),
+      signal: createTimeoutSignal(getAnswerSynthesisTimeoutMs(), events.signal),
       headers: {
         Authorization: `Bearer ${BROK_PROVIDER_API_KEY}`,
         'Content-Type': 'application/json'
@@ -811,6 +823,11 @@ function createThinkingBlockDeltaFilter() {
       return output
     }
   }
+}
+
+function createTimeoutSignal(timeoutMs: number, parent?: AbortSignal) {
+  if (!parent) return AbortSignal.timeout(timeoutMs)
+  return AbortSignal.any([parent, AbortSignal.timeout(timeoutMs)])
 }
 
 export function classifyQuery(query: string): QueryClassification {

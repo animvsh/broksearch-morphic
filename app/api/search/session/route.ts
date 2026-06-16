@@ -196,6 +196,7 @@ export async function POST(req: Request) {
             depth,
             recencyDays,
             domains,
+            signal: req.signal,
             onSources: sources => {
               send('status', {
                 id: requestId,

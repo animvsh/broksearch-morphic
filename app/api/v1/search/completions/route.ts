@@ -392,6 +392,7 @@ export async function POST(request: NextRequest) {
               depth,
               recencyDays: recency_days,
               domains: searchDomains,
+              signal: request.signal,
               onSources: sources => {
                 send('search.step', {
                   id: requestId,
