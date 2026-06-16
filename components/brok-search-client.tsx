@@ -18,6 +18,7 @@ import type { SearchResultItem } from '@/lib/types'
 import type { UIMessage } from '@/lib/types/ai'
 import type { SearchMode } from '@/lib/types/search'
 
+import { recordRecentSearch } from './search/recent-searches'
 import { FollowUpChips, type FollowUpItem } from './follow-up-chips'
 import { MarkdownMessage } from './message'
 import { RelatedQuestionsPanel } from './related-questions-panel'
@@ -55,6 +56,17 @@ interface SearchTurn {
   answer: string
   sources: Source[]
   followUps: FollowUpItem[]
+}
+
+type StoredAnswerMetadata = {
+  answer?: {
+    sources?: SearchResultItem[]
+    followUps?: Array<{
+      id?: string
+      label?: string
+      query: string
+    }>
+  }
 }
 
 interface BrokSearchClientProps {
@@ -174,6 +186,100 @@ function toDurableMessagePair({
   ] as UIMessage[]
 }
 
+function getTextPart(message: UIMessage | undefined) {
+  if (!message?.parts) return ''
+
+  return message.parts
+    .filter(
+      (part): part is { type: 'text'; text: string } =>
+        part?.type === 'text' &&
+        typeof (part as { text?: unknown }).text === 'string'
+    )
+    .map(part => part.text)
+    .join('')
+}
+
+function toSourceFromSearchResult(
+  source: SearchResultItem,
+  index: number
+): Source {
+  return {
+    id: source.url || `stored-source-${index + 1}`,
+    title: source.title,
+    url: source.url,
+    publisher: source.publisher,
+    snippet: source.snippet ?? source.content ?? '',
+    retrievedAt:
+      typeof source.retrievedAt === 'string'
+        ? source.retrievedAt
+        : new Date().toISOString()
+  }
+}
+
+function readStoredSearchMessages(searchId: string | undefined): UIMessage[] {
+  if (!searchId || typeof window === 'undefined') return []
+
+  try {
+    const raw = window.localStorage.getItem(getGuestChatStorageKey(searchId))
+    if (!raw) return []
+
+    const messages = JSON.parse(raw) as UIMessage[]
+    if (!Array.isArray(messages)) return []
+    return messages
+  } catch {
+    return []
+  }
+}
+
+function toStoredSearchTurns(searchId: string, messages: UIMessage[]) {
+  const turns: SearchTurn[] = []
+  for (let index = 0; index < messages.length; index += 2) {
+    const userMessage = messages[index]
+    const assistantMessage = messages[index + 1]
+    if (
+      userMessage?.role !== 'user' ||
+      assistantMessage?.role !== 'assistant'
+    ) {
+      continue
+    }
+
+    const query = getTextPart(userMessage).trim()
+    const answer = getTextPart(assistantMessage).trim()
+    if (!query || !answer) continue
+
+    const answerMetadata = (
+      assistantMessage.metadata as StoredAnswerMetadata | undefined
+    )?.answer
+    const sources = Array.isArray(answerMetadata?.sources)
+      ? answerMetadata.sources.map(toSourceFromSearchResult)
+      : []
+    const followUps = Array.isArray(answerMetadata?.followUps)
+      ? answerMetadata.followUps
+          .filter(
+            followUp =>
+              followUp &&
+              typeof followUp.query === 'string' &&
+              followUp.query.trim()
+          )
+          .map((followUp, followUpIndex) => ({
+            label: followUp.label ?? followUp.query,
+            query: followUp.query,
+            id: followUp.id ?? `stored-follow-up-${followUpIndex + 1}`
+          }))
+      : []
+
+    turns.push({
+      id: `${searchId}_turn_${turns.length + 1}`,
+      query,
+      answer,
+      sources,
+      followUps
+    })
+  }
+
+  return turns
+}
+
 function persistDurableMessages(
   searchId: string | undefined,
   messages: UIMessage[]
@@ -223,6 +329,7 @@ export function BrokSearchClient({
     status: 'idle'
   })
   const [error, setError] = useState<string | null>(null)
+  const restoredInitialQueryRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
   const durableMessagesRef = useRef<UIMessage[]>([])
   const activeTurnRef = useRef<SearchTurn | null>(null)
@@ -282,6 +389,7 @@ export function BrokSearchClient({
       const trimmed = q.trim()
       if (!trimmed) return
 
+      recordRecentSearch(trimmed, initialMode)
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
@@ -560,8 +668,43 @@ export function BrokSearchClient({
   )
 
   useEffect(() => {
-    if (initialQuery && initialQuery.trim().length > 0) {
-      void runSearch(initialQuery)
+    if (restoredInitialQueryRef.current) return
+
+    const trimmedInitialQuery = initialQuery?.trim() ?? ''
+    const storedMessages = readStoredSearchMessages(searchId)
+    const storedTurns = searchId
+      ? toStoredSearchTurns(searchId, storedMessages)
+      : []
+    const latestTurn = storedTurns.at(-1)
+
+    if (
+      latestTurn &&
+      (!trimmedInitialQuery ||
+        latestTurn.query.trim().toLowerCase() ===
+          trimmedInitialQuery.toLowerCase())
+    ) {
+      restoredInitialQueryRef.current = true
+      durableMessagesRef.current = storedMessages
+      setCompletedTurns(storedTurns.slice(0, -1))
+      setActiveQuestion(latestTurn.query)
+      setQuery(latestTurn.query)
+      setAnswer(latestTurn.answer)
+      setFollowUps(latestTurn.followUps)
+      setError(null)
+      setProgress({
+        searchQueries: [],
+        sources: latestTurn.sources,
+        status: 'done',
+        message: 'Restored answer'
+      })
+      activeTurnRef.current = latestTurn
+      commitDurableSearchUrl(searchId)
+      recordRecentSearch(latestTurn.query, initialMode)
+      return
+    }
+
+    if (trimmedInitialQuery) {
+      void runSearch(trimmedInitialQuery)
     }
     return () => {
       requestIdRef.current += 1
@@ -571,7 +714,7 @@ export function BrokSearchClient({
         persistTimerRef.current = null
       }
     }
-  }, [initialQuery, runSearch])
+  }, [initialMode, initialQuery, runSearch, searchId])
 
   const handleFollowUp = useCallback(
     (next: string) => {

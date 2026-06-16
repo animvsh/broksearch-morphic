@@ -47,6 +47,12 @@ vi.mock('@/components/chat', () => ({
   )
 }))
 
+vi.mock('@/components/brok-search-client', () => ({
+  BrokSearchClient: ({ searchId }: { searchId?: string }) => (
+    <div data-testid="brok-search-client">{searchId}</div>
+  )
+}))
+
 import SearchPage from './page'
 
 const originalEnableGuestChat = process.env.ENABLE_GUEST_CHAT
@@ -92,8 +98,8 @@ describe('app/search/[id]/page', () => {
 
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(mocks.redirect).not.toHaveBeenCalled()
-    expect(screen.getByTestId('chat')).toHaveTextContent(
-      'search_local_guest_answer:0:true'
+    expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
+      'search_local_guest_answer'
     )
   })
 
@@ -113,8 +119,27 @@ describe('app/search/[id]/page', () => {
 
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(mocks.redirect).not.toHaveBeenCalled()
-    expect(screen.getByTestId('chat')).toHaveTextContent(
-      'search_local_anonymous_answer:0:true'
+    expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
+      'search_local_anonymous_answer'
+    )
+  })
+
+  it('lets signed-in query-backed search pages restore from the session client when server chat is missing', async () => {
+    mocks.loadChat.mockResolvedValue(null)
+
+    render(
+      await SearchPage({
+        params: Promise.resolve({ id: 'search_signed_in_answer' })
+      })
+    )
+
+    expect(mocks.loadChat).toHaveBeenCalledWith(
+      'search_signed_in_answer',
+      'user-1'
+    )
+    expect(mocks.redirect).not.toHaveBeenCalled()
+    expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
+      'search_signed_in_answer'
     )
   })
 

@@ -11,6 +11,7 @@ import {
 import { isGuestSearchEnabled } from '@/lib/auth/guest-search'
 import { getModelSelectorData } from '@/lib/model-selector/get-model-selector-data'
 
+import { BrokSearchClient } from '@/components/brok-search-client'
 import { Chat } from '@/components/chat'
 
 export const maxDuration = 60
@@ -52,16 +53,13 @@ export default async function SearchPage(props: {
   const modelSelectorData = await getModelSelectorData()
 
   if (!chat) {
-    if (!effectiveUser && isGuestSearchEnabled() && id.startsWith('search_')) {
-      return (
-        <Chat
-          id={id}
-          savedMessages={[]}
-          isGuest
-          isCloudDeployment={isCloudDeployment}
-          modelSelectorData={modelSelectorData}
-        />
-      )
+    if (id.startsWith('search_')) {
+      if (!effectiveUser && !isGuestSearchEnabled()) {
+        redirect('/')
+        return null
+      }
+
+      return <BrokSearchClient searchId={id} />
     }
 
     redirect('/')

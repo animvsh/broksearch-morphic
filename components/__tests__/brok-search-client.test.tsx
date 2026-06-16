@@ -268,6 +268,112 @@ describe('BrokSearchClient', () => {
     })
   })
 
+  it('restores a completed durable search instead of rerunning on reload', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    window.localStorage.setItem(
+      'brok:guest-chat:search_test',
+      JSON.stringify([
+        {
+          id: 'search_test_user',
+          role: 'user',
+          parts: [{ type: 'text', text: 'What is Brok?' }]
+        },
+        {
+          id: 'search_test_assistant',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Stored answer with a source. [1]' }],
+          metadata: {
+            searchMode: 'search',
+            modelId: 'brok-session-search',
+            answer: {
+              sources: [
+                {
+                  title: 'Stored Brok docs',
+                  url: 'https://docs.example.com/stored',
+                  content: 'Stored source.',
+                  snippet: 'Stored source.',
+                  publisher: 'docs.example.com',
+                  retrievedAt: '2026-06-16T00:00:00.000Z'
+                }
+              ],
+              citationCount: 1,
+              followUps: [
+                {
+                  id: 'stored-follow-up-1',
+                  label: 'What should I ask next?',
+                  query: 'What should I ask next?'
+                }
+              ]
+            }
+          }
+        }
+      ])
+    )
+
+    render(
+      <BrokSearchClient
+        initialQuery="What is Brok?"
+        initialMode="search"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Stored answer with a source. [1](#brok-session-search:1)'
+    )
+    expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
+      'Stored Brok docs'
+    )
+    expect(screen.getByTestId('follow-up-chips')).toHaveTextContent(
+      'What should I ask next?'
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('restores a completed durable search from the rewritten search id route', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    window.history.replaceState({}, '', '/search/search_test')
+    window.localStorage.setItem(
+      'brok:guest-chat:search_test',
+      JSON.stringify([
+        {
+          id: 'search_test_user',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Reloaded question' }]
+        },
+        {
+          id: 'search_test_assistant',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Reloaded answer. [1]' }],
+          metadata: {
+            answer: {
+              sources: [
+                {
+                  title: 'Reloaded source',
+                  url: 'https://docs.example.com/reloaded',
+                  content: 'Reloaded source.'
+                }
+              ],
+              followUps: []
+            }
+          }
+        }
+      ])
+    )
+
+    render(<BrokSearchClient searchId="search_test" />)
+
+    expect(await screen.findByTestId('brok-search-question')).toHaveTextContent(
+      'Reloaded question'
+    )
+    expect(screen.getByTestId('brok-search-answer')).toHaveTextContent(
+      'Reloaded answer. [1](#brok-session-search:1)'
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('shows an answer skeleton immediately while the stream is pending', async () => {
     const deferred = deferredStreamResponse([
       {
