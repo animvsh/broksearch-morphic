@@ -227,6 +227,15 @@ function runLiveExample(example, baseUrl, apiKey) {
       continue
     }
 
+    if (
+      attempt < 3 &&
+      /Brok returned an empty (agent task|research brief|triage) response/i.test(
+        output
+      )
+    ) {
+      continue
+    }
+
     return result
   }
 
