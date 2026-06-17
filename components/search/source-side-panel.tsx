@@ -15,7 +15,10 @@ import {
   SheetTitle
 } from '@/components/ui/sheet'
 
-import type { SourceCardData } from '@/components/search/source-card'
+import {
+  getSourceTrustLabel,
+  type SourceCardData
+} from '@/components/search/source-card'
 
 function getHostname(url: string) {
   try {
@@ -50,6 +53,7 @@ export function SourceSidePanel({
         : getHostname(source.url)
   const excerpt =
     source.snippet || ('content' in source ? source.content : undefined)
+  const trustLabel = getSourceTrustLabel(source)
   const copySourceLink = async () => {
     const didCopy = await safeCopyTextToClipboard(source.url)
     if (!didCopy) return
@@ -89,6 +93,11 @@ export function SourceSidePanel({
               Kept with this answer so you can compare the cited claim with the
               original page.
             </p>
+            {trustLabel && (
+              <div className="mt-2 inline-flex rounded-full bg-foreground/[0.06] px-2 py-1 text-xs font-medium text-foreground/75">
+                {trustLabel}
+              </div>
+            )}
           </section>
 
           <div className="flex flex-wrap gap-2">

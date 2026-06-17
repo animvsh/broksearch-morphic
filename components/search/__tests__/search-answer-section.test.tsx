@@ -1,6 +1,12 @@
 import type { ComponentProps } from 'react'
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { SearchResultItem } from '@/lib/types'
@@ -107,6 +113,25 @@ describe('extractSources', () => {
       id: 'searchA:1',
       title: 'Original',
       domain: 'example.com'
+    })
+  })
+
+  it('preserves source quality scores as relevance scores', () => {
+    const citationMaps = {
+      searchA: {
+        1: source({
+          title: 'Trusted source',
+          url: 'https://example.com/trusted',
+          qualityScore: 91
+        })
+      }
+    }
+
+    const sources = extractSources(citationMaps)
+
+    expect(sources[0]).toMatchObject({
+      id: 'searchA:1',
+      relevanceScore: 91
     })
   })
 })
@@ -388,6 +413,52 @@ describe('SearchAnswerSection actions', () => {
     ).toHaveAttribute('href', 'https://stored.example/report')
   })
 
+  it('shows source trust labels on source cards', () => {
+    renderAnswer({
+      content: 'Answer text.',
+      metadata: {
+        answer: {
+          sources: [
+            source({
+              title: 'Trusted source',
+              url: 'https://stored.example/report',
+              qualityScore: 91
+            })
+          ]
+        }
+      }
+    })
+
+    expect(screen.getByText('High trust')).toBeInTheDocument()
+  })
+
+  it('shows source trust labels in the verifier side panel', () => {
+    renderAnswer({
+      content: 'Answer text.',
+      metadata: {
+        answer: {
+          sources: [
+            source({
+              title: 'Useful source',
+              url: 'https://stored.example/report',
+              qualityScore: 70
+            })
+          ]
+        }
+      }
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /verify source 1: useful source/i })
+    )
+
+    const verification = screen.getByText('Verification').closest('section')
+    expect(verification).not.toBeNull()
+    expect(
+      within(verification as HTMLElement).getByText('Useful')
+    ).toBeInTheDocument()
+  })
+
   it('copies source links from expanded source cards', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
@@ -485,15 +556,18 @@ describe('SearchAnswerSection actions', () => {
 
 function source({
   title,
-  url
+  url,
+  qualityScore
 }: {
   title: string
   url: string
+  qualityScore?: number
 }): SearchResultItem {
   return {
     title,
     url,
-    content: `${title} content`
+    content: `${title} content`,
+    qualityScore
   }
 }
 

@@ -13,6 +13,7 @@ import {
 import {
   buildSearchQueries,
   classifyQuery,
+  generateFollowUps,
   getCachedSearchPipelineResponse,
   resolveQuery,
   runSearchPipeline,
@@ -100,25 +101,6 @@ function buildPipelineQuery(
     .join('\n\n')
 
   return `Answer the current follow-up question using the previous conversation only as context.\n\n${contextText}\n\nCurrent follow-up question: ${query}`
-}
-
-function getDisplayFollowUps(query: string) {
-  const topic = query.trim() || 'this follow-up'
-
-  return [
-    {
-      label: 'Go deeper',
-      query: `Go deeper on ${topic}`
-    },
-    {
-      label: 'Compare options',
-      query: `Compare options for ${topic}`
-    },
-    {
-      label: 'Find risks',
-      query: `What are the risks or caveats around ${topic}?`
-    }
-  ]
 }
 
 function getRequestIp(req: Request) {
@@ -394,7 +376,13 @@ export async function POST(req: Request) {
             }
           }
           const resultFollowUps =
-            context.length > 0 ? getDisplayFollowUps(query) : result.followUps
+            context.length > 0
+              ? generateFollowUps(
+                  query,
+                  result.classification,
+                  result.citations
+                )
+              : result.followUps
 
           send('follow_ups', {
             id: requestId,
