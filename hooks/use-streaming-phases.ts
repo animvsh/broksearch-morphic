@@ -60,6 +60,7 @@ export function useStreamingPhases(isActive: boolean) {
         clearInterval(intervalRef.current)
         intervalRef.current = null
       }
+      setState(INITIAL)
       return
     }
     setState(prev =>

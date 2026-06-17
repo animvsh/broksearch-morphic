@@ -168,6 +168,14 @@ describe('SearchAnswerSection actions', () => {
     ).toBeInTheDocument()
   })
 
+  it('does not show streaming progress for completed historical answers', () => {
+    renderAnswer({ status: 'ready', content: 'Completed answer.' })
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByTestId('answer-toolbar')).toBeInTheDocument()
+    expect(screen.getByTestId('follow-up-suggestions')).toBeInTheDocument()
+  })
+
   it('places source chips before the answer for faster verification', () => {
     renderAnswer({
       content: 'Answer text.',

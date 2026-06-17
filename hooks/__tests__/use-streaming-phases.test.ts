@@ -27,4 +27,20 @@ describe('useStreamingPhases', () => {
     })
     expect(result.current.state.startedAt).toEqual(expect.any(Number))
   })
+
+  it('resets to idle when deactivated', async () => {
+    const { rerender, result } = renderHook(
+      ({ isActive }: { isActive: boolean }) => useStreamingPhases(isActive),
+      { initialProps: { isActive: true } }
+    )
+
+    expect(result.current.state.phase).toBe('reading')
+
+    rerender({ isActive: false })
+
+    await waitFor(() => {
+      expect(result.current.state.phase).toBe('idle')
+    })
+    expect(result.current.state.startedAt).toBeNull()
+  })
 })

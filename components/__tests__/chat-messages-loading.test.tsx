@@ -72,6 +72,52 @@ describe('ChatMessages loading state', () => {
     expect(screen.getByText('Cursor is strongest for...')).toBeInTheDocument()
   })
 
+  it('scopes streaming progress to the latest active assistant answer', () => {
+    render(
+      <ChatMessages
+        sections={[
+          {
+            id: 'section-1',
+            userMessage: {
+              id: 'user-1',
+              role: 'user',
+              parts: [{ type: 'text', text: 'First question' }]
+            },
+            assistantMessages: [
+              {
+                id: 'assistant-1',
+                role: 'assistant',
+                parts: [{ type: 'text', text: 'Historical answer.' }]
+              }
+            ]
+          },
+          {
+            id: 'section-2',
+            userMessage: {
+              id: 'user-2',
+              role: 'user',
+              parts: [{ type: 'text', text: 'Follow up' }]
+            },
+            assistantMessages: [
+              {
+                id: 'assistant-2',
+                role: 'assistant',
+                parts: [{ type: 'text', text: 'Active draft answer.' }]
+              }
+            ]
+          }
+        ]}
+        status="streaming"
+        scrollContainerRef={createRef<HTMLDivElement>()}
+      />
+    )
+
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(screen.getByRole('status')).toHaveTextContent('Writing answer')
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument()
+    expect(screen.queryByTestId('pending-answer')).not.toBeInTheDocument()
+  })
+
   it('shows pending answer for optimistic URL-query submissions before transport starts', () => {
     render(
       <ChatMessages

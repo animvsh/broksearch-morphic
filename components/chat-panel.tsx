@@ -92,6 +92,10 @@ type BackgroundTaskSummary = {
   }
 }
 
+function isActiveBackgroundTask(task: BackgroundTaskSummary) {
+  return task.status === 'queued' || task.status === 'running'
+}
+
 type ComposerLoadingStage = {
   id: string
   label: string
@@ -159,6 +163,7 @@ export function ChatPanel({
   const [enterDisabled, setEnterDisabled] = useState(false) // Disable Enter after composition ends
   const [isInputFocused, setIsInputFocused] = useState(false) // Track input focus
   const [recentTasks, setRecentTasks] = useState<BackgroundTaskSummary[]>([])
+  const [shouldPollTasks, setShouldPollTasks] = useState(false)
   const [insertedTaskIds, setInsertedTaskIds] = useState<Set<string>>(
     () => new Set()
   )
@@ -175,9 +180,7 @@ export function ChatPanel({
     isCloudDeployment || modelSelectorData?.hasAvailableModels !== false
   const canSubmitWithoutModel =
     input.trim().length > 0 && isSimpleUtilityText(input)
-  const activeTasks = recentTasks.filter(
-    task => task.status === 'queued' || task.status === 'running'
-  )
+  const activeTasks = recentTasks.filter(isActiveBackgroundTask)
   const latestCompletedResearch = useMemo(
     () =>
       recentTasks.find(
@@ -207,7 +210,9 @@ export function ChatPanel({
       const payload = (await response.json()) as {
         tasks?: BackgroundTaskSummary[]
       }
-      setRecentTasks(payload.tasks ?? [])
+      const tasks = payload.tasks ?? []
+      setRecentTasks(tasks)
+      setShouldPollTasks(tasks.some(isActiveBackgroundTask))
     } catch {
       // Task visibility is a resilience aid; never interrupt chat UX for it.
     }
@@ -256,7 +261,7 @@ export function ChatPanel({
   }, [])
 
   useEffect(() => {
-    if (isGuest) return
+    if (isGuest || !shouldPollTasks) return
 
     let cancelled = false
 
@@ -267,13 +272,13 @@ export function ChatPanel({
     }
 
     void loadTasks()
-    const interval = window.setInterval(loadTasks, isLoading ? 4000 : 10000)
+    const interval = window.setInterval(loadTasks, 4000)
 
     return () => {
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [isGuest, isLoading, loadRecentTasks])
+  }, [isGuest, loadRecentTasks, shouldPollTasks])
 
   useEffect(() => {
     if (initialSearchMode) {
@@ -330,7 +335,9 @@ export function ChatPanel({
       }
       if (payload.task) {
         setRecentTasks(prev => [payload.task!, ...prev].slice(0, 5))
+        setShouldPollTasks(isActiveBackgroundTask(payload.task))
       } else {
+        setShouldPollTasks(true)
         await loadRecentTasks()
       }
       toast.success('Deep research is running in the background.')
