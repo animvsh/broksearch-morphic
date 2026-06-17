@@ -802,6 +802,34 @@ describe('BrokSearchClient', () => {
     )
   })
 
+  it.each([
+    ['search', 'Search'],
+    ['deep', 'Deep search'],
+    ['code', 'Code']
+  ] as const)(
+    'labels the active progress shell as %s mode',
+    async (mode, expectedLabel) => {
+      const stream = controllableStreamResponse()
+      const fetchMock = vi.fn(async () => stream.response)
+      vi.stubGlobal('fetch', fetchMock)
+
+      const { unmount } = render(
+        <BrokSearchClient
+          initialQuery="What is Brok?"
+          initialMode={mode}
+          searchId="search_test"
+        />
+      )
+
+      const progress = await screen.findByTestId('search-progress')
+      expect(progress).toHaveTextContent(expectedLabel)
+      expect(progress).not.toHaveTextContent('Quick search')
+
+      unmount()
+      stream.close()
+    }
+  )
+
   it('shows resolved query planning chips while search is running', async () => {
     const stream = controllableStreamResponse()
     const fetchMock = vi.fn(async () => stream.response)
