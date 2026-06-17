@@ -1,7 +1,6 @@
 import { Redis } from '@upstash/redis'
 import { sql } from 'drizzle-orm'
 
-import { db } from '@/lib/db'
 import { generateId } from '@/lib/db/schema'
 
 export type SearchStreamMode = 'search' | 'deep' | 'quick'
@@ -94,6 +93,7 @@ function canUseDatabaseRegistry() {
 async function ensureDatabaseRegistry() {
   if (databaseRegistryReady) return
 
+  const { db } = await import('@/lib/db')
   await db.execute(sql`
     create table if not exists search_stream_requests (
       message_id text primary key,
@@ -107,6 +107,7 @@ async function ensureDatabaseRegistry() {
 
 async function pruneExpiredDatabaseRequests() {
   await ensureDatabaseRegistry()
+  const { db } = await import('@/lib/db')
   await db.execute(sql`
     delete from search_stream_requests
     where expires_at <= now()
@@ -118,6 +119,7 @@ async function registerDatabaseSearchStreamRequest(
   request: SearchStreamRequest
 ) {
   await pruneExpiredDatabaseRequests()
+  const { db } = await import('@/lib/db')
   await db.execute(sql`
     insert into search_stream_requests (message_id, payload, expires_at)
     values (
@@ -133,6 +135,7 @@ async function registerDatabaseSearchStreamRequest(
 
 async function getDatabaseSearchStreamRequest(messageId: string) {
   await ensureDatabaseRegistry()
+  const { db } = await import('@/lib/db')
   const rows = await db.execute<{ payload: SearchStreamRequest }>(sql`
     select payload
     from search_stream_requests
@@ -146,6 +149,7 @@ async function getDatabaseSearchStreamRequest(messageId: string) {
 
 async function consumeDatabaseSearchStreamRequest(messageId: string) {
   await ensureDatabaseRegistry()
+  const { db } = await import('@/lib/db')
   const rows = await db.execute<{ payload: SearchStreamRequest }>(sql`
     delete from search_stream_requests
     where message_id = ${messageId}

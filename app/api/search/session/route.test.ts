@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentUserIdForOptionalGuestSearch: vi.fn(),
   isGuestSearchEnabled: vi.fn(),
   isGuestSearchMode: vi.fn(),
+  generateFollowUps: vi.fn(),
   getCachedSearchPipelineResponse: vi.fn(),
   isFirstPartyBrokSearchQuery: vi.fn(),
   runSearchPipeline: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock('@/lib/brok/search-pipeline', () => ({
     needsSearch: true,
     reason: 'test'
   })),
+  generateFollowUps: mocks.generateFollowUps,
   getCachedSearchPipelineResponse: mocks.getCachedSearchPipelineResponse,
   isFirstPartyBrokSearchQuery: mocks.isFirstPartyBrokSearchQuery,
   resolveQuery: vi.fn((query: string) => query),
@@ -130,6 +132,18 @@ describe('POST /api/search/session', () => {
       name: 'Brok Fast',
       providerId: 'openai-compatible'
     })
+    mocks.generateFollowUps.mockImplementation(
+      (
+        query: string,
+        _classification: unknown,
+        citations: Array<{ publisher?: string }>
+      ) => [
+        {
+          label: `Ask about ${citations[0]?.publisher}`,
+          query: `What does ${citations[0]?.publisher} specifically say about ${query.replace(/[?.!]+$/, '')}?`
+        }
+      ]
+    )
     mocks.runSearchPipeline.mockResolvedValue(result())
   })
 
@@ -484,7 +498,9 @@ describe('POST /api/search/session', () => {
         ]
       })
     )
+    expect(mocks.generateFollowUps).not.toHaveBeenCalled()
     expect(stream).toContain('Go deeper on What about pricing?')
+    expect(stream).toContain('Compare options for What about pricing?')
     expect(stream).not.toContain('Answer the current follow-up question')
   })
 

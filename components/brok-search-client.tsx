@@ -88,6 +88,7 @@ type StoredAnswerMetadata = {
 interface BrokSearchClientProps {
   initialQuery?: string
   initialMode?: SearchMode
+  initialMessages?: UIMessage[]
   searchId?: string
   apiKey?: string
   apiBase?: string
@@ -479,6 +480,7 @@ function getProgressMessage(
 export function BrokSearchClient({
   initialQuery,
   initialMode = 'quick',
+  initialMessages,
   searchId,
   apiKey,
   apiBase,
@@ -1030,7 +1032,10 @@ export function BrokSearchClient({
     if (restoredInitialQueryRef.current) return
 
     const trimmedInitialQuery = initialQuery?.trim() ?? ''
-    const storedMessages = readStoredSearchMessages(searchId)
+    const storedMessages =
+      initialMessages && initialMessages.length > 0
+        ? initialMessages
+        : readStoredSearchMessages(searchId)
     const storedTurns = searchId
       ? toStoredSearchTurns(searchId, storedMessages)
       : []
@@ -1101,7 +1106,7 @@ export function BrokSearchClient({
         persistTimerRef.current = null
       }
     }
-  }, [initialMode, initialQuery, runSearch, searchId])
+  }, [initialMessages, initialMode, initialQuery, runSearch, searchId])
 
   const handleFollowUp = useCallback(
     (next: string) => {

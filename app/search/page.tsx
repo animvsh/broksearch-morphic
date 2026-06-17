@@ -111,6 +111,19 @@ export default async function SearchPage(props: {
     )
   }
 
+  if (existingChat?.messages.length) {
+    return (
+      <BrokSearchClient
+        initialQuery={q}
+        initialMode={mode}
+        initialMessages={existingChat.messages}
+        searchId={id}
+        modelSelectorData={modelSelectorData}
+        persistToServer={!isGuest}
+      />
+    )
+  }
+
   const initialMessages: UIMessage[] =
     simpleUtilityReply === null
       ? []

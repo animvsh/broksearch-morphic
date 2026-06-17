@@ -60,17 +60,21 @@ export function ExampleQueries({
   }, [])
 
   return (
-    <div className={cn('grid gap-2.5 sm:grid-cols-2', className)}>
+    <div
+      data-testid="example-query-grid"
+      className={cn('grid gap-1.5 sm:grid-cols-2 sm:gap-2.5', className)}
+    >
       {items.map((q, idx) => {
         const meta = CATEGORY_META[q.category]
         const Icon = meta.icon
         return (
           <button
             key={`${q.id}-${seed}`}
+            data-testid={`example-query-${q.id}`}
             type="button"
             onClick={() => onSelect(q.query, q.mode)}
             className={cn(
-              'group flex items-start gap-3 rounded-xl border border-border/60 bg-card/50 p-3.5 text-left transition-all duration-200',
+              'group flex items-start gap-2 rounded-xl border border-border/60 bg-card/50 p-2.5 text-left transition-all duration-200 sm:gap-3 sm:p-3.5',
               'hover:border-foreground/15 hover:bg-card hover:shadow-sm',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
             )}
@@ -78,14 +82,14 @@ export function ExampleQueries({
               animation: `fade-in-up 350ms ease-out ${idx * 40}ms both`
             }}
           >
-            <div className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground">
-              <Icon className="size-3.5" />
+            <div className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-foreground sm:size-7">
+              <Icon className="size-3 sm:size-3.5" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:text-[11px]">
                 {meta.label}
               </div>
-              <p className="mt-0.5 line-clamp-2 text-sm leading-snug text-foreground/90 group-hover:text-foreground">
+              <p className="mt-0.5 line-clamp-1 text-sm leading-snug text-foreground/90 group-hover:text-foreground sm:line-clamp-2">
                 {q.query}
               </p>
             </div>

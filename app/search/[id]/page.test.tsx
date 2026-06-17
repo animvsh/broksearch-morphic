@@ -54,17 +54,31 @@ vi.mock('@/components/chat', () => ({
 
 vi.mock('@/components/brok-search-client', () => ({
   BrokSearchClient: ({
+    initialMessages,
     modelSelectorData,
     persistToServer,
     searchId
   }: {
+    initialMessages?: Array<{
+      metadata?: {
+        answer?: {
+          sources?: Array<{ title?: string }>
+        }
+      }
+    }>
     modelSelectorData?: { hasAvailableModels?: boolean }
     persistToServer?: boolean
     searchId?: string
   }) => (
-    <div data-testid="brok-search-client">
+    <div
+      data-testid="brok-search-client"
+      data-source-title={
+        initialMessages?.[1]?.metadata?.answer?.sources?.[0]?.title ?? ''
+      }
+    >
       {searchId}:{String(persistToServer)}:
-      {String(modelSelectorData?.hasAvailableModels)}
+      {String(modelSelectorData?.hasAvailableModels)}:
+      {initialMessages?.length ?? 0}
     </div>
   )
 }))
@@ -137,8 +151,10 @@ describe('app/search/[id]/page', () => {
     render(await SearchPage({ params: Promise.resolve({ id: 'search_1' }) }))
 
     expect(mocks.loadChat).toHaveBeenCalledWith('search_1', 'user-1')
-    expect(screen.getByTestId('chat')).toHaveTextContent('search_1:2:false')
-    expect(screen.getByTestId('chat')).toHaveAttribute(
+    expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
+      'search_1:true:true:2'
+    )
+    expect(screen.getByTestId('brok-search-client')).toHaveAttribute(
       'data-source-title',
       'Brok Search docs'
     )

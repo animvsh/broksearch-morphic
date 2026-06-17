@@ -52,10 +52,38 @@ describe('/api/playground/run', () => {
       })
     )
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(403)
     expect(fetchSpy).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'browser_api_key_not_allowed' }
+      error: {
+        type: 'authentication_error',
+        code: 'browser_api_key_not_allowed'
+      }
+    })
+  })
+
+  it('requires an authenticated hosted playground session', async () => {
+    mockGetCurrentUser.mockResolvedValueOnce(null)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const { POST } = await import('../route')
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/playground/run', {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: 'chat',
+          payload: { model: 'brok-code', messages: [] }
+        })
+      })
+    )
+
+    expect(response.status).toBe(401)
+    expect(fetchSpy).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        type: 'authentication_error',
+        code: 'playground_session_required'
+      }
     })
   })
 
