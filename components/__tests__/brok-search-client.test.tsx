@@ -70,6 +70,12 @@ vi.mock('../voice-input-button', () => ({
   VoiceOutputButton: () => <button type="button">Read answer</button>
 }))
 
+vi.mock('../model-selector-client', () => ({
+  ModelSelectorClient: ({ compact }: { compact?: boolean }) => (
+    <div data-testid={compact ? 'compact-model-selector' : 'model-selector'} />
+  )
+}))
+
 vi.mock('../follow-up-chips', () => ({
   FollowUpChips: ({
     followUps
@@ -848,8 +854,19 @@ describe('BrokSearchClient', () => {
     expect(screen.getByTestId('brok-answer-loading-card')).toBeVisible()
     expect(window.location.pathname).toBe('/search')
     expect(
-      window.localStorage.getItem('brok:guest-chat:search_test')
-    ).toBeNull()
+      JSON.parse(
+        window.localStorage.getItem('brok:guest-chat:search_test') ?? '[]'
+      )
+    ).toMatchObject([
+      {
+        role: 'user',
+        parts: [{ type: 'text', text: 'What is Brok?' }]
+      },
+      {
+        role: 'assistant',
+        parts: [{ type: 'text', text: '' }]
+      }
+    ])
 
     deferred.flush()
 
@@ -1018,6 +1035,26 @@ describe('BrokSearchClient', () => {
     stream.close()
   })
 
+  it('keeps the compact model selector out of the mobile input row', async () => {
+    render(
+      <BrokSearchClient
+        initialMode="quick"
+        modelSelectorData={{
+          enabled: true,
+          hasAvailableModels: true,
+          modelsByProvider: {},
+          selectedModelKey: 'openai-compatible:brok-m2-5-highspeed'
+        }}
+        searchId="search_test"
+      />
+    )
+
+    expect(
+      screen.getByTestId('compact-model-selector').parentElement
+    ).toHaveClass('hidden', 'sm:block')
+    expect(screen.getByTestId('model-selector')).toBeInTheDocument()
+  })
+
   it('keeps specific server progress labels through generic query events', async () => {
     const stream = controllableStreamResponse()
     const fetchMock = vi.fn(async () => stream.response)
@@ -1179,6 +1216,20 @@ describe('BrokSearchClient', () => {
       'Could not reach Brok Search'
     )
     expect(screen.queryByTestId('search-progress')).not.toBeInTheDocument()
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem('brok:guest-chat:search_test') ?? '[]'
+    )
+    expect(persisted).toMatchObject([
+      {
+        role: 'user',
+        parts: [{ type: 'text', text: 'React hooks' }]
+      },
+      {
+        role: 'assistant',
+        parts: [{ type: 'text', text: '' }]
+      }
+    ])
   })
 
   it('shows source preview cards while the answer has not started', async () => {
@@ -1531,6 +1582,20 @@ describe('BrokSearchClient', () => {
     expect(screen.getByTestId('brok-search-answer')).toHaveTextContent(
       'Regenerated answer for What is Brok?.'
     )
+    expect(
+      screen.queryByTestId('completed-search-turn')
+    ).not.toBeInTheDocument()
+    expect(screen.getByTestId('brok-search-client')).not.toHaveTextContent(
+      'First answer for What is Brok?.'
+    )
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem('brok:guest-chat:search_test') ?? '[]'
+    )
+    expect(persisted).toHaveLength(2)
+    expect(persisted[1].parts).toEqual([
+      { type: 'text', text: 'Regenerated answer for What is Brok?.' }
+    ])
   })
 
   it('asks follow-ups in the same durable search thread', async () => {
