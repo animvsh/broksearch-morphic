@@ -12,6 +12,7 @@ import {
   Globe2,
   Info,
   Loader2,
+  RefreshCw,
   ShieldAlert,
   Sparkles,
   Square
@@ -921,6 +922,14 @@ export function BrokSearchClient({
     [followUpInput, handleFollowUp, isLoading]
   )
 
+  const retryActiveSearch = useCallback(() => {
+    if (isLoading) return
+    const retryQuery = activeQuestion.trim() || query.trim()
+    if (!retryQuery) return
+    setQuery(retryQuery)
+    void runSearch(retryQuery)
+  }, [activeQuestion, isLoading, query, runSearch])
+
   const handleVoiceTranscript = useCallback((text: string) => {
     setQuery(text)
   }, [])
@@ -1006,12 +1015,23 @@ export function BrokSearchClient({
 
         {error && (
           <div
-            className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700"
+            className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between"
             role="alert"
             data-testid="brok-search-error"
           >
-            <AlertCircle className="size-4 shrink-0" />
-            <span>{error}</span>
+            <div className="flex min-w-0 items-center gap-2">
+              <AlertCircle className="size-4 shrink-0" />
+              <span className="min-w-0">{error}</span>
+            </div>
+            <button
+              type="button"
+              onClick={retryActiveSearch}
+              disabled={isLoading || !(activeQuestion.trim() || query.trim())}
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white/75 px-3 text-xs font-medium text-red-700 transition-colors hover:bg-white hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
+            >
+              <RefreshCw className="size-3.5" />
+              Retry
+            </button>
           </div>
         )}
 

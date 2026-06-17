@@ -551,6 +551,59 @@ describe('BrokSearchClient', () => {
     })
   })
 
+  it('lets users retry a failed search from the error banner', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('Service unavailable', { status: 503 })
+      )
+      .mockResolvedValueOnce(
+        streamResponse([
+          {
+            event: 'answer_delta',
+            data: { delta: 'Retried answer works.' }
+          },
+          {
+            event: 'done',
+            data: {}
+          }
+        ])
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="What is Brok?"
+        initialMode="quick"
+        searchId="search_test"
+        persistToServer={false}
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-error')).toHaveTextContent(
+      'Search request failed (503)'
+    )
+    expect(screen.getByTestId('brok-search-error')).toHaveTextContent('Retry')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Retried answer works.'
+    )
+    await waitFor(() => {
+      expect(getSessionSearchCalls(fetchMock)).toHaveLength(2)
+    })
+    const retryRequest = getSessionSearchCalls(fetchMock)[1] as [
+      unknown,
+      RequestInit
+    ]
+    expect(JSON.parse(String(retryRequest[1]?.body))).toMatchObject({
+      query: 'What is Brok?',
+      mode: 'quick',
+      stream: true
+    })
+  })
+
   it('restores a completed durable search from the rewritten search id route', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
