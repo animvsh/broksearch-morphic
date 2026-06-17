@@ -34,6 +34,8 @@ import { StreamingProgress } from '@/components/search/streaming-progress'
 import { CollapsibleMessage } from '../collapsible-message'
 import { MarkdownMessage } from '../message'
 
+const METADATA_CITATION_TOOL_ID = 'answer'
+
 export interface SearchAnswerSectionProps {
   content: string
   isOpen: boolean
@@ -84,7 +86,7 @@ export function extractSources(
 
 function extractSourcesFromItems(
   sources: SearchResultItem[],
-  toolCallId = 'answer'
+  toolCallId = METADATA_CITATION_TOOL_ID
 ): SourceCardData[] {
   const seen = new Set<string>()
   const out: SourceCardData[] = []
@@ -105,6 +107,50 @@ function extractSourcesFromItems(
   })
 
   return out
+}
+
+function hasCitationMaps(
+  citationMaps?: Record<string, Record<number, SearchResultItem>>
+): citationMaps is Record<string, Record<number, SearchResultItem>> {
+  return Boolean(
+    citationMaps &&
+      Object.values(citationMaps).some(toolMap => Object.keys(toolMap).length)
+  )
+}
+
+function buildMetadataCitationMaps(
+  sources?: SearchResultItem[]
+): Record<string, Record<number, SearchResultItem>> | undefined {
+  if (!sources?.length) return undefined
+
+  const citationMap = sources.reduce<Record<number, SearchResultItem>>(
+    (acc, source, index) => {
+      if (source?.url) acc[index + 1] = source
+      return acc
+    },
+    {}
+  )
+
+  return Object.keys(citationMap).length
+    ? { [METADATA_CITATION_TOOL_ID]: citationMap }
+    : undefined
+}
+
+function linkPlainCitations(content: string, sourceCount: number): string {
+  if (!content || sourceCount === 0) return content
+
+  return content.replace(/\[(\d+)\](?!\()/g, (match, rawNumber) => {
+    const citationNumber = Number.parseInt(rawNumber, 10)
+    if (
+      !Number.isFinite(citationNumber) ||
+      citationNumber < 1 ||
+      citationNumber > sourceCount
+    ) {
+      return match
+    }
+
+    return `[${citationNumber}](#${METADATA_CITATION_TOOL_ID}:${citationNumber})`
+  })
 }
 
 function normalizeSourceKey(url: string): string {
@@ -253,6 +299,20 @@ export function SearchAnswerSection({
       ? 'gathering'
       : 'reading'
   const displayContent = useMemo(() => stripThinkingText(content), [content])
+  const metadataCitationMaps = useMemo(
+    () => buildMetadataCitationMaps(metadataSources),
+    [metadataSources]
+  )
+  const effectiveCitationMaps = hasCitationMaps(citationMaps)
+    ? citationMaps
+    : metadataCitationMaps
+  const answerContent = useMemo(
+    () =>
+      hasCitationMaps(citationMaps)
+        ? displayContent
+        : linkPlainCitations(displayContent, metadataSources?.length ?? 0),
+    [citationMaps, displayContent, metadataSources?.length]
+  )
   const [activeSource, setActiveSource] = useState<
     SearchResultItem | SourceCardData | null
   >(null)
@@ -371,8 +431,8 @@ export function SearchAnswerSection({
         {displayContent ? (
           <div className="flex flex-col gap-1" data-testid="answer-section">
             <MarkdownMessage
-              message={displayContent}
-              citationMaps={citationMaps}
+              message={answerContent}
+              citationMaps={effectiveCitationMaps}
               onCitationOpen={setActiveSource}
             />
           </div>

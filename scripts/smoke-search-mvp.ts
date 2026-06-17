@@ -20,6 +20,13 @@ type SessionSearchBody = {
 
 const sessionRequests: SessionSearchBody[] = []
 
+type FirstPaintEvent = {
+  kind: 'loading' | 'result'
+  selector: string
+  text: string
+  time: number
+}
+
 function source(title = 'Fixture Source') {
   return {
     id: 'fixture-source-1',
@@ -228,6 +235,84 @@ async function installRoutes(page: Page) {
   })
 }
 
+async function installFirstPaintObserver(page: Page) {
+  await page.addInitScript(() => {
+    const loadingSelectors = [
+      '[data-testid="search-route-loading"]',
+      '[data-testid="search-progress"]',
+      '[data-testid="brok-answer-loading-card"]'
+    ] as const
+    const resultSelectors = [
+      '[data-testid="brok-search-source-0"]',
+      '[data-testid="brok-search-answer"]'
+    ] as const
+    const seen = new Set<string>()
+    const events: FirstPaintEvent[] = []
+
+    function isVisible(element: Element | null) {
+      if (!(element instanceof HTMLElement)) return false
+
+      const style = window.getComputedStyle(element)
+      const rect = element.getBoundingClientRect()
+
+      return (
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        Number(style.opacity) > 0 &&
+        rect.width > 0 &&
+        rect.height > 0
+      )
+    }
+
+    function record(kind: FirstPaintEvent['kind'], selector: string) {
+      if (seen.has(selector)) return
+
+      const element = document.querySelector(selector)
+      if (!isVisible(element)) return
+
+      seen.add(selector)
+      events.push({
+        kind,
+        selector,
+        text: element?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+        time: performance.now()
+      })
+    }
+
+    function check() {
+      for (const selector of loadingSelectors) {
+        record('loading', selector)
+      }
+      for (const selector of resultSelectors) {
+        record('result', selector)
+      }
+    }
+
+    function start() {
+      check()
+      const observer = new MutationObserver(check)
+      observer.observe(document.documentElement, {
+        attributes: true,
+        childList: true,
+        subtree: true
+      })
+      window.addEventListener('pagehide', () => observer.disconnect(), {
+        once: true
+      })
+    }
+
+    if (document.documentElement) {
+      start()
+    } else {
+      window.addEventListener('DOMContentLoaded', start, { once: true })
+    }
+
+    ;(
+      window as typeof window & { __brokFirstPaintEvents?: FirstPaintEvent[] }
+    ).__brokFirstPaintEvents = events
+  })
+}
+
 async function assertSearchPageLoaded(page: Page) {
   const authRedirected =
     /\/auth|\/login|\/signin|\/sign-in/.test(page.url()) ||
@@ -249,6 +334,63 @@ async function assertSearchPageLoaded(page: Page) {
   }
 
   await page.getByTestId('brok-search-client').waitFor({ timeout: 30_000 })
+}
+
+async function assertFirstPaintLoadingSignal(page: Page) {
+  await page.waitForFunction(
+    () => {
+      const events =
+        (
+          window as typeof window & {
+            __brokFirstPaintEvents?: FirstPaintEvent[]
+          }
+        ).__brokFirstPaintEvents ?? []
+
+      return events.some(
+        event => event.kind === 'loading' || event.kind === 'result'
+      )
+    },
+    undefined,
+    { timeout: 5_000 }
+  )
+
+  const events = await page.evaluate<FirstPaintEvent[]>(
+    () =>
+      (
+        window as typeof window & {
+          __brokFirstPaintEvents?: FirstPaintEvent[]
+        }
+      ).__brokFirstPaintEvents ?? []
+  )
+  const firstLoading = events.find(event => event.kind === 'loading')
+  const firstResult = events.find(event => event.kind === 'result')
+
+  if (!firstLoading) {
+    fail(
+      [
+        'expected first-paint loading or progress signal before answer completion',
+        firstResult
+          ? `first result: ${firstResult.selector} at ${firstResult.time} (${firstResult.text})`
+          : 'no loading or result paint event was captured'
+      ].join('\n')
+    )
+  }
+  await assert(
+    !firstResult || firstLoading.time <= firstResult.time,
+    [
+      'expected loading/progress signal before source or answer content',
+      `first loading: ${firstLoading.selector} at ${firstLoading.time}`,
+      `first result: ${firstResult?.selector} at ${firstResult?.time}`
+    ].join('\n')
+  )
+  await assert(
+    [
+      '[data-testid="search-route-loading"]',
+      '[data-testid="search-progress"]',
+      '[data-testid="brok-answer-loading-card"]'
+    ].includes(firstLoading.selector),
+    `unexpected first-paint loading selector: ${firstLoading.selector}`
+  )
 }
 
 type FirstVisibleSearchResult = 'source' | 'answer' | 'simultaneous'
@@ -317,10 +459,12 @@ async function main() {
   const page = await browser.newPage()
 
   try {
+    await installFirstPaintObserver(page)
     await installRoutes(page)
 
     const searchUrl = `${baseUrl}/search?q=Fixture+query&mode=quick`
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded' })
+    await assertFirstPaintLoadingSignal(page)
     await assertSearchPageLoaded(page)
     const firstVisibleSearchResult = waitForFirstVisibleSearchResult(page)
 

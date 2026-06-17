@@ -34,7 +34,9 @@ export async function brokRequest(path, { method = 'GET', body } = {}) {
   if (!response.ok) {
     const message = data?.error?.message || response.statusText
     const code = data?.error?.code || 'unknown_error'
-    throw new Error(`${path} failed with ${response.status} ${code}: ${message}`)
+    throw new Error(
+      `${path} failed with ${response.status} ${code}: ${message}`
+    )
   }
 
   return {
