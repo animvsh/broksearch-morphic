@@ -23,6 +23,14 @@ function request(body: Record<string, unknown>) {
   })
 }
 
+function rawRequest(body: string) {
+  return new Request('http://localhost/api/build/plan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body
+  })
+}
+
 describe('Brok Build plan route', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -31,6 +39,26 @@ describe('Brok Build plan route', () => {
       user: { id: 'user-1' }
     })
     mocks.generateBrokBuildPlan.mockResolvedValue({ plan: { title: 'CRM' } })
+  })
+
+  test('returns validation errors before requiring access for invalid JSON', async () => {
+    const response = await POST(rawRequest('{'))
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body).toEqual({ error: 'Invalid JSON body.' })
+    expect(mocks.requireFeatureAccessForApi).not.toHaveBeenCalled()
+    expect(mocks.generateBrokBuildPlan).not.toHaveBeenCalled()
+  })
+
+  test('returns validation errors before requiring access for an empty prompt', async () => {
+    const response = await POST(request({ prompt: '   ' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body).toEqual({ error: 'A non-empty prompt is required.' })
+    expect(mocks.requireFeatureAccessForApi).not.toHaveBeenCalled()
+    expect(mocks.generateBrokBuildPlan).not.toHaveBeenCalled()
   })
 
   test('denies builder planning without BrokCode feature access', async () => {

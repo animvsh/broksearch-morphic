@@ -7,9 +7,6 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const access = await requireFeatureAccessForApi('brokcode')
-  if (!access.ok) return access.response
-
   let body: { prompt?: unknown } = {}
   try {
     body = await request.json()
@@ -33,6 +30,9 @@ export async function POST(request: Request) {
       { status: 400 }
     )
   }
+
+  const access = await requireFeatureAccessForApi('brokcode')
+  if (!access.ok) return access.response
 
   const result = await generateBrokBuildPlan({ prompt })
   return NextResponse.json(result)
