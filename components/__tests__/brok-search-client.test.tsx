@@ -884,6 +884,9 @@ describe('BrokSearchClient', () => {
     })
 
     expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
+      'Brok docs'
+    )
+    expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
       'docs.example.com'
     )
     expect(

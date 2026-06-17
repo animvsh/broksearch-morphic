@@ -1465,6 +1465,10 @@ function SourceList({
         {visibleSources.map((source, index) => {
           const sourceIndex = index + 1
           const sourceDomain = source.publisher ?? safeHostname(source.url)
+          const chipLabel =
+            source.title && source.title !== sourceDomain
+              ? source.title
+              : sourceDomain
 
           if (!expanded) {
             return (
@@ -1476,14 +1480,21 @@ function SourceList({
                 <button
                   type="button"
                   onClick={() => onOpenSource(source)}
-                  className="inline-flex h-10 max-w-[13rem] items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/90 px-3 text-xs font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+                  className="inline-flex h-10 max-w-[18rem] items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/90 px-3 text-xs font-medium text-zinc-800 transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
                   aria-label={`Verify source ${sourceIndex}: ${source.title}`}
+                  title={`${source.title} - ${sourceDomain}`}
                 >
                   <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-zinc-100 font-mono text-[9px] font-semibold text-zinc-600">
                     {sourceIndex}
                   </span>
-                  <span className="truncate">{sourceDomain}</span>
-                  <span className="sr-only">{source.title}</span>
+                  <span className="max-w-[10rem] truncate sm:max-w-[14rem]">
+                    {chipLabel}
+                  </span>
+                  {source.title && source.title !== sourceDomain ? (
+                    <span className="hidden max-w-[7rem] truncate text-[11px] font-normal text-muted-foreground sm:inline">
+                      {sourceDomain}
+                    </span>
+                  ) : null}
                 </button>
               </li>
             )
