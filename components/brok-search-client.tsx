@@ -103,6 +103,7 @@ interface BrokSearchClientProps {
 const DEFAULT_API_BASE = '/api/search/session'
 const GUEST_CHAT_STORAGE_PREFIX = 'brok:guest-chat:'
 const SESSION_CITATION_TOOL_ID = 'brok-session-search'
+const SEARCH_RESPONSE_START_TIMEOUT_MS = 20_000
 const EMPTY_INITIAL_MESSAGES: UIMessage[] = []
 const SEARCH_MODE_PROGRESS_LABELS: Record<SearchMode, string> = {
   quick: 'Quick search',
@@ -423,6 +424,22 @@ function compactSearchContext(turns: SearchTurn[]): SearchContextTurn[] {
     }))
 }
 
+function getSearchErrorMessage(error: unknown) {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return 'Search timed out before the server started responding. Please try again.'
+  }
+
+  if (error instanceof TypeError && /fetch/i.test(error.message)) {
+    return 'Could not reach Brok Search. Check your connection and try again.'
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+
+  return 'Search could not complete. Please try again.'
+}
+
 /**
  * Client for the Brok Search SSE endpoint. Renders the streaming answer,
  * source list, follow-up chips, and the related-questions panel as the
@@ -467,6 +484,7 @@ export function BrokSearchClient({
   const activeTurnRef = useRef<SearchTurn | null>(null)
   const completedTurnsRef = useRef<SearchTurn[]>([])
   const requestIdRef = useRef(0)
+  const activeRequestKeyRef = useRef<string | null>(null)
   const persistTimerRef = useRef<number | null>(null)
   const serverPersistSnapshotRef = useRef<string | null>(null)
 
@@ -491,6 +509,7 @@ export function BrokSearchClient({
     requestIdRef.current += 1
     abortRef.current?.abort()
     abortRef.current = null
+    activeRequestKeyRef.current = null
     setPendingQuery(null)
     setProgress(prev => ({
       ...prev,
@@ -504,6 +523,7 @@ export function BrokSearchClient({
       requestIdRef.current += 1
       abortRef.current?.abort()
       abortRef.current = null
+      activeRequestKeyRef.current = null
     }
 
     window.addEventListener('pagehide', abortForNavigation)
@@ -552,11 +572,14 @@ export function BrokSearchClient({
     async (q: string) => {
       const trimmed = q.trim()
       if (!trimmed) return
+      const requestKey = `${initialMode}:${trimmed.toLowerCase()}`
+      if (activeRequestKeyRef.current === requestKey) return
 
       recordRecentSearch(trimmed, initialMode)
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
+      activeRequestKeyRef.current = requestKey
       const requestId = requestIdRef.current + 1
       requestIdRef.current = requestId
       commitDurableSearchUrl(searchId)
@@ -590,7 +613,7 @@ export function BrokSearchClient({
         searchQueries: [],
         sources: [],
         status: 'planning',
-        message: 'Searching web...'
+        message: 'Connecting to Brok Search...'
       })
 
       const writeDurableTurn = ({
@@ -638,6 +661,7 @@ export function BrokSearchClient({
         followUps: []
       }
 
+      let responseStartTimedOut = false
       try {
         let streamedAnswer = ''
         let streamedSources: Source[] = []
@@ -659,18 +683,38 @@ export function BrokSearchClient({
           ...(contextTurns.length > 0 ? { context: contextTurns } : {})
         }
 
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
-          },
-          body: JSON.stringify(requestBody),
-          signal: controller.signal
-        })
+        const responseStartTimeout = window.setTimeout(() => {
+          responseStartTimedOut = true
+          controller.abort()
+        }, SEARCH_RESPONSE_START_TIMEOUT_MS)
+        let response: Response
+        try {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal
+          })
+        } finally {
+          window.clearTimeout(responseStartTimeout)
+        }
 
         if (!response.ok || !response.body) {
-          const message = `Search request failed (${response.status})`
+          let responseMessage = ''
+          try {
+            const errorBody = (await response.json()) as {
+              error?: string
+              message?: string
+            }
+            responseMessage = errorBody.error ?? errorBody.message ?? ''
+          } catch {
+            // Some edge responses do not include JSON; the status is enough.
+          }
+          const message =
+            responseMessage || `Search request failed (${response.status})`
           setError(message)
           setProgress(prev => ({ ...prev, status: 'error', message }))
           return
@@ -850,17 +894,17 @@ export function BrokSearchClient({
           message: 'Search ended before returning an answer.'
         }))
       } catch (err) {
-        if (!isCurrentRequest()) return
-        if ((err as Error).name === 'AbortError') return
+        if (requestIdRef.current !== requestId) return
+        if (controller.signal.aborted && !responseStartTimedOut) return
         console.error('Search failed:', err)
-        const message =
-          err instanceof Error ? err.message : 'Search could not complete'
+        const message = getSearchErrorMessage(err)
         setError(message)
         setProgress(prev => ({ ...prev, status: 'error', message }))
       } finally {
         if (isCurrentRequest()) {
           flushPendingPersistence()
           setPendingQuery(null)
+          activeRequestKeyRef.current = null
         }
       }
     },
@@ -871,6 +915,7 @@ export function BrokSearchClient({
     const cleanup = () => {
       requestIdRef.current += 1
       abortRef.current?.abort()
+      activeRequestKeyRef.current = null
       if (persistTimerRef.current) {
         window.clearTimeout(persistTimerRef.current)
         persistTimerRef.current = null

@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 
 import { generateBrokBuildPlan } from '@/lib/actions/build'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
+  const access = await requireFeatureAccessForApi('brokcode')
+  if (!access.ok) return access.response
+
   let body: { prompt?: unknown } = {}
   try {
     body = await request.json()
