@@ -290,6 +290,10 @@ describe('BrokSearchClient', () => {
     expect(await screen.findByTestId('brok-search-sources')).toHaveTextContent(
       'Brok docs'
     )
+    const firstSource = screen.getByTestId('brok-search-source-0')
+    expect(firstSource).toHaveTextContent('docs.example.com')
+    expect(screen.getByText('Brok docs')).toBeVisible()
+    expect(screen.getByText('Brok search docs.')).toBeVisible()
     expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
       'Brok answers with sources. [1]'
     )
@@ -520,6 +524,7 @@ describe('BrokSearchClient', () => {
     expect(
       screen.getByTestId('brok-fallback-sources-notice')
     ).toHaveTextContent('not verified by web sources')
+    expect(screen.queryByTestId('mock-citation-open')).not.toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
@@ -1176,7 +1181,7 @@ describe('BrokSearchClient', () => {
     expect(screen.queryByTestId('search-progress')).not.toBeInTheDocument()
   })
 
-  it('keeps the compact source strip only while the answer has not started', async () => {
+  it('shows source preview cards while the answer has not started', async () => {
     const stream = controllableStreamResponse()
     const fetchMock = vi.fn(async () => stream.response)
     vi.stubGlobal('fetch', fetchMock)
@@ -1210,6 +1215,8 @@ describe('BrokSearchClient', () => {
     expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
       'docs.example.com'
     )
+    expect(screen.getByText('Brok docs')).toBeVisible()
+    expect(screen.getByText('Brok search docs.')).toBeVisible()
 
     await act(async () => {
       stream.send('answer_delta', { delta: 'Answer started. [1]' })
@@ -1368,6 +1375,61 @@ describe('BrokSearchClient', () => {
       'Verify before relying'
     )
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent('Go deeper')
+  })
+
+  it('does not turn local fallback context into verified citations', async () => {
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        {
+          event: 'source_found',
+          data: {
+            source: {
+              id: 'fallback_local_1',
+              title: 'Brok local fallback',
+              url: 'https://brok.fyi/search#local-fallback',
+              publisher: 'Brok local fallback',
+              snippet: 'Model knowledge fallback.',
+              retrievedAt: '2026-06-16T00:00:00.000Z'
+            }
+          }
+        },
+        {
+          event: 'answer_delta',
+          data: {
+            delta:
+              'Live web search was unavailable, so this is fallback context. [1]'
+          }
+        },
+        {
+          event: 'done',
+          data: {}
+        }
+      ])
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="Current pricing?"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'fallback context. [1]'
+    )
+    expect(screen.getByTestId('brok-answer-trust-badge')).toHaveTextContent(
+      'Verify before relying'
+    )
+    expect(
+      screen.getByTestId('brok-fallback-sources-notice')
+    ).toHaveTextContent('not verified by web sources')
+    expect(screen.getByTestId('markdown-message')).toHaveAttribute(
+      'data-citation-title',
+      ''
+    )
+    expect(screen.queryByTestId('mock-citation-open')).not.toBeInTheDocument()
   })
 
   it('suggests fallback follow-ups when the stream omits them', async () => {

@@ -134,7 +134,21 @@ async function getSelectedSearchSynthesisModel(mode: SearchMode) {
   })
 
   if (!selected || !isSupportedSearchModel(selected)) {
-    return null
+    const fallback = selected
+      ? await selectModel({
+          searchMode: mode
+        })
+      : null
+
+    if (!fallback || !isSupportedSearchModel(fallback)) {
+      return null
+    }
+
+    return {
+      id: fallback.id,
+      name: fallback.name,
+      providerId: fallback.providerId
+    }
   }
 
   return {
