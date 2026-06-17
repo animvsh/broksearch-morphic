@@ -13,22 +13,22 @@ if (!ticketPath) {
 
 const ticket = JSON.parse(await readFile(ticketPath, 'utf8'))
 const models = await listModels()
-const triage = await chatCompletion({
-  model: 'brok-code',
-  messages: [
-    {
-      role: 'system',
-      content:
-        'You are an API support triage assistant. Return valid JSON only with keys: severity, category, likely_cause, customer_reply, internal_next_steps.'
-    },
-    {
-      role: 'user',
-      content: JSON.stringify(ticket, null, 2)
-    }
-  ],
-  maxTokens: 600,
-  temperature: 0
-})
+const systemPrompt = [
+  'You are a helpful API support engineer.',
+  'Triage the issue and write a concise support note.',
+  'Include severity, likely cause, customer reply, and internal next steps.'
+].join(' ')
+let triage = await runTriage(JSON.stringify(ticket, null, 2))
+
+if (!triage.content.trim()) {
+  triage = await runTriage(
+    `Subject: ${ticket.subject}\nPlan: ${ticket.plan}\nMessage: ${ticket.message}\n\nWrite a concise support triage note.`
+  )
+}
+
+if (!triage.content.trim()) {
+  throw new Error('Brok returned an empty triage response.')
+}
 
 printJson({
   app: 'support-triage',
@@ -37,3 +37,21 @@ printJson({
   ticketSubject: ticket.subject,
   triage: triage.content
 })
+
+function runTriage(content) {
+  return chatCompletion({
+    model: 'brok-code',
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      },
+      {
+        role: 'user',
+        content
+      }
+    ],
+    maxTokens: 500,
+    temperature: 0.2
+  })
+}

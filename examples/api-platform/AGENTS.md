@@ -20,6 +20,7 @@ Never write real API keys to files, logs, commits, issues, or screenshots.
 node examples/api-platform/apps/research-brief.mjs "What changed in AI coding agents this week?"
 node examples/api-platform/apps/support-triage.mjs examples/api-platform/apps/sample-support-ticket.json
 node examples/api-platform/apps/agent-task-runner.mjs "Draft a release checklist for an API integration"
+node examples/api-platform/apps/agent-task-runner.mjs --file examples/api-platform/apps/kery-integration-task.md
 ```
 
 ## Verification Commands

@@ -12,6 +12,7 @@ const files = [
   'examples/api-platform/agent-manifest.json',
   'examples/api-platform/apps/agent-task-runner.mjs',
   'examples/api-platform/apps/lib/brok-client.mjs',
+  'examples/api-platform/apps/kery-integration-task.md',
   'examples/api-platform/apps/research-brief.mjs',
   'examples/api-platform/apps/sample-support-ticket.json',
   'examples/api-platform/apps/support-triage.mjs',
@@ -39,7 +40,8 @@ const liveExamples = [
         'What should a public API launch checklist include?'
       ]
     ],
-    app: 'research-brief'
+    app: 'research-brief',
+    outputKey: 'brief'
   },
   {
     name: 'support triage sample app runs live',
@@ -50,7 +52,8 @@ const liveExamples = [
         'examples/api-platform/apps/sample-support-ticket.json'
       ]
     ],
-    app: 'support-triage'
+    app: 'support-triage',
+    outputKey: 'triage'
   },
   {
     name: 'agent task runner sample app runs live',
@@ -61,7 +64,21 @@ const liveExamples = [
         'Draft a three step smoke test plan for an API integration.'
       ]
     ],
-    app: 'agent-task-runner'
+    app: 'agent-task-runner',
+    outputKey: 'result'
+  },
+  {
+    name: 'Kery integration agent sample runs live',
+    command: [
+      process.execPath,
+      [
+        'examples/api-platform/apps/agent-task-runner.mjs',
+        '--file',
+        'examples/api-platform/apps/kery-integration-task.md'
+      ]
+    ],
+    app: 'agent-task-runner',
+    outputKey: 'result'
   }
 ]
 
@@ -173,7 +190,9 @@ async function runLiveExamples() {
       result.status === 0 &&
         parsed?.app === example.app &&
         typeof parsed?.modelCount === 'number' &&
-        parsed.modelCount > 0,
+        parsed.modelCount > 0 &&
+        typeof parsed?.[example.outputKey] === 'string' &&
+        parsed[example.outputKey].trim().length > 20,
       example.name,
       result.stderr || stdout.slice(0, 500)
     )

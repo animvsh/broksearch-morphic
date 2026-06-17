@@ -1,8 +1,16 @@
 #!/usr/bin/env node
 
+import { readFile } from 'node:fs/promises'
+
 import { chatCompletion, listModels, printJson } from './lib/brok-client.mjs'
 
-const task = process.argv.slice(2).join(' ').trim()
+const args = process.argv.slice(2)
+const fileIndex = args.indexOf('--file')
+const task =
+  fileIndex === -1
+    ? args.join(' ').trim()
+    : await readFile(args[fileIndex + 1], 'utf8')
+
 if (!task) {
   throw new Error(
     'Usage: node examples/api-platform/apps/agent-task-runner.mjs "Draft a release checklist"'
@@ -25,6 +33,10 @@ const result = await chatCompletion({
   ],
   maxTokens: 700
 })
+
+if (!result.content.trim()) {
+  throw new Error('Brok returned an empty agent task response.')
+}
 
 printJson({
   app: 'agent-task-runner',
