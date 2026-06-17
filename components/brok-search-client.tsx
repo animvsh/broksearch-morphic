@@ -1033,7 +1033,6 @@ export function BrokSearchClient({
         {progress.sources.length > 0 && (
           <SourceList
             sources={progress.sources}
-            defaultExpanded={progress.status === 'done'}
             onOpenSource={source => setActiveSource(toSearchResultItem(source))}
           />
         )}

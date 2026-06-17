@@ -289,6 +289,13 @@ describe('BrokSearchClient', () => {
       'Brok docs'
     )
     expect(
+      screen.getByRole('button', { name: /Show details/i })
+    ).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByTestId('brok-search-sources')).not.toHaveTextContent(
+      'Brok search docs.'
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Show details/i }))
+    expect(
       screen.getByRole('button', { name: /Hide details/i })
     ).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
@@ -794,9 +801,9 @@ describe('BrokSearchClient', () => {
       'Brok docs'
     )
     expect(
-      screen.getByRole('button', { name: /Hide details/i })
-    ).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
+      screen.getByRole('button', { name: /Show details/i })
+    ).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByTestId('brok-search-sources')).not.toHaveTextContent(
       'Brok search docs.'
     )
   })
