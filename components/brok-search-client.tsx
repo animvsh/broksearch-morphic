@@ -1111,7 +1111,13 @@ export function BrokSearchClient({
           </div>
         )}
 
-        {isLoading && <SearchProgressIndicator progress={progress} />}
+        {isLoading && (
+          <SearchProgressIndicator
+            progress={progress}
+            query={pendingQuery ?? activeQuestion ?? query}
+            mode={initialMode}
+          />
+        )}
 
         {progress.sources.length > 0 && (
           <SourceList
@@ -1348,7 +1354,15 @@ function CompletedTurn({ turn }: { turn: SearchTurn }) {
   )
 }
 
-function SearchProgressIndicator({ progress }: { progress: SearchProgress }) {
+function SearchProgressIndicator({
+  mode,
+  progress,
+  query
+}: {
+  mode: SearchMode
+  progress: SearchProgress
+  query?: string | null
+}) {
   const steps = [
     { id: 'searching', label: 'Searching web' },
     { id: 'reading', label: 'Reading sources' },
@@ -1360,33 +1374,74 @@ function SearchProgressIndicator({ progress }: { progress: SearchProgress }) {
     progress.status === 'planning'
       ? 0
       : order.indexOf(progress.status as (typeof order)[number])
+  const safeActiveIndex = Math.max(0, activeIndex)
+  const trimmedQuery = query?.trim()
+  const modeLabel = mode === 'deep' ? 'Deep search' : 'Quick search'
 
   return (
     <div
-      className="rounded-2xl border border-zinc-200 bg-white/80 p-4 shadow-[0_18px_44px_-32px_rgba(15,23,42,0.18)]"
+      className="rounded-2xl border border-zinc-200 bg-white/85 p-4 shadow-[0_18px_44px_-32px_rgba(15,23,42,0.18)]"
       data-testid="search-progress"
+      role="status"
+      aria-live="polite"
+      aria-label={
+        trimmedQuery ? `Search progress for ${trimmedQuery}` : 'Search progress'
+      }
     >
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin" />
-          <span>{progress.message ?? 'Working on it...'}</span>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-xs font-medium text-zinc-900">
+              <Loader2 className="size-3.5 shrink-0 animate-spin text-zinc-500" />
+              <span>{progress.message ?? 'Working on it...'}</span>
+            </div>
+            {trimmedQuery && (
+              <p
+                className="mt-1 line-clamp-2 text-sm font-medium leading-6 text-zinc-950"
+                data-testid="search-progress-query"
+              >
+                {trimmedQuery}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-1.5 text-[11px] font-medium text-zinc-600">
+            <span className="rounded-full border border-zinc-200 bg-white px-2 py-1">
+              {modeLabel}
+            </span>
+            <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1">
+              {progress.sources.length}{' '}
+              {progress.sources.length === 1 ? 'source' : 'sources'}
+            </span>
+          </div>
         </div>
-        <ol className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-4">
+        <ol className="grid grid-cols-1 gap-1.5 text-xs sm:grid-cols-3">
           {steps.map((step, index) => {
-            const isActive = index === activeIndex
-            const isDone = activeIndex > index
+            const isActive = index === safeActiveIndex
+            const isDone = safeActiveIndex > index
             return (
               <li
                 key={step.id}
-                className={
+                className={[
+                  'flex min-h-9 items-center gap-2 rounded-xl border px-2.5 transition-colors',
                   isActive
-                    ? 'font-medium text-zinc-900'
+                    ? 'border-zinc-300 bg-zinc-950 text-white'
                     : isDone
-                      ? 'text-zinc-600'
-                      : 'text-muted-foreground/70'
-                }
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                      : 'border-zinc-200 bg-zinc-50 text-zinc-500'
+                ].join(' ')}
               >
-                <span className="mr-1">{index + 1}.</span>
+                <span
+                  className={[
+                    'inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px]',
+                    isActive
+                      ? 'bg-white/15 text-white'
+                      : isDone
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-white text-zinc-500'
+                  ].join(' ')}
+                >
+                  {isDone ? <Check className="size-3" /> : index + 1}
+                </span>
                 {step.label}
               </li>
             )
