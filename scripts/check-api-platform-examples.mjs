@@ -142,7 +142,9 @@ for (const file of pythonExamples) {
     env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' }
   })
   if (pythonCompile.error?.code === 'ENOENT') {
-    skip(`Python example compile skipped because python3 is unavailable: ${file}`)
+    skip(
+      `Python example compile skipped because python3 is unavailable: ${file}`
+    )
   } else {
     check(
       pythonCompile.status === 0,

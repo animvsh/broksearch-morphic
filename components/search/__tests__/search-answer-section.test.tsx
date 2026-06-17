@@ -7,10 +7,32 @@ import type { SearchResultItem } from '@/lib/types'
 
 import { extractSources, SearchAnswerSection } from '../search-answer-section'
 
+const markdownMessageMock = vi.hoisted(() => vi.fn())
+
 vi.mock('@/components/message', () => ({
-  MarkdownMessage: ({ message }: { message: string }) => (
-    <div data-testid="markdown-message">{message}</div>
-  )
+  MarkdownMessage: ({
+    message,
+    citationMaps,
+    onCitationOpen
+  }: {
+    message: string
+    citationMaps?: Record<string, Record<number, SearchResultItem>>
+    onCitationOpen?: (source: SearchResultItem) => void
+  }) => {
+    markdownMessageMock({ message, citationMaps, onCitationOpen })
+    const citation = citationMaps?.answer?.[1]
+
+    return (
+      <div data-testid="markdown-message">
+        {message}
+        {citation && message.includes('[1](#answer:1)') && (
+          <button type="button" onClick={() => onCitationOpen?.(citation)}>
+            citation 1
+          </button>
+        )}
+      </div>
+    )
+  }
 }))
 
 vi.mock('@/components/search/answer-toolbar', () => ({
@@ -302,6 +324,43 @@ describe('SearchAnswerSection actions', () => {
     expect(
       screen.getByRole('button', { name: /verify source 1: stored source/i })
     ).toBeInTheDocument()
+  })
+
+  it('links plain citations against durable metadata sources when citation maps are unavailable', () => {
+    renderAnswer({
+      content: 'Answer [1]',
+      metadata: {
+        answer: {
+          sources: [
+            source({
+              title: 'Stored source',
+              url: 'https://stored.example/report'
+            })
+          ]
+        }
+      }
+    })
+
+    expect(markdownMessageMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        message: 'Answer [1](#answer:1)',
+        citationMaps: {
+          answer: {
+            1: expect.objectContaining({
+              title: 'Stored source',
+              url: 'https://stored.example/report'
+            })
+          }
+        }
+      })
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /citation 1/i }))
+
+    expect(screen.getByText('Verification')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /open original/i })
+    ).toHaveAttribute('href', 'https://stored.example/report')
   })
 
   it('opens source cards in the verifier side panel', () => {
