@@ -78,6 +78,14 @@ describe('SearchLanding', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('does not expose attachments on the landing submission form', () => {
+    render(<SearchLanding />)
+
+    expect(
+      screen.queryByRole('button', { name: /attach files/i })
+    ).not.toBeInTheDocument()
+  })
+
   it('shows the MVP example prompts and starts from one immediately', () => {
     render(<SearchLanding />)
 
