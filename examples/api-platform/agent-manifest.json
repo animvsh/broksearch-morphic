@@ -1,0 +1,29 @@
+{
+  "name": "brok-api-platform-sample-apps",
+  "version": "1.0.0",
+  "description": "Agent-runnable sample apps for building with the Brok API platform.",
+  "baseUrlEnv": "BROK_BASE_URL",
+  "apiKeyEnv": "BROK_API_KEY",
+  "defaultBaseUrl": "https://www.brok.fyi",
+  "commands": [
+    {
+      "id": "research-brief",
+      "description": "Generate a grounded research brief using search completions and chat synthesis.",
+      "command": "node examples/api-platform/apps/research-brief.mjs \"What changed in AI coding agents this week?\""
+    },
+    {
+      "id": "support-triage",
+      "description": "Classify and draft a response for a support ticket using chat completions.",
+      "command": "node examples/api-platform/apps/support-triage.mjs examples/api-platform/apps/sample-support-ticket.json"
+    },
+    {
+      "id": "agent-task-runner",
+      "description": "Run a generic agent-style task with Brok chat completions.",
+      "command": "node examples/api-platform/apps/agent-task-runner.mjs \"Draft a release checklist for an API integration\""
+    }
+  ],
+  "verification": {
+    "static": "bun run check:api-examples",
+    "live": "BROK_BASE_URL=https://www.brok.fyi BROK_API_KEY=$BROK_API_KEY bun run check:api-examples -- --live"
+  }
+}
