@@ -9,7 +9,8 @@ import {
   createUsageEventViaSupabaseRest,
   ensureWorkspaceForUserViaSupabaseRest,
   updateApiKeyStatusViaSupabaseRest,
-  updateWorkspaceMonthlyBudgetViaSupabaseRest} from './supabase-rest-seed'
+  updateWorkspaceMonthlyBudgetViaSupabaseRest
+} from './supabase-rest-seed'
 
 const seedMonthlyBudgetCents = 100
 

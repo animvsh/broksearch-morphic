@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from 'react'
 
 import { ArrowUp, Paperclip, Sparkles, Square } from 'lucide-react'
 
+import type { ModelSelectorData } from '@/lib/types/model-selector'
 import type { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
 import { setCookie } from '@/lib/utils/cookies'
 
+import { ModelSelectorClient } from '@/components/model-selector-client'
 import {
   RecentSearches,
   recordRecentSearch
@@ -21,10 +23,12 @@ interface HeroProps {
   isSubmitting?: boolean
   onStop?: () => void
   defaultMode?: SearchMode
+  attachmentsEnabled?: boolean
   recentStorageKey?: string
   className?: string
   isCloudDeployment?: boolean
   hasModels?: boolean
+  modelSelectorData?: ModelSelectorData | null
 }
 
 export function Hero({
@@ -32,10 +36,12 @@ export function Hero({
   isSubmitting = false,
   onStop,
   defaultMode,
+  attachmentsEnabled = true,
   recentStorageKey,
   className,
   isCloudDeployment: _isCloudDeployment,
-  hasModels: _hasModels
+  hasModels: _hasModels,
+  modelSelectorData
 }: HeroProps) {
   const [mode, setLocalMode] = useState<SearchMode>(defaultMode ?? 'quick')
   const [query, setQuery] = useState('')
@@ -51,6 +57,15 @@ export function Hero({
     setCookie('searchMode', mode)
   }, [mode])
 
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    textarea.style.height = 'auto'
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 280)}px`
+    textarea.style.overflowY = textarea.scrollHeight > 280 ? 'auto' : 'hidden'
+  }, [query])
+
   const submitQuery = (
     submittedQuery: string,
     submittedMode: SearchMode = mode,
@@ -59,7 +74,7 @@ export function Hero({
     const trimmed = submittedQuery.trim()
     if (!trimmed || isSubmitting) return
     recordRecentSearch(trimmed, submittedMode, recentStorageKey)
-    onSubmit(trimmed, submittedMode, submittedFiles)
+    onSubmit(trimmed, submittedMode, attachmentsEnabled ? submittedFiles : [])
     setQuery('')
   }
 
@@ -76,6 +91,7 @@ export function Hero({
   }
 
   const handleFileSelect = (selected: FileList | null) => {
+    if (!attachmentsEnabled) return
     if (!selected) return
     setFiles(prev => [...prev, ...Array.from(selected)])
   }
@@ -90,19 +106,14 @@ export function Hero({
     submitQuery(q, nextMode, [])
   }
 
-  const handleRecentSelect = (q: string, storedMode?: string) => {
-    const nextMode =
-      storedMode === 'quick' ||
-      storedMode === 'search' ||
-      storedMode === 'deep' ||
-      storedMode === 'code'
-        ? storedMode
-        : mode
+  const handleRecentSelect = (q: string, storedMode?: SearchMode) => {
+    const nextMode = storedMode ?? mode
     setLocalMode(nextMode)
     submitQuery(q, nextMode, [])
   }
 
   const handlePaste = async (e: React.ClipboardEvent) => {
+    if (!attachmentsEnabled) return
     const items = e.clipboardData?.items
     if (!items) return
     const pastedFiles: File[] = []
@@ -142,7 +153,7 @@ export function Hero({
       <form
         onSubmit={handleSubmit}
         className="w-full"
-        aria-label="Search query"
+        aria-label="Ask Brok Search"
       >
         <div className="rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur transition-all focus-within:border-foreground/20 focus-within:shadow-md">
           <div className="relative">
@@ -167,12 +178,13 @@ export function Hero({
                 const t = e.currentTarget
                 t.style.height = 'auto'
                 t.style.height = `${Math.min(t.scrollHeight, 280)}px`
+                t.style.overflowY = t.scrollHeight > 280 ? 'auto' : 'hidden'
               }}
               aria-label="Search query"
             />
           </div>
 
-          {files.length > 0 && (
+          {attachmentsEnabled && files.length > 0 && (
             <div className="flex flex-wrap gap-2 px-4 pb-2">
               {files.map((f, idx) => (
                 <FileChip
@@ -185,31 +197,40 @@ export function Hero({
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-2">
-            <div className="flex items-center gap-1.5">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={e => {
-                  handleFileSelect(e.target.files)
-                  if (e.target) e.target.value = ''
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="clicky-control inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Attach files"
-              >
-                <Paperclip className="size-4" />
-              </button>
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+              {attachmentsEnabled && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={e => {
+                      handleFileSelect(e.target.files)
+                      if (e.target) e.target.value = ''
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="clicky-control inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Attach files"
+                  >
+                    <Paperclip className="size-4" />
+                  </button>
+                </>
+              )}
               <ModeSelectorV2 value={mode} onChange={setLocalMode} size="sm" />
+              {modelSelectorData ? (
+                <div className="min-w-0 max-w-full">
+                  <ModelSelectorClient data={modelSelectorData} compact />
+                </div>
+              ) : null}
             </div>
 
             <button
               type="submit"
-              disabled={!query.trim() || isSubmitting}
+              disabled={!query.trim() && !isSubmitting}
               className={cn(
                 'clicky-control inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-lg transition-all',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',

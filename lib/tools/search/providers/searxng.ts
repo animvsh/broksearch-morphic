@@ -5,7 +5,11 @@ import {
   SearXNGResult
 } from '@/lib/types'
 
-import { BaseSearchProvider } from './base'
+import {
+  BaseSearchProvider,
+  createProviderAbortSignal,
+  SearchProviderOptions
+} from './base'
 
 export class SearXNGSearchProvider extends BaseSearchProvider {
   async search(
@@ -13,7 +17,8 @@ export class SearXNGSearchProvider extends BaseSearchProvider {
     maxResults: number = 10,
     searchDepth: 'basic' | 'advanced' = 'basic',
     includeDomains: string[] = [],
-    excludeDomains: string[] = []
+    excludeDomains: string[] = [],
+    options?: SearchProviderOptions
   ): Promise<SearchResults> {
     const apiUrl = process.env.SEARXNG_API_URL
     this.validateApiUrl(apiUrl, 'SEARXNG')
@@ -41,21 +46,29 @@ export class SearXNGSearchProvider extends BaseSearchProvider {
         url.searchParams.append('site', includeDomains.join(','))
       }
 
-      // Fetch results from SearXNG
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json'
+      const abortContext = createProviderAbortSignal('SearXNG', options)
+      let data: SearXNGResponse
+
+      try {
+        // Fetch results from SearXNG
+        const response = await fetch(url.toString(), {
+          method: 'GET',
+          signal: abortContext.signal,
+          headers: {
+            Accept: 'application/json'
+          }
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error(`SearXNG API error (${response.status}):`, errorText)
+          throw new Error('Search failed')
         }
-      })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`SearXNG API error (${response.status}):`, errorText)
-        throw new Error('Search failed')
+        data = await response.json()
+      } finally {
+        abortContext.cleanup()
       }
-
-      const data: SearXNGResponse = await response.json()
 
       // Separate general results and image results, and limit to maxResults
       const generalResults = data.results

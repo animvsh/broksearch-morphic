@@ -97,7 +97,12 @@ describe('search session message persistence route', () => {
       expect.objectContaining({
         id: 'search_1_assistant',
         chatId: 'search_1',
-        role: 'assistant'
+        role: 'assistant',
+        metadata: {
+          answer: {
+            citationCount: 1
+          }
+        }
       }),
       'user_1'
     )

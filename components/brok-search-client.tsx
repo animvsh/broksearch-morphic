@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowUp,
+  Check,
   ChevronDown,
   ExternalLink,
   Globe2,
@@ -21,13 +22,13 @@ import type { UIMessage } from '@/lib/types/ai'
 import type { ModelSelectorData } from '@/lib/types/model-selector'
 import type { SearchMode } from '@/lib/types/search'
 
+import { AnswerToolbar } from './search/answer-toolbar'
 import { recordRecentSearch } from './search/recent-searches'
 import { SourceSidePanel } from './search/source-side-panel'
 import { FollowUpChips, type FollowUpItem } from './follow-up-chips'
 import { MarkdownMessage } from './message'
 import { ModelSelectorClient } from './model-selector-client'
-import { RelatedQuestionsPanel } from './related-questions-panel'
-import { VoiceInputButton, VoiceOutputButton } from './voice-input-button'
+import { VoiceInputButton } from './voice-input-button'
 
 interface Source {
   id?: string
@@ -98,6 +99,10 @@ interface BrokSearchClientProps {
 const DEFAULT_API_BASE = '/api/search/session'
 const GUEST_CHAT_STORAGE_PREFIX = 'brok:guest-chat:'
 const SESSION_CITATION_TOOL_ID = 'brok-session-search'
+const SEARCH_RESPONSE_START_TIMEOUT_MS = 20_000
+const SEARCH_STREAM_IDLE_TIMEOUT_MS = 45_000
+const DURABLE_STREAM_SNAPSHOT_INTERVAL_MS = 1_000
+const STREAM_IDLE_ABORT_REASON = 'brok-search-stream-idle-timeout'
 
 function getGuestChatStorageKey(chatId: string) {
   return `${GUEST_CHAT_STORAGE_PREFIX}${chatId}`
@@ -335,6 +340,47 @@ function toStoredSearchTurns(searchId: string, messages: UIMessage[]) {
   return turns
 }
 
+function getReloadablePendingSearch(messages: UIMessage[]) {
+  const lastIndex = messages.length - 1
+  if (lastIndex < 0) return null
+
+  const lastMessage = messages[lastIndex]
+  const previousMessage = messages[lastIndex - 1]
+  const userIndex = lastMessage?.role === 'user' ? lastIndex : lastIndex - 1
+  const userMessage = messages[userIndex]
+  const assistantMessage = userIndex >= 0 ? messages[userIndex + 1] : undefined
+
+  if (userMessage?.role !== 'user') return null
+  if (
+    assistantMessage &&
+    assistantMessage.role === 'assistant' &&
+    getTextPart(assistantMessage).trim()
+  ) {
+    return null
+  }
+  if (
+    previousMessage?.role === 'user' &&
+    lastMessage?.role === 'assistant' &&
+    !getTextPart(lastMessage).trim()
+  ) {
+    const query = getTextPart(previousMessage).trim()
+    return query
+      ? {
+          query,
+          completedMessages: messages.slice(0, lastIndex - 1)
+        }
+      : null
+  }
+
+  const query = getTextPart(userMessage).trim()
+  return query
+    ? {
+        query,
+        completedMessages: messages.slice(0, userIndex)
+      }
+    : null
+}
+
 function persistDurableMessages(
   searchId: string | undefined,
   messages: UIMessage[]
@@ -390,11 +436,45 @@ function compactSearchContext(turns: SearchTurn[]): SearchContextTurn[] {
     }))
 }
 
+function getSearchErrorMessage(error: unknown, abortReason?: unknown) {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    if (abortReason === STREAM_IDLE_ABORT_REASON) {
+      return 'Search stalled before finishing. Please try again.'
+    }
+    return 'Search timed out before the server started responding. Please try again.'
+  }
+
+  if (error instanceof TypeError && /fetch/i.test(error.message)) {
+    return 'Could not reach Brok Search. Check your connection and try again.'
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+
+  return 'Search could not complete. Please try again.'
+}
+
+function isSpecificServerProgressMessage(message: string | undefined) {
+  return (
+    message === 'Loading Brok product context' ||
+    message === 'Loading cached answer'
+  )
+}
+
+function getProgressMessage(
+  currentMessage: string | undefined,
+  fallbackMessage: string
+) {
+  return isSpecificServerProgressMessage(currentMessage)
+    ? currentMessage
+    : fallbackMessage
+}
+
 /**
  * Client for the Brok Search SSE endpoint. Renders the streaming answer,
- * source list, follow-up chips, and the related-questions panel as the
- * pipeline progresses. The component owns the streaming lifecycle and
- * surfaces a step-by-step progress UI while the search is running.
+ * source list, follow-up chips, and step-by-step progress UI as the pipeline
+ * progresses. The component owns the streaming lifecycle.
  */
 export function BrokSearchClient({
   initialQuery,
@@ -426,12 +506,16 @@ export function BrokSearchClient({
     message: initialQueryText ? 'Planning search query...' : undefined
   }))
   const [error, setError] = useState<string | null>(null)
+  const [interruptedSearch, setInterruptedSearch] = useState<string | null>(
+    null
+  )
   const restoredInitialQueryRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
   const durableMessagesRef = useRef<UIMessage[]>([])
   const activeTurnRef = useRef<SearchTurn | null>(null)
   const completedTurnsRef = useRef<SearchTurn[]>([])
   const requestIdRef = useRef(0)
+  const activeRequestKeyRef = useRef<string | null>(null)
   const persistTimerRef = useRef<number | null>(null)
   const serverPersistSnapshotRef = useRef<string | null>(null)
 
@@ -456,6 +540,7 @@ export function BrokSearchClient({
     requestIdRef.current += 1
     abortRef.current?.abort()
     abortRef.current = null
+    activeRequestKeyRef.current = null
     setPendingQuery(null)
     setProgress(prev => ({
       ...prev,
@@ -469,6 +554,7 @@ export function BrokSearchClient({
       requestIdRef.current += 1
       abortRef.current?.abort()
       abortRef.current = null
+      activeRequestKeyRef.current = null
     }
 
     window.addEventListener('pagehide', abortForNavigation)
@@ -517,14 +603,16 @@ export function BrokSearchClient({
     async (q: string) => {
       const trimmed = q.trim()
       if (!trimmed) return
+      const requestKey = `${initialMode}:${trimmed.toLowerCase()}`
+      if (activeRequestKeyRef.current === requestKey) return
 
       recordRecentSearch(trimmed, initialMode)
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
+      activeRequestKeyRef.current = requestKey
       const requestId = requestIdRef.current + 1
       requestIdRef.current = requestId
-      commitDurableSearchUrl(searchId)
 
       const isCurrentRequest = () =>
         requestIdRef.current === requestId && !controller.signal.aborted
@@ -548,6 +636,7 @@ export function BrokSearchClient({
 
       setActiveQuestion(trimmed)
       setPendingQuery(trimmed)
+      setInterruptedSearch(null)
       setAnswer('')
       setFollowUps([])
       setError(null)
@@ -555,17 +644,19 @@ export function BrokSearchClient({
         searchQueries: [],
         sources: [],
         status: 'planning',
-        message: 'Planning search query...'
+        message: 'Connecting to Brok Search...'
       })
 
       const writeDurableTurn = ({
         durableAnswer,
         durableFollowUps,
-        durableSources
+        durableSources,
+        persistNow = false
       }: {
         durableAnswer: string
         durableFollowUps: FollowUpItem[]
         durableSources: Source[]
+        persistNow?: boolean
       }) => {
         const pair = toDurableMessagePair({
           answer: durableAnswer,
@@ -584,17 +675,16 @@ export function BrokSearchClient({
         if (persistTimerRef.current) {
           window.clearTimeout(persistTimerRef.current)
         }
+        if (persistNow) {
+          persistDurableMessages(searchId, durableMessagesRef.current)
+          return
+        }
         persistTimerRef.current = window.setTimeout(() => {
           persistTimerRef.current = null
           persistDurableMessages(searchId, durableMessagesRef.current)
         }, 300)
       }
 
-      writeDurableTurn({
-        durableAnswer: '',
-        durableFollowUps: [],
-        durableSources: []
-      })
       activeTurnRef.current = {
         id: turnId,
         query: trimmed,
@@ -603,18 +693,79 @@ export function BrokSearchClient({
         followUps: []
       }
 
+      let responseStartTimedOut = false
+      let cancelPendingDurableSnapshot = () => {}
+
       try {
         let streamedAnswer = ''
         let streamedSources: Source[] = []
         let streamedFollowUps: FollowUpItem[] = []
         let streamCompleted = false
+        let lastDurableSnapshotAt = 0
+        let pendingDurableSnapshotTimer: number | null = null
+        let streamIdleTimeout: number | null = null
 
-        const persistSnapshot = () => {
+        const persistSnapshot = ({ force = false } = {}) => {
+          if (
+            !streamedAnswer.trim() &&
+            streamedSources.length === 0 &&
+            streamedFollowUps.length === 0
+          ) {
+            return
+          }
+          const now = Date.now()
+          const elapsed = now - lastDurableSnapshotAt
+          const writeSnapshot = () => {
+            if (pendingDurableSnapshotTimer) {
+              window.clearTimeout(pendingDurableSnapshotTimer)
+              pendingDurableSnapshotTimer = null
+            }
+            lastDurableSnapshotAt = Date.now()
+            writeDurableTurn({
+              durableAnswer: streamedAnswer,
+              durableFollowUps: streamedFollowUps,
+              durableSources: streamedSources
+            })
+          }
+
+          if (force || elapsed >= DURABLE_STREAM_SNAPSHOT_INTERVAL_MS) {
+            writeSnapshot()
+            return
+          }
+
+          if (pendingDurableSnapshotTimer) return
+          pendingDurableSnapshotTimer = window.setTimeout(
+            writeSnapshot,
+            DURABLE_STREAM_SNAPSHOT_INTERVAL_MS - elapsed
+          )
+        }
+
+        cancelPendingDurableSnapshot = () => {
+          if (!pendingDurableSnapshotTimer) return
+          window.clearTimeout(pendingDurableSnapshotTimer)
+          pendingDurableSnapshotTimer = null
+        }
+
+        const persistFinalSnapshot = () => {
+          cancelPendingDurableSnapshot()
           writeDurableTurn({
             durableAnswer: streamedAnswer,
             durableFollowUps: streamedFollowUps,
-            durableSources: streamedSources
+            durableSources: streamedSources,
+            persistNow: true
           })
+        }
+        const clearStreamIdleTimeout = () => {
+          if (!streamIdleTimeout) return
+          window.clearTimeout(streamIdleTimeout)
+          streamIdleTimeout = null
+        }
+        const refreshStreamIdleTimeout = () => {
+          clearStreamIdleTimeout()
+          streamIdleTimeout = window.setTimeout(() => {
+            if (!isCurrentRequest() || streamCompleted) return
+            controller.abort(STREAM_IDLE_ABORT_REASON)
+          }, SEARCH_STREAM_IDLE_TIMEOUT_MS)
         }
 
         const requestBody = {
@@ -624,18 +775,38 @@ export function BrokSearchClient({
           ...(contextTurns.length > 0 ? { context: contextTurns } : {})
         }
 
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
-          },
-          body: JSON.stringify(requestBody),
-          signal: controller.signal
-        })
+        const responseStartTimeout = window.setTimeout(() => {
+          responseStartTimedOut = true
+          controller.abort()
+        }, SEARCH_RESPONSE_START_TIMEOUT_MS)
+        let response: Response
+        try {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal
+          })
+        } finally {
+          window.clearTimeout(responseStartTimeout)
+        }
 
         if (!response.ok || !response.body) {
-          const message = `Search request failed (${response.status})`
+          let responseMessage = ''
+          try {
+            const errorBody = (await response.json()) as {
+              error?: string
+              message?: string
+            }
+            responseMessage = errorBody.error ?? errorBody.message ?? ''
+          } catch {
+            // Some edge responses do not include JSON; the status is enough.
+          }
+          const message =
+            responseMessage || `Search request failed (${response.status})`
           setError(message)
           setProgress(prev => ({ ...prev, status: 'error', message }))
           return
@@ -663,7 +834,10 @@ export function BrokSearchClient({
                 classification: data.classification?.type,
                 searchQueries: data.search_queries ?? prev.searchQueries,
                 status: prev.status === 'planning' ? 'searching' : prev.status,
-                message: prev.message ?? 'Searching sources...'
+                message: getProgressMessage(
+                  prev.message,
+                  'Searching sources...'
+                )
               }))
               return
             case 'query_resolved':
@@ -674,7 +848,10 @@ export function BrokSearchClient({
                 classification: data.classification?.type,
                 searchQueries: data.search_queries ?? [],
                 status: 'searching',
-                message: 'Fetching and ranking sources...'
+                message: getProgressMessage(
+                  prev.message,
+                  'Fetching and ranking sources...'
+                )
               }))
               return
             case 'search_started':
@@ -682,7 +859,10 @@ export function BrokSearchClient({
                 ...prev,
                 answerModel: data.answer_model ?? prev.answerModel,
                 status: 'searching',
-                message: `Running ${data.search_queries?.length ?? 0} searches...`
+                message: getProgressMessage(
+                  prev.message,
+                  `Running ${data.search_queries?.length ?? 0} searches...`
+                )
               }))
               return
             case 'source_found':
@@ -692,7 +872,7 @@ export function BrokSearchClient({
                 )
               ) {
                 streamedSources = [...streamedSources, data.source as Source]
-                persistSnapshot()
+                persistSnapshot({ force: true })
               }
               setProgress(prev => {
                 if (
@@ -730,17 +910,19 @@ export function BrokSearchClient({
               return
             case 'follow_ups_generated':
               streamedFollowUps = data.follow_ups ?? []
-              persistSnapshot()
+              persistSnapshot({ force: true })
               setFollowUps(data.follow_ups ?? [])
               return
             case 'follow_ups':
               streamedFollowUps = data.items ?? data.follow_ups ?? []
-              persistSnapshot()
+              persistSnapshot({ force: true })
               setFollowUps(streamedFollowUps)
               return
             case 'done':
               streamCompleted = true
-              persistSnapshot()
+              clearStreamIdleTimeout()
+              persistFinalSnapshot()
+              commitDurableSearchUrl(searchId)
               flushPendingPersistence()
               setProgress(prev => ({
                 ...prev,
@@ -753,6 +935,7 @@ export function BrokSearchClient({
               }))
               return
             case 'search.error':
+              clearStreamIdleTimeout()
               setError(data?.error?.message ?? 'Search failed')
               setProgress(prev => ({
                 ...prev,
@@ -765,10 +948,13 @@ export function BrokSearchClient({
           }
         }
 
+        refreshStreamIdleTimeout()
         while (true) {
           const { done, value } = await reader.read()
+          clearStreamIdleTimeout()
           if (!isCurrentRequest()) break
           if (done) break
+          refreshStreamIdleTimeout()
           buffer += decoder.decode(value, { stream: true })
 
           let boundary: number
@@ -795,10 +981,13 @@ export function BrokSearchClient({
           }
         }
 
+        clearStreamIdleTimeout()
+
         if (!isCurrentRequest() || streamCompleted) return
 
         if (streamedAnswer.trim()) {
-          persistSnapshot()
+          persistFinalSnapshot()
+          commitDurableSearchUrl(searchId)
           flushPendingPersistence()
           setProgress(prev => ({
             ...prev,
@@ -815,17 +1004,22 @@ export function BrokSearchClient({
           message: 'Search ended before returning an answer.'
         }))
       } catch (err) {
-        if (!isCurrentRequest()) return
-        if ((err as Error).name === 'AbortError') return
+        cancelPendingDurableSnapshot()
+        const isResponseStartTimeout =
+          responseStartTimedOut && requestIdRef.current === requestId
+        if (!isCurrentRequest() && !isResponseStartTimeout) return
         console.error('Search failed:', err)
-        const message =
-          err instanceof Error ? err.message : 'Search could not complete'
+        const message = getSearchErrorMessage(err, controller.signal.reason)
         setError(message)
         setProgress(prev => ({ ...prev, status: 'error', message }))
       } finally {
-        if (isCurrentRequest()) {
-          flushPendingPersistence()
+        cancelPendingDurableSnapshot()
+        if (requestIdRef.current === requestId) {
+          if (!controller.signal.aborted) {
+            flushPendingPersistence()
+          }
           setPendingQuery(null)
+          activeRequestKeyRef.current = null
         }
       }
     },
@@ -868,12 +1062,40 @@ export function BrokSearchClient({
       return
     }
 
+    const pendingSearch = getReloadablePendingSearch(storedMessages)
+    if (
+      pendingSearch &&
+      (!trimmedInitialQuery ||
+        pendingSearch.query.trim().toLowerCase() ===
+          trimmedInitialQuery.toLowerCase())
+    ) {
+      restoredInitialQueryRef.current = true
+      durableMessagesRef.current = pendingSearch.completedMessages
+      setCompletedTurns(
+        searchId
+          ? toStoredSearchTurns(searchId, pendingSearch.completedMessages)
+          : []
+      )
+      setActiveQuestion(pendingSearch.query)
+      setQuery(pendingSearch.query)
+      setPendingQuery(null)
+      setInterruptedSearch(pendingSearch.query)
+      setError(null)
+      setProgress({
+        searchQueries: [],
+        sources: [],
+        status: 'idle',
+        message: undefined
+      })
+      commitDurableSearchUrl(searchId)
+      return
+    }
+
     if (trimmedInitialQuery) {
+      restoredInitialQueryRef.current = true
       void runSearch(trimmedInitialQuery)
     }
     return () => {
-      requestIdRef.current += 1
-      abortRef.current?.abort()
       if (persistTimerRef.current) {
         window.clearTimeout(persistTimerRef.current)
         persistTimerRef.current = null
@@ -898,6 +1120,9 @@ export function BrokSearchClient({
     progress.status === 'searching' ||
     progress.status === 'reading' ||
     progress.status === 'answering'
+  const hasTrustedSources =
+    progress.sources.length > 0 &&
+    !hasOnlyLocalFallbackSources(progress.sources)
 
   const submitFollowUp = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
@@ -914,6 +1139,48 @@ export function BrokSearchClient({
 
   const handleVoiceTranscript = useCallback((text: string) => {
     setQuery(text)
+  }, [])
+
+  const handleShareAnswer = useCallback(async () => {
+    const url = typeof window !== 'undefined' ? window.location.href : ''
+    try {
+      if (url && navigator.clipboard) {
+        await navigator.clipboard.writeText(url)
+        toast.success('Link copied to clipboard')
+      } else {
+        toast.error('Cannot copy in this environment')
+      }
+    } catch {
+      toast.error('Copy failed')
+    }
+  }, [])
+
+  const handleRegenerateAnswer = useCallback(() => {
+    const target = activeQuestion.trim()
+    if (!target || isLoading) return
+    setQuery(target)
+    void runSearch(target)
+  }, [activeQuestion, isLoading, runSearch])
+
+  const handleResumeInterruptedSearch = useCallback(() => {
+    const target = interruptedSearch?.trim()
+    if (!target || isLoading) return
+    setQuery(target)
+    void runSearch(target)
+  }, [interruptedSearch, isLoading, runSearch])
+
+  const handleReadAnswerAloud = useCallback(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      toast.error('Read aloud not supported')
+      return
+    }
+    const synth = window.speechSynthesis
+    synth.cancel()
+    synth.speak(new SpeechSynthesisUtterance(answer))
+  }, [answer])
+
+  const handleTranslateAnswer = useCallback((lang: string) => {
+    toast.info(`Translation to ${lang} would run server-side here.`)
   }, [])
 
   return (
@@ -949,8 +1216,8 @@ export function BrokSearchClient({
               />
               <div className="flex shrink-0 items-center gap-1">
                 {modelSelectorData ? (
-                  <div className="hidden sm:block">
-                    <ModelSelectorClient data={modelSelectorData} />
+                  <div className="min-w-0">
+                    <ModelSelectorClient data={modelSelectorData} compact />
                   </div>
                 ) : null}
                 <VoiceInputButton onTranscript={handleVoiceTranscript} />
@@ -992,13 +1259,33 @@ export function BrokSearchClient({
           </div>
         )}
 
+        {interruptedSearch && !isLoading && !answer && !error && (
+          <div
+            className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between"
+            data-testid="brok-search-interrupted"
+          >
+            <span>This search was interrupted before an answer was saved.</span>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center rounded-xl bg-amber-900 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-800"
+              onClick={handleResumeInterruptedSearch}
+            >
+              Resume search
+            </button>
+          </div>
+        )}
+
         {completedTurns.map(turn => (
-          <CompletedTurn key={turn.id} turn={turn} />
+          <CompletedTurn
+            key={turn.id}
+            turn={turn}
+            onOpenSource={setActiveSource}
+          />
         ))}
 
         {activeQuestion && (
           <div
-            className="ml-auto max-w-[85%] rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-[0_14px_40px_-34px_rgba(15,23,42,0.35)]"
+            className="ml-auto max-w-[85%] break-words rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-[0_14px_40px_-34px_rgba(15,23,42,0.35)]"
             data-testid="brok-search-question"
           >
             {activeQuestion}
@@ -1021,7 +1308,7 @@ export function BrokSearchClient({
             className="flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-5 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.28)]"
             data-testid="brok-search-answer"
           >
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
               <div className="inline-flex items-center gap-2">
                 {hasOnlyLocalFallbackSources(progress.sources) ? (
                   <ShieldAlert className="size-3.5 text-amber-600" />
@@ -1040,7 +1327,26 @@ export function BrokSearchClient({
                     : ''}
                 </span>
               </div>
-              <VoiceOutputButton text={answer} />
+              <span
+                className={`inline-flex h-7 items-center gap-1 rounded-full border px-2 text-[11px] font-medium ${
+                  hasTrustedSources
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-zinc-200 bg-zinc-50 text-zinc-500'
+                }`}
+                data-testid="brok-answer-trust-badge"
+              >
+                {hasTrustedSources ? (
+                  <>
+                    <Check className="size-3" />
+                    Sources attached
+                  </>
+                ) : (
+                  <>
+                    <Info className="size-3" />
+                    Verify before relying
+                  </>
+                )}
+              </span>
             </div>
             <MarkdownMessage
               message={linkedAnswer}
@@ -1054,6 +1360,16 @@ export function BrokSearchClient({
             {progress.status === 'done' && progress.sources.length === 0 && (
               <NoSourcesNotice />
             )}
+            {progress.status === 'done' && (
+              <AnswerToolbar
+                answerText={answer}
+                onShare={handleShareAnswer}
+                onRegenerate={handleRegenerateAnswer}
+                onReadAloud={handleReadAnswerAloud}
+                onTranslate={handleTranslateAnswer}
+                className="mt-2"
+              />
+            )}
           </article>
         )}
 
@@ -1066,15 +1382,9 @@ export function BrokSearchClient({
           />
         )}
 
-        {pendingQuery && progress.status === 'planning' && (
-          <p className="text-xs text-muted-foreground">
-            Searching for: {pendingQuery}
-          </p>
-        )}
-
         {(answer || completedTurns.length > 0 || isLoading) && (
           <form
-            className="mt-2 flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-2 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.35)] backdrop-blur sm:sticky sm:bottom-[calc(env(safe-area-inset-bottom)+0.75rem)]"
+            className="sticky bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-10 mt-2 flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-2 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.35)] backdrop-blur"
             data-testid="brok-follow-up-form"
             onSubmit={submitFollowUp}
           >
@@ -1109,11 +1419,6 @@ export function BrokSearchClient({
         )}
       </section>
 
-      <RelatedQuestionsPanel
-        followUps={displayFollowUps}
-        onSelect={handleFollowUp}
-        isLoading={isLoading}
-      />
       <SourceSidePanel
         source={activeSource}
         open={Boolean(activeSource)}
@@ -1175,7 +1480,15 @@ function FallbackSourcesNotice() {
   )
 }
 
-function CompletedTurn({ turn }: { turn: SearchTurn }) {
+function CompletedTurn({
+  onOpenSource,
+  turn
+}: {
+  onOpenSource: (source: SearchResultItem) => void
+  turn: SearchTurn
+}) {
+  const fallbackOnly = hasOnlyLocalFallbackSources(turn.sources)
+  const hasSources = turn.sources.length > 0
   const citationMaps = useMemo(
     () => buildCitationMaps(turn.sources),
     [turn.sources]
@@ -1190,13 +1503,30 @@ function CompletedTurn({ turn }: { turn: SearchTurn }) {
       className="flex flex-col gap-3 border-b border-zinc-200/70 pb-5"
       data-testid="completed-search-turn"
     >
-      <div className="ml-auto max-w-[85%] rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900">
+      <div className="ml-auto max-w-[85%] break-words rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900">
         {turn.query}
+      </div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        {fallbackOnly ? (
+          <ShieldAlert className="size-3.5 text-amber-600" />
+        ) : (
+          <Check className="size-3.5 text-emerald-600" />
+        )}
+        <span>
+          Previous answer
+          {fallbackOnly
+            ? ' • model knowledge fallback'
+            : hasSources
+              ? ` • ${turn.sources.length} source${turn.sources.length === 1 ? '' : 's'}`
+              : ' • model knowledge'}
+        </span>
       </div>
       {turn.sources.length > 0 && (
         <div
-          className="mobile-chip-row flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0"
-          aria-label="Previous sources"
+          className="flex flex-wrap gap-1.5 pb-1"
+          aria-label={
+            fallbackOnly ? 'Previous fallback context' : 'Previous sources'
+          }
         >
           {turn.sources.slice(0, 4).map((source, index) => (
             <a
@@ -1204,18 +1534,29 @@ function CompletedTurn({ turn }: { turn: SearchTurn }) {
               href={source.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-11 max-w-[12rem] shrink-0 items-center gap-1 rounded-full border border-zinc-200 bg-white/80 px-3 text-[11px] font-medium text-zinc-600 hover:text-zinc-950"
+              className={`inline-flex h-11 max-w-full items-center gap-1 rounded-full border px-3 text-[11px] font-medium transition-colors ${
+                isLocalFallbackSource(source)
+                  ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                  : 'border-zinc-200 bg-white/80 text-zinc-600 hover:text-zinc-950'
+              }`}
             >
               <span className="shrink-0">[{index + 1}]</span>
               <span className="truncate">
-                {source.publisher ?? safeHostname(source.url)}
+                {isLocalFallbackSource(source)
+                  ? 'Fallback context'
+                  : (source.publisher ?? safeHostname(source.url))}
               </span>
             </a>
           ))}
         </div>
       )}
       <article className="rounded-2xl border border-zinc-200 bg-white/80 p-4 text-sm text-zinc-900">
-        <MarkdownMessage message={linkedAnswer} citationMaps={citationMaps} />
+        <MarkdownMessage
+          message={linkedAnswer}
+          citationMaps={citationMaps}
+          onCitationOpen={onOpenSource}
+        />
+        {fallbackOnly && <FallbackSourcesNotice />}
       </article>
     </section>
   )
@@ -1223,10 +1564,10 @@ function CompletedTurn({ turn }: { turn: SearchTurn }) {
 
 function SearchProgressIndicator({ progress }: { progress: SearchProgress }) {
   const steps = [
-    { id: 'planning', label: 'Resolving query' },
-    { id: 'searching', label: 'Running searches' },
-    { id: 'reading', label: 'Reading sources' },
-    { id: 'answering', label: 'Composing answer' }
+    { id: 'planning', label: 'Resolve' },
+    { id: 'searching', label: 'Search' },
+    { id: 'reading', label: 'Read' },
+    { id: 'answering', label: 'Write' }
   ] as const
 
   const order = steps.map(step => step.id)
@@ -1234,31 +1575,50 @@ function SearchProgressIndicator({ progress }: { progress: SearchProgress }) {
 
   return (
     <div
-      className="rounded-2xl border border-zinc-200 bg-white/80 p-4 shadow-[0_18px_44px_-32px_rgba(15,23,42,0.18)]"
+      className="rounded-2xl border border-zinc-200 bg-white/85 p-3 shadow-[0_18px_44px_-32px_rgba(15,23,42,0.18)]"
       data-testid="search-progress"
     >
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin" />
-          <span>{progress.message ?? 'Working on it...'}</span>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="size-3.5 shrink-0 animate-spin" />
+            <span className="truncate">
+              {progress.message ?? 'Working on it...'}
+            </span>
+          </div>
+          {progress.sources.length > 0 && (
+            <span
+              className="inline-flex h-7 shrink-0 items-center rounded-full border border-zinc-200 bg-zinc-50 px-2 text-[11px] font-medium text-zinc-600"
+              data-testid="search-progress-source-count"
+            >
+              {progress.sources.length} source
+              {progress.sources.length === 1 ? '' : 's'} found
+            </span>
+          )}
         </div>
-        <ol className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-4">
+        <ol className="grid grid-cols-4 gap-1 text-[11px] sm:text-xs">
           {steps.map((step, index) => {
             const isActive = index === activeIndex
             const isDone = activeIndex > index
             return (
               <li
                 key={step.id}
-                className={
+                className={`flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 ${
                   isActive
-                    ? 'font-medium text-zinc-900'
+                    ? 'border-zinc-300 bg-zinc-950 text-white'
                     : isDone
-                      ? 'text-zinc-600'
-                      : 'text-muted-foreground/70'
-                }
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : 'border-zinc-200 bg-zinc-50 text-zinc-500'
+                }`}
               >
-                <span className="mr-1">{index + 1}.</span>
-                {step.label}
+                {isDone ? (
+                  <Check className="size-3 shrink-0" />
+                ) : isActive ? (
+                  <Loader2 className="size-3 shrink-0 animate-spin" />
+                ) : (
+                  <span className="size-3 shrink-0 rounded-full border border-current/30" />
+                )}
+                <span className="truncate">{step.label}</span>
               </li>
             )
           })}
@@ -1268,7 +1628,7 @@ function SearchProgressIndicator({ progress }: { progress: SearchProgress }) {
             {progress.searchQueries.map((q, index) => (
               <li
                 key={`${q}-${index}`}
-                className="rounded-full bg-zinc-100 px-2 py-0.5"
+                className="max-w-full truncate rounded-full bg-zinc-100 px-2 py-0.5"
               >
                 {q}
               </li>
@@ -1295,7 +1655,7 @@ function SourceList({
 
   return (
     <section
-      className="rounded-2xl border border-zinc-200 bg-white/75 p-3 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.2)]"
+      className="rounded-2xl border border-zinc-200 bg-white/80 p-3 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.2)]"
       data-testid="brok-search-sources"
     >
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -1306,11 +1666,16 @@ function SourceList({
             <Globe2 className="size-3.5 shrink-0 text-zinc-500" />
           )}
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {fallbackOnly ? 'Fallback' : 'Sources'}
+            {fallbackOnly ? 'Fallback' : 'Sources used'}
           </h2>
           <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-zinc-100 px-1.5 text-[11px] font-medium text-zinc-700">
             {sources.length}
           </span>
+          {!fallbackOnly && (
+            <span className="hidden text-[11px] text-muted-foreground sm:inline">
+              click any card to verify
+            </span>
+          )}
         </div>
         <button
           type="button"
@@ -1332,7 +1697,7 @@ function SourceList({
         className={
           expanded
             ? 'grid grid-cols-1 gap-2 md:grid-cols-2'
-            : 'mobile-chip-row flex gap-2 overflow-x-auto pb-1'
+            : 'flex flex-wrap gap-2 pb-1'
         }
         id="brok-source-details"
       >
@@ -1344,13 +1709,13 @@ function SourceList({
             return (
               <li
                 key={getSourceIdentity(source)}
-                className="min-w-0 shrink-0"
+                className="min-w-0 max-w-full"
                 data-testid={`brok-search-source-${index}`}
               >
                 <button
                   type="button"
                   onClick={() => onOpenSource(source)}
-                  className="inline-flex h-10 max-w-[13rem] items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/90 px-3 text-xs font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+                  className="inline-flex h-10 max-w-full items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/90 px-3 text-xs font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
                   aria-label={`Verify source ${sourceIndex}: ${source.title}`}
                 >
                   <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-zinc-100 font-mono text-[9px] font-semibold text-zinc-600">

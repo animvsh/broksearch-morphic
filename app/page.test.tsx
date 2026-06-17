@@ -35,13 +35,16 @@ vi.mock('@/components/brok/brok-landing', () => ({
 vi.mock('@/components/search/search-landing', () => ({
   SearchLanding: ({
     isCloudDeployment,
-    hasModels
+    hasModels,
+    modelSelectorData
   }: {
     isCloudDeployment?: boolean
     hasModels?: boolean
+    modelSelectorData?: { selectedModelKey?: string }
   }) => (
     <div data-testid="search-landing">
-      {String(isCloudDeployment)}:{String(hasModels)}
+      {String(isCloudDeployment)}:{String(hasModels)}:
+      {modelSelectorData?.selectedModelKey ?? 'none'}
     </div>
   )
 }))
@@ -58,7 +61,10 @@ describe('app/page', () => {
     mocks.getCurrentUser.mockResolvedValue(null)
     mocks.getAppAccessForUser.mockResolvedValue({ allowed: false })
     mocks.hasFeatureAccess.mockReturnValue(false)
-    mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
+    mocks.getModelSelectorData.mockResolvedValue({
+      hasAvailableModels: true,
+      selectedModelKey: 'openai-compatible:brok-m2-5-highspeed'
+    })
   })
 
   afterEach(() => {
@@ -68,11 +74,13 @@ describe('app/page', () => {
 
   it('renders the search-first landing for signed-out users when guest search is enabled', async () => {
     process.env.ENABLE_GUEST_CHAT = 'true'
-    process.env.BROK_CLOUD_DEPLOYMENT = 'true'
+    process.env.BROK_CLOUD_DEPLOYMENT = 'false'
 
     render(await Page())
 
-    expect(screen.getByTestId('search-landing')).toHaveTextContent('true:true')
+    expect(screen.getByTestId('search-landing')).toHaveTextContent(
+      'false:true:openai-compatible:brok-m2-5-highspeed'
+    )
     expect(screen.queryByTestId('brok-landing')).not.toBeInTheDocument()
     expect(mocks.getModelSelectorData).toHaveBeenCalledOnce()
   })

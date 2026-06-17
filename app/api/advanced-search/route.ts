@@ -13,6 +13,8 @@ import {
   SearXNGSearchResults
 } from '@/lib/types'
 
+import { runWithConcurrencyLimit } from './concurrency'
+
 /**
  * Maximum number of results to fetch from SearXNG.
  * Increasing this value can improve result quality but may impact performance.
@@ -24,7 +26,7 @@ const SEARXNG_MAX_RESULTS = Math.max(
 )
 
 const CACHE_TTL = 3600 // Cache time-to-live in seconds (1 hour)
-const CACHE_EXPIRATION_CHECK_INTERVAL = 3600000 // 1 hour in milliseconds
+const DEFAULT_SEARXNG_CRAWL_CONCURRENCY = 5
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
@@ -136,28 +138,6 @@ async function setCachedResults(
     console.error('Redis cache error:', error)
   }
 }
-
-// Function to periodically clean up expired cache entries
-async function cleanupExpiredCache() {
-  try {
-    const client = await initializeRedisClient()
-    if (!client) return
-
-    const keys = await client.keys('search:*')
-    for (const key of keys) {
-      const ttl = await client.ttl(key)
-      if (ttl <= 0) {
-        await client.del(key)
-        console.log(`Removed expired cache entry: ${key}`)
-      }
-    }
-  } catch (error) {
-    console.error('Cache cleanup error:', error)
-  }
-}
-
-// Set up periodic cache cleanup
-setInterval(cleanupExpiredCache, CACHE_EXPIRATION_CHECK_INTERVAL)
 
 export async function POST(request: Request) {
   let payload: Record<string, unknown>
@@ -330,10 +310,14 @@ async function advancedSearchXNGSearch(
     }
 
     if (searchDepth === 'advanced') {
-      const crawledResults = await Promise.all(
-        generalResults
-          .slice(0, maxResults * SEARXNG_CRAWL_MULTIPLIER)
-          .map(result => crawlPage(result, query))
+      const crawlCandidates = generalResults.slice(
+        0,
+        maxResults * SEARXNG_CRAWL_MULTIPLIER
+      )
+      const crawledResults = await runWithConcurrencyLimit(
+        crawlCandidates,
+        getSearXNGCrawlConcurrency(),
+        result => crawlPage(result, query)
       )
       generalResults = crawledResults
         .filter(result => result !== null && isQualityContent(result.content))
@@ -382,6 +366,17 @@ async function advancedSearchXNGSearch(
       number_of_results: 0
     }
   }
+}
+
+function getSearXNGCrawlConcurrency(): number {
+  const configured = Number.parseInt(
+    process.env.SEARXNG_CRAWL_CONCURRENCY || '',
+    10
+  )
+  if (Number.isFinite(configured) && configured > 0) {
+    return Math.min(configured, 20)
+  }
+  return DEFAULT_SEARXNG_CRAWL_CONCURRENCY
 }
 
 async function crawlPage(

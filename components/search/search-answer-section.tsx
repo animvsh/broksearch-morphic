@@ -107,6 +107,23 @@ function extractSourcesFromItems(
   return out
 }
 
+function buildCitationMapFromMetadataSources(
+  sources: SearchResultItem[] | undefined,
+  toolCallId = 'answer'
+): Record<string, Record<number, SearchResultItem>> {
+  if (!sources?.length) return {}
+
+  return {
+    [toolCallId]: sources.reduce<Record<number, SearchResultItem>>(
+      (acc, source, index) => {
+        acc[index + 1] = source
+        return acc
+      },
+      {}
+    )
+  }
+}
+
 function normalizeSourceKey(url: string): string {
   try {
     const parsed = new URL(url)
@@ -227,12 +244,19 @@ export function SearchAnswerSection({
     () => getMetadataSources(metadata),
     [metadata]
   )
+  const displayCitationMaps = useMemo(
+    () =>
+      metadataSources && metadataSources.length > 0
+        ? buildCitationMapFromMetadataSources(metadataSources)
+        : citationMaps,
+    [citationMaps, metadataSources]
+  )
   const sources = useMemo(
     () =>
       metadataSources && metadataSources.length > 0
         ? extractSourcesFromItems(metadataSources)
-        : extractSources(citationMaps),
-    [citationMaps, metadataSources]
+        : extractSources(displayCitationMaps),
+    [displayCitationMaps, metadataSources]
   )
   const isStreaming = status === 'submitted' || status === 'streaming'
   const streaming = useStreamingPhases(isStreaming)
@@ -372,7 +396,7 @@ export function SearchAnswerSection({
           <div className="flex flex-col gap-1" data-testid="answer-section">
             <MarkdownMessage
               message={displayContent}
-              citationMaps={citationMaps}
+              citationMaps={displayCitationMaps}
               onCitationOpen={setActiveSource}
             />
           </div>

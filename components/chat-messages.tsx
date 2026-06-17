@@ -215,6 +215,8 @@ export function ChatMessages({
               const isLatestMessage =
                 sectionIndex === sections.length - 1 &&
                 messageIndex === section.assistantMessages.length - 1
+              const messageStatus =
+                isLatestMessage && isLoading ? status : 'ready'
 
               return (
                 <div
@@ -230,7 +232,7 @@ export function ChatMessages({
                     onOpenChange={handleOpenChange}
                     chatId={chatId}
                     isGuest={isGuest}
-                    status={status}
+                    status={messageStatus}
                     addToolResult={addToolResult}
                     onFollowUpSubmit={onFollowUpSubmit}
                     onUpdateMessage={onUpdateMessage}

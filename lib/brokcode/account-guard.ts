@@ -7,7 +7,12 @@ import {
   getCurrentUser,
   isAnonymousAuthMode
 } from '@/lib/auth/get-current-user'
-import { type AuthResult, verifyRequestAuth } from '@/lib/brok/auth'
+import {
+  apiKeyHasScope,
+  type AuthResult,
+  forbiddenScopeResponse,
+  verifyRequestAuth
+} from '@/lib/brok/auth'
 import type { apiKeys, workspaces } from '@/lib/db/schema'
 
 const LOCAL_FALLBACK_API_KEY_ID = '00000000-0000-0000-0000-000000000001'
@@ -277,6 +282,10 @@ export async function enforceBrokCodeAccountOwnership(
       },
       { status: 403 }
     )
+  }
+
+  if (!isLocalFallbackKey && !apiKeyHasScope(authResult.apiKey, 'code:write')) {
+    return forbiddenScopeResponse('code:write')
   }
 
   const user = await getCurrentUser()

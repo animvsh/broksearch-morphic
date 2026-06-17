@@ -138,7 +138,7 @@ function ToolbarButton({
       onClick={onClick}
       disabled={loading}
       className={cn(
-        'h-8 gap-1.5 rounded-lg px-2.5 text-xs font-medium',
+        'min-h-11 gap-1.5 rounded-lg px-3 text-xs font-medium sm:min-h-9 sm:px-2.5',
         active && 'bg-foreground/5',
         success && 'text-emerald-600'
       )}

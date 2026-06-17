@@ -15,6 +15,8 @@ export const APP_FEATURES = [
 
 export type AppFeature = (typeof APP_FEATURES)[number]
 
+const LOCAL_DEV_ACCESS_SEED_EMAILS = ['aalang@ucsc.edu']
+
 type AppAccessAllowed = {
   allowed: true
   user: User
@@ -55,6 +57,46 @@ function envAllowedEmails() {
 
 function envAdminEmails() {
   return new Set(parseEmailList(process.env.ADMIN_EMAILS))
+}
+
+function isCloudRuntime() {
+  return (
+    process.env.BROK_CLOUD_DEPLOYMENT === 'true' ||
+    process.env.MORPHIC_CLOUD_DEPLOYMENT === 'true' ||
+    Boolean(
+      process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID
+    ) ||
+    Boolean(process.env.VERCEL || process.env.NEXT_PUBLIC_VERCEL_ENV)
+  )
+}
+
+export function getLocalDevAccessSeedEmails() {
+  if (process.env.BROK_LOCAL_DEV_ACCESS_SEED === 'false') {
+    return new Set<string>()
+  }
+
+  if (
+    process.env.BROK_CLOUD_DEPLOYMENT === 'true' ||
+    process.env.MORPHIC_CLOUD_DEPLOYMENT === 'true'
+  ) {
+    return new Set<string>()
+  }
+
+  if (
+    process.env.NODE_ENV !== 'production' ||
+    process.env.BROK_LOCAL_DEV_ACCESS_SEED === 'true'
+  ) {
+    return new Set([
+      ...LOCAL_DEV_ACCESS_SEED_EMAILS,
+      ...parseEmailList(process.env.BROK_LOCAL_DEV_ACCESS_EMAILS)
+    ])
+  }
+
+  if (isCloudRuntime()) {
+    return new Set<string>()
+  }
+
+  return new Set<string>()
 }
 
 function hasMetadataAccess(user: User) {
@@ -128,6 +170,10 @@ export async function getAppAccessForUser(
   const email = normalizeAccessEmail(user.email)
 
   if (email && envAdminEmails().has(email)) {
+    return { allowed: true, user, source: 'admin', features: 'all' }
+  }
+
+  if (email && getLocalDevAccessSeedEmails().has(email)) {
     return { allowed: true, user, source: 'admin', features: 'all' }
   }
 

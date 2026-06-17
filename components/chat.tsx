@@ -78,6 +78,23 @@ function isTransientFetchError(error: unknown) {
   )
 }
 
+function isNonIdempotentChatPost(input: RequestInfo | URL, init?: RequestInit) {
+  const method =
+    init?.method ??
+    (input instanceof Request ? input.method : undefined) ??
+    'GET'
+  if (method.toUpperCase() !== 'POST') return false
+
+  const url =
+    input instanceof Request
+      ? input.url
+      : input instanceof URL
+        ? input.toString()
+        : input
+
+  return typeof url === 'string' && url.includes('/api/chat')
+}
+
 function getGuestChatStorageKey(chatId: string) {
   return `${GUEST_CHAT_STORAGE_PREFIX}${chatId}`
 }
@@ -105,7 +122,11 @@ async function resilientChatFetch(
   try {
     return await fetch(input, init)
   } catch (error) {
-    if (init?.signal?.aborted || !isTransientFetchError(error)) {
+    if (
+      init?.signal?.aborted ||
+      isNonIdempotentChatPost(input, init) ||
+      !isTransientFetchError(error)
+    ) {
       throw error
     }
 

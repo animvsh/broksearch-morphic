@@ -74,9 +74,13 @@ function formatContextWindow(contextWindow?: number) {
 
 interface ModelSelectorClientProps {
   data: ModelSelectorData
+  compact?: boolean
 }
 
-export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
+export function ModelSelectorClient({
+  data,
+  compact = false
+}: ModelSelectorClientProps) {
   const [open, setOpen] = useState(false)
   const [selectedModelKey, setSelectedModelKey] = useState<string>(
     data.selectedModelKey
@@ -113,7 +117,10 @@ export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
     return (
       <Button
         variant="outline"
-        className="h-9 gap-1 rounded-full border-zinc-200 bg-white px-3 py-2 text-sm shadow-xs transition-all"
+        className={cn(
+          'h-9 gap-1 rounded-full border-zinc-200 bg-white px-3 py-2 text-sm shadow-xs transition-all',
+          compact && 'max-w-[12rem] sm:max-w-56'
+        )}
         disabled
         title="No enabled models are available"
       >
@@ -135,10 +142,14 @@ export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="h-9 gap-1 rounded-full border-zinc-200 bg-white px-3 py-2 text-sm shadow-xs transition-all hover:border-zinc-300 hover:bg-zinc-50"
+          aria-label={`Answer model: ${selectedModel.name}`}
+          className={cn(
+            'h-9 gap-1 rounded-full border-zinc-200 bg-white px-3 py-2 text-sm shadow-xs transition-all hover:border-zinc-300 hover:bg-zinc-50',
+            compact && 'max-w-[12rem] sm:max-w-56'
+          )}
         >
           <ProviderLogo providerId={selectedModel.providerId} />
-          <span className="truncate max-w-40 text-xs font-medium">
+          <span className="max-w-28 truncate text-xs font-medium sm:max-w-40">
             {selectedModel.name}
           </span>
           <span className="hidden rounded-md bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 sm:inline">

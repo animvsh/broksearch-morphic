@@ -47,7 +47,7 @@ export const CitationLink = memo(function CitationLink({
 
   const linkClasses = cn(
     isCitation
-      ? 'text-[11px] bg-muted text-muted-foreground rounded-full h-5 min-w-5 px-1.5 inline-flex items-center justify-center hover:bg-primary hover:text-primary-foreground hover:scale-105 duration-200 no-underline -translate-y-0.5 whitespace-nowrap'
+      ? 'not-prose mx-0.5 inline-flex h-4 min-w-4 -translate-y-px items-center justify-center rounded px-1 font-mono text-[10px] font-semibold leading-none whitespace-nowrap bg-foreground/[0.08] text-foreground/75 no-underline transition-colors hover:bg-foreground/15 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
       : 'hover:underline inline-flex items-center gap-1.5',
     className
   )
@@ -95,18 +95,18 @@ export const CitationLink = memo(function CitationLink({
           </a>
         </PopoverTrigger>
         <PopoverContent
-          className="w-80 p-0 z-50 shadow-xs"
+          className="z-50 w-[min(18rem,calc(100vw-2rem))] p-0 shadow-xs"
           side="bottom"
           align="start"
           sideOffset={4}
-          onPointerDownOutside={e => e.preventDefault()}
+          collisionPadding={12}
         >
           {citationData ? (
             <Link
               href={citationData.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="block p-3 hover:bg-accent/50 transition-colors"
+              className="block p-3 transition-colors hover:bg-accent/50"
             >
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -121,14 +121,14 @@ export const CitationLink = memo(function CitationLink({
                       {getHostname(citationData.url)[0]?.toUpperCase() || '?'}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="text-xs text-muted-foreground truncate">
+                  <span className="truncate text-xs text-muted-foreground">
                     {getHostname(citationData.url)}
                   </span>
                 </div>
-                <p className="text-sm font-medium line-clamp-1">
+                <p className="line-clamp-2 break-words text-sm font-medium leading-snug">
                   {citationData.title}
                 </p>
-                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                <p className="line-clamp-2 break-words text-xs leading-relaxed text-muted-foreground">
                   {citationData.content}
                 </p>
               </div>

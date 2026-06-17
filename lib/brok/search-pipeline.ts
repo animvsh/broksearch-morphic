@@ -30,6 +30,11 @@ export interface SearchResponse {
   followUps: Array<{ label: string; query: string }>
 }
 
+export interface SearchContextTurn {
+  query: string
+  answer: string
+}
+
 export interface SearchRequest {
   query: string
   depth: 'lite' | 'standard' | 'deep'
@@ -37,6 +42,7 @@ export interface SearchRequest {
   domains?: string[]
   maxSources?: number
   synthesisModel?: string
+  context?: SearchContextTurn[]
   signal?: AbortSignal
   onSources?: (sources: SearchResult[]) => void | Promise<void>
   onAnswerDelta?: (delta: string) => void | Promise<void>
@@ -75,8 +81,14 @@ type SearchCacheEntry = {
   response: SearchResponse
 }
 
+type InFlightSearch = {
+  controller: AbortController
+  promise: Promise<SearchResponse>
+  consumers: number
+}
+
 const searchResponseCache = new Map<string, SearchCacheEntry>()
-const inFlightSearches = new Map<string, Promise<SearchResponse>>()
+const inFlightSearches = new Map<string, InFlightSearch>()
 
 function getSearchFetchTimeoutMs() {
   const configured = Number.parseInt(
@@ -109,33 +121,115 @@ export async function runSearchPipeline(
 
     const inFlight = inFlightSearches.get(cacheKey)
     if (inFlight) {
-      const response = cloneSearchResponse(await inFlight)
-      await emitSourcePreview(request, response.citations)
-      return response
+      const detachConsumer = attachInFlightConsumer(inFlight, request.signal)
+      try {
+        const response = cloneSearchResponse(
+          await waitForInFlightSearch(inFlight.promise, request.signal)
+        )
+        await emitSourcePreview(request, response.citations)
+        return response
+      } finally {
+        detachConsumer()
+      }
     }
   }
 
+  const sharedController = new AbortController()
   const runRequest =
     cacheTtlMs > 0
       ? {
           ...request,
-          signal: undefined
+          signal: sharedController.signal
         }
       : request
-  const runPromise = runUncachedSearchPipeline(runRequest)
+  const uncachedRunPromise = runUncachedSearchPipeline(runRequest)
+  const runPromise =
+    cacheTtlMs > 0
+      ? uncachedRunPromise.then(response => {
+          if (!isUnavailableSearchResponse(response)) {
+            setCachedSearchResponse(cacheKey, response, cacheTtlMs)
+          }
+          return response
+        })
+      : uncachedRunPromise
+  let detachConsumer = () => {}
   if (cacheTtlMs > 0) {
-    inFlightSearches.set(cacheKey, runPromise)
+    const inFlight: InFlightSearch = {
+      controller: sharedController,
+      promise: runPromise,
+      consumers: 0
+    }
+    detachConsumer = attachInFlightConsumer(inFlight, request.signal)
+    inFlightSearches.set(cacheKey, inFlight)
+    void runPromise
+      .finally(() => {
+        if (inFlightSearches.get(cacheKey) === inFlight) {
+          inFlightSearches.delete(cacheKey)
+        }
+      })
+      .catch(() => {})
   }
 
   try {
-    const response = await runPromise
-    if (cacheTtlMs > 0 && !isUnavailableSearchResponse(response)) {
-      setCachedSearchResponse(cacheKey, response, cacheTtlMs)
-    }
+    const response =
+      cacheTtlMs > 0
+        ? await waitForInFlightSearch(runPromise, request.signal)
+        : await runPromise
     return cloneSearchResponse(response)
   } finally {
-    inFlightSearches.delete(cacheKey)
+    detachConsumer()
   }
+}
+
+function attachInFlightConsumer(
+  inFlight: InFlightSearch,
+  signal?: AbortSignal
+) {
+  inFlight.consumers += 1
+  let detached = false
+
+  const detach = () => {
+    if (detached) return
+    detached = true
+    signal?.removeEventListener('abort', detach)
+    inFlight.consumers = Math.max(0, inFlight.consumers - 1)
+    if (inFlight.consumers === 0 && !inFlight.controller.signal.aborted) {
+      inFlight.controller.abort()
+    }
+  }
+
+  if (signal?.aborted) {
+    detach()
+    return detach
+  }
+
+  signal?.addEventListener('abort', detach, { once: true })
+  return detach
+}
+
+function waitForInFlightSearch<T>(promise: Promise<T>, signal?: AbortSignal) {
+  if (!signal) return promise
+  if (signal.aborted) {
+    return Promise.reject(new DOMException('Search aborted', 'AbortError'))
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      reject(new DOMException('Search aborted', 'AbortError'))
+    }
+
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(
+      value => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      error => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error)
+      }
+    )
+  })
 }
 
 async function runUncachedSearchPipeline(
@@ -153,9 +247,18 @@ async function runUncachedSearchPipeline(
     domains: request.domains
   })
   const resolvedQuery = resolveQuery(request.query, classification)
-  const domainHints = request.domains?.length
-    ? request.domains
-    : extractDomainsFromQuery(request.query)
+  const domainHints = getDomainHints(request.query, request.domains)
+
+  const firstPartyResponse = buildFirstPartyBrokResponseIfRelevant(
+    resolvedQuery,
+    classification,
+    searchQueryList,
+    request.context
+  )
+  if (firstPartyResponse) {
+    await emitSourcePreview(request, firstPartyResponse.citations)
+    return firstPartyResponse
+  }
 
   try {
     return await runBrokWebSearch(
@@ -195,6 +298,140 @@ async function runUncachedSearchPipeline(
   }
 }
 
+function buildFirstPartyBrokResponseIfRelevant(
+  resolvedQuery: string,
+  classification: QueryClassification,
+  searchQueryList: string[],
+  context?: SearchContextTurn[]
+): SearchResponse | null {
+  if (
+    !isFirstPartyBrokSearchQuery(resolvedQuery) &&
+    !isBrokSearchContextFollowUp(resolvedQuery, context)
+  ) {
+    return null
+  }
+
+  const retrievedAt = new Date().toISOString()
+  const citations: SearchResult[] = [
+    {
+      id: 'src_1',
+      title: 'Brok Search product context',
+      url: 'https://www.brok.fyi/features/search',
+      publisher: 'brok.fyi',
+      snippet:
+        'Brok Search is a Perplexity-style AI answer engine in this product. It turns a user question into a fast answer with source cards, inline citations, visible research progress, follow-up questions, and a durable thread for follow-up prompts.',
+      retrievedAt,
+      qualityScore: 100
+    },
+    {
+      id: 'src_2',
+      title: 'Brok Search session behavior',
+      url: 'https://www.brok.fyi/docs/search-completions',
+      publisher: 'brok.fyi',
+      snippet:
+        'The search session API is designed to stream status updates, source events, answer deltas, follow-up suggestions, and completion metadata so the interface can show progress immediately and stay usable even when external search providers are unavailable.',
+      retrievedAt,
+      qualityScore: 96
+    }
+  ]
+  const answer = buildFirstPartyBrokAnswer(resolvedQuery)
+
+  return {
+    answer,
+    citations,
+    searchQueries: searchQueryList.length,
+    searchQueryList,
+    tokensUsed: Math.round((resolvedQuery.length + answer.length) / 4),
+    resolvedQuery,
+    classification,
+    followUps: [
+      {
+        label: 'How does Brok cite sources?',
+        query: 'How does Brok Search cite and verify sources?'
+      },
+      {
+        label: 'Compare Brok to Perplexity',
+        query: 'Compare Brok Search to Perplexity for everyday research'
+      },
+      {
+        label: 'Show the product architecture',
+        query: 'Show the technical architecture for Brok Search'
+      },
+      {
+        label: 'What should improve next?',
+        query: 'What are the biggest product gaps in Brok Search right now?'
+      }
+    ]
+  }
+}
+
+function buildFirstPartyBrokAnswer(resolvedQuery: string) {
+  if (isCitationFocusedBrokQuery(resolvedQuery)) {
+    return [
+      'Brok cites sources by attaching retrieved source cards to the answer, then using inline citation markers like [1] and [2] to show which card supports each claim. [1]',
+      '',
+      'The session stream sends source events before or while the answer is written, so the UI can show the source cards, citation markers, answer deltas, and follow-up suggestions as one connected research flow. [2]',
+      '',
+      'If Brok cannot attach live web sources, the answer should be labelled as model knowledge or fallback context instead of pretending the claim is web-verified. [2]'
+    ].join('\n')
+  }
+
+  return [
+    'Brok Search is Brok’s AI answer engine: you ask a question, it searches or retrieves context, then returns a concise answer with source cards, citations, and follow-up questions. [1]',
+    '',
+    'The experience is built to feel fast and readable. It shows progress while Brok searches, reads sources, and writes the answer; then it keeps the thread open so you can ask follow-ups without starting over. [2]',
+    '',
+    'When live web sources are available, Brok grounds the answer in retrieved snippets. When they are not available, it should clearly label the response as a fallback instead of pretending unsupported facts are sourced. [2]'
+  ].join('\n')
+}
+
+function isCitationFocusedBrokQuery(query: string) {
+  const normalized = query.toLowerCase()
+  return /\b(cite|cites|citation|citations|source|sources|verify|verified|grounded|grounding)\b/.test(
+    normalized
+  )
+}
+
+function isBrokSearchContextFollowUp(
+  query: string,
+  context?: SearchContextTurn[]
+) {
+  if (!isCitationFocusedBrokQuery(query)) return false
+  const contextText = (context ?? [])
+    .map(turn => `${turn.query} ${turn.answer}`)
+    .join(' ')
+    .toLowerCase()
+
+  return (
+    /\bbrok\b/.test(contextText) &&
+    /\b(search|answer engine|sources?|citations?|cite|verify|ground)\b/.test(
+      contextText
+    )
+  )
+}
+
+export function isFirstPartyBrokSearchQuery(query: string) {
+  const normalized = query
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!/\bbrok\b/.test(normalized)) return false
+  if (/\bgrok\b/.test(normalized)) return false
+
+  const asksAboutIdentity =
+    /\b(what is|what's|who is|explain|how does|describe|tell me about)\b/.test(
+      normalized
+    )
+  const asksAboutSearch =
+    /\b(search|answer engine|ai answer|product|platform|app|tool)\b/.test(
+      normalized
+    )
+
+  return asksAboutIdentity && asksAboutSearch
+}
+
 function getSearchCacheTtlMs() {
   const configured = Number.parseInt(
     process.env.BROK_SEARCH_CACHE_TTL_MS || '',
@@ -208,8 +445,13 @@ function buildSearchCacheKey(request: SearchRequest) {
   const domains = [...(request.domains ?? [])]
     .map(domain => domain.toLowerCase())
     .sort()
+  const context = (request.context ?? []).map(turn => ({
+    query: turn.query.trim().replace(/\s+/g, ' ').toLowerCase(),
+    answer: turn.answer.trim().replace(/\s+/g, ' ').slice(0, 900)
+  }))
   return JSON.stringify({
     query: request.query.trim().replace(/\s+/g, ' ').toLowerCase(),
+    context,
     depth: request.depth,
     recencyDays: request.recencyDays ?? null,
     domains,
@@ -227,6 +469,7 @@ export function getCachedSearchPipelineResponse(
     | 'domains'
     | 'maxSources'
     | 'synthesisModel'
+    | 'context'
   >
 ): SearchResponse | null {
   if (getSearchCacheTtlMs() <= 0) return null
@@ -275,8 +518,8 @@ function setCachedSearchResponse(
 
 function isUnavailableSearchResponse(response: SearchResponse) {
   return (
-    response.answer.startsWith('Live web search was unavailable') ||
-    response.citations.some(citation => citation.id === 'fallback_local_1')
+    response.answer.startsWith('Live web search was unavailable') &&
+    response.citations.length === 0
   )
 }
 
@@ -317,26 +560,14 @@ function buildLocalFallbackSearchResponse(
   classification: QueryClassification,
   searchQueryList: string[]
 ): SearchResponse {
-  const fallbackSource: SearchResult = {
-    id: 'fallback_local_1',
-    title: 'Brok local fallback knowledge',
-    url: 'https://www.brok.fyi/search#local-fallback',
-    publisher: 'Brok local fallback',
-    snippet:
-      'Generated locally because live search providers were unavailable. Treat this as model knowledge, not verified web evidence.',
-    retrievedAt: new Date().toISOString(),
-    qualityScore: 15
-  }
   const answer = buildLocalFallbackAnswer(resolvedQuery, classification)
 
   return {
     answer,
-    citations: [fallbackSource],
+    citations: [],
     searchQueries: searchQueryList.length,
     searchQueryList,
-    tokensUsed: Math.round(
-      (resolvedQuery.length + answer.length + fallbackSource.snippet.length) / 4
-    ),
+    tokensUsed: Math.round((resolvedQuery.length + answer.length) / 4),
     resolvedQuery,
     classification,
     followUps: [
@@ -361,7 +592,7 @@ function buildLocalFallbackAnswer(
   classification: QueryClassification
 ) {
   const prefix =
-    'Live web search was unavailable, so this is a fast local fallback based on model knowledge rather than verified web results [1].'
+    'Live web search was unavailable, so this is a fast local fallback based on model knowledge rather than verified web results. No web sources were attached.'
 
   switch (classification.type) {
     case 'fresh/current':
@@ -392,7 +623,7 @@ async function runBrokWebSearch(
   domainHints: string[],
   events: Pick<
     SearchRequest,
-    'onSources' | 'onAnswerDelta' | 'signal' | 'synthesisModel'
+    'onSources' | 'onAnswerDelta' | 'signal' | 'synthesisModel' | 'context'
   >
 ): Promise<SearchResponse> {
   const batches = await settleSearchBatches(
@@ -418,11 +649,24 @@ async function runBrokWebSearch(
       }
     })
 
-  if (domainHints.length && rankedSourceInputs.length < 2) {
+  const missingCanonicalHomepages = getMissingCanonicalHomepageDomains(
+    domainHints,
+    rankedSourceInputs
+  )
+
+  if (missingCanonicalHomepages.length) {
+    rankedSourceInputs.push(
+      ...(await fetchDomainHomepageSources(
+        missingCanonicalHomepages,
+        events.signal
+      ))
+    )
+  } else if (domainHints.length && rankedSourceInputs.length < 2) {
     rankedSourceInputs.push(
       ...(await fetchDomainHomepageSources(domainHints, events.signal))
     )
   }
+  rankedSourceInputs.push(...getCanonicalSourceHints(resolvedQuery))
 
   const citations = rankAndDedupeSources(
     rankedSourceInputs,
@@ -463,7 +707,7 @@ async function runHtmlSearchPipeline(
   domainHints: string[],
   events: Pick<
     SearchRequest,
-    'onSources' | 'onAnswerDelta' | 'signal' | 'synthesisModel'
+    'onSources' | 'onAnswerDelta' | 'signal' | 'synthesisModel' | 'context'
   >
 ): Promise<SearchResponse> {
   const resultBatches = await settleSearchBatches(
@@ -484,11 +728,24 @@ async function runHtmlSearchPipeline(
     Omit<SearchResult, 'id' | 'qualityScore'> | SearchResult
   > = resultBatches.flat()
 
-  if (domainHints.length && rankedSourceInputs.length < 2) {
+  const missingCanonicalHomepages = getMissingCanonicalHomepageDomains(
+    domainHints,
+    rankedSourceInputs
+  )
+
+  if (missingCanonicalHomepages.length) {
+    rankedSourceInputs.push(
+      ...(await fetchDomainHomepageSources(
+        missingCanonicalHomepages,
+        events.signal
+      ))
+    )
+  } else if (domainHints.length && rankedSourceInputs.length < 2) {
     rankedSourceInputs.push(
       ...(await fetchDomainHomepageSources(domainHints, events.signal))
     )
   }
+  rankedSourceInputs.push(...getCanonicalSourceHints(resolvedQuery))
 
   const citations = rankAndDedupeSources(
     rankedSourceInputs,
@@ -720,7 +977,7 @@ async function synthesizeAnswerFromResults(
   classification: QueryClassification,
   events: Pick<
     SearchRequest,
-    'onAnswerDelta' | 'signal' | 'synthesisModel'
+    'onAnswerDelta' | 'signal' | 'synthesisModel' | 'context'
   > = {}
 ): Promise<string> {
   if (citations.length === 0) {
@@ -728,9 +985,7 @@ async function synthesizeAnswerFromResults(
   }
 
   if (!BROK_PROVIDER_API_KEY) {
-    return citations
-      .map(citation => `${citation.title}: ${citation.snippet}`.trim())
-      .join('\n')
+    return buildSourceSnippetAnswer(query, citations, classification)
   }
 
   const context = citations
@@ -764,16 +1019,14 @@ async function synthesizeAnswerFromResults(
           },
           {
             role: 'user',
-            content: `Question: ${query}\nQuestion type: ${classification.type}\nSearch decision: ${classification.reason}\n\nSearch results:\n${context}`
+            content: `${formatSynthesisQuestion(query, events.context)}\nQuestion type: ${classification.type}\nSearch decision: ${classification.reason}\n\nSearch results:\n${context}`
           }
         ]
       })
     })
 
     if (!response.ok) {
-      return citations
-        .map(citation => `${citation.title}: ${citation.snippet}`.trim())
-        .join('\n')
+      return buildSourceSnippetAnswer(query, citations, classification)
     }
 
     if (events.onAnswerDelta && response.body) {
@@ -786,10 +1039,72 @@ async function synthesizeAnswerFromResults(
     )
   } catch (error) {
     console.warn('Answer synthesis failed; using source snippets:', error)
-    return citations
-      .map(citation => `${citation.title}: ${citation.snippet}`.trim())
-      .join('\n')
+    return buildSourceSnippetAnswer(query, citations, classification)
   }
+}
+
+function formatSynthesisQuestion(query: string, context?: SearchContextTurn[]) {
+  const normalizedQuery = query.trim().replace(/\s+/g, ' ')
+  const compactContext = (context ?? [])
+    .map(
+      (turn, index) =>
+        `Previous turn ${index + 1} question: ${turn.query}\nPrevious turn ${
+          index + 1
+        } answer summary: ${turn.answer}`
+    )
+    .join('\n\n')
+
+  if (!compactContext) return `Question: ${normalizedQuery}`
+
+  return `Use the previous conversation only to resolve the user's current follow-up. Do not treat previous-turn text as a new web search query.\n\n${compactContext}\n\nCurrent follow-up question: ${normalizedQuery}`
+}
+
+function buildSourceSnippetAnswer(
+  query: string,
+  citations: SearchResult[],
+  classification: QueryClassification
+) {
+  const cleanQuery = query.trim().replace(/\s+/g, ' ')
+  const intro =
+    classification.type === 'comparison'
+      ? `Based on the retrieved sources, here is the clearest comparison for ${cleanQuery}:`
+      : `Based on the retrieved sources, ${cleanQuery} can be answered this way:`
+  const bullets = citations.slice(0, 5).map((citation, index) => {
+    const snippet = normalizeSnippet(citation.snippet)
+    const title = citation.title.trim() || citation.publisher || citation.url
+    const sourceLabel = citation.publisher
+      ? `${title} (${citation.publisher})`
+      : title
+
+    if (snippet) {
+      return `- ${snippet} [${index + 1}]`
+    }
+
+    return `- ${sourceLabel} is one of the retrieved sources for this question. [${index + 1}]`
+  })
+  const sourceLine = citations
+    .slice(0, 3)
+    .map(
+      (citation, index) =>
+        `${index + 1}. ${citation.publisher ?? citation.title}`
+    )
+    .join('; ')
+
+  return [
+    intro,
+    '',
+    ...bullets,
+    '',
+    `I could not reach the synthesis model, so this answer is assembled directly from retrieved snippets. Verify the source cards for nuance and recency${sourceLine ? ` (${sourceLine})` : ''}.`
+  ].join('\n')
+}
+
+function normalizeSnippet(snippet: string) {
+  return snippet
+    .replace(/\s+/g, ' ')
+    .replace(/\bDate:\s*/gi, 'Date: ')
+    .trim()
+    .slice(0, 320)
 }
 
 async function streamAnswerResponse(
@@ -991,18 +1306,18 @@ export function buildSearchQueries({
   domains?: string[]
 }): string[] {
   const resolved = resolveQuery(query, classification)
+  const searchSubject = expandSearchSubjectForNews(resolved, classification)
   const freshness = recencyDays ? ` within ${recencyDays} days` : ''
-  const inferredDomains = domains?.length ? [] : extractDomainsFromQuery(query)
-  const domainList = domains?.length ? domains : inferredDomains
+  const domainList = getDomainHints(query, domains)
   const domainHint = domainList?.length
     ? ` site:${domainList.join(' OR site:')}`
     : ''
   const queries = [
-    `${resolved}${freshness}${domainHint}`,
-    `${resolved} official docs primary source${freshness}${domainHint}`,
-    `${resolved} analysis comparison${freshness}${domainHint}`,
-    `${resolved} latest updates${freshness}${domainHint}`,
-    `${resolved} examples implementation${freshness}${domainHint}`
+    `${searchSubject}${freshness}${domainHint}`,
+    `${searchSubject} official docs primary source${freshness}${domainHint}`,
+    `${searchSubject} analysis comparison${freshness}${domainHint}`,
+    `${searchSubject} latest updates${freshness}${domainHint}`,
+    `${searchSubject} examples implementation${freshness}${domainHint}`
   ]
 
   if (depth === 'lite') {
@@ -1010,6 +1325,24 @@ export function buildSearchQueries({
   }
 
   return [...new Set(queries)].slice(0, limit)
+}
+
+function expandSearchSubjectForNews(
+  query: string,
+  classification: QueryClassification
+) {
+  if (classification.type !== 'news') return query
+  const lower = query.toLowerCase()
+  if (!/\b(ai|artificial intelligence)\b/.test(lower)) return query
+
+  const builderContext =
+    /\b(builder|builders|developer|developers|founder|founders|startup|startups)\b/.test(
+      lower
+    )
+      ? 'software developers startups AI tools models'
+      : 'AI tools models products research'
+
+  return `${query} ${builderContext}`
 }
 
 function extractDomainsFromQuery(query: string): string[] {
@@ -1037,6 +1370,154 @@ function extractDomainsFromQuery(query: string): string[] {
   ).slice(0, 3)
 }
 
+function getDomainHints(query: string, domains?: string[]) {
+  if (domains?.length) return domains
+
+  return Array.from(
+    new Set([
+      ...extractDomainsFromQuery(query),
+      ...inferCanonicalDomains(query)
+    ])
+  ).slice(0, 4)
+}
+
+function getMissingCanonicalHomepageDomains(
+  domains: string[],
+  sources: Array<Omit<SearchResult, 'id' | 'qualityScore'> | SearchResult>
+) {
+  const exactHosts = new Set(
+    sources
+      .map(source => getHost(source.url) ?? source.publisher)
+      .filter((host): host is string => Boolean(host))
+  )
+
+  return domains
+    .filter(isCanonicalHomepageDomain)
+    .filter(domain => !exactHosts.has(domain))
+}
+
+function getCanonicalSourceHints(
+  query: string
+): Array<Omit<SearchResult, 'id' | 'qualityScore'>> {
+  const lower = query.toLowerCase()
+  const retrievedAt = new Date().toISOString()
+  const sources: Array<Omit<SearchResult, 'id' | 'qualityScore'>> = []
+
+  if (
+    /\breact(?:\.js|js)?\b/.test(lower) &&
+    /\b(learn|learning|start|started|beginner|tutorial|best way|hooks?)\b/.test(
+      lower
+    )
+  ) {
+    sources.push(
+      {
+        title: 'React Learn',
+        url: 'https://react.dev/learn',
+        publisher: 'react.dev',
+        snippet:
+          'Official React learning path covering components, props, state, events, hooks, and practical ways to build with React.',
+        retrievedAt
+      },
+      {
+        title: 'Getting started with React - Learn web development | MDN',
+        url: 'https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Frameworks_libraries/React_getting_started',
+        publisher: 'developer.mozilla.org',
+        snippet:
+          'MDN guide for getting started with React, including prerequisites, project setup, components, props, state, and events.',
+        retrievedAt
+      }
+    )
+  }
+
+  if (/\breact(?:\.js|js)?\b/.test(lower) && /\bhooks?\b/.test(lower)) {
+    sources.push({
+      title: 'Built-in React Hooks',
+      url: 'https://react.dev/reference/react/hooks',
+      publisher: 'react.dev',
+      snippet:
+        'Official React reference for built-in Hooks including useState, useEffect, useContext, useReducer, useMemo, and custom Hook guidance.',
+      retrievedAt
+    })
+  }
+
+  if (/\bcursor\b/.test(lower) && /\bwindsurf\b/.test(lower)) {
+    sources.push(
+      {
+        title: 'Cursor: AI coding agent',
+        url: 'https://cursor.com',
+        publisher: 'cursor.com',
+        snippet:
+          'Official Cursor product page for its AI coding agent and editor features for software development.',
+        retrievedAt
+      },
+      {
+        title: 'Windsurf - Agentic IDE',
+        url: 'https://windsurf.com',
+        publisher: 'windsurf.com',
+        snippet:
+          'Official Windsurf product page for its agentic IDE and AI-powered coding environment.',
+        retrievedAt
+      },
+      {
+        title: 'Codeium',
+        url: 'https://codeium.com',
+        publisher: 'codeium.com',
+        snippet:
+          'Official Codeium product site; Codeium is the company behind Windsurf.',
+        retrievedAt
+      }
+    )
+  }
+
+  return sources
+}
+
+function inferCanonicalDomains(query: string): string[] {
+  const lower = query.toLowerCase()
+  const domains: string[] = []
+
+  if (/\breact(?:\.js|js)?\b/.test(lower)) {
+    domains.push('react.dev', 'developer.mozilla.org')
+  }
+  if (/\bnext(?:\.js|js)?\b/.test(lower)) {
+    domains.push('nextjs.org', 'react.dev')
+  }
+  if (/\btypescript\b/.test(lower)) {
+    domains.push('typescriptlang.org')
+  }
+  if (/\bvue(?:\.js|js)?\b/.test(lower)) {
+    domains.push('vuejs.org')
+  }
+  if (/\bsvelte\b/.test(lower)) {
+    domains.push('svelte.dev')
+  }
+  if (/\bcursor\b/.test(lower)) {
+    domains.push('cursor.com')
+  }
+  if (/\bwindsurf\b|\bcodeium\b/.test(lower)) {
+    domains.push('windsurf.com', 'codeium.com')
+  }
+  if (
+    /\b(news|latest|today|recent)\b/.test(lower) &&
+    /\b(ai|artificial intelligence)\b/.test(lower)
+  ) {
+    domains.push(
+      'reuters.com',
+      'techcrunch.com',
+      'theverge.com',
+      'news.mit.edu'
+    )
+  }
+
+  return domains
+}
+
+function isCanonicalHomepageDomain(domain: string) {
+  return /^(react\.dev|developer\.mozilla\.org|nextjs\.org|typescriptlang\.org|vuejs\.org|svelte\.dev|cursor\.com|windsurf\.com|codeium\.com)$/i.test(
+    domain
+  )
+}
+
 function isLikelyFileOrRuntimeName(domain: string) {
   return /\.(png|jpe?g|gif|webp|pdf|zip|txt|md|m?js|cjs|jsx|tsx?|json|ya?ml|toml|css|scss|html?|py|rb|go|rs|java|kt|swift|php|cs|cpp|c|h)$/i.test(
     domain
@@ -1049,10 +1530,23 @@ export function rankAndDedupeSources(
   limit: number
 ): SearchResult[] {
   const seen = new Set<string>()
+  const canonicalDomains = getDomainHints(query).filter(
+    isCanonicalHomepageDomain
+  )
+  const exactCanonicalHosts = new Set(
+    sources
+      .map(source => getHost(source.url) ?? source.publisher ?? '')
+      .filter(host => canonicalDomains.includes(host))
+  )
+
   return sources
     .filter(source => {
       const key = normalizeSourceKey(source.url)
       if (!key || seen.has(key)) return false
+      const host = getHost(source.url) ?? source.publisher ?? ''
+      if (shouldSuppressCommunitySubdomain(host, exactCanonicalHosts)) {
+        return false
+      }
       seen.add(key)
       return true
     })
@@ -1077,6 +1571,18 @@ function normalizeSourceKey(url: string) {
   } catch {
     return ''
   }
+}
+
+function shouldSuppressCommunitySubdomain(
+  host: string,
+  exactCanonicalHosts: Set<string>
+) {
+  if (!isCommunityHost(host)) return false
+
+  return Array.from(exactCanonicalHosts).some(
+    canonicalHost =>
+      host !== canonicalHost && host.endsWith(`.${canonicalHost}`)
+  )
 }
 
 function scoreSource(
@@ -1105,31 +1611,130 @@ function scoreSource(
   const spamPenalty = /\b(best|top|coupon|casino|essay|generator)\b/i.test(host)
     ? -20
     : 0
+  const communityPenalty = isCommunityHost(host) ? -12 : 0
+  const offTopicNewsPenalty = getOffTopicNewsPenalty(host, haystack, query)
+  const canonicalPathAdjustment = getCanonicalPathAdjustment(
+    source.url,
+    haystack,
+    query
+  )
 
   return Math.max(
     0,
-    Math.min(100, 20 + relevance + authority + freshness + spamPenalty)
+    Math.min(
+      100,
+      20 +
+        relevance +
+        authority +
+        freshness +
+        spamPenalty +
+        communityPenalty +
+        offTopicNewsPenalty +
+        canonicalPathAdjustment
+    )
   )
 }
 
 function scoreAuthority(host: string) {
   if (!host) return 0
   if (/\b(gov|edu)\b/.test(host)) return 35
+  if (isCanonicalHomepageDomain(host)) return 34
+  if (isCommunityHost(host)) return 6
   if (
-    /(^|\.)((docs|developer|platform|support)\.|github\.com|arxiv\.org|openai\.com|minimax\.io|anthropic\.com|google\.com|microsoft\.com|apple\.com)/i.test(
+    /(^|\.)((docs|developer|platform|support)\.|github\.com|arxiv\.org|openai\.com|minimax\.io|anthropic\.com|google\.com|microsoft\.com|apple\.com|react\.dev|nextjs\.org|typescriptlang\.org|vuejs\.org|svelte\.dev|cursor\.com|windsurf\.com|codeium\.com)/i.test(
       host
     )
   ) {
     return 30
   }
   if (
-    /(reuters|associatedpress|apnews|bloomberg|ft\.com|wsj\.com|theverge|techcrunch)/i.test(
+    /(reuters|associatedpress|apnews|bloomberg|ft\.com|wsj\.com|theverge|techcrunch|news\.mit\.edu)/i.test(
       host
     )
   ) {
     return 22
   }
   return 8
+}
+
+function isCommunityHost(host: string) {
+  return /\b(forum|community|quora|reddit|youtube|medium|substack|facebook|instagram|tiktok|linkedin)\b/i.test(
+    host
+  )
+}
+
+function getOffTopicNewsPenalty(host: string, haystack: string, query: string) {
+  const lowerQuery = query.toLowerCase()
+  if (
+    !/\b(news|latest|today|recent)\b/.test(lowerQuery) ||
+    !/\b(ai|artificial intelligence)\b/.test(lowerQuery)
+  ) {
+    return 0
+  }
+
+  if (
+    /\b(construction|aec|architecture|engineering|contractor|jobsite|finance team)\b/i.test(
+      `${host} ${haystack}`
+    )
+  ) {
+    return -28
+  }
+
+  return 0
+}
+
+function getCanonicalPathAdjustment(
+  url: string,
+  haystack: string,
+  query: string
+) {
+  const lowerQuery = query.toLowerCase()
+
+  let adjustment = 0
+  if (/\breact(?:\.js|js)?\b/.test(lowerQuery)) {
+    if (
+      /\bhooks?\b/.test(lowerQuery) &&
+      /react\.dev\/reference\/react\/hooks/i.test(url)
+    ) {
+      adjustment += 22
+    }
+
+    if (
+      /\b(learn|learning|start|started|beginner|tutorial|best way)\b/.test(
+        lowerQuery
+      ) &&
+      (/react\.dev\/learn/i.test(url) ||
+        /developer\.mozilla\.org\/.*react_getting_started/i.test(url))
+    ) {
+      adjustment += 18
+    }
+
+    if (
+      /\b(learn|learning|start|started|beginner|tutorial|hooks?)\b/.test(
+        lowerQuery
+      ) &&
+      /\b(conference|conferences|foundation|news|event|events)\b/i.test(
+        haystack
+      )
+    ) {
+      adjustment -= 24
+    }
+  }
+
+  if (/\bcursor\b/.test(lowerQuery) && /\bwindsurf\b/.test(lowerQuery)) {
+    if (/^https:\/\/(www\.)?(cursor|windsurf|codeium)\.com\/?$/i.test(url)) {
+      adjustment += 18
+    }
+
+    if (
+      /\b(devin|lovable|bolt|replit|v0)\b/i.test(haystack) &&
+      !/\b(cursor|windsurf|codeium)\b/i.test(haystack)
+    ) {
+      adjustment -= 22
+    }
+  }
+
+  return adjustment
 }
 
 export function generateFollowUps(

@@ -41,7 +41,12 @@ vi.mock('@/components/chat', () => ({
     savedMessages?: unknown[]
     isGuest?: boolean
   }) => (
-    <div data-testid="chat">
+    <div
+      data-source-title={
+        (savedMessages?.[1] as any)?.metadata?.answer?.sources?.[0]?.title
+      }
+      data-testid="chat"
+    >
       {id}:{savedMessages?.length ?? 0}:{String(isGuest)}
     </div>
   )
@@ -94,6 +99,49 @@ describe('app/search/[id]/page', () => {
       'search'
     )
     expect(screen.getByTestId('chat')).toHaveTextContent('chat-1:1:false')
+  })
+
+  it('preserves stored search answer metadata for signed-in reloads', async () => {
+    mocks.loadChat.mockResolvedValue({
+      visibility: 'private',
+      messages: [
+        {
+          id: 'search_1_user',
+          role: 'user',
+          parts: [{ type: 'text', text: 'What is Brok Search?' }]
+        },
+        {
+          id: 'search_1_assistant',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Brok Search answers with durable sources. [1]'
+            }
+          ],
+          metadata: {
+            answer: {
+              sources: [
+                {
+                  title: 'Brok Search docs',
+                  url: 'https://www.brok.fyi/features/search',
+                  content: 'Brok Search product context.'
+                }
+              ]
+            }
+          }
+        }
+      ]
+    })
+
+    render(await SearchPage({ params: Promise.resolve({ id: 'search_1' }) }))
+
+    expect(mocks.loadChat).toHaveBeenCalledWith('search_1', 'user-1')
+    expect(screen.getByTestId('chat')).toHaveTextContent('search_1:2:false')
+    expect(screen.getByTestId('chat')).toHaveAttribute(
+      'data-source-title',
+      'Brok Search docs'
+    )
   })
 
   it('allows guest search answer pages to hydrate from local storage', async () => {

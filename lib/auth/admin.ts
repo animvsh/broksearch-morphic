@@ -9,6 +9,7 @@ import {
   resolveAdminRole,
   ResolvedAdminRole
 } from './admin-roles'
+import { getLocalDevAccessSeedEmails } from './app-access'
 
 function parseList(value: string | undefined): string[] {
   return (value ?? '')
@@ -58,6 +59,7 @@ export async function requireAdminAccess(): Promise<AdminAccessResult> {
   const adminEmails = parseList(process.env.ADMIN_EMAILS).map(email =>
     email.toLowerCase()
   )
+  const localDevAdminEmails = getLocalDevAccessSeedEmails()
   const hasExplicitAdminAllowlist =
     adminUserIds.length > 0 || adminEmails.length > 0
 
@@ -87,8 +89,11 @@ export async function requireAdminAccess(): Promise<AdminAccessResult> {
   const isAllowedByEmail = !!user.email
     ? adminEmails.includes(user.email.toLowerCase())
     : false
+  const isAllowedByLocalDevSeed = !!user.email
+    ? localDevAdminEmails.has(user.email.toLowerCase())
+    : false
 
-  if (!isAllowedById && !isAllowedByEmail) {
+  if (!isAllowedById && !isAllowedByEmail && !isAllowedByLocalDevSeed) {
     return deny(403, 'Admin access required')
   }
 

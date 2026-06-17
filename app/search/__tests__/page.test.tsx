@@ -56,7 +56,11 @@ vi.mock('@/components/chat', () => ({
 
 vi.mock('@/components/search/search-landing', () => ({
   SearchLanding: (props: any) => (
-    <div data-testid="search-landing" data-mode={props.defaultMode} />
+    <div
+      data-testid="search-landing"
+      data-mode={props.defaultMode}
+      data-model={props.modelSelectorData?.selectedModelKey ?? 'none'}
+    />
   )
 }))
 

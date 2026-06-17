@@ -90,6 +90,115 @@ describe('Brok search pipeline helpers', () => {
     expect(resolveSearchSynthesisModel('')).toBeNull()
   })
 
+  it('answers Brok Search self-queries from first-party product context', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await runSearchPipeline({
+      query: 'What is Brok Search?',
+      depth: 'lite'
+    })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(result.answer).toContain('Brok’s AI answer engine')
+    expect(result.answer).toContain('source cards, citations')
+    expect(result.citations).toHaveLength(2)
+    expect(result.citations[0]).toMatchObject({
+      title: 'Brok Search product context',
+      publisher: 'brok.fyi',
+      qualityScore: 100
+    })
+    expect(result.followUps.map(item => item.label)).toContain(
+      'Compare Brok to Perplexity'
+    )
+  })
+
+  it('answers Brok Search citation follow-ups with citation-specific guidance', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await runSearchPipeline({
+      query:
+        'Previous turn question: What is Brok Search?\nPrevious turn answer summary: Brok Search returns cited answers.\nCurrent follow-up question: How does it cite sources?',
+      depth: 'lite'
+    })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(result.answer).toContain('inline citation markers')
+    expect(result.answer).toContain('source cards')
+    expect(result.answer).not.toContain(
+      'Brok Search is Brok’s AI answer engine'
+    )
+    expect(result.citations).toHaveLength(2)
+  })
+
+  it('keeps Brok Search citation follow-ups grounded in first-party context', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await runSearchPipeline({
+      query: 'How does it cite sources?',
+      depth: 'lite',
+      context: [
+        {
+          query: 'What is Brok Search?',
+          answer:
+            'Brok Search is Brok’s AI answer engine with source cards, citations, and follow-up questions.'
+        }
+      ]
+    })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(result.answer).toContain('inline citation markers')
+    expect(result.citations).toHaveLength(2)
+    expect(result.citations.map(source => source.publisher)).toEqual([
+      'brok.fyi',
+      'brok.fyi'
+    ])
+  })
+
+  it('biases quick React learning searches toward canonical documentation', () => {
+    const queries = buildSearchQueries({
+      query: 'What is the best way to learn React?',
+      classification: classifyQuery('What is the best way to learn React?'),
+      depth: 'lite',
+      limit: 1
+    })
+
+    expect(queries[0]).toContain('site:react.dev')
+    expect(queries[0]).toContain('site:developer.mozilla.org')
+  })
+
+  it('biases Cursor vs Windsurf comparisons toward official product sources', () => {
+    const queries = buildSearchQueries({
+      query: 'Compare Cursor vs Windsurf',
+      classification: classifyQuery('Compare Cursor vs Windsurf'),
+      depth: 'lite',
+      limit: 1
+    })
+
+    expect(queries[0]).toContain('site:cursor.com')
+    expect(queries[0]).toContain('site:windsurf.com')
+    expect(queries[0]).toContain('site:codeium.com')
+  })
+
+  it('expands AI news for builders toward developer news sources', () => {
+    const queries = buildSearchQueries({
+      query: 'Summarize the latest AI news for builders',
+      classification: classifyQuery(
+        'Summarize the latest AI news for builders'
+      ),
+      depth: 'lite',
+      limit: 1
+    })
+
+    expect(queries[0]).toContain('software developers startups AI tools models')
+    expect(queries[0]).toContain('site:reuters.com')
+    expect(queries[0]).toContain('site:techcrunch.com')
+    expect(queries[0]).toContain('site:theverge.com')
+    expect(queries[0]).toContain('site:news.mit.edu')
+  })
+
   it('falls back to an explicit domain homepage when search returns no results', async () => {
     vi.stubGlobal(
       'fetch',
@@ -170,6 +279,107 @@ describe('Brok search pipeline helpers', () => {
     ).toHaveLength(1)
   })
 
+  it('builds a cited snippet answer when synthesis is unavailable but search succeeds', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+
+        if (url.startsWith('https://html.duckduckgo.com/html/')) {
+          return new Response(
+            '<html><body><div class="result"><h2 class="result__title"><a href="https://react.dev/learn">React Learn</a></h2><a class="result__snippet">React is the library for web and native user interfaces.</a></div><div class="result"><h2 class="result__title"><a href="https://developer.mozilla.org/en-US/docs/Learn/Tools_and_testing/Client-side_JavaScript_frameworks/React_getting_started">MDN React guide</a></h2><a class="result__snippet">React lets you build interfaces from reusable components.</a></div></body></html>',
+            {
+              status: 200,
+              headers: { 'content-type': 'text/html' }
+            }
+          )
+        }
+
+        return new Response('synthesis unavailable', { status: 503 })
+      })
+    )
+
+    const result = await runSearchPipeline({
+      query: 'What is React?',
+      depth: 'lite'
+    })
+
+    expect(result.citations).toHaveLength(2)
+    expect(result.answer).toContain('Based on the retrieved sources')
+    expect(result.answer).toContain(
+      'React is the library for web and native user interfaces. [1]'
+    )
+    expect(result.answer).toContain(
+      'React lets you build interfaces from reusable components. [2]'
+    )
+    expect(result.answer).toContain('I could not reach the synthesis model')
+    expect(result.answer).not.toContain('React Learn:')
+  })
+
+  it('adds canonical React learning docs when search returns weak official pages', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+
+        if (url.startsWith('https://html.duckduckgo.com/html/')) {
+          return new Response(
+            '<html><body><div class="result"><h2 class="result__title"><a href="https://react.dev/conf">React Conferences</a></h2><a class="result__snippet">React community conferences and events.</a></div><div class="result"><h2 class="result__title"><a href="https://react.dev/blog/2025/10/07/react-foundation">The React Foundation</a></h2><a class="result__snippet">News about the React project home.</a></div></body></html>',
+            {
+              status: 200,
+              headers: { 'content-type': 'text/html' }
+            }
+          )
+        }
+
+        return new Response('synthesis unavailable', { status: 503 })
+      })
+    )
+
+    const result = await runSearchPipeline({
+      query: 'What is the best way to learn React hooks?',
+      depth: 'lite'
+    })
+
+    expect(result.citations.slice(0, 3).map(source => source.url)).toEqual([
+      'https://react.dev/reference/react/hooks',
+      'https://react.dev/learn',
+      'https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Frameworks_libraries/React_getting_started'
+    ])
+  })
+
+  it('adds official Cursor and Windsurf sources when comparison search misses one side', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+
+        if (url.startsWith('https://html.duckduckgo.com/html/')) {
+          return new Response(
+            '<html><body><div class="result"><h2 class="result__title"><a href="https://cursor.com">Cursor: AI coding agent</a></h2><a class="result__snippet">Cursor is an AI coding agent.</a></div><div class="result"><h2 class="result__title"><a href="https://devin.ai">Devin Desktop</a></h2><a class="result__snippet">Devin is an AI software engineering agent.</a></div></body></html>',
+            {
+              status: 200,
+              headers: { 'content-type': 'text/html' }
+            }
+          )
+        }
+
+        return new Response('synthesis unavailable', { status: 503 })
+      })
+    )
+
+    const result = await runSearchPipeline({
+      query: 'Compare Cursor vs Windsurf for coding',
+      depth: 'lite'
+    })
+
+    expect(result.citations.slice(0, 3).map(source => source.url)).toEqual([
+      'https://cursor.com',
+      'https://windsurf.com',
+      'https://codeium.com'
+    ])
+  })
+
   it('dedupes concurrent identical searches while the first request is in flight', async () => {
     let resolveSearch: ((response: Response) => void) | undefined
     const searchResponse = new Promise<Response>(resolve => {
@@ -221,7 +431,7 @@ describe('Brok search pipeline helpers', () => {
     ).toHaveLength(1)
   })
 
-  it('keeps shared in-flight searches alive when the first caller aborts', async () => {
+  it('keeps shared in-flight searches alive when one caller aborts', async () => {
     let resolveSearch: ((response: Response) => void) | undefined
     const searchResponse = new Promise<Response>(resolve => {
       resolveSearch = resolve
@@ -263,10 +473,15 @@ describe('Brok search pipeline helpers', () => {
       )
     )
 
-    const [firstResult, secondResult] = await Promise.all([first, second])
+    await expect(first).rejects.toMatchObject({ name: 'AbortError' })
+    const secondResult = await second
+    const thirdResult = await runSearchPipeline({
+      query: 'compare raycast vs alfred',
+      depth: 'lite'
+    })
 
-    expect(firstResult.answer).toContain('Raycast')
-    expect(secondResult.answer).toEqual(firstResult.answer)
+    expect(secondResult.answer).toContain('Raycast')
+    expect(thirdResult.answer).toEqual(secondResult.answer)
     expect(
       vi
         .mocked(fetch)
@@ -274,6 +489,50 @@ describe('Brok search pipeline helpers', () => {
           String(input).startsWith('https://html.duckduckgo.com/html/')
         )
     ).toHaveLength(1)
+  })
+
+  it('aborts shared provider work when the last caller aborts', async () => {
+    let providerSignal: AbortSignal | undefined
+    const controller = new AbortController()
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+
+        if (url.startsWith('https://html.duckduckgo.com/html/')) {
+          providerSignal = init?.signal as AbortSignal | undefined
+          return new Promise<Response>((_resolve, reject) => {
+            providerSignal?.addEventListener(
+              'abort',
+              () => {
+                reject(
+                  new DOMException('The operation was aborted.', 'AbortError')
+                )
+              },
+              { once: true }
+            )
+          })
+        }
+
+        return new Response('not found', { status: 404 })
+      })
+    )
+
+    const search = runSearchPipeline({
+      query: 'latest provider cancellation smoke',
+      depth: 'lite',
+      signal: controller.signal
+    })
+
+    await vi.waitFor(() => {
+      expect(providerSignal).toBeDefined()
+    })
+
+    controller.abort()
+
+    await expect(search).rejects.toMatchObject({ name: 'AbortError' })
+    expect(providerSignal?.aborted).toBe(true)
   })
 
   it('returns an honest local fallback without caching provider outages', async () => {
@@ -295,14 +554,9 @@ describe('Brok search pipeline helpers', () => {
 
     expect(first.answer).toContain('Live web search was unavailable')
     expect(first.answer).toContain('model knowledge')
-    expect(first.answer).toContain('[1]')
-    expect(first.citations[0]).toMatchObject({
-      id: 'fallback_local_1',
-      title: 'Brok local fallback knowledge',
-      publisher: 'Brok local fallback',
-      qualityScore: 15
-    })
-    expect(first.citations[0]?.snippet).toContain('not verified web evidence')
+    expect(first.answer).toContain('No web sources were attached')
+    expect(first.answer).not.toContain('[1]')
+    expect(first.citations).toEqual([])
     expect(first.followUps).toEqual([
       {
         label: 'Retry with live sources',
@@ -369,6 +623,198 @@ describe('Brok search pipeline helpers', () => {
     })
     expect(sources[0].qualityScore).toBeGreaterThan(
       sources[1].qualityScore ?? 0
+    )
+  })
+
+  it('ranks official framework docs ahead of casual React learning sources', () => {
+    const sources = rankAndDedupeSources(
+      [
+        {
+          title: 'What are the best resources for learning React?',
+          url: 'https://www.quora.com/What-are-the-best-resources-for-learning-React',
+          publisher: 'quora.com',
+          snippet: 'Community answers about courses and tutorials.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'React Learn',
+          url: 'https://react.dev/learn',
+          publisher: 'react.dev',
+          snippet:
+            'The official React documentation teaches components, props, state, and hooks.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        }
+      ],
+      'best way to learn React',
+      5
+    )
+
+    expect(sources[0]).toMatchObject({
+      publisher: 'react.dev',
+      url: 'https://react.dev/learn'
+    })
+  })
+
+  it('ranks official AI editor product pages ahead of comparison blogs', () => {
+    const sources = rankAndDedupeSources(
+      [
+        {
+          title: 'Cursor vs Windsurf comparison',
+          url: 'https://comparison.example.com/cursor-vs-windsurf',
+          publisher: 'comparison.example.com',
+          snippet: 'A third-party comparison of Cursor and Windsurf.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'Cursor - The AI code editor',
+          url: 'https://cursor.com',
+          publisher: 'cursor.com',
+          snippet: 'Cursor is an AI code editor for developers.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'Windsurf - Agentic IDE',
+          url: 'https://windsurf.com',
+          publisher: 'windsurf.com',
+          snippet: 'Windsurf is an AI-powered coding environment.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        }
+      ],
+      'Compare Cursor vs Windsurf',
+      5
+    )
+
+    expect(sources.slice(0, 2).map(source => source.publisher)).toEqual([
+      'cursor.com',
+      'windsurf.com'
+    ])
+  })
+
+  it('ranks official AI editor pages ahead of forum subdomains', () => {
+    const sources = rankAndDedupeSources(
+      [
+        {
+          title: 'Cursor vs Windsurf discussion',
+          url: 'https://forum.cursor.com/t/cursor-vs-windsurf/123',
+          publisher: 'forum.cursor.com',
+          snippet: 'Community discussion comparing Cursor and Windsurf.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'Cursor - The AI code editor',
+          url: 'https://cursor.com',
+          publisher: 'cursor.com',
+          snippet: 'Cursor is an AI code editor for developers.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'Windsurf - Agentic IDE',
+          url: 'https://windsurf.com',
+          publisher: 'windsurf.com',
+          snippet: 'Windsurf is an AI-powered coding environment.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        }
+      ],
+      'Compare Cursor vs Windsurf',
+      5
+    )
+
+    expect(sources.slice(0, 2).map(source => source.publisher)).toEqual([
+      'cursor.com',
+      'windsurf.com'
+    ])
+  })
+
+  it('suppresses community subdomains when official AI editor sources are available', () => {
+    const sources = rankAndDedupeSources(
+      [
+        {
+          title: 'Windsurf vs Cursor | AI IDE Comparison',
+          url: 'https://windsurf.com/compare/cursor',
+          publisher: 'windsurf.com',
+          snippet: 'Windsurf compares AI IDE capabilities.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'Cursor: AI coding agent',
+          url: 'https://cursor.com',
+          publisher: 'cursor.com',
+          snippet: 'Cursor is an AI coding agent.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'Think Cursor Pro is $20/month?',
+          url: 'https://forum.cursor.com/t/pricing-thread/123',
+          publisher: 'forum.cursor.com',
+          snippet: 'Forum discussion about Cursor pricing.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'Codeium: AI-powered code acceleration',
+          url: 'https://codeium.com',
+          publisher: 'codeium.com',
+          snippet: 'Codeium builds Windsurf.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        }
+      ],
+      'Compare Cursor vs Windsurf',
+      3
+    )
+
+    expect(sources.map(source => source.publisher).sort()).toEqual([
+      'codeium.com',
+      'cursor.com',
+      'windsurf.com'
+    ])
+    expect(sources.map(source => source.publisher)).not.toContain(
+      'forum.cursor.com'
+    )
+  })
+
+  it('ranks trusted AI news sources ahead of social and construction noise', () => {
+    const sources = rankAndDedupeSources(
+      [
+        {
+          title: 'AI Construction News',
+          url: 'https://aiconstructionnews.com/latest',
+          publisher: 'aiconstructionnews.com',
+          snippet:
+            'Construction analytics and AI in AEC for contractors and jobsites.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'Construction workers are beating your finance team at AI',
+          url: 'https://www.facebook.com/example/posts/123',
+          publisher: 'facebook.com',
+          snippet: 'A social post about construction workers using AI.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'Artificial Intelligence - AI News - Reuters',
+          url: 'https://www.reuters.com/technology/artificial-intelligence/',
+          publisher: 'reuters.com',
+          snippet:
+            'Latest artificial intelligence news covering AI models, companies, regulation, and software products in 2026.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'The latest AI product launches developers should know',
+          url: 'https://techcrunch.com/category/artificial-intelligence/',
+          publisher: 'techcrunch.com',
+          snippet:
+            'Recent AI tools, model releases, startups, and product updates for builders.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        }
+      ],
+      'Summarize the latest AI news for builders',
+      3
+    )
+
+    expect(sources.slice(0, 2).map(source => source.publisher)).toEqual(
+      expect.arrayContaining(['techcrunch.com', 'reuters.com'])
+    )
+    expect(sources.map(source => source.publisher)).not.toContain(
+      'facebook.com'
     )
   })
 

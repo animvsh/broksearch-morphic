@@ -8,9 +8,33 @@ import type { SearchResultItem } from '@/lib/types'
 import { extractSources, SearchAnswerSection } from '../search-answer-section'
 
 vi.mock('@/components/message', () => ({
-  MarkdownMessage: ({ message }: { message: string }) => (
-    <div data-testid="markdown-message">{message}</div>
-  )
+  MarkdownMessage: ({
+    citationMaps,
+    message,
+    onCitationOpen
+  }: {
+    citationMaps?: Record<string, Record<number, SearchResultItem>>
+    message: string
+    onCitationOpen?: (source: SearchResultItem) => void
+  }) => {
+    const source = citationMaps?.answer?.[1]
+
+    return (
+      <div data-testid="markdown-message">
+        <span data-testid="markdown-citation-title">{source?.title ?? ''}</span>
+        {message}
+        {source ? (
+          <button
+            type="button"
+            onClick={() => onCitationOpen?.(source)}
+            aria-label="Open citation 1"
+          >
+            Open citation 1
+          </button>
+        ) : null}
+      </div>
+    )
+  }
 }))
 
 vi.mock('@/components/search/answer-toolbar', () => ({
@@ -119,6 +143,14 @@ describe('SearchAnswerSection actions', () => {
     expect(
       screen.getByRole('button', { name: /verify source 1: streaming source/i })
     ).toBeInTheDocument()
+  })
+
+  it('does not show streaming progress for completed historical answers', () => {
+    renderAnswer({ status: 'ready', content: 'Completed answer.' })
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByTestId('answer-toolbar')).toBeInTheDocument()
+    expect(screen.getByTestId('follow-up-suggestions')).toBeInTheDocument()
   })
 
   it('places source chips before the answer for faster verification', () => {
@@ -304,6 +336,32 @@ describe('SearchAnswerSection actions', () => {
     ).toBeInTheDocument()
   })
 
+  it('linkifies plain citations from durable metadata sources after reload', () => {
+    renderAnswer({
+      content: 'Stored answers should keep citation links. [1]',
+      metadata: {
+        answer: {
+          sources: [
+            source({
+              title: 'Stored source',
+              url: 'https://stored.example/report'
+            })
+          ]
+        }
+      }
+    })
+
+    expect(screen.getByTestId('markdown-citation-title')).toHaveTextContent(
+      'Stored source'
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /open citation 1/i }))
+
+    expect(
+      screen.getByRole('link', { name: /open original source: stored source/i })
+    ).toHaveAttribute('href', 'https://stored.example/report')
+  })
+
   it('opens source cards in the verifier side panel', () => {
     renderAnswer({
       content: 'Answer text.',
@@ -319,11 +377,10 @@ describe('SearchAnswerSection actions', () => {
       }
     })
 
-    fireEvent.click(screen.getByRole('button', { name: /show all/i }))
+    fireEvent.click(screen.getByRole('button', { name: /expand 1 sources/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Stored source' }))
 
     expect(screen.getByText('Excerpt')).toBeInTheDocument()
-    expect(screen.getByText('Verification')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: /open original/i })
     ).toHaveAttribute('href', 'https://stored.example/report')
@@ -348,7 +405,9 @@ describe('SearchAnswerSection actions', () => {
       screen.getByRole('button', { name: /verify source 1: stored source/i })
     )
 
-    expect(screen.getByText('Verification')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /open original source: stored source/i })
+    ).toHaveAttribute('href', 'https://stored.example/report')
   })
 })
 
