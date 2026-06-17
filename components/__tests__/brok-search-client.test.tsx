@@ -454,6 +454,59 @@ describe('BrokSearchClient', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('hydrates completed server messages instead of rerunning on reload', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialMode="search"
+        initialMessages={[
+          {
+            id: 'search_test_user',
+            role: 'user',
+            parts: [{ type: 'text', text: 'Server stored question' }]
+          },
+          {
+            id: 'search_test_assistant',
+            role: 'assistant',
+            parts: [{ type: 'text', text: 'Server stored answer. [1]' }],
+            metadata: {
+              searchMode: 'search',
+              modelId: 'brok-session-search',
+              answer: {
+                sources: [
+                  {
+                    title: 'Server source',
+                    url: 'https://docs.example.com/server',
+                    content: 'Server source.',
+                    snippet: 'Server source.',
+                    publisher: 'docs.example.com',
+                    retrievedAt: '2026-06-16T00:00:00.000Z'
+                  }
+                ],
+                citationCount: 1,
+                followUps: []
+              }
+            }
+          }
+        ]}
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-question')).toHaveTextContent(
+      'Server stored question'
+    )
+    expect(screen.getByTestId('brok-search-answer')).toHaveTextContent(
+      'Server stored answer. [1](#brok-session-search:1)'
+    )
+    expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
+      'Server source'
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('keeps guest search persistence local when server persistence is disabled', async () => {
     const fetchMock = vi.fn(async () =>
       streamResponse([

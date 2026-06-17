@@ -91,6 +91,7 @@ type StoredAnswerMetadata = {
 interface BrokSearchClientProps {
   initialQuery?: string
   initialMode?: SearchMode
+  initialMessages?: UIMessage[]
   searchId?: string
   apiKey?: string
   apiBase?: string
@@ -102,6 +103,7 @@ interface BrokSearchClientProps {
 const DEFAULT_API_BASE = '/api/search/session'
 const GUEST_CHAT_STORAGE_PREFIX = 'brok:guest-chat:'
 const SESSION_CITATION_TOOL_ID = 'brok-session-search'
+const EMPTY_INITIAL_MESSAGES: UIMessage[] = []
 
 function getGuestChatStorageKey(chatId: string) {
   return `${GUEST_CHAT_STORAGE_PREFIX}${chatId}`
@@ -424,6 +426,7 @@ function compactSearchContext(turns: SearchTurn[]): SearchContextTurn[] {
 export function BrokSearchClient({
   initialQuery,
   initialMode = 'quick',
+  initialMessages = EMPTY_INITIAL_MESSAGES,
   searchId,
   apiKey,
   apiBase,
@@ -873,7 +876,13 @@ export function BrokSearchClient({
     if (restoredInitialQueryRef.current === initialRunKey) return cleanup
 
     const trimmedInitialQuery = initialQuery?.trim() ?? ''
-    const storedMessages = readStoredSearchMessages(searchId)
+    const localMessages = readStoredSearchMessages(searchId)
+    const storedMessages =
+      localMessages.length > initialMessages.length
+        ? localMessages
+        : initialMessages.length > 0
+          ? initialMessages
+          : localMessages
     const storedTurns = searchId
       ? toStoredSearchTurns(searchId, storedMessages)
       : []
@@ -943,7 +952,7 @@ export function BrokSearchClient({
       void runSearch(trimmedInitialQuery)
     }
     return cleanup
-  }, [initialMode, initialQuery, runSearch, searchId])
+  }, [initialMessages, initialMode, initialQuery, runSearch, searchId])
 
   const handleFollowUp = useCallback(
     (next: string) => {

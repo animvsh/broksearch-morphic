@@ -49,16 +49,18 @@ vi.mock('@/components/chat', () => ({
 
 vi.mock('@/components/brok-search-client', () => ({
   BrokSearchClient: ({
+    initialMessages,
     modelSelectorData,
     persistToServer,
     searchId
   }: {
+    initialMessages?: unknown[]
     modelSelectorData?: { hasAvailableModels?: boolean }
     persistToServer?: boolean
     searchId?: string
   }) => (
     <div data-testid="brok-search-client">
-      {searchId}:{String(persistToServer)}:
+      {searchId}:{initialMessages?.length ?? 0}:{String(persistToServer)}:
       {String(modelSelectorData?.hasAvailableModels)}
     </div>
   )
@@ -96,6 +98,36 @@ describe('app/search/[id]/page', () => {
     expect(screen.getByTestId('chat')).toHaveTextContent('chat-1:1:false')
   })
 
+  it('hydrates saved signed-in search sessions in the search client', async () => {
+    mocks.loadChat.mockResolvedValue({
+      visibility: 'private',
+      messages: [
+        { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'q' }] },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'answer' }]
+        }
+      ]
+    })
+
+    render(
+      await SearchPage({
+        params: Promise.resolve({ id: 'search_saved_answer' })
+      })
+    )
+
+    expect(mocks.loadChat).toHaveBeenCalledWith('search_saved_answer', 'user-1')
+    expect(mocks.requireFeatureAccess).toHaveBeenCalledWith(
+      '/search/search_saved_answer',
+      'search'
+    )
+    expect(screen.queryByTestId('chat')).not.toBeInTheDocument()
+    expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
+      'search_saved_answer:2:true:true'
+    )
+  })
+
   it('allows guest search answer pages to hydrate from local storage', async () => {
     process.env.ENABLE_GUEST_CHAT = 'true'
     mocks.getCurrentUser.mockRejectedValue(new TypeError('Failed to fetch'))
@@ -110,7 +142,7 @@ describe('app/search/[id]/page', () => {
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(mocks.redirect).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      'search_local_guest_answer:false:true'
+      'search_local_guest_answer:0:false:true'
     )
   })
 
@@ -131,7 +163,7 @@ describe('app/search/[id]/page', () => {
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(mocks.redirect).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      'search_local_anonymous_answer:false:true'
+      'search_local_anonymous_answer:0:false:true'
     )
   })
 
@@ -150,7 +182,7 @@ describe('app/search/[id]/page', () => {
     )
     expect(mocks.redirect).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      'search_signed_in_answer:true:true'
+      'search_signed_in_answer:0:true:true'
     )
   })
 

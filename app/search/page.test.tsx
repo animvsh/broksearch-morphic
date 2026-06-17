@@ -63,17 +63,20 @@ vi.mock('@/components/chat', () => ({
 vi.mock('@/components/brok-search-client', () => ({
   BrokSearchClient: ({
     initialQuery,
+    initialMessages,
     initialMode,
     persistToServer,
     searchId
   }: {
     initialQuery?: string
+    initialMessages?: unknown[]
     initialMode?: string
     persistToServer?: boolean
     searchId?: string
   }) => (
     <div data-testid="brok-search-client">
-      {searchId}:{initialQuery}:{initialMode}:{String(persistToServer)}
+      {searchId}:{initialQuery}:{initialMode}:{initialMessages?.length ?? 0}:
+      {String(persistToServer)}
     </div>
   )
 }))
@@ -148,7 +151,7 @@ describe('app/search/page', () => {
     expect(mocks.getModelSelectorData).toHaveBeenCalledOnce()
     const clientText =
       screen.getByTestId('brok-search-client').textContent ?? ''
-    expect(clientText).toContain(':latest ai funding:search:true')
+    expect(clientText).toContain(':latest ai funding:search:0:true')
     expect(clientText).toMatch(/^search_[a-f0-9]{48}:/)
   })
 
@@ -170,7 +173,7 @@ describe('app/search/page', () => {
       'search'
     )
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      ':latest ai funding:quick:true'
+      ':latest ai funding:quick:0:true'
     )
   })
 
@@ -224,9 +227,9 @@ describe('app/search/page', () => {
       })
     )
 
-    expect(screen.getByTestId('chat')).toHaveTextContent('::search_')
-    expect(screen.getByTestId('chat')).toHaveTextContent(
-      ':search:2:false:Existing answer'
+    expect(screen.queryByTestId('chat')).not.toBeInTheDocument()
+    expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
+      'latest ai funding:search:2:true'
     )
   })
 
@@ -266,7 +269,7 @@ describe('app/search/page', () => {
     expect(mocks.requireFeatureAccess).not.toHaveBeenCalled()
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      ':latest ai funding:search:false'
+      ':latest ai funding:search:0:false'
     )
   })
 
@@ -287,7 +290,7 @@ describe('app/search/page', () => {
     expect(mocks.requireFeatureAccess).not.toHaveBeenCalled()
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      ':latest ai funding:search:false'
+      ':latest ai funding:search:0:false'
     )
   })
 
@@ -311,7 +314,7 @@ describe('app/search/page', () => {
     expect(mocks.requireFeatureAccess).not.toHaveBeenCalled()
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      ':what is react in one sentence:quick:false'
+      ':what is react in one sentence:quick:0:false'
     )
   })
 
