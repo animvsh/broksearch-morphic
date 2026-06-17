@@ -24,6 +24,7 @@
     "smoke:brokcode:error-surface": "bun run scripts/smoke-brokcode-error-surface.ts",
     "smoke:brokcode:preview-states": "bun run scripts/smoke-brokcode-preview-states.ts",
     "smoke:brokcode:runtime": "bun run scripts/smoke-brokcode-runtime.ts",
+    "smoke:search-mvp": "bun run scripts/smoke-search-mvp.ts",
     "smoke:auth-platform": "PATH=$HOME/.bun/bin:$PATH bun run scripts/smoke-authenticated-platform.ts",
     "smoke:brokmail:composio": "PATH=$HOME/.bun/bin:$PATH bun run scripts/smoke-brokmail-composio.ts",
     "smoke:platform": "bun run --env-file=.env.local scripts/smoke-platform.ts",

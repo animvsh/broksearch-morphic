@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { EXAMPLE_QUERIES } from '../example-queries-data'
 import { SearchLanding } from '../search-landing'
 
 const mocks = vi.hoisted(() => ({
@@ -80,11 +81,9 @@ describe('SearchLanding', () => {
   it('shows the MVP example prompts and starts from one immediately', () => {
     render(<SearchLanding />)
 
-    expect(
-      screen.getByText('What is the best way to learn React?')
-    ).toBeInTheDocument()
-    expect(screen.getByText('Compare Cursor vs Windsurf')).toBeInTheDocument()
-    expect(screen.getByText('Summarize the latest AI news')).toBeInTheDocument()
+    for (const example of EXAMPLE_QUERIES.slice(0, 6)) {
+      expect(screen.getByText(example.query)).toBeInTheDocument()
+    }
 
     fireEvent.click(
       screen.getByRole('button', { name: /Compare Cursor vs Windsurf/i })
@@ -122,5 +121,30 @@ describe('SearchLanding', () => {
     expect(mocks.push).toHaveBeenCalledWith(
       '/search?q=Deep+dive+on+synthetic+biology+funding&mode=deep'
     )
+  })
+
+  it('keeps the first-run mobile layout compact without hiding examples', () => {
+    const { container } = render(<SearchLanding />)
+
+    expect(screen.getByTestId('example-query-grid')).toHaveClass(
+      'gap-1.5',
+      'sm:gap-2.5'
+    )
+    expect(screen.getByTestId('example-query-mvp-react')).toHaveClass(
+      'p-2.5',
+      'sm:p-3.5'
+    )
+    expect(
+      screen.getByText('What is the best way to learn React?')
+    ).toHaveClass('line-clamp-1', 'sm:line-clamp-2')
+    expect(container.querySelector('.flex-nowrap')).toBeInTheDocument()
+
+    for (const example of EXAMPLE_QUERIES.slice(0, 6)) {
+      expect(
+        screen.getByRole('button', {
+          name: name => name.includes(example.query)
+        })
+      ).toBeInTheDocument()
+    }
   })
 })
