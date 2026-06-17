@@ -57,6 +57,81 @@ describe('app access gate', () => {
     expect(dbMocks.select).not.toHaveBeenCalled()
   })
 
+  it('recognizes aalang@ucsc.edu as all-tools access from admin config', async () => {
+    vi.stubEnv('BROK_CLOUD_DEPLOYMENT', 'true')
+    vi.stubEnv('ADMIN_EMAILS', 'aalang@ucsc.edu')
+
+    await expect(
+      getAppAccessForUser({
+        id: 'user_aalang',
+        email: 'AALANG@ucsc.edu',
+        app_metadata: {}
+      } as any)
+    ).resolves.toMatchObject({
+      allowed: true,
+      source: 'admin',
+      features: 'all'
+    })
+    expect(dbMocks.select).not.toHaveBeenCalled()
+  })
+
+  it('recognizes aalang@ucsc.edu as all-tools access from the local dev seed', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    vi.stubEnv('APP_ACCESS_GATE', 'true')
+    vi.stubEnv('ADMIN_EMAILS', '')
+
+    await expect(
+      getAppAccessForUser({
+        id: 'user_aalang',
+        email: 'AALANG@ucsc.edu',
+        app_metadata: {}
+      } as any)
+    ).resolves.toMatchObject({
+      allowed: true,
+      source: 'admin',
+      features: 'all'
+    })
+    expect(dbMocks.select).not.toHaveBeenCalled()
+  })
+
+  it('does not use the local dev seed in production cloud mode', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('BROK_CLOUD_DEPLOYMENT', 'true')
+    vi.stubEnv('ADMIN_EMAILS', '')
+    dbMocks.limit.mockResolvedValue([])
+    dbMocks.where.mockReturnValue({ limit: dbMocks.limit })
+    dbMocks.from.mockReturnValue({ where: dbMocks.where })
+    dbMocks.select.mockReturnValue({ from: dbMocks.from })
+
+    await expect(
+      getAppAccessForUser({
+        id: 'user_aalang',
+        email: 'aalang@ucsc.edu',
+        app_metadata: {}
+      } as any)
+    ).resolves.toMatchObject({ allowed: false, reason: 'not_allowed' })
+  })
+
+  it('recognizes aalang@ucsc.edu as all-tools access from app allowlist config', async () => {
+    vi.stubEnv('BROK_CLOUD_DEPLOYMENT', 'true')
+    vi.stubEnv('BROK_LOCAL_DEV_ACCESS_SEED', 'false')
+    vi.stubEnv('ADMIN_EMAILS', '')
+    vi.stubEnv('APP_ALLOWED_EMAILS', 'aalang@ucsc.edu')
+
+    await expect(
+      getAppAccessForUser({
+        id: 'user_aalang',
+        email: 'aalang@ucsc.edu',
+        app_metadata: {}
+      } as any)
+    ).resolves.toMatchObject({
+      allowed: true,
+      source: 'env',
+      features: 'all'
+    })
+    expect(dbMocks.select).not.toHaveBeenCalled()
+  })
+
   it('allows active database allowlist rows', async () => {
     vi.stubEnv('BROK_CLOUD_DEPLOYMENT', 'true')
     dbMocks.limit.mockResolvedValue([
@@ -70,6 +145,30 @@ describe('app access gate', () => {
       getAppAccessForUser({
         id: 'user_1',
         email: 'user@example.com',
+        app_metadata: {}
+      } as any)
+    ).resolves.toMatchObject({
+      allowed: true,
+      source: 'database',
+      features: 'all'
+    })
+  })
+
+  it('recognizes aalang@ucsc.edu as all-tools access from a seeded database allowlist row', async () => {
+    vi.stubEnv('BROK_CLOUD_DEPLOYMENT', 'true')
+    vi.stubEnv('BROK_LOCAL_DEV_ACCESS_SEED', 'false')
+    vi.stubEnv('ADMIN_EMAILS', '')
+    dbMocks.limit.mockResolvedValue([
+      { id: 'row_aalang', status: 'active', features: null }
+    ])
+    dbMocks.where.mockReturnValue({ limit: dbMocks.limit })
+    dbMocks.from.mockReturnValue({ where: dbMocks.where })
+    dbMocks.select.mockReturnValue({ from: dbMocks.from })
+
+    await expect(
+      getAppAccessForUser({
+        id: 'user_aalang',
+        email: 'aalang@ucsc.edu',
         app_metadata: {}
       } as any)
     ).resolves.toMatchObject({

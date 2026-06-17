@@ -4,10 +4,9 @@
 
 import { useState } from 'react'
 
-import { Check, Copy, ExternalLink, PanelRightOpen } from 'lucide-react'
+import { ExternalLink, Star } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
 export interface SourceCardData {
   id: string
@@ -27,38 +26,6 @@ interface SourceCardProps {
   className?: string
 }
 
-export function getSourceTrustLabel(source: {
-  domain?: string
-  url?: string
-  relevanceScore?: number
-  qualityScore?: number
-}): string | null {
-  if (isLocalFallbackSource(source)) return 'Fallback'
-
-  const score = source.relevanceScore ?? source.qualityScore
-  if (typeof score !== 'number' || !Number.isFinite(score)) return null
-
-  const percent = score <= 1 ? score * 100 : score
-  if (percent >= 85) return 'High trust'
-  if (percent >= 60) return 'Useful'
-  return 'Weak'
-}
-
-function isLocalFallbackSource(source: { domain?: string; url?: string }) {
-  const raw = `${source.domain ?? ''} ${source.url ?? ''}`.toLowerCase()
-  const decoded = safeDecodeURIComponent(raw)
-  const normalized = `${raw} ${decoded}`.replace(/[-_%]+/g, ' ')
-  return normalized.includes('local fallback')
-}
-
-function safeDecodeURIComponent(value: string) {
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return value
-  }
-}
-
 export function SourceCard({
   source,
   index,
@@ -67,26 +34,17 @@ export function SourceCard({
 }: SourceCardProps) {
   const snippet = source.snippet ?? ''
   const title = source.title || source.domain
-  const trustLabel = getSourceTrustLabel(source)
-  const [copied, setCopied] = useState(false)
-
-  const copySourceLink = async () => {
-    const didCopy = await safeCopyTextToClipboard(source.url)
-    if (!didCopy) return
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1600)
-  }
 
   return (
     <article
       className={cn(
-        'group relative flex min-w-0 items-start gap-2.5 rounded-lg border border-border/60 bg-card/70 px-2.5 py-2 transition-all duration-200',
+        'group relative flex min-w-0 items-start gap-2 rounded-md border border-border/55 bg-card/70 px-2.5 py-2 transition-all duration-200',
         'hover:border-foreground/15 hover:bg-card hover:shadow-sm',
         className
       )}
       data-source-index={index}
     >
-      <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] font-mono text-[10px] font-semibold text-foreground/75">
+      <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground/[0.06] font-mono text-[10px] font-semibold text-foreground/75">
         {index}
       </span>
 
@@ -105,48 +63,12 @@ export function SourceCard({
           </button>
 
           <div className="flex shrink-0 items-center gap-0.5">
-            {onOpen && (
-              <button
-                type="button"
-                onClick={() => onOpen(source)}
-                className={cn(
-                  'inline-flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors sm:size-8',
-                  'hover:bg-foreground/5 hover:text-foreground',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                )}
-                aria-label={`Verify ${title}`}
-                title="Verify source"
-              >
-                <PanelRightOpen className="size-3.5" />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={copySourceLink}
-              className={cn(
-                'inline-flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors sm:size-8',
-                'hover:bg-foreground/5 hover:text-foreground',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-              )}
-              aria-label={
-                copied
-                  ? `Source link copied: ${title}`
-                  : `Copy source link: ${title}`
-              }
-              title={copied ? 'Source link copied' : 'Copy source link'}
-            >
-              {copied ? (
-                <Check className="size-3.5" />
-              ) : (
-                <Copy className="size-3.5" />
-              )}
-            </button>
             <a
               href={source.url}
               target="_blank"
               rel="noreferrer noopener"
               className={cn(
-                'inline-flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors sm:size-8',
+                'inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors',
                 'hover:bg-foreground/5 hover:text-foreground',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
               )}
@@ -167,18 +89,19 @@ export function SourceCard({
               <span className="shrink-0">{source.publishedAt}</span>
             </>
           )}
-          {trustLabel && (
+          {typeof source.relevanceScore === 'number' && (
             <>
               <span aria-hidden>·</span>
-              <span className="inline-flex items-center rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-medium leading-3 text-foreground/70">
-                {trustLabel}
+              <span className="inline-flex items-center gap-0.5 text-amber-600/80">
+                <Star className="size-2.5 fill-current" />
+                <span>{Math.round(source.relevanceScore * 100)}%</span>
               </span>
             </>
           )}
         </div>
 
         {snippet && (
-          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+          <p className="mt-1 line-clamp-2 break-words text-xs leading-5 text-muted-foreground">
             {snippet}
           </p>
         )}
@@ -197,15 +120,13 @@ export function SourceCompactChip({
   onOpen?: (source: SourceCardData) => void
 }) {
   const title = source.title || source.domain
-  const label = title && title !== source.domain ? title : source.domain
-  const trustLabel = getSourceTrustLabel(source)
 
   return (
     <button
       type="button"
       onClick={() => onOpen?.(source)}
       className={cn(
-        'inline-flex h-8 max-w-[18rem] items-center gap-1.5 rounded-full border border-border/70 bg-card px-2.5 text-xs text-foreground/85 transition-colors',
+        'inline-flex h-7 max-w-[min(14rem,72vw)] items-center gap-1.5 rounded-full border border-border/65 bg-card px-2 text-xs text-foreground/85 transition-colors',
         'hover:border-foreground/15 hover:bg-foreground/[0.035]',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
       )}
@@ -216,26 +137,19 @@ export function SourceCompactChip({
         {index}
       </span>
       <SourceFavicon domain={source.domain} favicon={source.favicon} />
-      <span className="max-w-[11rem] truncate sm:max-w-[14rem]">{label}</span>
-      {title && title !== source.domain ? (
-        <span className="hidden max-w-[7rem] truncate text-muted-foreground sm:inline">
-          {source.domain}
-        </span>
-      ) : null}
+      <span className="min-w-0 truncate">{source.domain}</span>
       {source.publishedAt && (
         <>
-          <span aria-hidden className="text-muted-foreground/70">
+          <span
+            aria-hidden
+            className="hidden text-muted-foreground/70 sm:inline"
+          >
             ·
           </span>
-          <span className="shrink-0 text-muted-foreground">
+          <span className="hidden shrink-0 text-muted-foreground sm:inline">
             {source.publishedAt}
           </span>
         </>
-      )}
-      {trustLabel && (
-        <span className="shrink-0 rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-medium leading-3 text-foreground/70">
-          {trustLabel}
-        </span>
       )}
     </button>
   )
@@ -298,10 +212,11 @@ export function SourcesPanel({
         type="button"
         onClick={() => setExpanded(v => !v)}
         className={cn(
-          'group flex w-full items-center justify-between gap-2 rounded-lg px-1 py-0.5 text-left transition-colors',
+          'group flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left transition-colors',
           'hover:bg-foreground/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded'
         )}
         aria-expanded={expanded}
+        aria-label={`${expanded ? 'Collapse' : 'Expand'} ${sources.length} sources`}
       >
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -312,12 +227,15 @@ export function SourcesPanel({
           </span>
         </div>
         <span className="text-[11px] font-medium text-muted-foreground group-hover:text-foreground/80">
-          {expanded ? 'Hide' : 'Show all'}
+          {expanded ? 'Hide' : 'Show'}
         </span>
       </button>
 
       {!expanded && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
+        <div
+          className="-mx-1 flex max-w-full snap-x gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          aria-label="Source shortcuts"
+        >
           {sources.slice(0, 6).map((src, idx) => (
             <SourceCompactChip
               key={src.id}
@@ -330,7 +248,7 @@ export function SourcesPanel({
       )}
 
       {expanded && (
-        <div className="grid gap-1.5 sm:grid-cols-2">
+        <div className="grid min-w-0 gap-1.5 sm:grid-cols-2">
           {sources.map((src, idx) => (
             <SourceCard
               key={src.id}

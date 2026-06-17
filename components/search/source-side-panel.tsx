@@ -1,11 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-
-import { Check, Copy, ExternalLink, Quote, ShieldCheck } from 'lucide-react'
+import { ExternalLink, Quote } from 'lucide-react'
 
 import type { SearchResultItem } from '@/lib/types'
-import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
 import {
   Sheet,
@@ -15,10 +12,7 @@ import {
   SheetTitle
 } from '@/components/ui/sheet'
 
-import {
-  getSourceTrustLabel,
-  type SourceCardData
-} from '@/components/search/source-card'
+import type { SourceCardData } from '@/components/search/source-card'
 
 function getHostname(url: string) {
   try {
@@ -26,6 +20,25 @@ function getHostname(url: string) {
   } catch {
     return 'source'
   }
+}
+
+function getPublishedAt(source: SearchResultItem | SourceCardData) {
+  if ('publishedAt' in source && source.publishedAt) return source.publishedAt
+
+  const raw =
+    'publishedDate' in source
+      ? source.publishedDate || source.date || source.retrievedAt
+      : undefined
+  if (!raw) return undefined
+
+  const date = raw instanceof Date ? raw : new Date(raw)
+  if (Number.isNaN(date.getTime())) return undefined
+
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  })
 }
 
 export function SourceSidePanel({
@@ -37,12 +50,6 @@ export function SourceSidePanel({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    setCopied(false)
-  }, [source?.url])
-
   if (!source) return null
 
   const host =
@@ -53,77 +60,57 @@ export function SourceSidePanel({
         : getHostname(source.url)
   const excerpt =
     source.snippet || ('content' in source ? source.content : undefined)
-  const trustLabel = getSourceTrustLabel(source)
-  const copySourceLink = async () => {
-    const didCopy = await safeCopyTextToClipboard(source.url)
-    if (!didCopy) return
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1600)
-  }
+  const publishedAt = getPublishedAt(source)
+  const title = source.title || host
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
-        <SheetHeader className="space-y-1 pr-8">
-          <SheetTitle className="text-base leading-snug">
-            {source.title || host}
+      <SheetContent
+        side="right"
+        className="flex w-full max-w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[26rem]"
+      >
+        <SheetHeader className="border-b border-border/60 px-4 py-3 pr-11 text-left">
+          <SheetTitle className="break-words text-base leading-snug">
+            {title}
           </SheetTitle>
-          <SheetDescription className="truncate">{host}</SheetDescription>
+          <SheetDescription className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+            <span className="max-w-full break-all">{host}</span>
+            {publishedAt && (
+              <>
+                <span aria-hidden className="text-muted-foreground/50">
+                  ·
+                </span>
+                <span className="shrink-0">{publishedAt}</span>
+              </>
+            )}
+          </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-5 space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           {excerpt && (
-            <section className="space-y-1.5">
+            <section className="space-y-2">
               <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 <Quote className="size-3.5" />
                 Excerpt
               </div>
-              <p className="max-h-52 overflow-y-auto rounded-lg border border-border/70 bg-muted/25 p-3 text-sm leading-6 text-foreground/85">
+              <p className="max-h-[45vh] overflow-y-auto break-words rounded-md border border-border/60 bg-muted/25 p-3 text-sm leading-6 text-foreground/85">
                 {excerpt}
               </p>
             </section>
           )}
+        </div>
 
-          <section className="rounded-lg border border-border/60 bg-card/60 p-3">
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <ShieldCheck className="size-3.5" />
-              Verification
-            </div>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Kept with this answer so you can compare the cited claim with the
-              original page.
-            </p>
-            {trustLabel && (
-              <div className="mt-2 inline-flex rounded-full bg-foreground/[0.06] px-2 py-1 text-xs font-medium text-foreground/75">
-                {trustLabel}
-              </div>
-            )}
-          </section>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={copySourceLink}
-              className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label={copied ? 'Source link copied' : 'Copy source link'}
-            >
-              {copied ? 'Copied' : 'Copy link'}
-              {copied ? (
-                <Check className="size-3.5" />
-              ) : (
-                <Copy className="size-3.5" />
-              )}
-            </button>
-            <a
-              href={source.url}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-muted"
-            >
-              Open original
-              <ExternalLink className="size-3.5" />
-            </a>
-          </div>
+        <div className="border-t border-border/60 p-4">
+          <a
+            href={source.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={`Open original source: ${title}`}
+          >
+            Open original
+            <ExternalLink className="size-3.5" />
+          </a>
         </div>
       </SheetContent>
     </Sheet>

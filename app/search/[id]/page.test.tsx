@@ -41,7 +41,12 @@ vi.mock('@/components/chat', () => ({
     savedMessages?: unknown[]
     isGuest?: boolean
   }) => (
-    <div data-testid="chat">
+    <div
+      data-source-title={
+        (savedMessages?.[1] as any)?.metadata?.answer?.sources?.[0]?.title
+      }
+      data-testid="chat"
+    >
       {id}:{savedMessages?.length ?? 0}:{String(isGuest)}
     </div>
   )
@@ -54,14 +59,26 @@ vi.mock('@/components/brok-search-client', () => ({
     persistToServer,
     searchId
   }: {
-    initialMessages?: unknown[]
+    initialMessages?: Array<{
+      metadata?: {
+        answer?: {
+          sources?: Array<{ title?: string }>
+        }
+      }
+    }>
     modelSelectorData?: { hasAvailableModels?: boolean }
     persistToServer?: boolean
     searchId?: string
   }) => (
-    <div data-testid="brok-search-client">
-      {searchId}:{initialMessages?.length ?? 0}:{String(persistToServer)}:
-      {String(modelSelectorData?.hasAvailableModels)}
+    <div
+      data-testid="brok-search-client"
+      data-source-title={
+        initialMessages?.[1]?.metadata?.answer?.sources?.[0]?.title ?? ''
+      }
+    >
+      {searchId}:{String(persistToServer)}:
+      {String(modelSelectorData?.hasAvailableModels)}:
+      {initialMessages?.length ?? 0}
     </div>
   )
 }))
@@ -98,33 +115,48 @@ describe('app/search/[id]/page', () => {
     expect(screen.getByTestId('chat')).toHaveTextContent('chat-1:1:false')
   })
 
-  it('hydrates saved signed-in search sessions in the search client', async () => {
+  it('preserves stored search answer metadata for signed-in reloads', async () => {
     mocks.loadChat.mockResolvedValue({
       visibility: 'private',
       messages: [
-        { id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'q' }] },
         {
-          id: 'assistant-1',
+          id: 'search_1_user',
+          role: 'user',
+          parts: [{ type: 'text', text: 'What is Brok Search?' }]
+        },
+        {
+          id: 'search_1_assistant',
           role: 'assistant',
-          parts: [{ type: 'text', text: 'answer' }]
+          parts: [
+            {
+              type: 'text',
+              text: 'Brok Search answers with durable sources. [1]'
+            }
+          ],
+          metadata: {
+            answer: {
+              sources: [
+                {
+                  title: 'Brok Search docs',
+                  url: 'https://www.brok.fyi/features/search',
+                  content: 'Brok Search product context.'
+                }
+              ]
+            }
+          }
         }
       ]
     })
 
-    render(
-      await SearchPage({
-        params: Promise.resolve({ id: 'search_saved_answer' })
-      })
-    )
+    render(await SearchPage({ params: Promise.resolve({ id: 'search_1' }) }))
 
-    expect(mocks.loadChat).toHaveBeenCalledWith('search_saved_answer', 'user-1')
-    expect(mocks.requireFeatureAccess).toHaveBeenCalledWith(
-      '/search/search_saved_answer',
-      'search'
-    )
-    expect(screen.queryByTestId('chat')).not.toBeInTheDocument()
+    expect(mocks.loadChat).toHaveBeenCalledWith('search_1', 'user-1')
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      'search_saved_answer:2:true:true'
+      'search_1:true:true:2'
+    )
+    expect(screen.getByTestId('brok-search-client')).toHaveAttribute(
+      'data-source-title',
+      'Brok Search docs'
     )
   })
 
@@ -142,7 +174,7 @@ describe('app/search/[id]/page', () => {
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(mocks.redirect).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      'search_local_guest_answer:0:false:true'
+      'search_local_guest_answer:false:true'
     )
   })
 
@@ -163,7 +195,7 @@ describe('app/search/[id]/page', () => {
     expect(mocks.loadChat).not.toHaveBeenCalled()
     expect(mocks.redirect).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      'search_local_anonymous_answer:0:false:true'
+      'search_local_anonymous_answer:false:true'
     )
   })
 
@@ -182,7 +214,7 @@ describe('app/search/[id]/page', () => {
     )
     expect(mocks.redirect).not.toHaveBeenCalled()
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
-      'search_signed_in_answer:0:true:true'
+      'search_signed_in_answer:true:true'
     )
   })
 

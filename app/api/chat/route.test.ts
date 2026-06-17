@@ -124,7 +124,7 @@ function makeRequest(body: Record<string, unknown>) {
 describe('POST /api/chat guest search gate', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    process.env.ENABLE_GUEST_CHAT = originalEnableGuestChat
+    delete process.env.ENABLE_GUEST_CHAT
 
     mocks.cookieGet.mockReturnValue(undefined)
     mocks.getCurrentUserId.mockResolvedValue(undefined)
@@ -210,6 +210,8 @@ describe('POST /api/chat guest search gate', () => {
   })
 
   it('requires authentication for guest requests when the guest flag is disabled', async () => {
+    process.env.ENABLE_GUEST_CHAT = 'false'
+
     const response = await POST(
       makeRequest({
         message: 'latest ai funding',

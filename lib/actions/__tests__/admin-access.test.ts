@@ -168,6 +168,38 @@ describe('admin access actions', () => {
     expect(mockRevalidatePath).toHaveBeenCalledWith('/admin/brok')
   })
 
+  it('grants builder and tools access by email', async () => {
+    const { grantAppAccessByEmail } = await import('../admin-access')
+    const formData = makeFormData([
+      ['email', 'Builder@Example.COM'],
+      ['featureScope', 'specific'],
+      ['features', 'brokcode'],
+      ['features', 'tools']
+    ])
+
+    await grantAppAccessByEmail(formData)
+
+    expect(dbMocks.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'builder@example.com',
+        status: 'active',
+        features: ['brokcode', 'tools'],
+        createdBy: 'admin-user',
+        revokedAt: null
+      })
+    )
+    expect(dbMocks.onConflictDoUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: 'email',
+        set: expect.objectContaining({
+          status: 'active',
+          features: ['brokcode', 'tools'],
+          revokedAt: null
+        })
+      })
+    )
+  })
+
   it('marks a request approved when granting from a pending request row', async () => {
     const { grantAppAccessByEmail } = await import('../admin-access')
     const formData = makeFormData([

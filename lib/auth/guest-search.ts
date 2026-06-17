@@ -3,7 +3,11 @@ import type { SearchMode } from '@/lib/types/search'
 import { getCurrentUserId } from './get-current-user'
 
 export function isGuestSearchEnabled() {
-  return process.env.ENABLE_GUEST_CHAT === 'true'
+  if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') return false
+  if (process.env.ENABLE_GUEST_CHAT === 'true') return true
+  if (process.env.ENABLE_GUEST_CHAT === 'false') return false
+
+  return process.env.NODE_ENV !== 'production'
 }
 
 export function isGuestSearchMode(mode: SearchMode) {

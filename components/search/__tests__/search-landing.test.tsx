@@ -1,7 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { EXAMPLE_QUERIES } from '../example-queries-data'
 import { SearchLanding } from '../search-landing'
 
 const mocks = vi.hoisted(() => ({
@@ -13,6 +12,36 @@ vi.mock('next/navigation', () => ({
     push: mocks.push
   })
 }))
+
+vi.mock('@/components/model-selector-client', () => ({
+  ModelSelectorClient: ({
+    compact,
+    data
+  }: {
+    compact?: boolean
+    data: { selectedModelKey: string }
+  }) => (
+    <div data-compact={String(compact)} data-testid="model-selector">
+      {data.selectedModelKey}
+    </div>
+  )
+}))
+
+const modelSelectorData = {
+  enabled: true,
+  hasAvailableModels: true,
+  selectedModelKey: 'openai-compatible:brok-m2-5-highspeed',
+  modelsByProvider: {
+    'openai-compatible': [
+      {
+        id: 'brok-m2-5-highspeed',
+        name: 'Brok 2.5 Fast',
+        provider: 'Brok',
+        providerId: 'openai-compatible'
+      }
+    ]
+  }
+}
 
 describe('SearchLanding', () => {
   const storage = new Map<string, string>()
@@ -41,6 +70,11 @@ describe('SearchLanding', () => {
   it('routes submitted searches through the chat creation route', () => {
     render(<SearchLanding />)
 
+    expect(
+      screen.getByRole('form', { name: 'Ask Brok Search' })
+    ).toBeInTheDocument()
+    expect(screen.getAllByLabelText('Search query')).toHaveLength(1)
+
     fireEvent.change(screen.getByRole('textbox', { name: 'Search query' }), {
       target: { value: 'best study plan for finals' }
     })
@@ -49,19 +83,10 @@ describe('SearchLanding', () => {
     expect(mocks.push).toHaveBeenCalledWith(
       '/search?q=best+study+plan+for+finals&mode=quick'
     )
-    expect(screen.getByTestId('landing-submit-status')).toHaveTextContent(
-      'Preparing your answer'
-    )
-    expect(screen.getByTestId('landing-submit-status')).toHaveTextContent(
-      'best study plan for finals'
-    )
-    expect(screen.getByText('Searching web')).toBeInTheDocument()
-    expect(screen.getByText('Reading sources')).toBeInTheDocument()
-    expect(screen.getByText('Writing answer')).toBeInTheDocument()
     expect(window.localStorage.setItem).toHaveBeenCalledTimes(1)
   })
 
-  it('lets users cancel the instant pending state before navigation completes', () => {
+  it('shows an immediate handoff state after submitting', () => {
     render(<SearchLanding />)
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Search query' }), {
@@ -69,13 +94,28 @@ describe('SearchLanding', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /send query/i }))
 
-    expect(screen.getByTestId('landing-submit-status')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: /stop generating/i }))
-
     expect(
-      screen.queryByTestId('landing-submit-status')
-    ).not.toBeInTheDocument()
+      screen.getByRole('button', { name: /stop generating/i })
+    ).toBeInTheDocument()
+  })
+
+  it('keeps long landing questions scrollable inside the input', () => {
+    render(<SearchLanding />)
+
+    const textarea = screen.getByRole('textbox', { name: 'Search query' })
+    Object.defineProperty(textarea, 'scrollHeight', {
+      configurable: true,
+      value: 420
+    })
+
+    fireEvent.input(textarea, {
+      target: {
+        value:
+          'Explain a very long research question with many constraints, dates, URLs, and comparison criteria so the mobile input has to grow and then scroll.'
+      }
+    })
+
+    expect(textarea).toHaveStyle({ height: '280px', overflowY: 'auto' })
   })
 
   it('does not expose attachments on the landing submission form', () => {
@@ -86,12 +126,26 @@ describe('SearchLanding', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('shows the answer model selector on the landing search form', () => {
+    render(<SearchLanding modelSelectorData={modelSelectorData} />)
+
+    expect(screen.getByTestId('model-selector')).toHaveTextContent(
+      'openai-compatible:brok-m2-5-highspeed'
+    )
+    expect(screen.getByTestId('model-selector')).toHaveAttribute(
+      'data-compact',
+      'true'
+    )
+  })
+
   it('shows the MVP example prompts and starts from one immediately', () => {
     render(<SearchLanding />)
 
-    for (const example of EXAMPLE_QUERIES.slice(0, 6)) {
-      expect(screen.getByText(example.query)).toBeInTheDocument()
-    }
+    expect(
+      screen.getByText('What is the best way to learn React?')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Compare Cursor vs Windsurf')).toBeInTheDocument()
+    expect(screen.getByText('Summarize the latest AI news')).toBeInTheDocument()
 
     fireEvent.click(
       screen.getByRole('button', { name: /Compare Cursor vs Windsurf/i })
@@ -99,9 +153,6 @@ describe('SearchLanding', () => {
 
     expect(mocks.push).toHaveBeenCalledWith(
       '/search?q=Compare+Cursor+vs+Windsurf&mode=search'
-    )
-    expect(screen.getByTestId('landing-submit-status')).toHaveTextContent(
-      'Compare Cursor vs Windsurf'
     )
   })
 
@@ -129,30 +180,5 @@ describe('SearchLanding', () => {
     expect(mocks.push).toHaveBeenCalledWith(
       '/search?q=Deep+dive+on+synthetic+biology+funding&mode=deep'
     )
-  })
-
-  it('keeps the first-run mobile layout compact without hiding examples', () => {
-    const { container } = render(<SearchLanding />)
-
-    expect(screen.getByTestId('example-query-grid')).toHaveClass(
-      'gap-1.5',
-      'sm:gap-2.5'
-    )
-    expect(screen.getByTestId('example-query-mvp-react')).toHaveClass(
-      'p-2.5',
-      'sm:p-3.5'
-    )
-    expect(
-      screen.getByText('What is the best way to learn React?')
-    ).toHaveClass('line-clamp-1', 'sm:line-clamp-2')
-    expect(container.querySelector('.flex-nowrap')).toBeInTheDocument()
-
-    for (const example of EXAMPLE_QUERIES.slice(0, 6)) {
-      expect(
-        screen.getByRole('button', {
-          name: name => name.includes(example.query)
-        })
-      ).toBeInTheDocument()
-    }
   })
 })

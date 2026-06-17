@@ -13,13 +13,15 @@ import {
 import {
   buildSearchQueries,
   classifyQuery,
-  generateFollowUps,
   getCachedSearchPipelineResponse,
+  isFirstPartyBrokSearchQuery,
   resolveQuery,
   runSearchPipeline,
+  type SearchResponse,
   type SearchResult
 } from '@/lib/brok/search-pipeline'
 import { normalizeSearchMode } from '@/lib/config/search-modes'
+import { isSupportedSearchModel } from '@/lib/model-selector/search-models'
 import { checkAndEnforceOverallChatLimit } from '@/lib/rate-limit/chat-limits'
 import { checkAndEnforceGuestLimit } from '@/lib/rate-limit/guest-limit'
 import type { SearchMode } from '@/lib/types/search'
@@ -85,22 +87,23 @@ function normalizeContext(value: unknown): SessionSearchContextTurn[] {
     }))
 }
 
-function buildPipelineQuery(
-  query: string,
-  context: SessionSearchContextTurn[]
-) {
-  if (context.length === 0) return query
+function getDisplayFollowUps(query: string) {
+  const topic = query.trim() || 'this follow-up'
 
-  const contextText = context
-    .map(
-      (turn, index) =>
-        `Previous turn ${index + 1} question: ${turn.query}\nPrevious turn ${
-          index + 1
-        } answer summary: ${turn.answer}`
-    )
-    .join('\n\n')
-
-  return `Answer the current follow-up question using the previous conversation only as context.\n\n${contextText}\n\nCurrent follow-up question: ${query}`
+  return [
+    {
+      label: 'Go deeper',
+      query: `Go deeper on ${topic}`
+    },
+    {
+      label: 'Compare options',
+      query: `Compare options for ${topic}`
+    },
+    {
+      label: 'Find risks',
+      query: `What are the risks or caveats around ${topic}?`
+    }
+  ]
 }
 
 function getRequestIp(req: Request) {
@@ -110,13 +113,27 @@ function getRequestIp(req: Request) {
   )
 }
 
+function getInitialStatusMessage({
+  cachedResult,
+  resolvedQuery
+}: {
+  cachedResult: SearchResponse | null
+  resolvedQuery: string
+}) {
+  if (cachedResult) return 'Loading cached answer'
+  if (isFirstPartyBrokSearchQuery(resolvedQuery)) {
+    return 'Loading Brok product context'
+  }
+  return 'Searching web'
+}
+
 async function getSelectedSearchSynthesisModel(mode: SearchMode) {
   const selected = await selectModel({
     searchMode: mode,
     cookieStore: await cookies()
   })
 
-  if (selected?.providerId !== 'openai-compatible') {
+  if (!selected || !isSupportedSearchModel(selected)) {
     return null
   }
 
@@ -222,14 +239,14 @@ export async function POST(req: Request) {
     typeof body.recency_days === 'number' ? body.recency_days : undefined
   const domains = normalizeDomains(body.domains)
   const context = normalizeContext(body.context)
-  const pipelineQuery = buildPipelineQuery(query, context)
   const selectedModel = await getSelectedSearchSynthesisModel(mode)
   const cachedResult = getCachedSearchPipelineResponse({
-    query: pipelineQuery,
+    query,
     depth,
     recencyDays,
     domains,
-    synthesisModel: selectedModel?.id
+    synthesisModel: selectedModel?.id,
+    context
   })
 
   if (isGuest) {
@@ -278,7 +295,10 @@ export async function POST(req: Request) {
         try {
           send('status', {
             id: requestId,
-            message: 'Searching web'
+            message: getInitialStatusMessage({
+              cachedResult,
+              resolvedQuery
+            })
           })
           send('query', {
             id: requestId,
@@ -310,10 +330,11 @@ export async function POST(req: Request) {
           const result =
             cachedResult ??
             (await runSearchPipeline({
-              query: pipelineQuery,
+              query,
               depth,
               recencyDays,
               domains,
+              context,
               synthesisModel: selectedModel?.id,
               signal: req.signal,
               onSources: sources => {
@@ -376,13 +397,7 @@ export async function POST(req: Request) {
             }
           }
           const resultFollowUps =
-            context.length > 0
-              ? generateFollowUps(
-                  query,
-                  result.classification,
-                  result.citations
-                )
-              : result.followUps
+            context.length > 0 ? getDisplayFollowUps(query) : result.followUps
 
           send('follow_ups', {
             id: requestId,

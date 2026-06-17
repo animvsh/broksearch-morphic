@@ -84,6 +84,7 @@ export default async function SearchPage(props: {
         defaultMode={mode}
         isCloudDeployment={isCloudDeployment}
         hasModels={modelSelectorData?.hasAvailableModels !== false}
+        modelSelectorData={modelSelectorData}
       />
     )
   }

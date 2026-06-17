@@ -1,21 +1,23 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('@/components/search/pending-answer', () => ({
+  PendingAnswer: () => (
+    <div data-testid="pending-answer" aria-label="Preparing answer">
+      Preparing answer
+    </div>
+  )
+}))
 
 import Loading from './loading'
 
-describe('search loading route', () => {
-  it('shows answer-engine progress immediately', () => {
+describe('app/search/loading', () => {
+  it('shows an answer-shaped search loading shell', () => {
     render(<Loading />)
 
-    expect(
-      screen.getByRole('main', { name: 'Preparing search answer' })
-    ).toBeInTheDocument()
-    expect(screen.getByTestId('search-route-loading')).toHaveTextContent(
-      'Preparing your answer'
+    expect(screen.getByText('Starting Brok Search')).toBeInTheDocument()
+    expect(screen.getByTestId('pending-answer')).toHaveAccessibleName(
+      'Preparing answer'
     )
-    expect(screen.getByText('Searching web')).toBeInTheDocument()
-    expect(screen.getByText('Reading sources')).toBeInTheDocument()
-    expect(screen.getByText('Writing answer')).toBeInTheDocument()
-    expect(screen.getByText('Drafting answer from sources')).toBeInTheDocument()
   })
 })

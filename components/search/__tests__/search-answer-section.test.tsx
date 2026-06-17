@@ -1,41 +1,37 @@
 import type { ComponentProps } from 'react'
 
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within
-} from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { SearchResultItem } from '@/lib/types'
 
 import { extractSources, SearchAnswerSection } from '../search-answer-section'
 
-const markdownMessageMock = vi.hoisted(() => vi.fn())
-
 vi.mock('@/components/message', () => ({
   MarkdownMessage: ({
-    message,
     citationMaps,
+    message,
     onCitationOpen
   }: {
-    message: string
     citationMaps?: Record<string, Record<number, SearchResultItem>>
+    message: string
     onCitationOpen?: (source: SearchResultItem) => void
   }) => {
-    markdownMessageMock({ message, citationMaps, onCitationOpen })
-    const citation = citationMaps?.answer?.[1]
+    const source = citationMaps?.answer?.[1]
 
     return (
       <div data-testid="markdown-message">
+        <span data-testid="markdown-citation-title">{source?.title ?? ''}</span>
         {message}
-        {citation && message.includes('[1](#answer:1)') && (
-          <button type="button" onClick={() => onCitationOpen?.(citation)}>
-            citation 1
+        {source ? (
+          <button
+            type="button"
+            onClick={() => onCitationOpen?.(source)}
+            aria-label="Open citation 1"
+          >
+            Open citation 1
           </button>
-        )}
+        ) : null}
       </div>
     )
   }
@@ -113,25 +109,6 @@ describe('extractSources', () => {
       id: 'searchA:1',
       title: 'Original',
       domain: 'example.com'
-    })
-  })
-
-  it('preserves source quality scores as relevance scores', () => {
-    const citationMaps = {
-      searchA: {
-        1: source({
-          title: 'Trusted source',
-          url: 'https://example.com/trusted',
-          qualityScore: 91
-        })
-      }
-    }
-
-    const sources = extractSources(citationMaps)
-
-    expect(sources[0]).toMatchObject({
-      id: 'searchA:1',
-      relevanceScore: 91
     })
   })
 })
@@ -359,9 +336,9 @@ describe('SearchAnswerSection actions', () => {
     ).toBeInTheDocument()
   })
 
-  it('links plain citations against durable metadata sources when citation maps are unavailable', () => {
+  it('linkifies plain citations from durable metadata sources after reload', () => {
     renderAnswer({
-      content: 'Answer [1]',
+      content: 'Stored answers should keep citation links. [1]',
       metadata: {
         answer: {
           sources: [
@@ -374,25 +351,14 @@ describe('SearchAnswerSection actions', () => {
       }
     })
 
-    expect(markdownMessageMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        message: 'Answer [1](#answer:1)',
-        citationMaps: {
-          answer: {
-            1: expect.objectContaining({
-              title: 'Stored source',
-              url: 'https://stored.example/report'
-            })
-          }
-        }
-      })
+    expect(screen.getByTestId('markdown-citation-title')).toHaveTextContent(
+      'Stored source'
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /citation 1/i }))
+    fireEvent.click(screen.getByRole('button', { name: /open citation 1/i }))
 
-    expect(screen.getByText('Verification')).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: /open original/i })
+      screen.getByRole('link', { name: /open original source: stored source/i })
     ).toHaveAttribute('href', 'https://stored.example/report')
   })
 
@@ -411,132 +377,13 @@ describe('SearchAnswerSection actions', () => {
       }
     })
 
-    fireEvent.click(screen.getByRole('button', { name: /show all/i }))
+    fireEvent.click(screen.getByRole('button', { name: /expand 1 sources/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Stored source' }))
 
     expect(screen.getByText('Excerpt')).toBeInTheDocument()
-    expect(screen.getByText('Verification')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: /open original/i })
     ).toHaveAttribute('href', 'https://stored.example/report')
-  })
-
-  it('shows source trust labels on source cards', () => {
-    renderAnswer({
-      content: 'Answer text.',
-      metadata: {
-        answer: {
-          sources: [
-            source({
-              title: 'Trusted source',
-              url: 'https://stored.example/report',
-              qualityScore: 91
-            })
-          ]
-        }
-      }
-    })
-
-    expect(screen.getByText('High trust')).toBeInTheDocument()
-  })
-
-  it('shows source trust labels in the verifier side panel', () => {
-    renderAnswer({
-      content: 'Answer text.',
-      metadata: {
-        answer: {
-          sources: [
-            source({
-              title: 'Useful source',
-              url: 'https://stored.example/report',
-              qualityScore: 70
-            })
-          ]
-        }
-      }
-    })
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /verify source 1: useful source/i })
-    )
-
-    const verification = screen.getByText('Verification').closest('section')
-    expect(verification).not.toBeNull()
-    expect(
-      within(verification as HTMLElement).getByText('Useful')
-    ).toBeInTheDocument()
-  })
-
-  it('copies source links from expanded source cards', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText }
-    })
-
-    renderAnswer({
-      content: 'Answer text.',
-      metadata: {
-        answer: {
-          sources: [
-            source({
-              title: 'Stored source',
-              url: 'https://stored.example/report'
-            })
-          ]
-        }
-      }
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: /show all/i }))
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: /copy source link: stored source/i
-      })
-    )
-
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith('https://stored.example/report')
-    })
-    expect(
-      await screen.findByRole('button', {
-        name: /source link copied: stored source/i
-      })
-    ).toBeInTheDocument()
-  })
-
-  it('copies source links from the verifier side panel', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText }
-    })
-
-    renderAnswer({
-      content: 'Answer text.',
-      metadata: {
-        answer: {
-          sources: [
-            source({
-              title: 'Stored source',
-              url: 'https://stored.example/report'
-            })
-          ]
-        }
-      }
-    })
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /verify source 1: stored source/i })
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Copy source link' }))
-
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith('https://stored.example/report')
-    })
-    expect(
-      await screen.findByRole('button', { name: 'Source link copied' })
-    ).toBeInTheDocument()
   })
 
   it('keeps source verification reachable from compact source controls', () => {
@@ -558,24 +405,23 @@ describe('SearchAnswerSection actions', () => {
       screen.getByRole('button', { name: /verify source 1: stored source/i })
     )
 
-    expect(screen.getByText('Verification')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /open original source: stored source/i })
+    ).toHaveAttribute('href', 'https://stored.example/report')
   })
 })
 
 function source({
   title,
-  url,
-  qualityScore
+  url
 }: {
   title: string
   url: string
-  qualityScore?: number
 }): SearchResultItem {
   return {
     title,
     url,
-    content: `${title} content`,
-    qualityScore
+    content: `${title} content`
   }
 }
 

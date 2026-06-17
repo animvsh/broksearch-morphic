@@ -52,6 +52,20 @@ const fallbackAuthResult = {
   }
 } as Extract<AuthResult, { success: true }>
 
+function realAuthResult(scopes: string[] = ['code:write']) {
+  return {
+    success: true,
+    apiKey: {
+      id: 'api-key-1',
+      userId: 'user-1',
+      scopes
+    },
+    workspace: {
+      id: 'workspace-1'
+    }
+  } as Extract<AuthResult, { success: true }>
+}
+
 describe('enforceBrokCodeAccountOwnership', () => {
   afterEach(() => {
     delete process.env.BROKCODE_ALLOW_LOCAL_AUTH_FALLBACK
@@ -78,6 +92,26 @@ describe('enforceBrokCodeAccountOwnership', () => {
 
     await expect(
       enforceBrokCodeAccountOwnership(fallbackAuthResult)
+    ).resolves.toBeNull()
+  })
+
+  it('rejects real API keys without the BrokCode write scope', async () => {
+    const response = await enforceBrokCodeAccountOwnership(
+      realAuthResult(['chat:write'])
+    )
+
+    expect(response?.status).toBe(403)
+    await expect(response?.json()).resolves.toMatchObject({
+      error: {
+        code: 'missing_scope',
+        message: 'This API key requires the code:write scope.'
+      }
+    })
+  })
+
+  it('allows real API keys with the BrokCode write scope when no browser user is present', async () => {
+    await expect(
+      enforceBrokCodeAccountOwnership(realAuthResult(['code:write']))
     ).resolves.toBeNull()
   })
 })

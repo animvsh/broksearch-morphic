@@ -13,6 +13,8 @@ import { isProviderEnabled } from '@/lib/utils/registry'
 
 import 'server-only'
 
+import { filterSearchModelsByProvider } from './search-models'
+
 function modelKey(model: Model): string {
   return `${model.providerId}:${model.id}`
 }
@@ -96,7 +98,7 @@ function resolveSelectedModelKey(
 }
 
 export async function getModelSelectorData(): Promise<ModelSelectorData> {
-  const modelsByProvider = withDefaultModel({})
+  const modelsByProvider = filterSearchModelsByProvider(withDefaultModel({}))
   const fallbackModel =
     isProviderEnabled(DEFAULT_MODEL.providerId) &&
     Object.values(modelsByProvider)
@@ -126,7 +128,9 @@ export async function getModelSelectorData(): Promise<ModelSelectorData> {
 }
 
 export async function getLiveModelSelectorData(): Promise<ModelSelectorData> {
-  const modelsByProvider = withDefaultModel(await fetchAvailableModels())
+  const modelsByProvider = filterSearchModelsByProvider(
+    withDefaultModel(await fetchAvailableModels())
+  )
   const fallbackModel =
     isProviderEnabled(DEFAULT_MODEL.providerId) &&
     Object.values(modelsByProvider)

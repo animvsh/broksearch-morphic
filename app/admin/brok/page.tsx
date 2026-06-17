@@ -208,6 +208,9 @@ function SplitBars({
 
 export default async function BrokAdminPage() {
   await requirePageAuth('/admin/brok')
+  const { grantAppAccessByEmail, rejectAppAccessRequest } = await import(
+    '@/lib/actions/admin-access'
+  )
   const {
     addAppAccessAllowlistEmail,
     getAppAccessAllowlist,
@@ -341,6 +344,7 @@ export default async function BrokAdminPage() {
                   <th className="px-3 py-2 text-left font-medium">Status</th>
                   <th className="px-3 py-2 text-left font-medium">Source</th>
                   <th className="px-3 py-2 text-left font-medium">Submitted</th>
+                  <th className="px-3 py-2 text-right font-medium">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -348,7 +352,7 @@ export default async function BrokAdminPage() {
                   <tr>
                     <td
                       className="px-3 py-6 text-center text-muted-foreground"
-                      colSpan={5}
+                      colSpan={6}
                     >
                       No access requests yet.
                     </td>
@@ -368,6 +372,56 @@ export default async function BrokAdminPage() {
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">
                         {formatDateTime(request.createdAt)}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex justify-end gap-2">
+                          <form action={grantAppAccessByEmail}>
+                            <input
+                              name="requestId"
+                              type="hidden"
+                              value={request.id}
+                            />
+                            <input
+                              name="email"
+                              type="hidden"
+                              value={request.email}
+                            />
+                            <input
+                              name="note"
+                              type="hidden"
+                              value={`Approved from admin Brok request ${request.id}`}
+                            />
+                            <input
+                              name="featureScope"
+                              type="hidden"
+                              value="all"
+                            />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              className="h-10"
+                              disabled={request.status !== 'pending'}
+                            >
+                              Grant all
+                            </Button>
+                          </form>
+                          <form action={rejectAppAccessRequest}>
+                            <input
+                              name="requestId"
+                              type="hidden"
+                              value={request.id}
+                            />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              variant="outline"
+                              className="h-10"
+                              disabled={request.status !== 'pending'}
+                            >
+                              Reject
+                            </Button>
+                          </form>
+                        </div>
                       </td>
                     </tr>
                   ))

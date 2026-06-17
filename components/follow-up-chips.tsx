@@ -41,7 +41,7 @@ export function FollowUpChips({
   return (
     <div
       className={cn(
-        'mobile-chip-row mt-3 flex items-center gap-2 overflow-x-auto pb-1 text-xs sm:flex-wrap sm:overflow-visible sm:pb-0',
+        'mt-3 flex flex-wrap items-center gap-2 pb-1 text-xs sm:pb-0',
         className
       )}
       data-testid="follow-up-chips"
@@ -56,11 +56,13 @@ export function FollowUpChips({
             disabled={disabled}
             onClick={() => onSelect(followUp.query)}
             className={cn(
-              'group inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/80 px-3 text-xs font-medium text-zinc-700 shadow-[0_4px_18px_-12px_rgba(15,23,42,0.18)] backdrop-blur transition-all hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 disabled:cursor-not-allowed disabled:opacity-60'
+              'group inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/80 px-3 py-2 text-left text-xs font-medium text-zinc-700 shadow-[0_4px_18px_-12px_rgba(15,23,42,0.18)] backdrop-blur transition-all hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 disabled:cursor-not-allowed disabled:opacity-60'
             )}
             data-testid={`follow-up-chip-${index}`}
           >
-            <span className="max-w-[14rem] truncate">{followUp.label}</span>
+            <span className="max-w-[18rem] whitespace-normal leading-snug">
+              {followUp.label}
+            </span>
             <ArrowRight className="size-3 text-zinc-400 transition-transform group-hover:translate-x-0.5 group-hover:text-zinc-600" />
           </button>
         ))

@@ -1,3 +1,5 @@
+import { StrictMode } from 'react'
+
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -204,11 +206,6 @@ describe('BrokSearchClient', () => {
   })
 
   it('uses the browser-safe session stream endpoint by default', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText }
-    })
     const fetchMock = vi.fn(async () =>
       streamResponse([
         {
@@ -293,26 +290,23 @@ describe('BrokSearchClient', () => {
     expect(await screen.findByTestId('brok-search-sources')).toHaveTextContent(
       'Brok docs'
     )
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Brok answers with sources. [1]'
+    )
+    expect(screen.getByTestId('brok-answer-trust-badge')).toHaveTextContent(
+      'Sources attached'
+    )
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /Show details/i })
-    ).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByTestId('brok-search-sources')).not.toHaveTextContent(
-      'Brok search docs.'
-    )
-    fireEvent.click(screen.getByRole('button', { name: /Show details/i }))
+      screen.getByRole('button', { name: 'Regenerate' })
+    ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /Hide details/i })
-    ).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
-      'Brok search docs.'
-    )
-    expect(screen.getByTestId('markdown-message')).toHaveTextContent(
-      'Brok answers with sources. [1](#brok-session-search:1)'
-    )
-    expect(screen.getByTestId('markdown-message')).toHaveAttribute(
-      'data-citation-title',
-      'Brok docs'
-    )
+      screen.getByRole('button', { name: 'Read aloud' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Translate' })
+    ).toBeInTheDocument()
     expect(screen.queryByTestId('brok-source-strip')).not.toBeInTheDocument()
     expect(
       screen
@@ -323,28 +317,8 @@ describe('BrokSearchClient', () => {
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent(
       'How does Brok cite sources?'
     )
-    expect(screen.getByTestId('related-questions')).toHaveTextContent(
-      'How does Brok cite sources?'
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Copy answer' }))
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith('Brok answers with sources. [1]')
-    })
-    expect(
-      await screen.findByRole('button', { name: 'Answer copied' })
-    ).toBeInTheDocument()
-
     fireEvent.click(
       screen.getByRole('button', { name: /Verify source 1: Brok docs/i })
-    )
-    expect(screen.getByTestId('source-side-panel')).toHaveTextContent(
-      'Brok docs'
-    )
-
-    fireEvent.click(screen.getByTestId('mock-citation-open'))
-    expect(screen.getByTestId('source-side-panel')).toHaveTextContent(
-      'Brok docs'
     )
 
     const persisted = JSON.parse(
@@ -448,7 +422,7 @@ describe('BrokSearchClient', () => {
     )
 
     expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
-      'Stored answer with a source. [1](#brok-session-search:1)'
+      'Stored answer with a source. [1]'
     )
     expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
       'Stored Brok docs'
@@ -459,56 +433,93 @@ describe('BrokSearchClient', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('hydrates completed server messages instead of rerunning on reload', async () => {
+  it('labels restored previous fallback turns as unverified model knowledge', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
+    window.localStorage.setItem(
+      'brok:guest-chat:search_test',
+      JSON.stringify([
+        {
+          id: 'search_test_user',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Current pricing for a tool' }]
+        },
+        {
+          id: 'search_test_assistant',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Live web search was unavailable, so this is a fallback. [1]'
+            }
+          ],
+          metadata: {
+            searchMode: 'quick',
+            modelId: 'brok-session-search',
+            answer: {
+              sources: [
+                {
+                  id: 'fallback_local_1',
+                  title: 'Brok local fallback',
+                  url: 'https://brok.fyi/search#local-fallback',
+                  content: 'Model knowledge fallback.',
+                  snippet: 'Model knowledge fallback.',
+                  publisher: 'Brok local fallback',
+                  retrievedAt: '2026-06-16T00:00:00.000Z'
+                }
+              ],
+              citationCount: 1,
+              followUps: []
+            }
+          }
+        },
+        {
+          id: 'search_test_user_followup',
+          role: 'user',
+          parts: [{ type: 'text', text: 'What should I verify next?' }]
+        },
+        {
+          id: 'search_test_assistant_followup',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Verify the current pricing page before relying on it.'
+            }
+          ],
+          metadata: {
+            searchMode: 'quick',
+            modelId: 'brok-session-search',
+            answer: {
+              sources: [],
+              citationCount: 0,
+              followUps: []
+            }
+          }
+        }
+      ])
+    )
 
     render(
       <BrokSearchClient
-        initialMode="search"
-        initialMessages={[
-          {
-            id: 'search_test_user',
-            role: 'user',
-            parts: [{ type: 'text', text: 'Server stored question' }]
-          },
-          {
-            id: 'search_test_assistant',
-            role: 'assistant',
-            parts: [{ type: 'text', text: 'Server stored answer. [1]' }],
-            metadata: {
-              searchMode: 'search',
-              modelId: 'brok-session-search',
-              answer: {
-                sources: [
-                  {
-                    title: 'Server source',
-                    url: 'https://docs.example.com/server',
-                    content: 'Server source.',
-                    snippet: 'Server source.',
-                    publisher: 'docs.example.com',
-                    retrievedAt: '2026-06-16T00:00:00.000Z'
-                  }
-                ],
-                citationCount: 1,
-                followUps: []
-              }
-            }
-          }
-        ]}
+        initialQuery="What should I verify next?"
+        initialMode="quick"
         searchId="search_test"
       />
     )
 
-    expect(await screen.findByTestId('brok-search-question')).toHaveTextContent(
-      'Server stored question'
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Verify the current pricing page'
     )
-    expect(screen.getByTestId('brok-search-answer')).toHaveTextContent(
-      'Server stored answer. [1](#brok-session-search:1)'
+    expect(screen.getByTestId('completed-search-turn')).toHaveTextContent(
+      'model knowledge fallback'
     )
-    expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
-      'Server source'
+    expect(screen.getByTestId('completed-search-turn')).toHaveTextContent(
+      'Fallback context'
     )
+    expect(
+      screen.getByTestId('brok-fallback-sources-notice')
+    ).toHaveTextContent('not verified by web sources')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
@@ -580,7 +591,7 @@ describe('BrokSearchClient', () => {
     )
 
     expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
-      'Brok answers even if the stream ends early. [1](#brok-session-search:1)'
+      'Brok answers even if the stream ends early. [1]'
     )
     await waitFor(() => {
       expect(screen.queryByTestId('search-progress')).not.toBeInTheDocument()
@@ -589,6 +600,10 @@ describe('BrokSearchClient', () => {
     expect(screen.getByLabelText('Ask a follow-up')).toHaveAttribute(
       'placeholder',
       'Ask a follow-up...'
+    )
+    expect(screen.getByTestId('brok-follow-up-form')).toHaveClass('sticky')
+    expect(screen.getByTestId('brok-follow-up-form')).toHaveClass(
+      'bottom-[calc(env(safe-area-inset-bottom)+0.75rem)]'
     )
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent('Go deeper')
 
@@ -606,59 +621,6 @@ describe('BrokSearchClient', () => {
           text: 'Brok answers even if the stream ends early. [1]'
         }
       ]
-    })
-  })
-
-  it('lets users retry a failed search from the error banner', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response('Service unavailable', { status: 503 })
-      )
-      .mockResolvedValueOnce(
-        streamResponse([
-          {
-            event: 'answer_delta',
-            data: { delta: 'Retried answer works.' }
-          },
-          {
-            event: 'done',
-            data: {}
-          }
-        ])
-      )
-    vi.stubGlobal('fetch', fetchMock)
-
-    render(
-      <BrokSearchClient
-        initialQuery="What is Brok?"
-        initialMode="quick"
-        searchId="search_test"
-        persistToServer={false}
-      />
-    )
-
-    expect(await screen.findByTestId('brok-search-error')).toHaveTextContent(
-      'Search request failed (503)'
-    )
-    expect(screen.getByTestId('brok-search-error')).toHaveTextContent('Retry')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-
-    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
-      'Retried answer works.'
-    )
-    await waitFor(() => {
-      expect(getSessionSearchCalls(fetchMock)).toHaveLength(2)
-    })
-    const retryRequest = getSessionSearchCalls(fetchMock)[1] as [
-      unknown,
-      RequestInit
-    ]
-    expect(JSON.parse(String(retryRequest[1]?.body))).toMatchObject({
-      query: 'What is Brok?',
-      mode: 'quick',
-      stream: true
     })
   })
 
@@ -700,13 +662,24 @@ describe('BrokSearchClient', () => {
       'Reloaded question'
     )
     expect(screen.getByTestId('brok-search-answer')).toHaveTextContent(
-      'Reloaded answer. [1](#brok-session-search:1)'
+      'Reloaded answer. [1]'
     )
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('does not rerun an interrupted durable search on reload', async () => {
-    const fetchMock = vi.fn()
+  it('waits for confirmation before replaying a pending durable search from the rewritten search id route', async () => {
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        {
+          event: 'answer_delta',
+          data: { delta: 'Reloaded pending answer.' }
+        },
+        {
+          event: 'done',
+          data: {}
+        }
+      ])
+    )
     vi.stubGlobal('fetch', fetchMock)
     window.history.replaceState({}, '', '/search/search_test')
     window.localStorage.setItem(
@@ -715,18 +688,15 @@ describe('BrokSearchClient', () => {
         {
           id: 'search_test_user',
           role: 'user',
-          parts: [{ type: 'text', text: 'Interrupted question' }]
+          parts: [{ type: 'text', text: 'Pending reload question' }]
         },
         {
           id: 'search_test_assistant',
           role: 'assistant',
           parts: [{ type: 'text', text: '' }],
           metadata: {
-            searchMode: 'quick',
-            modelId: 'brok-session-search',
             answer: {
               sources: [],
-              citationCount: 0,
               followUps: []
             }
           }
@@ -736,69 +706,113 @@ describe('BrokSearchClient', () => {
 
     render(
       <BrokSearchClient
-        initialQuery="Interrupted question"
         initialMode="quick"
         searchId="search_test"
+        persistToServer={false}
       />
     )
 
-    expect(await screen.findByTestId('brok-search-question')).toHaveTextContent(
-      'Interrupted question'
+    expect(
+      await screen.findByTestId('brok-search-interrupted')
+    ).toHaveTextContent(
+      'This search was interrupted before an answer was saved.'
     )
-    expect(screen.getByTestId('brok-search-error')).toHaveTextContent(
-      'This search was interrupted before an answer finished.'
-    )
-    expect(screen.getByTestId('brok-search-error')).toHaveTextContent('Retry')
     expect(fetchMock).not.toHaveBeenCalled()
-  })
 
-  it('does not replay the same active search while a request is in flight', async () => {
-    const stream = controllableStreamResponse()
-    const fetchMock = vi.fn(async () => stream.response)
-    vi.stubGlobal('fetch', fetchMock)
-
-    render(
-      <BrokSearchClient
-        initialQuery="React hooks"
-        initialMode="quick"
-        searchId="search_test"
-      />
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Resume search' }))
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(getSessionSearchCalls(fetchMock)).toHaveLength(1)
     })
-
-    fireEvent.submit(
-      screen.getByPlaceholderText('Ask anything...').closest('form')!
+    const replayRequest = getSessionSearchCalls(fetchMock)[0] as unknown as [
+      unknown,
+      RequestInit
+    ]
+    expect(JSON.parse(String(replayRequest[1]?.body))).toMatchObject({
+      query: 'Pending reload question',
+      mode: 'quick',
+      stream: true
+    })
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Reloaded pending answer.'
     )
-
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-
-    await act(async () => {
-      stream.close()
-    })
   })
 
-  it('shows a clearer message when the browser cannot reach search', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    const fetchMock = vi.fn(async () => {
-      throw new TypeError('Failed to fetch')
-    })
+  it('does not auto-rerun a matching pending durable search from the query route on reload', async () => {
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        {
+          event: 'answer_delta',
+          data: { delta: 'Query reload answer.' }
+        },
+        {
+          event: 'done',
+          data: {}
+        }
+      ])
+    )
     vi.stubGlobal('fetch', fetchMock)
+    window.history.replaceState(
+      {},
+      '',
+      '/search?q=Pending+reload+question&mode=quick'
+    )
+    window.localStorage.setItem(
+      'brok:guest-chat:search_test',
+      JSON.stringify([
+        {
+          id: 'search_test_user',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Pending reload question' }]
+        },
+        {
+          id: 'search_test_assistant',
+          role: 'assistant',
+          parts: [{ type: 'text', text: '' }],
+          metadata: {
+            answer: {
+              sources: [],
+              followUps: []
+            }
+          }
+        }
+      ])
+    )
 
     render(
       <BrokSearchClient
-        initialQuery="React hooks"
+        initialQuery="Pending reload question"
         initialMode="quick"
         searchId="search_test"
+        persistToServer={false}
       />
     )
 
-    expect(await screen.findByTestId('brok-search-error')).toHaveTextContent(
-      'Could not reach Brok Search'
+    expect(
+      await screen.findByTestId('brok-search-interrupted')
+    ).toHaveTextContent(
+      'This search was interrupted before an answer was saved.'
     )
     expect(screen.queryByTestId('search-progress')).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume search' }))
+
+    await waitFor(() => {
+      expect(getSessionSearchCalls(fetchMock)).toHaveLength(1)
+    })
+    const replayRequest = getSessionSearchCalls(fetchMock)[0] as unknown as [
+      unknown,
+      RequestInit
+    ]
+    expect(JSON.parse(String(replayRequest[1]?.body))).toMatchObject({
+      query: 'Pending reload question',
+      mode: 'quick',
+      stream: true
+    })
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Query reload answer.'
+    )
   })
 
   it('shows an answer skeleton immediately while the stream is pending', async () => {
@@ -824,65 +838,96 @@ describe('BrokSearchClient', () => {
     )
 
     expect(screen.getByTestId('search-progress')).toHaveTextContent(
-      'Searching web'
+      'Connecting to Brok Search'
     )
-    expect(screen.getByTestId('search-progress')).toHaveTextContent(
-      'Reading sources'
-    )
-    expect(screen.getByTestId('search-progress')).toHaveTextContent(
-      'Writing answer'
-    )
-    expect(screen.getByTestId('search-progress-query')).toHaveTextContent(
-      'What is Brok?'
-    )
-    expect(screen.getByTestId('search-progress')).toHaveTextContent(
-      'Quick search'
-    )
-    expect(screen.getByTestId('search-progress')).toHaveTextContent('0 sources')
-    expect(screen.getByLabelText('Search query')).toHaveValue('What is Brok?')
     expect(screen.getByTestId('brok-answer-loading-card')).toBeVisible()
-    expect(screen.getByTestId('brok-answer-loading-query')).toHaveTextContent(
-      'Searching: What is Brok?'
-    )
-    expect(screen.getByTestId('brok-follow-up-form')).toHaveClass('sticky')
-    expect(screen.getByTestId('brok-follow-up-form').className).toContain(
-      'bottom-[calc(env(safe-area-inset-bottom)+0.75rem)]'
-    )
+    expect(window.location.pathname).toBe('/search')
+    expect(
+      window.localStorage.getItem('brok:guest-chat:search_test')
+    ).toBeNull()
 
     deferred.flush()
 
     expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
       'Brok answers with sources.'
     )
+    expect(window.location.pathname).toBe('/search/search_test')
   })
 
-  it.each([
-    ['search', 'Search'],
-    ['deep', 'Deep search'],
-    ['code', 'Code']
-  ] as const)(
-    'labels the active progress shell as %s mode',
-    async (mode, expectedLabel) => {
-      const stream = controllableStreamResponse()
-      const fetchMock = vi.fn(async () => stream.response)
-      vi.stubGlobal('fetch', fetchMock)
+  it('does not abort initial auto-search during React StrictMode effect replay', async () => {
+    const stream = controllableStreamResponse()
+    const fetchMock = vi.fn(async () => stream.response)
+    vi.stubGlobal('fetch', fetchMock)
 
-      const { unmount } = render(
+    render(
+      <StrictMode>
         <BrokSearchClient
-          initialQuery="What is Brok?"
-          initialMode={mode}
+          initialQuery="What is Brok Search?"
+          initialMode="quick"
           searchId="search_test"
+          persistToServer={false}
         />
-      )
+      </StrictMode>
+    )
 
-      const progress = await screen.findByTestId('search-progress')
-      expect(progress).toHaveTextContent(expectedLabel)
-      expect(progress).not.toHaveTextContent('Quick search')
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
 
-      unmount()
+    const calls = fetchMock.mock.calls as unknown as Array<
+      [unknown, RequestInit]
+    >
+    const init = calls[0][1]
+    const signal = init.signal as AbortSignal
+    expect(signal.aborted).toBe(false)
+
+    await act(async () => {
+      stream.send('answer_delta', { delta: 'Strict mode answer.' })
+      stream.send('done', {})
       stream.close()
-    }
-  )
+    })
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'Strict mode answer.'
+    )
+  })
+
+  it('throttles durable writes while answer deltas stream', async () => {
+    const deltas = Array.from({ length: 20 }, (_, index) => ({
+      event: 'answer_delta',
+      data: { delta: `${index} ` }
+    }))
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        ...deltas,
+        {
+          event: 'done',
+          data: {}
+        }
+      ])
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="What is Brok?"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      '0 1 2 3'
+    )
+    await waitFor(() => {
+      expect(getSessionPersistCalls(fetchMock)).toHaveLength(1)
+    })
+
+    const durableWrites = vi
+      .mocked(window.localStorage.setItem)
+      .mock.calls.filter(([key]) => key === 'brok:guest-chat:search_test')
+    expect(durableWrites.length).toBeLessThan(8)
+  })
 
   it('shows resolved query planning chips while search is running', async () => {
     const stream = controllableStreamResponse()
@@ -918,6 +963,94 @@ describe('BrokSearchClient', () => {
         'React hooks official docs'
       )
     })
+
+    unmount()
+    stream.close()
+  })
+
+  it('keeps long question text and generated query chips mobile-safe', async () => {
+    const stream = controllableStreamResponse()
+    const fetchMock = vi.fn(async () => stream.response)
+    vi.stubGlobal('fetch', fetchMock)
+    const longQuery =
+      'CompareSuperLongProductNameWithoutSpacesAgainstAnotherSuperLongProductNameWithoutSpacesForTeams'
+
+    const { unmount } = render(
+      <BrokSearchClient
+        initialQuery={longQuery}
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-question')).toHaveClass(
+      'break-words'
+    )
+
+    await act(async () => {
+      stream.send('query_resolved', {
+        query: longQuery,
+        resolved_query: longQuery,
+        classification: {
+          type: 'comparison',
+          needsSearch: true,
+          reason: 'test'
+        },
+        search_queries: [`${longQuery} official docs primary source`]
+      })
+      stream.send('search_started', {
+        search_queries: [`${longQuery} official docs primary source`]
+      })
+    })
+
+    const progress = screen.getByTestId('search-progress')
+    expect(progress).toHaveTextContent(`${longQuery} official docs`)
+    expect(progress.querySelector('li.mt-1')).toBeNull()
+    expect(progress.querySelector('ul li')).toHaveClass('max-w-full')
+    expect(progress.querySelector('ul li')).toHaveClass('truncate')
+
+    unmount()
+    stream.close()
+  })
+
+  it('keeps specific server progress labels through generic query events', async () => {
+    const stream = controllableStreamResponse()
+    const fetchMock = vi.fn(async () => stream.response)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { unmount } = render(
+      <BrokSearchClient
+        initialQuery="What is Brok Search?"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('search-progress')).toBeVisible()
+
+    await act(async () => {
+      stream.send('status', { message: 'Loading Brok product context' })
+      stream.send('query_resolved', {
+        query: 'What is Brok Search?',
+        resolved_query: 'What is Brok Search?',
+        classification: {
+          type: 'evergreen/explainer',
+          needsSearch: true,
+          reason: 'test'
+        },
+        search_queries: ['What is Brok Search?']
+      })
+      stream.send('search_started', {
+        search_queries: ['What is Brok Search?']
+      })
+    })
+
+    expect(screen.getByTestId('search-progress')).toHaveTextContent(
+      'Loading Brok product context'
+    )
+    expect(screen.getByTestId('search-progress')).not.toHaveTextContent(
+      'Running 1 searches'
+    )
 
     unmount()
     stream.close()
@@ -994,7 +1127,56 @@ describe('BrokSearchClient', () => {
     })
   })
 
-  it('keeps sources compact while loading and expands source cards when done', async () => {
+  it('does not replay the same active search while a request is in flight', async () => {
+    const stream = controllableStreamResponse()
+    const fetchMock = vi.fn(async () => stream.response)
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="React hooks"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    fireEvent.submit(
+      screen.getByPlaceholderText('Ask anything...').closest('form')!
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      stream.close()
+    })
+  })
+
+  it('shows a clearer message when the browser cannot reach search', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="React hooks"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-error')).toHaveTextContent(
+      'Could not reach Brok Search'
+    )
+    expect(screen.queryByTestId('search-progress')).not.toBeInTheDocument()
+  })
+
+  it('keeps the compact source strip only while the answer has not started', async () => {
     const stream = controllableStreamResponse()
     const fetchMock = vi.fn(async () => stream.response)
     vi.stubGlobal('fetch', fetchMock)
@@ -1026,16 +1208,7 @@ describe('BrokSearchClient', () => {
     })
 
     expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
-      'Brok docs'
-    )
-    expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
       'docs.example.com'
-    )
-    expect(
-      screen.getByRole('button', { name: /Show details/i })
-    ).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByTestId('brok-search-sources')).not.toHaveTextContent(
-      'Brok search docs.'
     )
 
     await act(async () => {
@@ -1045,17 +1218,11 @@ describe('BrokSearchClient', () => {
     })
 
     expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
-      'Answer started. [1](#brok-session-search:1)'
+      'Answer started. [1]'
     )
     expect(screen.queryByTestId('brok-source-strip')).not.toBeInTheDocument()
     expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
       'Brok docs'
-    )
-    expect(
-      screen.getByRole('button', { name: /Show details/i })
-    ).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByTestId('brok-search-sources')).not.toHaveTextContent(
-      'Brok search docs.'
     )
   })
 
@@ -1105,61 +1272,6 @@ describe('BrokSearchClient', () => {
     expect(screen.getByTestId('brok-search-answer')).not.toHaveTextContent(
       'Old answer should not leak.'
     )
-  })
-
-  it('runs a fresh search when the initial query and search id change', async () => {
-    const fetchMock = vi.fn(async (_url, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body ?? '{}')) as { query: string }
-
-      return streamResponse([
-        {
-          event: 'answer_delta',
-          data: { delta: `Answer for ${body.query}` }
-        },
-        {
-          event: 'done',
-          data: {}
-        }
-      ])
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    const { rerender } = render(
-      <BrokSearchClient
-        initialQuery="First question"
-        initialMode="quick"
-        searchId="search_first"
-      />
-    )
-
-    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
-      'Answer for First question'
-    )
-
-    rerender(
-      <BrokSearchClient
-        initialQuery="Second question"
-        initialMode="quick"
-        searchId="search_second"
-      />
-    )
-
-    await waitFor(() => {
-      expect(getSessionSearchCalls(fetchMock)).toHaveLength(2)
-    })
-    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
-      'Answer for Second question'
-    )
-
-    const secondRequest = getSessionSearchCalls(fetchMock)[1] as unknown as [
-      unknown,
-      RequestInit
-    ]
-    expect(JSON.parse(String(secondRequest[1]?.body))).toMatchObject({
-      query: 'Second question',
-      mode: 'quick',
-      stream: true
-    })
   })
 
   it('keeps distinct sources when streamed source ids are missing', async () => {
@@ -1218,7 +1330,11 @@ describe('BrokSearchClient', () => {
       'Second Brok source'
     )
     expect(screen.getByTestId('brok-search-answer')).toHaveTextContent(
-      'Brok cites both. [1](#brok-session-search:1) [2](#brok-session-search:2)'
+      'Brok cites both.'
+    )
+    expect(screen.getByTestId('markdown-message')).toHaveAttribute(
+      'data-citation-title',
+      'First Brok source'
     )
   })
 
@@ -1248,6 +1364,9 @@ describe('BrokSearchClient', () => {
     expect(
       await screen.findByTestId('brok-no-sources-notice')
     ).toHaveTextContent('No web sources were attached')
+    expect(screen.getByTestId('brok-answer-trust-badge')).toHaveTextContent(
+      'Verify before relying'
+    )
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent('Go deeper')
   })
 
@@ -1289,17 +1408,66 @@ describe('BrokSearchClient', () => {
     )
 
     expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
-      'Brok answers with sources. [1](#brok-session-search:1)'
+      'Brok answers with sources. [1]'
     )
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent('Go deeper')
-    expect(screen.getByTestId('related-questions')).toHaveTextContent(
-      'Go deeper'
-    )
     expect(screen.getByTestId('follow-up-chips')).toHaveTextContent(
       'Compare tradeoffs'
     )
-    expect(screen.getByTestId('related-questions')).toHaveTextContent(
-      'Compare tradeoffs'
+  })
+
+  it('regenerates the active answer from the toolbar', async () => {
+    let answerNumber = 0
+    const fetchMock = vi.fn(async (_url, init?: RequestInit) => {
+      answerNumber += 1
+      const body = JSON.parse(String(init?.body ?? '{}')) as { query: string }
+
+      return streamResponse([
+        {
+          event: 'answer_delta',
+          data: {
+            delta:
+              answerNumber === 1
+                ? `First answer for ${body.query}.`
+                : `Regenerated answer for ${body.query}.`
+          }
+        },
+        {
+          event: 'done',
+          data: {}
+        }
+      ])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="What is Brok?"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'First answer for What is Brok?.'
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+
+    await waitFor(() => {
+      expect(getSessionSearchCalls(fetchMock)).toHaveLength(2)
+    })
+    const regenerateRequest = getSessionSearchCalls(
+      fetchMock
+    )[1] as unknown as [unknown, RequestInit]
+
+    expect(JSON.parse(String(regenerateRequest[1]?.body))).toMatchObject({
+      query: 'What is Brok?',
+      mode: 'quick',
+      stream: true
+    })
+    expect(screen.getByTestId('brok-search-answer')).toHaveTextContent(
+      'Regenerated answer for What is Brok?.'
     )
   })
 
@@ -1369,7 +1537,7 @@ describe('BrokSearchClient', () => {
     )
 
     expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
-      'Brok answers with sources. [1](#brok-session-search:1)'
+      'Brok answers with sources. [1]'
     )
 
     fireEvent.change(screen.getByLabelText('Ask a follow-up'), {
@@ -1397,11 +1565,16 @@ describe('BrokSearchClient', () => {
     })
     expect(
       await screen.findByTestId('completed-search-turn')
-    ).toHaveTextContent(
-      'Brok answers with sources. [1](#brok-session-search:1)'
+    ).toHaveTextContent('Brok answers with sources. [1]')
+    expect(screen.getByTestId('completed-search-turn')).toHaveTextContent(
+      'Previous answer • 1 source'
+    )
+    fireEvent.click(screen.getAllByTestId('mock-citation-open')[0])
+    expect(screen.getByTestId('source-side-panel')).toHaveTextContent(
+      'Brok docs'
     )
     expect(screen.getByTestId('brok-search-answer')).toHaveTextContent(
-      'Brok cites each answer with source cards. [1](#brok-session-search:1)'
+      'Brok cites each answer with source cards. [1]'
     )
 
     const persisted = JSON.parse(

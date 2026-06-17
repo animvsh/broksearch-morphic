@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   isGuestSearchMode: vi.fn(),
   generateFollowUps: vi.fn(),
   getCachedSearchPipelineResponse: vi.fn(),
+  isFirstPartyBrokSearchQuery: vi.fn(),
   runSearchPipeline: vi.fn(),
   checkAndEnforceOverallChatLimit: vi.fn(),
   checkAndEnforceGuestLimit: vi.fn(),
@@ -42,6 +43,7 @@ vi.mock('@/lib/brok/search-pipeline', () => ({
   })),
   generateFollowUps: mocks.generateFollowUps,
   getCachedSearchPipelineResponse: mocks.getCachedSearchPipelineResponse,
+  isFirstPartyBrokSearchQuery: mocks.isFirstPartyBrokSearchQuery,
   resolveQuery: vi.fn((query: string) => query),
   runSearchPipeline: mocks.runSearchPipeline
 }))
@@ -119,6 +121,7 @@ describe('POST /api/search/session', () => {
     mocks.isGuestSearchEnabled.mockReturnValue(true)
     mocks.isGuestSearchMode.mockReturnValue(true)
     mocks.getCachedSearchPipelineResponse.mockReturnValue(null)
+    mocks.isFirstPartyBrokSearchQuery.mockReturnValue(false)
     mocks.checkAndEnforceOverallChatLimit.mockResolvedValue(null)
     mocks.checkAndEnforceGuestLimit.mockResolvedValue(null)
     mocks.cookies.mockResolvedValue({
@@ -221,6 +224,84 @@ describe('POST /api/search/session', () => {
     expect(stream).toContain('"name":"Brok 2.5 Fast"')
   })
 
+  it('does not claim or use a selected model that search synthesis cannot support', async () => {
+    mocks.selectModel.mockResolvedValueOnce({
+      id: 'gpt-4o',
+      name: 'GPT-4o',
+      providerId: 'openai'
+    })
+
+    const response = await POST(
+      makeRequest({
+        query: 'What is Brok search?',
+        mode: 'search'
+      })
+    )
+    const stream = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(mocks.getCachedSearchPipelineResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        synthesisModel: undefined
+      })
+    )
+    expect(mocks.runSearchPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        synthesisModel: undefined
+      })
+    )
+    expect(stream).toContain('"answer_model":null')
+    expect(stream).not.toContain('GPT-4o')
+    expect(stream).not.toContain('gpt-4o')
+  })
+
+  it('keeps follow-up context out of provider search queries', async () => {
+    const response = await POST(
+      makeRequest({
+        query: 'How does it cite sources?',
+        mode: 'search',
+        context: [
+          {
+            query: 'What is Brok Search?',
+            answer:
+              'Brok Search returns cited answers with source cards and follow-ups.'
+          }
+        ]
+      })
+    )
+    const stream = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(mocks.getCachedSearchPipelineResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: 'How does it cite sources?',
+        context: [
+          {
+            query: 'What is Brok Search?',
+            answer:
+              'Brok Search returns cited answers with source cards and follow-ups.'
+          }
+        ]
+      })
+    )
+    expect(mocks.runSearchPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: 'How does it cite sources?',
+        context: [
+          {
+            query: 'What is Brok Search?',
+            answer:
+              'Brok Search returns cited answers with source cards and follow-ups.'
+          }
+        ]
+      })
+    )
+    expect(stream).toContain('"search_queries":["What is Brok search?"]')
+    expect(
+      JSON.stringify(mocks.runSearchPipeline.mock.calls[0]?.[0])
+    ).not.toContain('Previous turn')
+  })
+
   it('streams answer deltas as the pipeline writes them', async () => {
     mocks.runSearchPipeline.mockImplementationOnce(async request => {
       await request.onAnswerDelta?.('Brok ')
@@ -244,6 +325,68 @@ describe('POST /api/search/session', () => {
     expect(stream).toContain('"delta":"Brok "')
     expect(stream).toContain('"delta":"streams."')
     expect(stream).not.toContain('"delta":"Brok streams."')
+  })
+
+  it('flushes initial progress before the search pipeline resolves', async () => {
+    let resolvePipeline!: (value: ReturnType<typeof result>) => void
+    mocks.runSearchPipeline.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolvePipeline = resolve
+        })
+    )
+
+    const response = await POST(
+      makeRequest({
+        query: 'What is Brok search?',
+        mode: 'search'
+      })
+    )
+    const reader = response.body?.getReader()
+    expect(reader).toBeDefined()
+    const decoder = new TextDecoder()
+
+    const firstChunk = await reader!.read()
+    const chunks = [decoder.decode(firstChunk.value)]
+
+    expect(firstChunk.done).toBe(false)
+    expect(chunks[0]).toContain('event: status')
+
+    while (!chunks.join('').includes('event: search_started')) {
+      const next = await reader!.read()
+      expect(next.done).toBe(false)
+      chunks.push(decoder.decode(next.value))
+    }
+
+    const earlyProgress = chunks.join('')
+    expect(earlyProgress).toContain('event: query_resolved')
+    expect(earlyProgress).toContain('event: search_started')
+    expect(earlyProgress).not.toContain('event: answer_delta')
+
+    resolvePipeline(result())
+    while (true) {
+      const next = await reader!.read()
+      if (next.done) break
+      chunks.push(decoder.decode(next.value))
+    }
+
+    expect(chunks.join('')).toContain('event: answer_delta')
+  })
+
+  it('labels first-party Brok product context without claiming a web search', async () => {
+    mocks.isFirstPartyBrokSearchQuery.mockReturnValueOnce(true)
+
+    const response = await POST(
+      makeRequest({
+        query: 'What is Brok Search?',
+        mode: 'quick'
+      })
+    )
+    const stream = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(stream).toContain('"message":"Loading Brok product context"')
+    expect(stream).not.toContain('"message":"Searching web"')
   })
 
   it('allows guest quick/search requests through the same gate', async () => {
@@ -290,6 +433,8 @@ describe('POST /api/search/session', () => {
     expect(response.status).toBe(200)
     expect(stream).toContain('event: source')
     expect(stream).toContain('event: answer_delta')
+    expect(stream).toContain('"message":"Loading cached answer"')
+    expect(stream).not.toContain('"message":"Searching web"')
     expect(mocks.checkAndEnforceGuestLimit).not.toHaveBeenCalled()
     expect(mocks.checkAndEnforceOverallChatLimit).not.toHaveBeenCalled()
     expect(mocks.runSearchPipeline).not.toHaveBeenCalled()
@@ -312,7 +457,7 @@ describe('POST /api/search/session', () => {
     expect(mocks.runSearchPipeline).not.toHaveBeenCalled()
   })
 
-  it('passes compact prior-turn context into follow-up search pipeline queries', async () => {
+  it('passes compact prior-turn context separately from follow-up search query', async () => {
     const response = await POST(
       makeRequest({
         query: 'What about pricing?',
@@ -331,36 +476,31 @@ describe('POST /api/search/session', () => {
     expect(response.status).toBe(200)
     expect(mocks.runSearchPipeline).toHaveBeenCalledWith(
       expect.objectContaining({
-        query: expect.stringContaining(
-          'Current follow-up question: What about pricing?'
-        )
-      })
-    )
-    expect(mocks.runSearchPipeline).toHaveBeenCalledWith(
-      expect.objectContaining({
-        query: expect.stringContaining('Compare Cursor vs Windsurf')
+        query: 'What about pricing?',
+        context: [
+          {
+            query: 'Compare Cursor vs Windsurf',
+            answer:
+              'Cursor is stronger for agentic coding. Windsurf is cheaper.'
+          }
+        ]
       })
     )
     expect(mocks.getCachedSearchPipelineResponse).toHaveBeenCalledWith(
       expect.objectContaining({
-        query: expect.stringContaining('Previous turn 1 question')
+        query: 'What about pricing?',
+        context: [
+          {
+            query: 'Compare Cursor vs Windsurf',
+            answer:
+              'Cursor is stronger for agentic coding. Windsurf is cheaper.'
+          }
+        ]
       })
     )
-    expect(mocks.generateFollowUps).toHaveBeenCalledWith(
-      'What about pricing?',
-      expect.objectContaining({ type: 'evergreen/explainer' }),
-      [
-        expect.objectContaining({
-          title: 'Brok docs',
-          publisher: 'docs.example.com',
-          url: 'https://docs.example.com/search'
-        })
-      ]
-    )
-    expect(stream).toContain('Ask about docs.example.com')
-    expect(stream).toContain(
-      'What does docs.example.com specifically say about What about pricing?'
-    )
+    expect(mocks.generateFollowUps).not.toHaveBeenCalled()
+    expect(stream).toContain('Go deeper on What about pricing?')
+    expect(stream).toContain('Compare options for What about pricing?')
     expect(stream).not.toContain('Answer the current follow-up question')
   })
 
@@ -385,6 +525,32 @@ describe('POST /api/search/session', () => {
     expect(await response.json()).toMatchObject({
       error: 'Authentication required'
     })
+    expect(mocks.checkAndEnforceGuestLimit).not.toHaveBeenCalled()
+    expect(mocks.runSearchPipeline).not.toHaveBeenCalled()
+  })
+
+  it('requires auth for guest deep search even when guest search is enabled', async () => {
+    mocks.getCurrentUserIdForOptionalGuestSearch.mockResolvedValue(undefined)
+    mocks.isGuestSearchEnabled.mockReturnValue(true)
+    mocks.isGuestSearchMode.mockReturnValue(false)
+    mocks.getCurrentAppAccess.mockResolvedValue({
+      allowed: false,
+      user: null,
+      reason: 'unauthenticated'
+    })
+
+    const response = await POST(
+      makeRequest({
+        query: 'deep research',
+        mode: 'deep'
+      })
+    )
+
+    expect(response.status).toBe(401)
+    expect(await response.json()).toMatchObject({
+      error: 'Authentication required'
+    })
+    expect(mocks.checkAndEnforceGuestLimit).not.toHaveBeenCalled()
     expect(mocks.runSearchPipeline).not.toHaveBeenCalled()
   })
 })

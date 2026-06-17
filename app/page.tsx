@@ -22,6 +22,7 @@ export default async function Page() {
         <SearchLanding
           isCloudDeployment={isCloudDeployment}
           hasModels={modelSelectorData?.hasAvailableModels !== false}
+          modelSelectorData={modelSelectorData}
         />
       )
     }
@@ -45,6 +46,7 @@ export default async function Page() {
     <SearchLanding
       isCloudDeployment={isCloudDeployment}
       hasModels={modelSelectorData?.hasAvailableModels !== false}
+      modelSelectorData={modelSelectorData}
     />
   )
 }

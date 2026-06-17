@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from 'react'
 
 import { ArrowUp, Paperclip, Sparkles, Square } from 'lucide-react'
 
+import type { ModelSelectorData } from '@/lib/types/model-selector'
 import type { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
 import { setCookie } from '@/lib/utils/cookies'
 
+import { ModelSelectorClient } from '@/components/model-selector-client'
 import {
   RecentSearches,
   recordRecentSearch
@@ -20,26 +22,26 @@ interface HeroProps {
   onSubmit: (query: string, mode: SearchMode, files: File[]) => void
   isSubmitting?: boolean
   onStop?: () => void
-  pendingQuery?: string
   defaultMode?: SearchMode
   attachmentsEnabled?: boolean
   recentStorageKey?: string
   className?: string
   isCloudDeployment?: boolean
   hasModels?: boolean
+  modelSelectorData?: ModelSelectorData | null
 }
 
 export function Hero({
   onSubmit,
   isSubmitting = false,
   onStop,
-  pendingQuery,
   defaultMode,
   attachmentsEnabled = true,
   recentStorageKey,
   className,
   isCloudDeployment: _isCloudDeployment,
-  hasModels: _hasModels
+  hasModels: _hasModels,
+  modelSelectorData
 }: HeroProps) {
   const [mode, setLocalMode] = useState<SearchMode>(defaultMode ?? 'quick')
   const [query, setQuery] = useState('')
@@ -54,6 +56,15 @@ export function Hero({
   useEffect(() => {
     setCookie('searchMode', mode)
   }, [mode])
+
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    textarea.style.height = 'auto'
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 280)}px`
+    textarea.style.overflowY = textarea.scrollHeight > 280 ? 'auto' : 'hidden'
+  }, [query])
 
   const submitQuery = (
     submittedQuery: string,
@@ -95,14 +106,8 @@ export function Hero({
     submitQuery(q, nextMode, [])
   }
 
-  const handleRecentSelect = (q: string, storedMode?: string) => {
-    const nextMode =
-      storedMode === 'quick' ||
-      storedMode === 'search' ||
-      storedMode === 'deep' ||
-      storedMode === 'code'
-        ? storedMode
-        : mode
+  const handleRecentSelect = (q: string, storedMode?: SearchMode) => {
+    const nextMode = storedMode ?? mode
     setLocalMode(nextMode)
     submitQuery(q, nextMode, [])
   }
@@ -128,19 +133,19 @@ export function Hero({
   return (
     <div
       className={cn(
-        'mx-auto flex w-full max-w-3xl flex-col items-center px-4 py-6 sm:py-16',
+        'mx-auto flex w-full max-w-3xl flex-col items-center px-4 py-10 sm:py-16',
         className
       )}
     >
-      <div className="mb-5 flex flex-col items-center text-center sm:mb-8">
-        <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur sm:mb-3">
+      <div className="mb-8 flex flex-col items-center text-center">
+        <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur">
           <Sparkles className="size-3 text-foreground/70" />
           Fast answers with sources
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-4xl">
+        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
           Ask anything
         </h1>
-        <p className="mt-1.5 max-w-md text-xs leading-relaxed text-muted-foreground sm:mt-2 sm:text-sm">
+        <p className="mt-2 max-w-md text-sm text-muted-foreground">
           Get a concise answer, cited sources, and useful follow-up questions.
         </p>
       </div>
@@ -148,7 +153,7 @@ export function Hero({
       <form
         onSubmit={handleSubmit}
         className="w-full"
-        aria-label="Search query"
+        aria-label="Ask Brok Search"
       >
         <div className="rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur transition-all focus-within:border-foreground/20 focus-within:shadow-md">
           <div className="relative">
@@ -173,6 +178,7 @@ export function Hero({
                 const t = e.currentTarget
                 t.style.height = 'auto'
                 t.style.height = `${Math.min(t.scrollHeight, 280)}px`
+                t.style.overflowY = t.scrollHeight > 280 ? 'auto' : 'hidden'
               }}
               aria-label="Search query"
             />
@@ -190,8 +196,8 @@ export function Hero({
             </div>
           )}
 
-          <div className="flex flex-nowrap items-center justify-between gap-2 px-2 pb-2">
-            <div className="flex min-w-0 items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
               {attachmentsEnabled && (
                 <>
                   <input
@@ -214,17 +220,17 @@ export function Hero({
                   </button>
                 </>
               )}
-              <ModeSelectorV2
-                value={mode}
-                onChange={setLocalMode}
-                size="sm"
-                className="max-w-[calc(100vw-8rem)] shrink overflow-x-auto"
-              />
+              <ModeSelectorV2 value={mode} onChange={setLocalMode} size="sm" />
+              {modelSelectorData ? (
+                <div className="min-w-0 max-w-full">
+                  <ModelSelectorClient data={modelSelectorData} compact />
+                </div>
+              ) : null}
             </div>
 
             <button
               type="submit"
-              disabled={!isSubmitting && !query.trim()}
+              disabled={!query.trim() && !isSubmitting}
               className={cn(
                 'clicky-control inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-lg transition-all',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -251,56 +257,11 @@ export function Hero({
         </div>
       </form>
 
-      {isSubmitting && (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="landing-submit-status"
-          className="mt-3 w-full rounded-2xl border border-border/70 bg-card/80 p-3 text-sm shadow-sm backdrop-blur"
-        >
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-foreground text-background">
-              <Sparkles className="size-3.5" />
-            </span>
-            <div className="min-w-0">
-              <p className="font-medium text-foreground">
-                Preparing your answer
-              </p>
-              {pendingQuery ? (
-                <p className="truncate text-xs text-muted-foreground">
-                  {pendingQuery}
-                </p>
-              ) : null}
-            </div>
-          </div>
-          <div className="mt-3 grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-3">
-            {['Searching web', 'Reading sources', 'Writing answer'].map(
-              (step, index) => (
-                <span
-                  key={step}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-foreground/[0.04] px-2.5 py-1"
-                >
-                  <span className="size-1.5 rounded-full bg-foreground/50" />
-                  <span>{step}</span>
-                  {index === 0 ? (
-                    <span className="typing-dots ml-auto" aria-hidden>
-                      <span />
-                      <span />
-                      <span />
-                    </span>
-                  ) : null}
-                </span>
-              )
-            )}
-          </div>
-        </div>
-      )}
-
-      <div className="mt-2 w-full sm:mt-3">
+      <div className="mt-3 w-full">
         <ModeDescription mode={mode} />
       </div>
 
-      <div className="mt-5 w-full space-y-4 sm:mt-8 sm:space-y-6">
+      <div className="mt-8 w-full space-y-6">
         <RecentSearches
           onSelect={handleRecentSelect}
           storageKey={recentStorageKey}

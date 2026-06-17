@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
+import { assertApiKeyEntitlements } from '@/lib/actions/api-key-entitlements'
 import { getCurrentAppAccess, hasFeatureAccess } from '@/lib/auth/app-access'
 import { isAnonymousAuthMode } from '@/lib/auth/get-current-user'
 import {
@@ -148,6 +149,8 @@ export async function createApiKey(
     throw new Error('Sign in to your Brok account before creating API keys.')
   }
   const validatedInput = validateCreateApiKeyInput(input)
+  const access = await getCurrentAppAccess()
+  assertApiKeyEntitlements(access, validatedInput)
   const { eq, db, apiKeys, workspaces } = await getApiKeyDependencies()
   const { generateApiKey, getKeyPrefix, hashNewApiKey, maskApiKey } =
     await getApiKeyCrypto()

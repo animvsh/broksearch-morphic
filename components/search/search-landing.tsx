@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+import type { ModelSelectorData } from '@/lib/types/model-selector'
 import type { SearchMode } from '@/lib/types/search'
 import { cn } from '@/lib/utils'
 
@@ -12,6 +13,7 @@ interface SearchLandingProps {
   defaultMode?: SearchMode
   isCloudDeployment?: boolean
   hasModels?: boolean
+  modelSelectorData?: ModelSelectorData | null
   className?: string
 }
 
@@ -19,26 +21,47 @@ export function SearchLanding({
   defaultMode,
   isCloudDeployment = false,
   hasModels = true,
+  modelSelectorData,
   className
 }: SearchLandingProps) {
   const router = useRouter()
   const submittingRef = useRef(false)
-  const [pendingQuery, setPendingQuery] = useState<string | null>(null)
+  const resetTimerRef = useRef<number | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = (query: string, mode: string) => {
     if (submittingRef.current) return
     submittingRef.current = true
-    setPendingQuery(query)
+    setIsSubmitting(true)
     const params = new URLSearchParams({
       q: query,
       mode
     })
     router.push(`/search?${params.toString()}`)
+    resetTimerRef.current = window.setTimeout(() => {
+      submittingRef.current = false
+      setIsSubmitting(false)
+      resetTimerRef.current = null
+    }, 4000)
+  }
+
+  const handleStop = () => {
+    if (resetTimerRef.current) {
+      window.clearTimeout(resetTimerRef.current)
+      resetTimerRef.current = null
+    }
+    submittingRef.current = false
+    setIsSubmitting(false)
   }
 
   useEffect(() => {
     submittingRef.current = false
-    setPendingQuery(null)
+    return () => {
+      if (resetTimerRef.current) {
+        window.clearTimeout(resetTimerRef.current)
+        resetTimerRef.current = null
+      }
+    }
   }, [])
 
   return (
@@ -53,13 +76,10 @@ export function SearchLanding({
         defaultMode={defaultMode}
         isCloudDeployment={isCloudDeployment}
         hasModels={hasModels}
-        isSubmitting={Boolean(pendingQuery)}
-        pendingQuery={pendingQuery ?? undefined}
+        modelSelectorData={modelSelectorData}
         attachmentsEnabled={false}
-        onStop={() => {
-          submittingRef.current = false
-          setPendingQuery(null)
-        }}
+        isSubmitting={isSubmitting}
+        onStop={handleStop}
       />
     </main>
   )

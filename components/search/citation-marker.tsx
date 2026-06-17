@@ -33,6 +33,7 @@ export function CitationMarker({
         <button
           type="button"
           aria-label={`Citation ${index}: ${source?.title ?? source?.domain ?? 'source'}`}
+          title={`Citation ${index}${source ? `: ${source.title || source.domain}` : ''}`}
           onClick={() => {
             onJumpToSource?.(index)
             const el = document.querySelector(`[data-source-index="${index}"]`)
@@ -45,8 +46,8 @@ export function CitationMarker({
             }
           }}
           className={cn(
-            'citation-marker inline-flex h-4 min-w-4 translate-y-[-1px] cursor-pointer items-center justify-center rounded-full px-1 font-mono text-[10px] font-semibold leading-none',
-            'bg-foreground/8 text-foreground/80 transition-all',
+            'citation-marker mx-0.5 inline-flex h-3.5 min-w-3.5 translate-y-[-1px] cursor-pointer items-center justify-center rounded px-1 font-mono text-[9px] font-semibold leading-none',
+            'bg-foreground/[0.08] text-foreground/80 transition-colors',
             'hover:bg-foreground/15 hover:text-foreground',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             className
@@ -60,11 +61,12 @@ export function CitationMarker({
           side="top"
           align="center"
           sideOffset={6}
-          className="w-80 p-3"
+          collisionPadding={12}
+          className="w-[min(18rem,calc(100vw-2rem))] p-3"
         >
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground/10 px-1 font-mono text-[10px] font-semibold text-foreground/80">
+              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded bg-foreground/10 px-1 font-mono text-[10px] font-semibold text-foreground/80">
                 {index}
               </span>
               <span className="truncate">{source.domain}</span>
@@ -78,7 +80,7 @@ export function CitationMarker({
               {source.title || source.domain}
             </a>
             {source.snippet && (
-              <p className="line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+              <p className="line-clamp-3 break-words text-xs leading-relaxed text-muted-foreground">
                 {source.snippet}
               </p>
             )}
@@ -108,7 +110,7 @@ export function renderCitations(
       out.push(text.slice(lastIndex, match.index))
     }
     const idx = Number(match[1])
-    const source = sources.find(s => Number(s.id) === idx || sources[idx - 1])
+    const source = sources.find(s => Number(s.id) === idx) ?? sources[idx - 1]
     out.push(
       <CitationMarker
         key={`cite-${match.index}-${idx}`}

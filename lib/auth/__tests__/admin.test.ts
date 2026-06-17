@@ -44,6 +44,51 @@ describe('requireAdminAccess', () => {
     })
   })
 
+  it('allows aalang@ucsc.edu when configured as an admin email', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('ADMIN_EMAILS', 'aalang@ucsc.edu')
+    mocks.getCurrentUser.mockResolvedValue({
+      id: 'user_aalang',
+      email: 'AALANG@ucsc.edu'
+    } as any)
+    const { requireAdminAccess } = await import('../admin')
+
+    await expect(requireAdminAccess()).resolves.toMatchObject({
+      ok: true,
+      user: { id: 'user_aalang' }
+    })
+  })
+
+  it('allows aalang@ucsc.edu from the local dev access seed', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    vi.stubEnv('ADMIN_EMAILS', 'other-admin@example.com')
+    mocks.getCurrentUser.mockResolvedValue({
+      id: 'user_aalang',
+      email: 'AALANG@ucsc.edu'
+    } as any)
+    const { requireAdminAccess } = await import('../admin')
+
+    await expect(requireAdminAccess()).resolves.toMatchObject({
+      ok: true,
+      user: { id: 'user_aalang' }
+    })
+  })
+
+  it('does not apply the local dev access seed in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('ADMIN_EMAILS', '')
+    mocks.getCurrentUser.mockResolvedValue({
+      id: 'user_aalang',
+      email: 'aalang@ucsc.edu'
+    } as any)
+    const { requireAdminAccess } = await import('../admin')
+
+    await expect(requireAdminAccess()).resolves.toMatchObject({
+      ok: false,
+      status: 403
+    })
+  })
+
   it('keeps local development convenient when no allowlist is configured', async () => {
     vi.stubEnv('NODE_ENV', 'development')
     mocks.getCurrentUser.mockResolvedValue({

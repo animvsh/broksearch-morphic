@@ -85,14 +85,17 @@ vi.mock('@/components/search/search-landing', () => ({
   SearchLanding: ({
     defaultMode,
     isCloudDeployment,
-    hasModels
+    hasModels,
+    modelSelectorData
   }: {
     defaultMode?: string
     isCloudDeployment?: boolean
     hasModels?: boolean
+    modelSelectorData?: { selectedModelKey?: string }
   }) => (
     <div data-testid="search-landing">
-      {String(isCloudDeployment)}:{String(hasModels)}:{defaultMode}
+      {String(isCloudDeployment)}:{String(hasModels)}:{defaultMode}:
+      {modelSelectorData?.selectedModelKey ?? 'none'}
     </div>
   )
 }))
@@ -100,23 +103,31 @@ vi.mock('@/components/search/search-landing', () => ({
 import SearchPage from './page'
 
 const originalEnableGuestChat = process.env.ENABLE_GUEST_CHAT
+const originalBrokCloudDeployment = process.env.BROK_CLOUD_DEPLOYMENT
 
 describe('app/search/page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.unstubAllEnvs()
     process.env.ENABLE_GUEST_CHAT = originalEnableGuestChat
+    process.env.BROK_CLOUD_DEPLOYMENT = originalBrokCloudDeployment
     mocks.isAnonymousAuthMode.mockReturnValue(false)
     mocks.getCurrentUserId.mockResolvedValue('user-1')
     mocks.loadChat.mockResolvedValue(null)
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     process.env.ENABLE_GUEST_CHAT = originalEnableGuestChat
+    process.env.BROK_CLOUD_DEPLOYMENT = originalBrokCloudDeployment
   })
 
   it('renders the search landing surface for bare /search requests', async () => {
     mocks.requireFeatureAccess.mockResolvedValue({})
-    mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
+    mocks.getModelSelectorData.mockResolvedValue({
+      hasAvailableModels: true,
+      selectedModelKey: 'openai-compatible:brok-m2-5-highspeed'
+    })
 
     render(await SearchPage({ searchParams: Promise.resolve({ q: '' }) }))
 
@@ -126,7 +137,7 @@ describe('app/search/page', () => {
     )
     expect(mocks.getModelSelectorData).toHaveBeenCalledOnce()
     expect(screen.getByTestId('search-landing')).toHaveTextContent(
-      'false:true:quick'
+      'false:true:quick:openai-compatible:brok-m2-5-highspeed'
     )
   })
 
@@ -271,6 +282,53 @@ describe('app/search/page', () => {
     expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
       ':latest ai funding:search:0:false'
     )
+  })
+
+  it('defaults local development query-backed search to guest mode when guest chat is unset', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    vi.stubEnv('BROK_CLOUD_DEPLOYMENT', 'false')
+    delete process.env.ENABLE_GUEST_CHAT
+    mocks.getCurrentUserId.mockResolvedValue(undefined)
+    mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
+
+    render(
+      await SearchPage({
+        searchParams: Promise.resolve({
+          q: 'latest ai funding',
+          mode: 'search'
+        })
+      })
+    )
+
+    expect(mocks.requireFeatureAccess).not.toHaveBeenCalled()
+    expect(mocks.loadChat).not.toHaveBeenCalled()
+    expect(screen.getByTestId('brok-search-client')).toHaveTextContent(
+      'latest ai funding:search:0:false'
+    )
+  })
+
+  it('honors explicit local guest search disablement for query-backed search', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    vi.stubEnv('BROK_CLOUD_DEPLOYMENT', 'false')
+    vi.stubEnv('ENABLE_GUEST_CHAT', 'false')
+    mocks.getCurrentUserId.mockResolvedValue(undefined)
+    mocks.requireFeatureAccess.mockResolvedValue({})
+    mocks.getModelSelectorData.mockResolvedValue({ hasAvailableModels: true })
+
+    render(
+      await SearchPage({
+        searchParams: Promise.resolve({
+          q: 'latest ai funding',
+          mode: 'search'
+        })
+      })
+    )
+
+    expect(mocks.requireFeatureAccess).toHaveBeenCalledWith(
+      '/search?q=latest+ai+funding&mode=search',
+      'search'
+    )
+    expect(mocks.loadChat).not.toHaveBeenCalled()
   })
 
   it('falls back to guest search when auth lookup fails for guest-enabled search', async () => {
