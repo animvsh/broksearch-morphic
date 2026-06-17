@@ -221,12 +221,13 @@ describe('Brok search pipeline helpers', () => {
     ).toHaveLength(1)
   })
 
-  it('keeps shared in-flight searches alive when the first caller aborts', async () => {
+  it('detaches an aborted caller while keeping shared in-flight searches alive', async () => {
     let resolveSearch: ((response: Response) => void) | undefined
     const searchResponse = new Promise<Response>(resolve => {
       resolveSearch = resolve
     })
     const firstController = new AbortController()
+    const firstSources = vi.fn()
 
     vi.stubGlobal(
       'fetch',
@@ -245,6 +246,7 @@ describe('Brok search pipeline helpers', () => {
     const first = runSearchPipeline({
       query: 'compare Raycast vs Alfred',
       depth: 'lite',
+      onSources: firstSources,
       signal: firstController.signal
     })
     const second = runSearchPipeline({
@@ -263,10 +265,11 @@ describe('Brok search pipeline helpers', () => {
       )
     )
 
-    const [firstResult, secondResult] = await Promise.all([first, second])
+    await expect(first).rejects.toMatchObject({ name: 'AbortError' })
+    const secondResult = await second
 
-    expect(firstResult.answer).toContain('Raycast')
-    expect(secondResult.answer).toEqual(firstResult.answer)
+    expect(secondResult.answer).toContain('Raycast')
+    expect(firstSources).not.toHaveBeenCalled()
     expect(
       vi
         .mocked(fetch)

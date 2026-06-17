@@ -100,42 +100,57 @@ export async function runSearchPipeline(
   const cacheKey = buildSearchCacheKey(request)
   const cacheTtlMs = getSearchCacheTtlMs()
 
-  if (cacheTtlMs > 0) {
-    const cached = getCachedSearchResponse(cacheKey)
-    if (cached) {
-      await emitSourcePreview(request, cached.citations)
-      return cached
-    }
-
-    const inFlight = inFlightSearches.get(cacheKey)
-    if (inFlight) {
-      const response = cloneSearchResponse(await inFlight)
-      await emitSourcePreview(request, response.citations)
-      return response
-    }
+  if (cacheTtlMs <= 0) {
+    return cloneSearchResponse(await runUncachedSearchPipeline(request))
   }
 
-  const runRequest =
-    cacheTtlMs > 0
-      ? {
-          ...request,
-          signal: undefined
-        }
-      : request
-  const runPromise = runUncachedSearchPipeline(runRequest)
-  if (cacheTtlMs > 0) {
+  const cached = getCachedSearchResponse(cacheKey)
+  if (cached) {
+    await emitSourcePreview(request, cached.citations)
+    return cached
+  }
+
+  let shouldReplaySources = true
+  let runPromise = inFlightSearches.get(cacheKey)
+  if (!runPromise) {
+    shouldReplaySources = false
+    runPromise = runUncachedSearchPipeline({
+      ...request,
+      signal: undefined,
+      onSources: request.onSources
+        ? sources => {
+            if (request.signal?.aborted) return
+            return request.onSources?.(sources)
+          }
+        : undefined,
+      onAnswerDelta: request.onAnswerDelta
+        ? delta => {
+            if (request.signal?.aborted) return
+            return request.onAnswerDelta?.(delta)
+          }
+        : undefined
+    })
     inFlightSearches.set(cacheKey, runPromise)
+    void runPromise
+      .then(response => {
+        if (!isUnavailableSearchResponse(response)) {
+          setCachedSearchResponse(cacheKey, response, cacheTtlMs)
+        }
+      })
+      .catch(() => {
+        // The awaiting request will surface the error. This background handler
+        // only prevents abandoned shared work from becoming an unhandled rejection.
+      })
+      .finally(() => {
+        inFlightSearches.delete(cacheKey)
+      })
   }
 
-  try {
-    const response = await runPromise
-    if (cacheTtlMs > 0 && !isUnavailableSearchResponse(response)) {
-      setCachedSearchResponse(cacheKey, response, cacheTtlMs)
-    }
-    return cloneSearchResponse(response)
-  } finally {
-    inFlightSearches.delete(cacheKey)
+  const response = await waitForSearchResponse(runPromise, request.signal)
+  if (shouldReplaySources) {
+    await emitSourcePreview(request, response.citations)
   }
+  return cloneSearchResponse(response)
 }
 
 async function runUncachedSearchPipeline(
@@ -282,6 +297,34 @@ function isUnavailableSearchResponse(response: SearchResponse) {
 
 function cloneSearchResponse(response: SearchResponse): SearchResponse {
   return JSON.parse(JSON.stringify(response)) as SearchResponse
+}
+
+async function waitForSearchResponse(
+  promise: Promise<SearchResponse>,
+  signal?: AbortSignal
+) {
+  if (!signal) return promise
+  if (signal.aborted) throw createAbortError()
+
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      const abort = () => reject(createAbortError())
+      const cleanup = () => signal.removeEventListener('abort', abort)
+      signal.addEventListener('abort', abort, { once: true })
+      promise.then(cleanup, cleanup)
+    })
+  ])
+}
+
+function createAbortError() {
+  if (typeof DOMException !== 'undefined') {
+    return new DOMException('The operation was aborted.', 'AbortError')
+  }
+
+  const error = new Error('The operation was aborted.')
+  error.name = 'AbortError'
+  return error
 }
 
 async function emitSourcePreview(
