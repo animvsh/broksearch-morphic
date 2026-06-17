@@ -1,7 +1,5 @@
 import { redirect } from 'next/navigation'
 
-import { UIMessage } from 'ai'
-
 import { loadChat } from '@/lib/actions/chat'
 import { requireFeatureAccess } from '@/lib/auth/app-access'
 import {
@@ -10,6 +8,7 @@ import {
 } from '@/lib/auth/get-current-user'
 import { isGuestSearchEnabled } from '@/lib/auth/guest-search'
 import { getModelSelectorData } from '@/lib/model-selector/get-model-selector-data'
+import type { UIMessage } from '@/lib/types/ai'
 
 import { BrokSearchClient } from '@/components/brok-search-client'
 import { Chat } from '@/components/chat'
@@ -85,6 +84,17 @@ export default async function SearchPage(props: {
   }
 
   const messages: UIMessage[] = chat.messages
+
+  if (id.startsWith('search_')) {
+    return (
+      <BrokSearchClient
+        searchId={id}
+        initialMessages={messages}
+        persistToServer={!!effectiveUser}
+        modelSelectorData={modelSelectorData}
+      />
+    )
+  }
 
   return (
     <Chat
