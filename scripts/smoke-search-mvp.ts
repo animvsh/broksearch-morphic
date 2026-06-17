@@ -466,7 +466,7 @@ async function main() {
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded' })
     await assertFirstPaintLoadingSignal(page)
     await assertSearchPageLoaded(page)
-    const firstVisibleSearchResult = waitForFirstVisibleSearchResult(page)
+    const firstVisibleSearchResult = await waitForFirstVisibleSearchResult(page)
 
     const searchProgress = page.getByTestId('search-progress')
     await searchProgress.waitFor({ timeout: 10_000 })
@@ -483,7 +483,7 @@ async function main() {
     )
 
     await assert(
-      (await firstVisibleSearchResult) === 'source',
+      firstVisibleSearchResult === 'source',
       'expected source card to appear before answer'
     )
 

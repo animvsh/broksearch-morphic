@@ -1569,10 +1569,10 @@ function CompletedTurn({
 
 function SearchProgressIndicator({ progress }: { progress: SearchProgress }) {
   const steps = [
-    { id: 'planning', label: 'Resolve' },
-    { id: 'searching', label: 'Search' },
-    { id: 'reading', label: 'Read' },
-    { id: 'answering', label: 'Write' }
+    { id: 'planning', label: 'Understanding' },
+    { id: 'searching', label: 'Searching web' },
+    { id: 'reading', label: 'Reading sources' },
+    { id: 'answering', label: 'Writing answer' }
   ] as const
 
   const order = steps.map(step => step.id)
