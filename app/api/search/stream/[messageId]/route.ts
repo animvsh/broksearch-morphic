@@ -1,12 +1,9 @@
 import { NextRequest } from 'next/server'
 
-import { upsertMessage } from '@/lib/actions/chat'
 import { consumeSearchStreamRequest } from '@/lib/brok/search-stream-registry'
 import { generateId } from '@/lib/db/schema'
 import type { SearchResultItem } from '@/lib/types'
 import type { UIMessageMetadata } from '@/lib/types/ai'
-
-import { POST as postSearchCompletion } from '@/app/api/v1/search/completions/route'
 
 export const runtime = 'nodejs'
 
@@ -113,6 +110,9 @@ export async function GET(
     }
   )
 
+  const { POST: postSearchCompletion } = await import(
+    '@/app/api/v1/search/completions/route'
+  )
   const response = await postSearchCompletion(forwarded)
   const thread = storedRequest.thread
 
@@ -380,24 +380,32 @@ function readSearchStreamBody(
         controller.close()
 
         if (typeof completionText === 'string' && completionText.trim()) {
-          void upsertMessage(
-            thread.id,
-            {
-              id: generateId(),
-              role: 'assistant',
-              parts: [{ type: 'text', text: completionText }],
-              metadata: metadataFromStreamPayloads({
-                completionPayload,
-                eventSources,
-                eventFollowUps
-              })
-            },
-            thread.userId
-          ).catch(error => {
-            if (process.env.NODE_ENV !== 'test') {
-              console.error('Failed to persist search stream response:', error)
-            }
-          })
+          const text = completionText
+          void import('@/lib/actions/chat')
+            .then(({ upsertMessage }) =>
+              upsertMessage(
+                thread.id,
+                {
+                  id: generateId(),
+                  role: 'assistant',
+                  parts: [{ type: 'text', text }],
+                  metadata: metadataFromStreamPayloads({
+                    completionPayload,
+                    eventSources,
+                    eventFollowUps
+                  })
+                },
+                thread.userId
+              )
+            )
+            .catch(error => {
+              if (process.env.NODE_ENV !== 'test') {
+                console.error(
+                  'Failed to persist search stream response:',
+                  error
+                )
+              }
+            })
         }
       }
     }
