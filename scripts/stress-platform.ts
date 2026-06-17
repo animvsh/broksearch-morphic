@@ -22,8 +22,7 @@ const stressUserId =
   '00000000-0000-0000-0000-000000000000'
 const stressRunId =
   process.env.STRESS_PLATFORM_RUN_ID || Date.now().toString(36)
-const stressRunUserId =
-  `${stressUserId}:stress:${stressRunId}`
+const stressRunUserId = `${stressUserId}:stress:${stressRunId}`
 const browserNavigationTimeoutMs = readPositiveIntegerEnv(
   'STRESS_PLATFORM_BROWSER_TIMEOUT_MS',
   120_000
@@ -397,16 +396,18 @@ async function createStressKeysWithSupabaseRest() {
     workspace.id,
     seedMonthlyBudgetCents
   )
-  const workspaceExceededWorkspace = await ensureWorkspaceForUserViaSupabaseRest(
-    `${stressRunUserId}:workspace-budget-exceeded`
-  )
+  const workspaceExceededWorkspace =
+    await ensureWorkspaceForUserViaSupabaseRest(
+      `${stressRunUserId}:workspace-budget-exceeded`
+    )
   await updateWorkspaceMonthlyBudgetViaSupabaseRest(
     workspaceExceededWorkspace.id,
     workspaceExceededBudgetCents
   )
-  const workspaceRequiredWorkspace = await ensureWorkspaceForUserViaSupabaseRest(
-    `${stressRunUserId}:workspace-budget-required`
-  )
+  const workspaceRequiredWorkspace =
+    await ensureWorkspaceForUserViaSupabaseRest(
+      `${stressRunUserId}:workspace-budget-required`
+    )
   await updateWorkspaceMonthlyBudgetViaSupabaseRest(
     workspaceRequiredWorkspace.id,
     0

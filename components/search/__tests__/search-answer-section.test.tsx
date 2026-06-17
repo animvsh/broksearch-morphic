@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react'
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { SearchResultItem } from '@/lib/types'
@@ -327,6 +327,78 @@ describe('SearchAnswerSection actions', () => {
     expect(
       screen.getByRole('link', { name: /open original/i })
     ).toHaveAttribute('href', 'https://stored.example/report')
+  })
+
+  it('copies source links from expanded source cards', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText }
+    })
+
+    renderAnswer({
+      content: 'Answer text.',
+      metadata: {
+        answer: {
+          sources: [
+            source({
+              title: 'Stored source',
+              url: 'https://stored.example/report'
+            })
+          ]
+        }
+      }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /show all/i }))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /copy source link: stored source/i
+      })
+    )
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('https://stored.example/report')
+    })
+    expect(
+      await screen.findByRole('button', {
+        name: /source link copied: stored source/i
+      })
+    ).toBeInTheDocument()
+  })
+
+  it('copies source links from the verifier side panel', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText }
+    })
+
+    renderAnswer({
+      content: 'Answer text.',
+      metadata: {
+        answer: {
+          sources: [
+            source({
+              title: 'Stored source',
+              url: 'https://stored.example/report'
+            })
+          ]
+        }
+      }
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /verify source 1: stored source/i })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Copy source link' }))
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('https://stored.example/report')
+    })
+    expect(
+      await screen.findByRole('button', { name: 'Source link copied' })
+    ).toBeInTheDocument()
   })
 
   it('keeps source verification reachable from compact source controls', () => {
