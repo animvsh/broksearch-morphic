@@ -71,6 +71,13 @@ Runs a generic coding-agent-style task against `brok-code`.
 node examples/api-platform/apps/agent-task-runner.mjs "Draft a release checklist for an API integration"
 ```
 
+You can also run an agent-oriented real-repo task using the checked-in Kery
+context fixture:
+
+```bash
+node examples/api-platform/apps/agent-task-runner.mjs --file examples/api-platform/apps/kery-integration-task.md
+```
+
 ## Agent Access
 
 Agents should start with:

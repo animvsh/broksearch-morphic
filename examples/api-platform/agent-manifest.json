@@ -20,6 +20,11 @@
       "id": "agent-task-runner",
       "description": "Run a generic agent-style task with Brok chat completions.",
       "command": "node examples/api-platform/apps/agent-task-runner.mjs \"Draft a release checklist for an API integration\""
+    },
+    {
+      "id": "kery-integration-plan",
+      "description": "Use Brok as an agent to plan integrating the Brok API into the Kery open-source repo.",
+      "command": "node examples/api-platform/apps/agent-task-runner.mjs --file examples/api-platform/apps/kery-integration-task.md"
     }
   ],
   "verification": {
