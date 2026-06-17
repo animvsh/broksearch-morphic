@@ -283,6 +283,12 @@ describe('BrokSearchClient', () => {
     expect(await screen.findByTestId('brok-search-sources')).toHaveTextContent(
       'Brok docs'
     )
+    expect(
+      screen.getByRole('button', { name: /Hide details/i })
+    ).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
+      'Brok search docs.'
+    )
     expect(screen.getByTestId('markdown-message')).toHaveTextContent(
       'Brok answers with sources. [1](#brok-session-search:1)'
     )
@@ -712,7 +718,7 @@ describe('BrokSearchClient', () => {
     })
   })
 
-  it('keeps the compact source strip only while the answer has not started', async () => {
+  it('keeps sources compact while loading and expands source cards when done', async () => {
     const stream = controllableStreamResponse()
     const fetchMock = vi.fn(async () => stream.response)
     vi.stubGlobal('fetch', fetchMock)
@@ -746,6 +752,12 @@ describe('BrokSearchClient', () => {
     expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
       'docs.example.com'
     )
+    expect(
+      screen.getByRole('button', { name: /Show details/i })
+    ).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByTestId('brok-search-sources')).not.toHaveTextContent(
+      'Brok search docs.'
+    )
 
     await act(async () => {
       stream.send('answer_delta', { delta: 'Answer started. [1]' })
@@ -759,6 +771,12 @@ describe('BrokSearchClient', () => {
     expect(screen.queryByTestId('brok-source-strip')).not.toBeInTheDocument()
     expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
       'Brok docs'
+    )
+    expect(
+      screen.getByRole('button', { name: /Hide details/i })
+    ).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('brok-search-sources')).toHaveTextContent(
+      'Brok search docs.'
     )
   })
 

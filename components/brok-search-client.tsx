@@ -1015,6 +1015,7 @@ export function BrokSearchClient({
         {progress.sources.length > 0 && (
           <SourceList
             sources={progress.sources}
+            defaultExpanded={progress.status === 'done'}
             onOpenSource={source => setActiveSource(toSearchResultItem(source))}
           />
         )}
@@ -1286,13 +1287,19 @@ function SearchProgressIndicator({ progress }: { progress: SearchProgress }) {
 }
 
 function SourceList({
+  defaultExpanded = false,
   onOpenSource,
   sources
 }: {
+  defaultExpanded?: boolean
   onOpenSource: (source: Source) => void
   sources: Source[]
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(defaultExpanded)
+
+  useEffect(() => {
+    if (defaultExpanded) setExpanded(true)
+  }, [defaultExpanded])
 
   if (sources.length === 0) return null
   const visibleSources = expanded ? sources : sources.slice(0, 6)
@@ -1383,6 +1390,7 @@ function SourceList({
                   type="button"
                   onClick={() => onOpenSource(source)}
                   className="line-clamp-2 min-h-11 min-w-0 flex-1 rounded-md py-1 text-left text-xs font-semibold text-zinc-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+                  aria-label={`Verify source ${sourceIndex}: ${source.title}`}
                 >
                   [{sourceIndex}] {source.title}
                 </button>
