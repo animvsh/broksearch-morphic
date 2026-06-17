@@ -1038,7 +1038,9 @@ export function BrokSearchClient({
           />
         )}
 
-        {isLoading && !answer && <AnswerLoadingCard />}
+        {isLoading && !answer && (
+          <AnswerLoadingCard query={pendingQuery ?? activeQuestion ?? query} />
+        )}
 
         {answer && (
           <article
@@ -1105,12 +1107,6 @@ export function BrokSearchClient({
           />
         )}
 
-        {pendingQuery && progress.status === 'planning' && (
-          <p className="text-xs text-muted-foreground">
-            Searching for: {pendingQuery}
-          </p>
-        )}
-
         {(answer || completedTurns.length > 0 || isLoading) && (
           <form
             className="sticky bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] mt-2 flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-2 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.35)] backdrop-blur"
@@ -1164,7 +1160,9 @@ export function BrokSearchClient({
   )
 }
 
-function AnswerLoadingCard() {
+function AnswerLoadingCard({ query }: { query?: string | null }) {
+  const trimmedQuery = query?.trim()
+
   return (
     <article
       className="rounded-2xl border border-zinc-200 bg-white/85 p-5 shadow-[0_18px_54px_-42px_rgba(15,23,42,0.26)]"
@@ -1175,6 +1173,14 @@ function AnswerLoadingCard() {
         <Loader2 className="size-3.5 animate-spin" />
         <span>Preparing answer</span>
       </div>
+      {trimmedQuery && (
+        <p
+          className="mb-4 line-clamp-2 text-sm font-medium leading-6 text-zinc-900"
+          data-testid="brok-answer-loading-query"
+        >
+          Searching: {trimmedQuery}
+        </p>
+      )}
       <div className="flex flex-col gap-2">
         <div className="h-3 w-11/12 animate-pulse rounded-full bg-zinc-100" />
         <div className="h-3 w-10/12 animate-pulse rounded-full bg-zinc-100" />
