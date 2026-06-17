@@ -4,9 +4,10 @@
 
 import { useState } from 'react'
 
-import { ExternalLink, PanelRightOpen, Star } from 'lucide-react'
+import { Check, Copy, ExternalLink, PanelRightOpen, Star } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
 export interface SourceCardData {
   id: string
@@ -34,6 +35,14 @@ export function SourceCard({
 }: SourceCardProps) {
   const snippet = source.snippet ?? ''
   const title = source.title || source.domain
+  const [copied, setCopied] = useState(false)
+
+  const copySourceLink = async () => {
+    const didCopy = await safeCopyTextToClipboard(source.url)
+    if (!didCopy) return
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1600)
+  }
 
   return (
     <article
@@ -78,6 +87,27 @@ export function SourceCard({
                 <PanelRightOpen className="size-3.5" />
               </button>
             )}
+            <button
+              type="button"
+              onClick={copySourceLink}
+              className={cn(
+                'inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors',
+                'hover:bg-foreground/5 hover:text-foreground',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+              )}
+              aria-label={
+                copied
+                  ? `Source link copied: ${title}`
+                  : `Copy source link: ${title}`
+              }
+              title={copied ? 'Source link copied' : 'Copy source link'}
+            >
+              {copied ? (
+                <Check className="size-3.5" />
+              ) : (
+                <Copy className="size-3.5" />
+              )}
+            </button>
             <a
               href={source.url}
               target="_blank"

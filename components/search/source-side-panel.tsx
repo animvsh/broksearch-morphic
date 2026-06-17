@@ -1,8 +1,11 @@
 'use client'
 
-import { ExternalLink, Quote, ShieldCheck } from 'lucide-react'
+import { useEffect, useState } from 'react'
+
+import { Check, Copy, ExternalLink, Quote, ShieldCheck } from 'lucide-react'
 
 import type { SearchResultItem } from '@/lib/types'
+import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
 import {
   Sheet,
@@ -31,6 +34,12 @@ export function SourceSidePanel({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    setCopied(false)
+  }, [source?.url])
+
   if (!source) return null
 
   const host =
@@ -41,6 +50,12 @@ export function SourceSidePanel({
         : getHostname(source.url)
   const excerpt =
     source.snippet || ('content' in source ? source.content : undefined)
+  const copySourceLink = async () => {
+    const didCopy = await safeCopyTextToClipboard(source.url)
+    if (!didCopy) return
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1600)
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -76,15 +91,30 @@ export function SourceSidePanel({
             </p>
           </section>
 
-          <a
-            href={source.url}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-muted"
-          >
-            Open original
-            <ExternalLink className="size-3.5" />
-          </a>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={copySourceLink}
+              className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={copied ? 'Source link copied' : 'Copy source link'}
+            >
+              {copied ? 'Copied' : 'Copy link'}
+              {copied ? (
+                <Check className="size-3.5" />
+              ) : (
+                <Copy className="size-3.5" />
+              )}
+            </button>
+            <a
+              href={source.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              Open original
+              <ExternalLink className="size-3.5" />
+            </a>
+          </div>
         </div>
       </SheetContent>
     </Sheet>
