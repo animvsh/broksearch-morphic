@@ -599,7 +599,12 @@ describe('BrokSearchClient', () => {
     expect(screen.getByTestId('search-progress')).toHaveTextContent(
       'Planning search query'
     )
+    expect(screen.getByLabelText('Search query')).toHaveValue('What is Brok?')
     expect(screen.getByTestId('brok-answer-loading-card')).toBeVisible()
+    expect(screen.getByTestId('brok-follow-up-form')).toHaveClass('sticky')
+    expect(screen.getByTestId('brok-follow-up-form').className).toContain(
+      'bottom-[calc(env(safe-area-inset-bottom)+0.75rem)]'
+    )
 
     deferred.flush()
 

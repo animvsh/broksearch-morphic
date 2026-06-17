@@ -951,6 +951,7 @@ export function BrokSearchClient({
                 onChange={event => setQuery(event.target.value)}
                 placeholder="Ask anything..."
                 className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none"
+                aria-label="Search query"
               />
               <div className="flex shrink-0 items-center gap-1">
                 {modelSelectorData ? (
@@ -1080,7 +1081,7 @@ export function BrokSearchClient({
 
         {(answer || completedTurns.length > 0 || isLoading) && (
           <form
-            className="mt-2 flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-2 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.35)] backdrop-blur sm:sticky sm:bottom-[calc(env(safe-area-inset-bottom)+0.75rem)]"
+            className="sticky bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] mt-2 flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white/95 p-2 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.35)] backdrop-blur"
             data-testid="brok-follow-up-form"
             onSubmit={submitFollowUp}
           >
