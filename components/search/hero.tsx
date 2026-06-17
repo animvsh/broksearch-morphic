@@ -124,19 +124,19 @@ export function Hero({
   return (
     <div
       className={cn(
-        'mx-auto flex w-full max-w-3xl flex-col items-center px-4 py-10 sm:py-16',
+        'mx-auto flex w-full max-w-3xl flex-col items-center px-4 py-6 sm:py-16',
         className
       )}
     >
-      <div className="mb-8 flex flex-col items-center text-center">
-        <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur">
+      <div className="mb-5 flex flex-col items-center text-center sm:mb-8">
+        <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur sm:mb-3">
           <Sparkles className="size-3 text-foreground/70" />
           Fast answers with sources
         </div>
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-4xl">
           Ask anything
         </h1>
-        <p className="mt-2 max-w-md text-sm text-muted-foreground">
+        <p className="mt-1.5 max-w-md text-xs leading-relaxed text-muted-foreground sm:mt-2 sm:text-sm">
           Get a concise answer, cited sources, and useful follow-up questions.
         </p>
       </div>
@@ -186,8 +186,8 @@ export function Hero({
             </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-2">
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-nowrap items-center justify-between gap-2 px-2 pb-2">
+            <div className="flex min-w-0 items-center gap-1.5">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -206,7 +206,12 @@ export function Hero({
               >
                 <Paperclip className="size-4" />
               </button>
-              <ModeSelectorV2 value={mode} onChange={setLocalMode} size="sm" />
+              <ModeSelectorV2
+                value={mode}
+                onChange={setLocalMode}
+                size="sm"
+                className="max-w-[calc(100vw-8rem)] shrink overflow-x-auto"
+              />
             </div>
 
             <button
@@ -283,11 +288,11 @@ export function Hero({
         </div>
       )}
 
-      <div className="mt-3 w-full">
+      <div className="mt-2 w-full sm:mt-3">
         <ModeDescription mode={mode} />
       </div>
 
-      <div className="mt-8 w-full space-y-6">
+      <div className="mt-5 w-full space-y-4 sm:mt-8 sm:space-y-6">
         <RecentSearches
           onSelect={handleRecentSelect}
           storageKey={recentStorageKey}
