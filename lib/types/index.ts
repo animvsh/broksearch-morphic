@@ -47,6 +47,7 @@ export type SearchResultItem = {
   retrievedAt?: string
   snippet?: string
   publisher?: string
+  qualityScore?: number
 }
 
 export type ExaSearchResultItem = {

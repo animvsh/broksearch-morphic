@@ -77,7 +77,8 @@ export function extractSources(
         title: item.title,
         domain: safeHostname(item.url),
         snippet: item.content || item.snippet,
-        publishedAt: formatDate(item.publishedDate || item.date)
+        publishedAt: formatDate(item.publishedDate || item.date),
+        relevanceScore: item.qualityScore
       })
     }
   }
@@ -102,7 +103,8 @@ function extractSourcesFromItems(
       title: item.title,
       domain: safeHostname(item.url),
       snippet: item.content || item.snippet,
-      publishedAt: formatDate(item.publishedDate || item.date)
+      publishedAt: formatDate(item.publishedDate || item.date),
+      relevanceScore: item.qualityScore
     })
   })
 

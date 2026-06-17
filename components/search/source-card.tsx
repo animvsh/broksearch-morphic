@@ -4,7 +4,7 @@
 
 import { useState } from 'react'
 
-import { Check, Copy, ExternalLink, PanelRightOpen, Star } from 'lucide-react'
+import { Check, Copy, ExternalLink, PanelRightOpen } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
@@ -27,6 +27,38 @@ interface SourceCardProps {
   className?: string
 }
 
+export function getSourceTrustLabel(source: {
+  domain?: string
+  url?: string
+  relevanceScore?: number
+  qualityScore?: number
+}): string | null {
+  if (isLocalFallbackSource(source)) return 'Fallback'
+
+  const score = source.relevanceScore ?? source.qualityScore
+  if (typeof score !== 'number' || !Number.isFinite(score)) return null
+
+  const percent = score <= 1 ? score * 100 : score
+  if (percent >= 85) return 'High trust'
+  if (percent >= 60) return 'Useful'
+  return 'Weak'
+}
+
+function isLocalFallbackSource(source: { domain?: string; url?: string }) {
+  const raw = `${source.domain ?? ''} ${source.url ?? ''}`.toLowerCase()
+  const decoded = safeDecodeURIComponent(raw)
+  const normalized = `${raw} ${decoded}`.replace(/[-_%]+/g, ' ')
+  return normalized.includes('local fallback')
+}
+
+function safeDecodeURIComponent(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 export function SourceCard({
   source,
   index,
@@ -35,6 +67,7 @@ export function SourceCard({
 }: SourceCardProps) {
   const snippet = source.snippet ?? ''
   const title = source.title || source.domain
+  const trustLabel = getSourceTrustLabel(source)
   const [copied, setCopied] = useState(false)
 
   const copySourceLink = async () => {
@@ -134,12 +167,11 @@ export function SourceCard({
               <span className="shrink-0">{source.publishedAt}</span>
             </>
           )}
-          {typeof source.relevanceScore === 'number' && (
+          {trustLabel && (
             <>
               <span aria-hidden>·</span>
-              <span className="inline-flex items-center gap-0.5 text-amber-600/80">
-                <Star className="size-2.5 fill-current" />
-                <span>{Math.round(source.relevanceScore * 100)}%</span>
+              <span className="inline-flex items-center rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-medium leading-3 text-foreground/70">
+                {trustLabel}
               </span>
             </>
           )}
@@ -166,6 +198,7 @@ export function SourceCompactChip({
 }) {
   const title = source.title || source.domain
   const label = title && title !== source.domain ? title : source.domain
+  const trustLabel = getSourceTrustLabel(source)
 
   return (
     <button
@@ -198,6 +231,11 @@ export function SourceCompactChip({
             {source.publishedAt}
           </span>
         </>
+      )}
+      {trustLabel && (
+        <span className="shrink-0 rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-medium leading-3 text-foreground/70">
+          {trustLabel}
+        </span>
       )}
     </button>
   )

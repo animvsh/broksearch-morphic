@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentUserIdForOptionalGuestSearch: vi.fn(),
   isGuestSearchEnabled: vi.fn(),
   isGuestSearchMode: vi.fn(),
+  generateFollowUps: vi.fn(),
   getCachedSearchPipelineResponse: vi.fn(),
   runSearchPipeline: vi.fn(),
   checkAndEnforceOverallChatLimit: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock('@/lib/brok/search-pipeline', () => ({
     needsSearch: true,
     reason: 'test'
   })),
+  generateFollowUps: mocks.generateFollowUps,
   getCachedSearchPipelineResponse: mocks.getCachedSearchPipelineResponse,
   resolveQuery: vi.fn((query: string) => query),
   runSearchPipeline: mocks.runSearchPipeline
@@ -127,6 +129,18 @@ describe('POST /api/search/session', () => {
       name: 'Brok Fast',
       providerId: 'openai-compatible'
     })
+    mocks.generateFollowUps.mockImplementation(
+      (
+        query: string,
+        _classification: unknown,
+        citations: Array<{ publisher?: string }>
+      ) => [
+        {
+          label: `Ask about ${citations[0]?.publisher}`,
+          query: `What does ${citations[0]?.publisher} specifically say about ${query.replace(/[?.!]+$/, '')}?`
+        }
+      ]
+    )
     mocks.runSearchPipeline.mockResolvedValue(result())
   })
 
@@ -332,7 +346,21 @@ describe('POST /api/search/session', () => {
         query: expect.stringContaining('Previous turn 1 question')
       })
     )
-    expect(stream).toContain('Go deeper on What about pricing?')
+    expect(mocks.generateFollowUps).toHaveBeenCalledWith(
+      'What about pricing?',
+      expect.objectContaining({ type: 'evergreen/explainer' }),
+      [
+        expect.objectContaining({
+          title: 'Brok docs',
+          publisher: 'docs.example.com',
+          url: 'https://docs.example.com/search'
+        })
+      ]
+    )
+    expect(stream).toContain('Ask about docs.example.com')
+    expect(stream).toContain(
+      'What does docs.example.com specifically say about What about pricing?'
+    )
     expect(stream).not.toContain('Answer the current follow-up question')
   })
 
