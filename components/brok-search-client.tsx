@@ -139,7 +139,7 @@ function hasOnlyLocalFallbackSources(sources: Source[]) {
 function buildCitationMaps(
   sources: Source[]
 ): Record<string, Record<number, SearchResultItem>> {
-  if (sources.length === 0) return {}
+  if (sources.length === 0 || hasOnlyLocalFallbackSources(sources)) return {}
 
   return {
     [SESSION_CITATION_TOOL_ID]: sources.reduce<
@@ -152,7 +152,9 @@ function buildCitationMaps(
 }
 
 function linkPlainCitations(message: string, sources: Source[]) {
-  if (sources.length === 0) return message
+  if (sources.length === 0 || hasOnlyLocalFallbackSources(sources)) {
+    return message
+  }
 
   return message.replace(/\[(\d+)\](?!\()/g, (match, rawNumber) => {
     const citationNumber = Number.parseInt(rawNumber, 10)
@@ -1702,7 +1704,7 @@ function SourceList({
         className={
           expanded
             ? 'grid grid-cols-1 gap-2 md:grid-cols-2'
-            : 'flex flex-wrap gap-2 pb-1'
+            : 'grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3'
         }
         id="brok-source-details"
       >
@@ -1714,20 +1716,35 @@ function SourceList({
             return (
               <li
                 key={getSourceIdentity(source)}
-                className="min-w-0 max-w-full"
+                className="min-w-0"
                 data-testid={`brok-search-source-${index}`}
               >
                 <button
                   type="button"
                   onClick={() => onOpenSource(source)}
-                  className="inline-flex h-10 max-w-full items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/90 px-3 text-xs font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+                  className={`group flex min-h-24 w-full items-start gap-2 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 ${
+                    isLocalFallbackSource(source)
+                      ? 'border-amber-200/80 bg-amber-50/70 hover:bg-amber-50'
+                      : 'border-zinc-200/80 bg-white/90 hover:border-zinc-300 hover:bg-white'
+                  }`}
                   aria-label={`Verify source ${sourceIndex}: ${source.title}`}
                 >
-                  <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-zinc-100 font-mono text-[9px] font-semibold text-zinc-600">
+                  <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-zinc-100 font-mono text-[10px] font-semibold text-zinc-600">
                     {sourceIndex}
                   </span>
-                  <span className="truncate">{sourceDomain}</span>
-                  <span className="sr-only">{source.title}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[11px] font-medium text-muted-foreground">
+                      {sourceDomain}
+                    </span>
+                    <span className="line-clamp-2 text-xs font-semibold leading-5 text-zinc-900 group-hover:underline">
+                      {source.title}
+                    </span>
+                    {source.snippet && (
+                      <span className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-600">
+                        {source.snippet}
+                      </span>
+                    )}
+                  </span>
                 </button>
               </li>
             )

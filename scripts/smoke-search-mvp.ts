@@ -490,7 +490,7 @@ async function main() {
     const sourceCard = page.getByTestId('brok-search-source-0')
     await sourceCard.waitFor({ timeout: 10_000 })
     await assert(
-      await sourceCard.getByText('Fixture Source').isVisible(),
+      await sourceCard.getByText('Fixture Source', { exact: true }).isVisible(),
       'expected source card before answer'
     )
 

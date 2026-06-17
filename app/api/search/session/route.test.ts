@@ -224,12 +224,18 @@ describe('POST /api/search/session', () => {
     expect(stream).toContain('"name":"Brok 2.5 Fast"')
   })
 
-  it('does not claim or use a selected model that search synthesis cannot support', async () => {
-    mocks.selectModel.mockResolvedValueOnce({
-      id: 'gpt-4o',
-      name: 'GPT-4o',
-      providerId: 'openai'
-    })
+  it('falls back to a supported search model when the saved model is unsupported', async () => {
+    mocks.selectModel
+      .mockResolvedValueOnce({
+        id: 'gpt-4o',
+        name: 'GPT-4o',
+        providerId: 'openai'
+      })
+      .mockResolvedValueOnce({
+        id: 'brok-m2-7-highspeed',
+        name: 'Brok Fast',
+        providerId: 'openai-compatible'
+      })
 
     const response = await POST(
       makeRequest({
@@ -240,17 +246,32 @@ describe('POST /api/search/session', () => {
     const stream = await response.text()
 
     expect(response.status).toBe(200)
+    expect(mocks.selectModel).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        searchMode: 'search',
+        cookieStore: expect.anything()
+      })
+    )
+    expect(mocks.selectModel).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        searchMode: 'search'
+      })
+    )
     expect(mocks.getCachedSearchPipelineResponse).toHaveBeenCalledWith(
       expect.objectContaining({
-        synthesisModel: undefined
+        synthesisModel: 'brok-m2-7-highspeed'
       })
     )
     expect(mocks.runSearchPipeline).toHaveBeenCalledWith(
       expect.objectContaining({
-        synthesisModel: undefined
+        synthesisModel: 'brok-m2-7-highspeed'
       })
     )
-    expect(stream).toContain('"answer_model":null')
+    expect(stream).toContain('"answer_model"')
+    expect(stream).toContain('"id":"brok-m2-7-highspeed"')
+    expect(stream).toContain('"name":"Brok Fast"')
     expect(stream).not.toContain('GPT-4o')
     expect(stream).not.toContain('gpt-4o')
   })
