@@ -35,6 +35,7 @@
     "reconcile:usage-reservations": "bun run --env-file=.env.local scripts/reconcile-usage-reservations.ts",
     "check:deploy-env": "bun run scripts/check-deploy-env.mjs",
     "check:api-examples": "bun run scripts/check-api-platform-examples.mjs",
+    "check:api-platform-kery": "bun run scripts/check-api-platform-kery-proof.mjs",
     "check:openapi": "bun run scripts/check-openapi-spec.mjs",
     "check:api-platform-dx": "bun run scripts/check-api-platform-dx.mjs",
     "check:api-platform-launch": "bun run scripts/check-api-platform-launch-blockers.mjs",

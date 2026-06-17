@@ -19,6 +19,13 @@ Repository shape:
   - `packages/kery`: setup CLI published as `keryai`.
   - `packages/mcp`: MCP server published as `@keryai/mcp`.
 
+Useful operator entrypoints:
+
+- Quick start command: `npx keryai`.
+- Local dashboard: `http://localhost:11111`.
+- MCP server env: `KERY_BASE_URL=http://localhost:11111`.
+- MCP package: `@keryai/mcp`.
+
 Current provider positioning:
 
 - Kery supports OpenRouter, OpenAI, Anthropic, and Google Gemini.

@@ -78,6 +78,21 @@ context fixture:
 node examples/api-platform/apps/agent-task-runner.mjs --file examples/api-platform/apps/kery-integration-task.md
 ```
 
+The Kery fixture is guarded by a dedicated proof checker. Static mode verifies
+that the checked-in fixture, manifest command, and live sample hook stay wired:
+
+```bash
+bun run check:api-platform-kery
+```
+
+Live mode also reads the public
+[`Kery-HQ/Kery`](https://github.com/Kery-HQ/Kery) repository through the GitHub
+API and fails if the fixture drifts from the current repo shape:
+
+```bash
+bun run check:api-platform-kery -- --live
+```
+
 ## Agent Access
 
 Agents should start with:
@@ -96,6 +111,7 @@ Static verification:
 
 ```bash
 bun run check:api-examples
+bun run check:api-platform-kery
 ```
 
 Live verification with a valid key:
