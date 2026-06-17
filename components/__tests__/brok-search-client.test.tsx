@@ -670,7 +670,13 @@ describe('BrokSearchClient', () => {
     )
 
     expect(screen.getByTestId('search-progress')).toHaveTextContent(
-      'Planning search query'
+      'Searching web'
+    )
+    expect(screen.getByTestId('search-progress')).toHaveTextContent(
+      'Reading sources'
+    )
+    expect(screen.getByTestId('search-progress')).toHaveTextContent(
+      'Writing answer'
     )
     expect(screen.getByLabelText('Search query')).toHaveValue('What is Brok?')
     expect(screen.getByTestId('brok-answer-loading-card')).toBeVisible()

@@ -428,7 +428,7 @@ export function BrokSearchClient({
     searchQueries: [],
     sources: [],
     status: initialQueryText ? 'planning' : 'idle',
-    message: initialQueryText ? 'Planning search query...' : undefined
+    message: initialQueryText ? 'Searching web...' : undefined
   }))
   const [error, setError] = useState<string | null>(null)
   const restoredInitialQueryRef = useRef<string | null>(null)
@@ -560,7 +560,7 @@ export function BrokSearchClient({
         searchQueries: [],
         sources: [],
         status: 'planning',
-        message: 'Planning search query...'
+        message: 'Searching web...'
       })
 
       const writeDurableTurn = ({
@@ -679,7 +679,7 @@ export function BrokSearchClient({
                 classification: data.classification?.type,
                 searchQueries: data.search_queries ?? [],
                 status: 'searching',
-                message: 'Fetching and ranking sources...'
+                message: 'Searching web...'
               }))
               return
             case 'search_started':
@@ -717,7 +717,7 @@ export function BrokSearchClient({
               setProgress(prev => ({
                 ...prev,
                 status: prev.status === 'searching' ? 'reading' : prev.status,
-                message: 'Reading sources and compressing context...'
+                message: 'Reading sources...'
               }))
               return
             case 'answer_delta':
@@ -727,7 +727,7 @@ export function BrokSearchClient({
               setProgress(prev => ({
                 ...prev,
                 status: 'answering',
-                message: 'Composing answer...'
+                message: 'Writing answer...'
               }))
               return
             case 'citation_added':
@@ -1287,14 +1287,16 @@ function CompletedTurn({ turn }: { turn: SearchTurn }) {
 
 function SearchProgressIndicator({ progress }: { progress: SearchProgress }) {
   const steps = [
-    { id: 'planning', label: 'Resolving query' },
-    { id: 'searching', label: 'Running searches' },
+    { id: 'searching', label: 'Searching web' },
     { id: 'reading', label: 'Reading sources' },
-    { id: 'answering', label: 'Composing answer' }
+    { id: 'answering', label: 'Writing answer' }
   ] as const
 
   const order = steps.map(step => step.id)
-  const activeIndex = order.indexOf(progress.status as (typeof order)[number])
+  const activeIndex =
+    progress.status === 'planning'
+      ? 0
+      : order.indexOf(progress.status as (typeof order)[number])
 
   return (
     <div
