@@ -25,7 +25,7 @@ export function SearchLanding({
   const submittingRef = useRef(false)
   const [pendingQuery, setPendingQuery] = useState<string | null>(null)
 
-  const handleSubmit = (query: string, mode: string, _files: File[]) => {
+  const handleSubmit = (query: string, mode: string) => {
     if (submittingRef.current) return
     submittingRef.current = true
     setPendingQuery(query)
@@ -55,6 +55,7 @@ export function SearchLanding({
         hasModels={hasModels}
         isSubmitting={Boolean(pendingQuery)}
         pendingQuery={pendingQuery ?? undefined}
+        attachmentsEnabled={false}
         onStop={() => {
           submittingRef.current = false
           setPendingQuery(null)

@@ -5,6 +5,9 @@ const mocks = vi.hoisted(() => ({
   useRouter: vi.fn(),
   useChat: vi.fn(),
   sendMessage: vi.fn(),
+  DefaultChatTransport: vi.fn((options: Record<string, unknown>) => ({
+    options
+  })),
   generateId: vi.fn()
 }))
 
@@ -17,7 +20,7 @@ vi.mock('@ai-sdk/react', () => ({
 }))
 
 vi.mock('ai', () => ({
-  DefaultChatTransport: vi.fn()
+  DefaultChatTransport: mocks.DefaultChatTransport
 }))
 
 vi.mock('@/lib/db/schema', () => ({
@@ -144,6 +147,28 @@ describe('Chat query-backed URL behavior', () => {
 
     expect(window.location.pathname).toBe('/search/chat-from-query')
     expect(window.location.search).toBe('')
+  })
+
+  it('does not blindly retry transient failures for chat POST submissions', async () => {
+    render(<Chat />)
+
+    const transportOptions = mocks.DefaultChatTransport.mock.calls[0]?.[0] as {
+      fetch: typeof fetch
+    }
+    const transientError = new TypeError('Failed to fetch')
+    const originalFetch = globalThis.fetch
+    const fetchMock = vi.fn().mockRejectedValue(transientError)
+    globalThis.fetch = fetchMock
+
+    try {
+      await expect(
+        transportOptions.fetch('/api/chat', { method: 'POST' })
+      ).rejects.toBe(transientError)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('persists guest messages locally for reloadable answer pages', async () => {

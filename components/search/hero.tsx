@@ -22,6 +22,7 @@ interface HeroProps {
   onStop?: () => void
   pendingQuery?: string
   defaultMode?: SearchMode
+  attachmentsEnabled?: boolean
   recentStorageKey?: string
   className?: string
   isCloudDeployment?: boolean
@@ -34,6 +35,7 @@ export function Hero({
   onStop,
   pendingQuery,
   defaultMode,
+  attachmentsEnabled = true,
   recentStorageKey,
   className,
   isCloudDeployment: _isCloudDeployment,
@@ -61,7 +63,7 @@ export function Hero({
     const trimmed = submittedQuery.trim()
     if (!trimmed || isSubmitting) return
     recordRecentSearch(trimmed, submittedMode, recentStorageKey)
-    onSubmit(trimmed, submittedMode, submittedFiles)
+    onSubmit(trimmed, submittedMode, attachmentsEnabled ? submittedFiles : [])
     setQuery('')
   }
 
@@ -78,6 +80,7 @@ export function Hero({
   }
 
   const handleFileSelect = (selected: FileList | null) => {
+    if (!attachmentsEnabled) return
     if (!selected) return
     setFiles(prev => [...prev, ...Array.from(selected)])
   }
@@ -105,6 +108,7 @@ export function Hero({
   }
 
   const handlePaste = async (e: React.ClipboardEvent) => {
+    if (!attachmentsEnabled) return
     const items = e.clipboardData?.items
     if (!items) return
     const pastedFiles: File[] = []
@@ -174,7 +178,7 @@ export function Hero({
             />
           </div>
 
-          {files.length > 0 && (
+          {attachmentsEnabled && files.length > 0 && (
             <div className="flex flex-wrap gap-2 px-4 pb-2">
               {files.map((f, idx) => (
                 <FileChip
@@ -188,24 +192,28 @@ export function Hero({
 
           <div className="flex flex-nowrap items-center justify-between gap-2 px-2 pb-2">
             <div className="flex min-w-0 items-center gap-1.5">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={e => {
-                  handleFileSelect(e.target.files)
-                  if (e.target) e.target.value = ''
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="clicky-control inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Attach files"
-              >
-                <Paperclip className="size-4" />
-              </button>
+              {attachmentsEnabled && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={e => {
+                      handleFileSelect(e.target.files)
+                      if (e.target) e.target.value = ''
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="clicky-control inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Attach files"
+                  >
+                    <Paperclip className="size-4" />
+                  </button>
+                </>
+              )}
               <ModeSelectorV2
                 value={mode}
                 onChange={setLocalMode}
