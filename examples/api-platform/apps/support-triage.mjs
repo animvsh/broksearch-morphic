@@ -13,16 +13,19 @@ if (!ticketPath) {
 
 const ticket = JSON.parse(await readFile(ticketPath, 'utf8'))
 const models = await listModels()
-const systemPrompt = [
-  'You are a helpful API support engineer.',
-  'Triage the issue and write a concise support note.',
-  'Include severity, likely cause, customer reply, and internal next steps.'
-].join(' ')
-let triage = await runTriage(JSON.stringify(ticket, null, 2))
+const supportTask = [
+  'Draft a concise API support triage note for this ticket.',
+  'Include Severity, Category, Likely cause, Customer reply, and Internal next steps.',
+  '',
+  `Subject: ${ticket.subject}`,
+  `Plan: ${ticket.plan}`,
+  `Message: ${ticket.message}`
+].join('\n')
+let triage = await runTriage(supportTask)
 
 if (!triage.content.trim()) {
   triage = await runTriage(
-    `Subject: ${ticket.subject}\nPlan: ${ticket.plan}\nMessage: ${ticket.message}\n\nWrite a concise support triage note.`
+    `You are a coding-agent helper. ${supportTask}\n\nReturn a short markdown note.`
   )
 }
 
@@ -44,7 +47,8 @@ function runTriage(content) {
     messages: [
       {
         role: 'system',
-        content: systemPrompt
+        content:
+          'You are a careful coding-agent helper. Produce concise, actionable output. If the task asks for a plan, include verification steps.'
       },
       {
         role: 'user',
