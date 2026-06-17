@@ -647,6 +647,53 @@ describe('BrokSearchClient', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('does not rerun an interrupted durable search on reload', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    window.history.replaceState({}, '', '/search/search_test')
+    window.localStorage.setItem(
+      'brok:guest-chat:search_test',
+      JSON.stringify([
+        {
+          id: 'search_test_user',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Interrupted question' }]
+        },
+        {
+          id: 'search_test_assistant',
+          role: 'assistant',
+          parts: [{ type: 'text', text: '' }],
+          metadata: {
+            searchMode: 'quick',
+            modelId: 'brok-session-search',
+            answer: {
+              sources: [],
+              citationCount: 0,
+              followUps: []
+            }
+          }
+        }
+      ])
+    )
+
+    render(
+      <BrokSearchClient
+        initialQuery="Interrupted question"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-question')).toHaveTextContent(
+      'Interrupted question'
+    )
+    expect(screen.getByTestId('brok-search-error')).toHaveTextContent(
+      'This search was interrupted before an answer finished.'
+    )
+    expect(screen.getByTestId('brok-search-error')).toHaveTextContent('Retry')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('shows an answer skeleton immediately while the stream is pending', async () => {
     const deferred = deferredStreamResponse([
       {

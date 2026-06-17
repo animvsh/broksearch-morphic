@@ -339,6 +339,27 @@ function toStoredSearchTurns(searchId: string, messages: UIMessage[]) {
   return turns
 }
 
+function getLatestIncompleteStoredQuery(messages: UIMessage[]) {
+  for (let index = messages.length - 2; index >= 0; index -= 2) {
+    const userMessage = messages[index]
+    const assistantMessage = messages[index + 1]
+    if (
+      userMessage?.role !== 'user' ||
+      assistantMessage?.role !== 'assistant'
+    ) {
+      continue
+    }
+
+    const query = getTextPart(userMessage).trim()
+    const answer = getTextPart(assistantMessage).trim()
+    if (query && !answer) {
+      return query
+    }
+  }
+
+  return null
+}
+
 function persistDurableMessages(
   searchId: string | undefined,
   messages: UIMessage[]
@@ -857,6 +878,7 @@ export function BrokSearchClient({
       ? toStoredSearchTurns(searchId, storedMessages)
       : []
     const latestTurn = storedTurns.at(-1)
+    const incompleteStoredQuery = getLatestIncompleteStoredQuery(storedMessages)
 
     if (
       latestTurn &&
@@ -881,6 +903,38 @@ export function BrokSearchClient({
       activeTurnRef.current = latestTurn
       commitDurableSearchUrl(searchId)
       recordRecentSearch(latestTurn.query, initialMode)
+      return cleanup
+    }
+
+    if (
+      incompleteStoredQuery &&
+      (!trimmedInitialQuery ||
+        incompleteStoredQuery.trim().toLowerCase() ===
+          trimmedInitialQuery.toLowerCase())
+    ) {
+      restoredInitialQueryRef.current = initialRunKey
+      durableMessagesRef.current = storedMessages
+      setCompletedTurns(storedTurns)
+      setActiveQuestion(incompleteStoredQuery)
+      setQuery(incompleteStoredQuery)
+      setAnswer('')
+      setFollowUps([])
+      setError('This search was interrupted before an answer finished.')
+      setProgress({
+        searchQueries: [],
+        sources: [],
+        status: 'error',
+        message: 'Search interrupted'
+      })
+      activeTurnRef.current = {
+        id: `${searchId ?? 'search_session'}_turn_${storedTurns.length + 1}`,
+        query: incompleteStoredQuery,
+        answer: '',
+        sources: [],
+        followUps: []
+      }
+      commitDurableSearchUrl(searchId)
+      recordRecentSearch(incompleteStoredQuery, initialMode)
       return cleanup
     }
 
