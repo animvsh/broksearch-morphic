@@ -98,6 +98,14 @@ function getSearchFetchTimeoutMs() {
   return Number.isFinite(configured) && configured > 0 ? configured : 8000
 }
 
+function getSearchBatchSoftTimeoutMs() {
+  const configured = Number.parseInt(
+    process.env.BROK_SEARCH_BATCH_SOFT_TIMEOUT_MS || '',
+    10
+  )
+  return Number.isFinite(configured) && configured > 0 ? configured : 3000
+}
+
 function getAnswerSynthesisTimeoutMs() {
   const configured = Number.parseInt(
     process.env.BROK_SEARCH_SYNTHESIS_TIMEOUT_MS || '',
@@ -779,19 +787,54 @@ async function runHtmlSearchPipeline(
 async function settleSearchBatches<T>(
   searches: Array<Promise<T[]>>
 ): Promise<T[][]> {
-  const results = await Promise.allSettled(searches)
-  const fulfilled = results
+  const results: Array<PromiseSettledResult<T[]> | undefined> = new Array(
+    searches.length
+  )
+  let settledCount = 0
+  let fulfilledCount = 0
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+
+  const allSettled = Promise.all(
+    searches.map((search, index) =>
+      search.then(
+        value => {
+          results[index] = { status: 'fulfilled', value }
+          fulfilledCount += 1
+          settledCount += 1
+        },
+        reason => {
+          console.warn('Search query failed:', reason)
+          results[index] = { status: 'rejected', reason }
+          settledCount += 1
+        }
+      )
+    )
+  )
+
+  const softDeadline = new Promise<'timeout'>(resolve => {
+    timeoutId = setTimeout(resolve, getSearchBatchSoftTimeoutMs(), 'timeout')
+  })
+
+  await Promise.race([allSettled, softDeadline])
+  if (timeoutId) {
+    clearTimeout(timeoutId)
+  }
+
+  if (fulfilledCount === 0 && settledCount < searches.length) {
+    await allSettled
+  }
+
+  const settledResults = results.filter(
+    (result): result is PromiseSettledResult<T[]> => Boolean(result)
+  )
+  const fulfilled = settledResults
     .filter((result): result is PromiseFulfilledResult<T[]> => {
-      if (result.status === 'rejected') {
-        console.warn('Search query failed:', result.reason)
-        return false
-      }
-      return true
+      return result.status === 'fulfilled'
     })
     .map(result => result.value)
 
   if (fulfilled.length === 0) {
-    const firstError = results.find(
+    const firstError = settledResults.find(
       (result): result is PromiseRejectedResult => result.status === 'rejected'
     )
     throw firstError?.reason ?? new Error('All search queries failed')

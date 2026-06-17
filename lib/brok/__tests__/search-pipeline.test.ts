@@ -316,6 +316,54 @@ describe('Brok search pipeline helpers', () => {
     expect(result.answer).not.toContain('React Learn:')
   })
 
+  it('starts answering from fast search batches before slow sibling queries finish', async () => {
+    vi.stubEnv('BROK_SEARCH_BATCH_SOFT_TIMEOUT_MS', '25')
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+
+      if (url.startsWith('https://html.duckduckgo.com/html/')) {
+        const searchCalls = fetchMock.mock.calls.filter(([calledInput]) =>
+          String(calledInput).startsWith('https://html.duckduckgo.com/html/')
+        )
+        if (searchCalls.length === 1) {
+          return new Response(
+            '<html><body><div class="result"><h2 class="result__title"><a href="https://react.dev/learn">React Learn</a></h2><a class="result__snippet">The official React learning path.</a></div></body></html>',
+            {
+              status: 200,
+              headers: { 'content-type': 'text/html' }
+            }
+          )
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 150))
+        return new Response(
+          '<html><body><div class="result"><h2 class="result__title"><a href="https://slow.example.com">Slow source</a></h2><a class="result__snippet">A slow secondary result.</a></div></body></html>',
+          {
+            status: 200,
+            headers: { 'content-type': 'text/html' }
+          }
+        )
+      }
+
+      return new Response('synthesis unavailable', { status: 503 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const startedAt = Date.now()
+    const result = await runSearchPipeline({
+      query: 'best way to learn React',
+      depth: 'standard'
+    })
+    const elapsed = Date.now() - startedAt
+
+    expect(elapsed).toBeLessThan(140)
+    expect(result.citations[0]).toMatchObject({
+      title: 'React Learn',
+      publisher: 'react.dev'
+    })
+    expect(result.answer).toContain('The official React learning path')
+  })
+
   it('adds canonical React learning docs when search returns weak official pages', async () => {
     vi.stubGlobal(
       'fetch',
