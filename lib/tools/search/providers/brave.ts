@@ -4,7 +4,11 @@ import {
   SerperSearchResultItem
 } from '@/lib/types'
 
-import { SearchProvider } from './base'
+import {
+  BaseSearchProvider,
+  createProviderAbortSignal,
+  SearchProviderOptions
+} from './base'
 
 interface BraveWebResult {
   title?: string
@@ -43,10 +47,11 @@ interface BraveImageResult {
   height?: number
 }
 
-export class BraveSearchProvider implements SearchProvider {
+export class BraveSearchProvider extends BaseSearchProvider {
   private apiKey: string | undefined
 
   constructor() {
+    super()
     this.apiKey = process.env.BRAVE_SEARCH_API_KEY
   }
 
@@ -62,10 +67,7 @@ export class BraveSearchProvider implements SearchProvider {
     searchDepth?: 'basic' | 'advanced',
     includeDomains?: string[],
     excludeDomains?: string[],
-    options?: {
-      type?: 'general' | 'optimized'
-      content_types?: Array<'web' | 'video' | 'image' | 'news'>
-    }
+    options?: SearchProviderOptions
   ): Promise<SearchResults> {
     if (!this.apiKey) {
       throw new Error('Brave Search API key not configured')
@@ -84,15 +86,15 @@ export class BraveSearchProvider implements SearchProvider {
     const promises: Promise<void>[] = []
 
     if (contentTypes.includes('web')) {
-      promises.push(this.searchWeb(query, maxResults, results))
+      promises.push(this.searchWeb(query, maxResults, results, options))
     }
 
     if (contentTypes.includes('video')) {
-      promises.push(this.searchVideos(query, maxResults, results))
+      promises.push(this.searchVideos(query, maxResults, results, options))
     }
 
     if (contentTypes.includes('image')) {
-      promises.push(this.searchImages(query, maxResults, results))
+      promises.push(this.searchImages(query, maxResults, results, options))
     }
 
     await Promise.all(promises)
@@ -106,14 +108,17 @@ export class BraveSearchProvider implements SearchProvider {
   private async searchWeb(
     query: string,
     maxResults: number,
-    results: SearchResults
+    results: SearchResults,
+    options?: SearchProviderOptions
   ): Promise<void> {
+    const abortContext = createProviderAbortSignal('Brave web', options)
     try {
       const response = await fetch(
         `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(
           query
         )}&count=${maxResults}`,
         {
+          signal: abortContext.signal,
           headers: {
             Accept: 'application/json',
             'Accept-Encoding': 'gzip',
@@ -137,20 +142,25 @@ export class BraveSearchProvider implements SearchProvider {
         }))
     } catch (error) {
       console.error('Brave web search error:', error)
+    } finally {
+      abortContext.cleanup()
     }
   }
 
   private async searchVideos(
     query: string,
     maxResults: number,
-    results: SearchResults
+    results: SearchResults,
+    options?: SearchProviderOptions
   ): Promise<void> {
+    const abortContext = createProviderAbortSignal('Brave video', options)
     try {
       const response = await fetch(
         `https://api.search.brave.com/res/v1/videos/search?q=${encodeURIComponent(
           query
         )}&count=${maxResults}`,
         {
+          signal: abortContext.signal,
           headers: {
             Accept: 'application/json',
             'Accept-Encoding': 'gzip',
@@ -184,20 +194,25 @@ export class BraveSearchProvider implements SearchProvider {
     } catch (error) {
       console.error('Brave video search error:', error)
       results.videos = []
+    } finally {
+      abortContext.cleanup()
     }
   }
 
   private async searchImages(
     query: string,
     maxResults: number,
-    results: SearchResults
+    results: SearchResults,
+    options?: SearchProviderOptions
   ): Promise<void> {
+    const abortContext = createProviderAbortSignal('Brave image', options)
     try {
       const response = await fetch(
         `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(
           query
         )}&count=${maxResults}`,
         {
+          signal: abortContext.signal,
           headers: {
             Accept: 'application/json',
             'Accept-Encoding': 'gzip',
@@ -223,6 +238,8 @@ export class BraveSearchProvider implements SearchProvider {
     } catch (error) {
       console.error('Brave image search error:', error)
       results.images = []
+    } finally {
+      abortContext.cleanup()
     }
   }
 }
