@@ -1,7 +1,11 @@
 import { SearchResults } from '@/lib/types'
 import { sanitizeUrl } from '@/lib/utils'
 
-import { BaseSearchProvider } from './base'
+import {
+  BaseSearchProvider,
+  createProviderAbortSignal,
+  SearchProviderOptions
+} from './base'
 
 // Domains excluded system-wide in Morphic Cloud deployments. Tavily has
 // started surfacing low-value aggregator/social pages (notably Instagram)
@@ -14,7 +18,8 @@ export class TavilySearchProvider extends BaseSearchProvider {
     maxResults: number = 10,
     searchDepth: 'basic' | 'advanced' = 'basic',
     includeDomains: string[] = [],
-    excludeDomains: string[] = []
+    excludeDomains: string[] = [],
+    options?: SearchProviderOptions
   ): Promise<SearchResults> {
     const apiKey = process.env.TAVILY_API_KEY
     this.validateApiKey(apiKey, 'TAVILY')
@@ -29,32 +34,40 @@ export class TavilySearchProvider extends BaseSearchProvider {
       : excludeDomains
 
     const includeImageDescriptions = true
-    const response = await fetch('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        api_key: apiKey,
-        query: filledQuery,
-        max_results: Math.max(maxResults, 5),
-        search_depth: searchDepth,
-        include_images: true,
-        include_image_descriptions: includeImageDescriptions,
-        include_answers: true,
-        include_domains: includeDomains,
-        exclude_domains: effectiveExcludeDomains
+    const abortContext = createProviderAbortSignal('Tavily', options)
+    let data: any
+
+    try {
+      const response = await fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        signal: abortContext.signal,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          api_key: apiKey,
+          query: filledQuery,
+          max_results: Math.max(maxResults, 5),
+          search_depth: searchDepth,
+          include_images: true,
+          include_image_descriptions: includeImageDescriptions,
+          include_answers: true,
+          include_domains: includeDomains,
+          exclude_domains: effectiveExcludeDomains
+        })
       })
-    })
 
-    if (!response.ok) {
-      console.error(
-        `Tavily API error: ${response.status} ${response.statusText}`
-      )
-      throw new Error('Search failed')
+      if (!response.ok) {
+        console.error(
+          `Tavily API error: ${response.status} ${response.statusText}`
+        )
+        throw new Error('Search failed')
+      }
+
+      data = await response.json()
+    } finally {
+      abortContext.cleanup()
     }
-
-    const data = await response.json()
 
     // Tavily returns top-level images with { url, title?, description? }. We try
     // to match each image to a result by title so the UI can link back to the

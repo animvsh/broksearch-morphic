@@ -33,10 +33,11 @@ function isSearchTimeoutError(error: unknown) {
 }
 
 async function withSearchTimeout<T>(
-  promise: Promise<T>,
+  run: (signal: AbortSignal) => Promise<T>,
   provider: SearchProviderType,
   timeoutMs = getSearchProviderTimeoutMs()
 ): Promise<T> {
+  const controller = new AbortController()
   let timeoutId: ReturnType<typeof setTimeout> | undefined
 
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -45,12 +46,13 @@ async function withSearchTimeout<T>(
         `${provider} search timed out after ${timeoutMs}ms`
       )
       error.name = 'SearchTimeoutError'
+      controller.abort(error)
       reject(error)
     }, timeoutMs)
   })
 
   try {
-    return await Promise.race([promise, timeoutPromise])
+    return await Promise.race([run(controller.signal), timeoutPromise])
   } finally {
     if (timeoutId) clearTimeout(timeoutId)
   }
@@ -79,17 +81,19 @@ async function runSearchProvider({
     const baseUrl = await getBaseUrlString()
 
     const response = await withSearchTimeout(
-      fetch(`${baseUrl}/api/advanced-search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: filledQuery,
-          maxResults: effectiveMaxResults,
-          searchDepth: effectiveSearchDepthForAPI,
-          includeDomains,
-          excludeDomains
-        })
-      }),
+      signal =>
+        fetch(`${baseUrl}/api/advanced-search`, {
+          method: 'POST',
+          signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: filledQuery,
+            maxResults: effectiveMaxResults,
+            searchDepth: effectiveSearchDepthForAPI,
+            includeDomains,
+            excludeDomains
+          })
+        }),
       searchAPI
     )
     if (!response.ok) {
@@ -104,6 +108,26 @@ async function runSearchProvider({
 
   if (searchAPI === 'brave') {
     return withSearchTimeout(
+      signal =>
+        searchProvider.search(
+          filledQuery,
+          effectiveMaxResults,
+          effectiveSearchDepthForAPI,
+          includeDomains,
+          excludeDomains,
+          {
+            type,
+            content_types: contentTypes,
+            signal,
+            timeoutMs: getSearchProviderTimeoutMs()
+          }
+        ),
+      searchAPI
+    )
+  }
+
+  return withSearchTimeout(
+    signal =>
       searchProvider.search(
         filledQuery,
         effectiveMaxResults,
@@ -111,22 +135,10 @@ async function runSearchProvider({
         includeDomains,
         excludeDomains,
         {
-          type,
-          content_types: contentTypes
+          signal,
+          timeoutMs: getSearchProviderTimeoutMs()
         }
       ),
-      searchAPI
-    )
-  }
-
-  return withSearchTimeout(
-    searchProvider.search(
-      filledQuery,
-      effectiveMaxResults,
-      effectiveSearchDepthForAPI,
-      includeDomains,
-      excludeDomains
-    ),
     searchAPI
   )
 }
