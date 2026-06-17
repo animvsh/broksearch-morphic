@@ -604,7 +604,12 @@ export function BrokSearchClient({
   }, [activeQuestion, answer, displayFollowUps, progress.sources, searchId])
 
   const runSearch = useCallback(
-    async (q: string) => {
+    async (
+      q: string,
+      options: {
+        replaceActiveTurn?: boolean
+      } = {}
+    ) => {
       const trimmed = q.trim()
       if (!trimmed) return
       const requestKey = `${initialMode}:${trimmed.toLowerCase()}`
@@ -622,11 +627,18 @@ export function BrokSearchClient({
         requestIdRef.current === requestId && !controller.signal.aborted
 
       const previousTurn = activeTurnRef.current
+      const replaceActiveTurn = options.replaceActiveTurn === true
+      if (replaceActiveTurn && previousTurn?.answer.trim()) {
+        durableMessagesRef.current = durableMessagesRef.current.slice(0, -2)
+        persistDurableMessages(searchId, durableMessagesRef.current)
+      }
       const contextTurns = compactSearchContext([
         ...completedTurnsRef.current,
-        ...(previousTurn?.answer.trim() ? [previousTurn] : [])
+        ...(previousTurn?.answer.trim() && !replaceActiveTurn
+          ? [previousTurn]
+          : [])
       ])
-      if (previousTurn?.answer.trim()) {
+      if (previousTurn?.answer.trim() && !replaceActiveTurn) {
         setCompletedTurns(prev =>
           prev.some(turn => turn.id === previousTurn.id)
             ? prev
@@ -696,6 +708,12 @@ export function BrokSearchClient({
         sources: [],
         followUps: []
       }
+      writeDurableTurn({
+        durableAnswer: '',
+        durableFollowUps: [],
+        durableSources: [],
+        persistNow: true
+      })
 
       let responseStartTimedOut = false
       let cancelPendingDurableSnapshot = () => {}
@@ -1166,7 +1184,7 @@ export function BrokSearchClient({
     const target = activeQuestion.trim()
     if (!target || isLoading) return
     setQuery(target)
-    void runSearch(target)
+    void runSearch(target, { replaceActiveTurn: true })
   }, [activeQuestion, isLoading, runSearch])
 
   const handleResumeInterruptedSearch = useCallback(() => {
@@ -1223,7 +1241,7 @@ export function BrokSearchClient({
               />
               <div className="flex shrink-0 items-center gap-1">
                 {modelSelectorData ? (
-                  <div className="min-w-0">
+                  <div className="hidden min-w-0 sm:block">
                     <ModelSelectorClient data={modelSelectorData} compact />
                   </div>
                 ) : null}
