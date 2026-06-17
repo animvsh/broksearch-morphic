@@ -20,6 +20,7 @@ interface HeroProps {
   onSubmit: (query: string, mode: SearchMode, files: File[]) => void
   isSubmitting?: boolean
   onStop?: () => void
+  pendingQuery?: string
   defaultMode?: SearchMode
   recentStorageKey?: string
   className?: string
@@ -31,6 +32,7 @@ export function Hero({
   onSubmit,
   isSubmitting = false,
   onStop,
+  pendingQuery,
   defaultMode,
   recentStorageKey,
   className,
@@ -209,7 +211,7 @@ export function Hero({
 
             <button
               type="submit"
-              disabled={!query.trim() || isSubmitting}
+              disabled={!isSubmitting && !query.trim()}
               className={cn(
                 'clicky-control inline-flex h-11 min-h-11 min-w-11 items-center justify-center rounded-lg transition-all',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -235,6 +237,51 @@ export function Hero({
           </div>
         </div>
       </form>
+
+      {isSubmitting && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="landing-submit-status"
+          className="mt-3 w-full rounded-2xl border border-border/70 bg-card/80 p-3 text-sm shadow-sm backdrop-blur"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-foreground text-background">
+              <Sparkles className="size-3.5" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-medium text-foreground">
+                Preparing your answer
+              </p>
+              {pendingQuery ? (
+                <p className="truncate text-xs text-muted-foreground">
+                  {pendingQuery}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <div className="mt-3 grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-3">
+            {['Searching web', 'Reading sources', 'Writing answer'].map(
+              (step, index) => (
+                <span
+                  key={step}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-foreground/[0.04] px-2.5 py-1"
+                >
+                  <span className="size-1.5 rounded-full bg-foreground/50" />
+                  <span>{step}</span>
+                  {index === 0 ? (
+                    <span className="typing-dots ml-auto" aria-hidden>
+                      <span />
+                      <span />
+                      <span />
+                    </span>
+                  ) : null}
+                </span>
+              )
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 w-full">
         <ModeDescription mode={mode} />

@@ -48,7 +48,33 @@ describe('SearchLanding', () => {
     expect(mocks.push).toHaveBeenCalledWith(
       '/search?q=best+study+plan+for+finals&mode=quick'
     )
+    expect(screen.getByTestId('landing-submit-status')).toHaveTextContent(
+      'Preparing your answer'
+    )
+    expect(screen.getByTestId('landing-submit-status')).toHaveTextContent(
+      'best study plan for finals'
+    )
+    expect(screen.getByText('Searching web')).toBeInTheDocument()
+    expect(screen.getByText('Reading sources')).toBeInTheDocument()
+    expect(screen.getByText('Writing answer')).toBeInTheDocument()
     expect(window.localStorage.setItem).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets users cancel the instant pending state before navigation completes', () => {
+    render(<SearchLanding />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search query' }), {
+      target: { value: 'best study plan for finals' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: /send query/i }))
+
+    expect(screen.getByTestId('landing-submit-status')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /stop generating/i }))
+
+    expect(
+      screen.queryByTestId('landing-submit-status')
+    ).not.toBeInTheDocument()
   })
 
   it('shows the MVP example prompts and starts from one immediately', () => {
@@ -66,6 +92,9 @@ describe('SearchLanding', () => {
 
     expect(mocks.push).toHaveBeenCalledWith(
       '/search?q=Compare+Cursor+vs+Windsurf&mode=search'
+    )
+    expect(screen.getByTestId('landing-submit-status')).toHaveTextContent(
+      'Compare Cursor vs Windsurf'
     )
   })
 
