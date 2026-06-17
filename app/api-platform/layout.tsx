@@ -70,8 +70,8 @@ export default function ApiLayout({ children }: { children: React.ReactNode }) {
               </p>
             </div>
           </div>
-          <div className="border-b">
-            <nav className="flex w-full items-stretch">
+          <div className="border-b overflow-x-auto">
+            <nav className="flex min-w-max items-stretch sm:min-w-full">
               {tabs.map(tab => {
                 const Icon = tab.icon
                 const isActive = activeTab === tab.value
@@ -80,7 +80,7 @@ export default function ApiLayout({ children }: { children: React.ReactNode }) {
                     key={tab.value}
                     href={tab.href}
                     className={cn(
-                      'inline-flex h-12 items-center gap-2 border-b-2 px-4 text-sm font-medium transition-colors',
+                      'inline-flex h-12 shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-medium transition-colors',
                       isActive
                         ? 'border-primary text-foreground'
                         : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'

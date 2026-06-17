@@ -93,4 +93,53 @@ describe('smoke seed route', () => {
       true
     )
   })
+
+  it('creates stress billing keys in isolated workspace budget states', async () => {
+    process.env.SMOKE_SEED_TOKEN = 'test-seed-token'
+    mockEnsureWorkspaceForUser
+      .mockResolvedValueOnce({ id: 'workspace_main' })
+      .mockResolvedValueOnce({ id: 'workspace_exceeded' })
+      .mockResolvedValueOnce({ id: 'workspace_required' })
+    const { POST } = await import('../smoke-seed/route')
+
+    const response = await POST(
+      postSeed({ kind: 'stress', userId: 'user_123' }, 'test-seed-token')
+    )
+    const body = await response.json()
+    const insertedKeys = mockValues.mock.calls
+      .map(([value]) => value)
+      .filter(value => value?.keyHash)
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      kind: 'stress',
+      workspaceId: 'workspace_main'
+    })
+    expect(body.monthlyBudgetKey).toMatch(/^brok_sk_test_/)
+    expect(body.workspaceBudgetKey).toMatch(/^brok_sk_test_/)
+    expect(body.apiBudgetRequiredKey).toMatch(/^brok_sk_test_/)
+    expect(body.workspaceBudgetRequiredKey).toMatch(/^brok_sk_test_/)
+    expect(mockSet).toHaveBeenCalledWith({ monthlyBudgetCents: 100 })
+    expect(mockSet).toHaveBeenCalledWith({ monthlyBudgetCents: 1 })
+    expect(mockSet).toHaveBeenCalledWith({ monthlyBudgetCents: 0 })
+    expect(insertedKeys).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Stress Workspace Budget Key',
+          workspaceId: 'workspace_exceeded',
+          monthlyBudgetCents: 100
+        }),
+        expect.objectContaining({
+          name: 'Stress API Budget Required Key',
+          workspaceId: 'workspace_main',
+          monthlyBudgetCents: 0
+        }),
+        expect.objectContaining({
+          name: 'Stress Workspace Budget Required Key',
+          workspaceId: 'workspace_required',
+          monthlyBudgetCents: 100
+        })
+      ])
+    )
+  })
 })

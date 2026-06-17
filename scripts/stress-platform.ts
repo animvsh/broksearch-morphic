@@ -9,13 +9,21 @@ import {
   createUsageEventViaSupabaseRest,
   ensureWorkspaceForUserViaSupabaseRest,
   updateApiKeyStatusViaSupabaseRest,
-  updateWorkspaceMonthlyBudgetViaSupabaseRest} from './supabase-rest-seed'
+  updateWorkspaceMonthlyBudgetViaSupabaseRest
+} from './supabase-rest-seed'
 
 const seedMonthlyBudgetCents = 100
+const workspaceExceededBudgetCents = 1
 
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3001'
 const stressUserId =
-  process.env.ANONYMOUS_USER_ID || '00000000-0000-0000-0000-000000000000'
+  process.env.STRESS_PLATFORM_USER_ID ||
+  process.env.ANONYMOUS_USER_ID ||
+  '00000000-0000-0000-0000-000000000000'
+const stressRunId =
+  process.env.STRESS_PLATFORM_RUN_ID || Date.now().toString(36)
+const stressRunUserId =
+  `${stressUserId}:stress:${stressRunId}`
 const browserNavigationTimeoutMs = readPositiveIntegerEnv(
   'STRESS_PLATFORM_BROWSER_TIMEOUT_MS',
   120_000
@@ -145,7 +153,7 @@ async function createStressKeys() {
       },
       body: JSON.stringify({
         kind: 'stress',
-        userId: stressUserId
+        userId: stressRunUserId
       })
     })
     const body = await response.json().catch(() => null)
@@ -157,6 +165,9 @@ async function createStressKeys() {
         lowRpmKey: body.lowRpmKey as string,
         dailyLimitedKey: body.dailyLimitedKey as string,
         monthlyBudgetKey: body.monthlyBudgetKey as string,
+        workspaceBudgetKey: body.workspaceBudgetKey as string,
+        apiBudgetRequiredKey: body.apiBudgetRequiredKey as string,
+        workspaceBudgetRequiredKey: body.workspaceBudgetRequiredKey as string,
         pausedKey: body.pausedKey as string,
         revokedKey: body.revokedKey as string,
         expiredKey: body.expiredKey as string
@@ -183,11 +194,25 @@ async function createStressKeys() {
 
 async function createStressKeysWithDrizzle() {
   const deps = await getDrizzleSeedDeps()
-  const workspace = await deps.ensureWorkspaceForUser(stressUserId)
+  const workspace = await deps.ensureWorkspaceForUser(stressRunUserId)
   await deps.db
     .update(deps.workspaces)
     .set({ monthlyBudgetCents: seedMonthlyBudgetCents })
     .where(eq(deps.workspaces.id, workspace.id))
+  const workspaceExceededWorkspace = await deps.ensureWorkspaceForUser(
+    `${stressRunUserId}:workspace-budget-exceeded`
+  )
+  await deps.db
+    .update(deps.workspaces)
+    .set({ monthlyBudgetCents: workspaceExceededBudgetCents })
+    .where(eq(deps.workspaces.id, workspaceExceededWorkspace.id))
+  const workspaceRequiredWorkspace = await deps.ensureWorkspaceForUser(
+    `${stressRunUserId}:workspace-budget-required`
+  )
+  await deps.db
+    .update(deps.workspaces)
+    .set({ monthlyBudgetCents: 0 })
+    .where(eq(deps.workspaces.id, workspaceRequiredWorkspace.id))
 
   const mainKey = await createStressKey(deps, workspace.id, {
     name: 'Stress Main Key',
@@ -221,7 +246,7 @@ async function createStressKeysWithDrizzle() {
   await deps.db.insert(deps.usageEvents).values({
     requestId: `stress_daily_${Date.now()}`,
     workspaceId: workspace.id,
-    userId: stressUserId,
+    userId: stressRunUserId,
     apiKeyId: dailyLimitedKey.id,
     endpoint: 'chat',
     model: 'brok-lite',
@@ -233,6 +258,59 @@ async function createStressKeysWithDrizzle() {
     latencyMs: 1,
     status: 'success'
   })
+
+  const workspaceBudgetKey = await createStressKey(
+    deps,
+    workspaceExceededWorkspace.id,
+    {
+      name: 'Stress Workspace Budget Key',
+      environment: 'test',
+      scopes: ['chat:write'],
+      allowedModels: ['brok-lite'],
+      rpmLimit: 5,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: seedMonthlyBudgetCents
+    }
+  )
+  await deps.db.insert(deps.usageEvents).values({
+    requestId: `stress_workspace_budget_${Date.now()}`,
+    workspaceId: workspaceExceededWorkspace.id,
+    userId: stressRunUserId,
+    apiKeyId: workspaceBudgetKey.id,
+    endpoint: 'chat',
+    model: 'brok-lite',
+    provider: 'Brok',
+    inputTokens: 1,
+    outputTokens: 1,
+    providerCostUsd: '0.01',
+    billedUsd: '0.01',
+    latencyMs: 1,
+    status: 'success'
+  })
+
+  const apiBudgetRequiredKey = await createStressKey(deps, workspace.id, {
+    name: 'Stress API Budget Required Key',
+    environment: 'test',
+    scopes: ['chat:write'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0
+  })
+
+  const workspaceBudgetRequiredKey = await createStressKey(
+    deps,
+    workspaceRequiredWorkspace.id,
+    {
+      name: 'Stress Workspace Budget Required Key',
+      environment: 'test',
+      scopes: ['chat:write'],
+      allowedModels: ['brok-lite'],
+      rpmLimit: 5,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: seedMonthlyBudgetCents
+    }
+  )
 
   const monthlyBudgetKey = await createStressKey(deps, workspace.id, {
     name: 'Stress Monthly Budget Key',
@@ -246,7 +324,7 @@ async function createStressKeysWithDrizzle() {
   await deps.db.insert(deps.usageEvents).values({
     requestId: `stress_budget_${Date.now()}`,
     workspaceId: workspace.id,
-    userId: stressUserId,
+    userId: stressRunUserId,
     apiKeyId: monthlyBudgetKey.id,
     endpoint: 'chat',
     model: 'brok-lite',
@@ -304,6 +382,9 @@ async function createStressKeysWithDrizzle() {
     lowRpmKey: lowRpmKey.key,
     dailyLimitedKey: dailyLimitedKey.key,
     monthlyBudgetKey: monthlyBudgetKey.key,
+    workspaceBudgetKey: workspaceBudgetKey.key,
+    apiBudgetRequiredKey: apiBudgetRequiredKey.key,
+    workspaceBudgetRequiredKey: workspaceBudgetRequiredKey.key,
     pausedKey: pausedKey.key,
     revokedKey: revokedKey.key,
     expiredKey: expiredKey.key
@@ -311,10 +392,24 @@ async function createStressKeysWithDrizzle() {
 }
 
 async function createStressKeysWithSupabaseRest() {
-  const workspace = await ensureWorkspaceForUserViaSupabaseRest(stressUserId)
+  const workspace = await ensureWorkspaceForUserViaSupabaseRest(stressRunUserId)
   await updateWorkspaceMonthlyBudgetViaSupabaseRest(
     workspace.id,
     seedMonthlyBudgetCents
+  )
+  const workspaceExceededWorkspace = await ensureWorkspaceForUserViaSupabaseRest(
+    `${stressRunUserId}:workspace-budget-exceeded`
+  )
+  await updateWorkspaceMonthlyBudgetViaSupabaseRest(
+    workspaceExceededWorkspace.id,
+    workspaceExceededBudgetCents
+  )
+  const workspaceRequiredWorkspace = await ensureWorkspaceForUserViaSupabaseRest(
+    `${stressRunUserId}:workspace-budget-required`
+  )
+  await updateWorkspaceMonthlyBudgetViaSupabaseRest(
+    workspaceRequiredWorkspace.id,
+    0
   )
 
   const mainKey = await createStressKeyViaSupabaseRest(workspace.id, {
@@ -349,7 +444,7 @@ async function createStressKeysWithSupabaseRest() {
   await createUsageEventViaSupabaseRest({
     request_id: `stress_daily_${Date.now()}`,
     workspace_id: workspace.id,
-    user_id: stressUserId,
+    user_id: stressRunUserId,
     api_key_id: dailyLimitedKey.id,
     endpoint: 'chat',
     model: 'brok-lite',
@@ -361,6 +456,60 @@ async function createStressKeysWithSupabaseRest() {
     latency_ms: 1,
     status: 'success'
   })
+
+  const workspaceBudgetKey = await createStressKeyViaSupabaseRest(
+    workspaceExceededWorkspace.id,
+    {
+      name: 'Stress Workspace Budget Key',
+      environment: 'test',
+      scopes: ['chat:write'],
+      allowedModels: ['brok-lite'],
+      rpmLimit: 5,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: seedMonthlyBudgetCents
+    }
+  )
+  await createUsageEventViaSupabaseRest({
+    request_id: `stress_workspace_budget_${Date.now()}`,
+    workspace_id: workspaceExceededWorkspace.id,
+    user_id: stressRunUserId,
+    api_key_id: workspaceBudgetKey.id,
+    endpoint: 'chat',
+    model: 'brok-lite',
+    provider: 'Brok',
+    input_tokens: 1,
+    output_tokens: 1,
+    provider_cost_usd: '0.01',
+    billed_usd: '0.01',
+    latency_ms: 1,
+    status: 'success'
+  })
+
+  const apiBudgetRequiredKey = await createStressKeyViaSupabaseRest(
+    workspace.id,
+    {
+      name: 'Stress API Budget Required Key',
+      environment: 'test',
+      scopes: ['chat:write'],
+      allowedModels: ['brok-lite'],
+      rpmLimit: 5,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: 0
+    }
+  )
+
+  const workspaceBudgetRequiredKey = await createStressKeyViaSupabaseRest(
+    workspaceRequiredWorkspace.id,
+    {
+      name: 'Stress Workspace Budget Required Key',
+      environment: 'test',
+      scopes: ['chat:write'],
+      allowedModels: ['brok-lite'],
+      rpmLimit: 5,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: seedMonthlyBudgetCents
+    }
+  )
 
   const monthlyBudgetKey = await createStressKeyViaSupabaseRest(workspace.id, {
     name: 'Stress Monthly Budget Key',
@@ -374,7 +523,7 @@ async function createStressKeysWithSupabaseRest() {
   await createUsageEventViaSupabaseRest({
     request_id: `stress_budget_${Date.now()}`,
     workspace_id: workspace.id,
-    user_id: stressUserId,
+    user_id: stressRunUserId,
     api_key_id: monthlyBudgetKey.id,
     endpoint: 'chat',
     model: 'brok-lite',
@@ -426,6 +575,9 @@ async function createStressKeysWithSupabaseRest() {
     lowRpmKey: lowRpmKey.key,
     dailyLimitedKey: dailyLimitedKey.key,
     monthlyBudgetKey: monthlyBudgetKey.key,
+    workspaceBudgetKey: workspaceBudgetKey.key,
+    apiBudgetRequiredKey: apiBudgetRequiredKey.key,
+    workspaceBudgetRequiredKey: workspaceBudgetRequiredKey.key,
     pausedKey: pausedKey.key,
     revokedKey: revokedKey.key,
     expiredKey: expiredKey.key
@@ -449,7 +601,7 @@ async function createStressKeyViaSupabaseRest(
   const { hash: keyHash, salt: keySalt } = hashNewApiKey(rawKey)
   const created = await createApiKeyViaSupabaseRest({
     workspace_id: workspaceId,
-    user_id: stressUserId,
+    user_id: stressRunUserId,
     name: input.name,
     key_prefix: getKeyPrefix(rawKey),
     key_hash: keyHash,
@@ -486,7 +638,7 @@ async function createStressKey(
     .insert(deps.apiKeys)
     .values({
       workspaceId,
-      userId: stressUserId,
+      userId: stressRunUserId,
       name: input.name,
       keyPrefix: getKeyPrefix(rawKey),
       keyHash,
@@ -580,6 +732,32 @@ async function runBrokCodeSecurityScan(baseKey: string) {
   }
 }
 
+async function expectChatError(
+  baseKey: string,
+  label: string,
+  expectedStatus: number,
+  expectedCode: string
+) {
+  const response = await fetch(`${baseUrl}/api/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${baseKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'brok-lite',
+      stream: false,
+      max_tokens: 16,
+      messages: [{ role: 'user', content: label }]
+    })
+  })
+  const body = await expectJson(response, expectedStatus)
+
+  if (body?.error?.code !== expectedCode) {
+    throw new Error(`${label} did not return ${expectedCode}`)
+  }
+}
+
 async function runApiStress(
   keys: Awaited<ReturnType<typeof createStressKeys>>
 ) {
@@ -657,53 +835,51 @@ async function runApiStress(
   }
   console.log('stress api ok scope enforcement')
 
-  const dailyLimitedResponse = await fetch(
-    `${baseUrl}/api/v1/chat/completions`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${keys.dailyLimitedKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'brok-lite',
-        stream: false,
-        max_tokens: 16,
-        messages: [{ role: 'user', content: 'daily limit check' }]
-      })
-    }
+  await expectChatError(
+    keys.dailyLimitedKey,
+    'daily limit check',
+    429,
+    'daily_request_limit_exceeded'
   )
-  const dailyLimitedBody = await expectJson(dailyLimitedResponse, 429)
-  if (dailyLimitedBody?.error?.code !== 'daily_request_limit_exceeded') {
-    throw new Error(
-      'daily-limited key did not return daily_request_limit_exceeded'
-    )
-  }
   console.log('stress api ok daily usage limit enforcement')
 
-  const monthlyBudgetResponse = await fetch(
-    `${baseUrl}/api/v1/chat/completions`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${keys.monthlyBudgetKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'brok-lite',
-        stream: false,
-        max_tokens: 16,
-        messages: [{ role: 'user', content: 'monthly budget check' }]
-      })
-    }
+  await expectChatError(
+    keys.monthlyBudgetKey,
+    'monthly budget check',
+    402,
+    'api_key_monthly_budget_exceeded'
   )
-  const monthlyBudgetBody = await expectJson(monthlyBudgetResponse, 402)
-  if (monthlyBudgetBody?.error?.code !== 'api_key_monthly_budget_exceeded') {
-    throw new Error(
-      'monthly-budget key did not return api_key_monthly_budget_exceeded'
+  console.log('stress api ok api key monthly budget enforcement')
+
+  await expectChatError(
+    keys.workspaceBudgetKey,
+    'workspace monthly budget check',
+    402,
+    'workspace_monthly_budget_exceeded'
+  )
+  console.log('stress api ok workspace monthly budget enforcement')
+
+  if (process.env.BROK_CLOUD_DEPLOYMENT === 'true') {
+    await expectChatError(
+      keys.apiBudgetRequiredKey,
+      'api key monthly budget required check',
+      402,
+      'api_key_monthly_budget_required'
+    )
+    console.log('stress api ok cloud api key monthly budget requirement')
+
+    await expectChatError(
+      keys.workspaceBudgetRequiredKey,
+      'workspace monthly budget required check',
+      402,
+      'workspace_monthly_budget_required'
+    )
+    console.log('stress api ok cloud workspace monthly budget requirement')
+  } else {
+    console.log(
+      'stress api skipped cloud-only monthly budget required contracts'
     )
   }
-  console.log('stress api ok monthly budget enforcement')
 
   await runChat(keys.lowRpmKey, 'rate-limit-first')
 

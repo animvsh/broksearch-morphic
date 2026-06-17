@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { invalidRequestResponse, readJsonBody } from '@/lib/brok/http'
-import { getOrCreatePlaygroundSessionKey } from '@/lib/brok/playground-session-key'
 
 export const runtime = 'nodejs'
 
@@ -17,12 +16,36 @@ function isPlaygroundMode(value: unknown): value is PlaygroundMode {
   return value === 'chat' || value === 'search'
 }
 
+function playgroundAuthResponse({
+  code,
+  message,
+  status
+}: {
+  code: string
+  message: string
+  status: 401 | 403
+}) {
+  return NextResponse.json(
+    {
+      error: {
+        type: 'authentication_error',
+        code,
+        message
+      }
+    },
+    { status }
+  )
+}
+
 async function resolvePlaygroundApiKey() {
   const user = await getCurrentUser()
   if (!user) {
     return null
   }
 
+  const { getOrCreatePlaygroundSessionKey } = await import(
+    '@/lib/brok/playground-session-key'
+  )
   const session = await getOrCreatePlaygroundSessionKey(user.id)
   return session.rawKey
 }
@@ -46,18 +69,21 @@ export async function POST(request: NextRequest) {
   }
 
   if (apiKey !== undefined && apiKey !== null && apiKey !== '') {
-    return invalidRequestResponse(
-      'browser_api_key_not_allowed',
-      'The hosted playground uses an account-owned server-side session key. Do not send raw API keys from browser code.'
-    )
+    return playgroundAuthResponse({
+      code: 'browser_api_key_not_allowed',
+      message:
+        'The hosted playground uses an account-owned server-side session key. Do not send raw API keys from browser code.',
+      status: 403
+    })
   }
 
   const resolvedApiKey = await resolvePlaygroundApiKey()
   if (!resolvedApiKey) {
-    return invalidRequestResponse(
-      'playground_session_required',
-      'Sign in to use the hosted playground session key.'
-    )
+    return playgroundAuthResponse({
+      code: 'playground_session_required',
+      message: 'Sign in to use the hosted playground session key.',
+      status: 401
+    })
   }
 
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {

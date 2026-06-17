@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 
 type SeedKind = 'smoke' | 'stress' | 'share' | 'share-cleanup'
 const seedMonthlyBudgetCents = 100
+const workspaceExceededBudgetCents = 1
 
 function isAuthorized(request: NextRequest) {
   const token = process.env.SMOKE_SEED_TOKEN
@@ -127,10 +128,24 @@ async function seedSmoke(userId: string) {
 }
 
 async function seedStress(userId: string) {
-  const { apiKeys, db, ensureWorkspaceForUser, eq, usageEvents } =
+  const { apiKeys, db, ensureWorkspaceForUser, eq, usageEvents, workspaces } =
     await getSeedDependencies()
   const workspace = await ensureWorkspaceForUser(userId)
   await ensureSeedWorkspaceBudget(workspace.id)
+  const workspaceExceededWorkspace = await ensureWorkspaceForUser(
+    `${userId}:workspace-budget-exceeded`
+  )
+  await db
+    .update(workspaces)
+    .set({ monthlyBudgetCents: workspaceExceededBudgetCents })
+    .where(eq(workspaces.id, workspaceExceededWorkspace.id))
+  const workspaceRequiredWorkspace = await ensureWorkspaceForUser(
+    `${userId}:workspace-budget-required`
+  )
+  await db
+    .update(workspaces)
+    .set({ monthlyBudgetCents: 0 })
+    .where(eq(workspaces.id, workspaceRequiredWorkspace.id))
 
   const mainKey = await createKey(workspace.id, userId, {
     name: 'Stress Main Key',
@@ -176,6 +191,59 @@ async function seedStress(userId: string) {
     latencyMs: 1,
     status: 'success'
   })
+
+  const workspaceBudgetKey = await createKey(
+    workspaceExceededWorkspace.id,
+    userId,
+    {
+      name: 'Stress Workspace Budget Key',
+      environment: 'test',
+      scopes: ['chat:write'],
+      allowedModels: ['brok-lite'],
+      rpmLimit: 5,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: seedMonthlyBudgetCents
+    }
+  )
+  await db.insert(usageEvents).values({
+    requestId: `stress_workspace_budget_${Date.now()}`,
+    workspaceId: workspaceExceededWorkspace.id,
+    userId,
+    apiKeyId: workspaceBudgetKey.id,
+    endpoint: 'chat',
+    model: 'brok-lite',
+    provider: 'Brok',
+    inputTokens: 1,
+    outputTokens: 1,
+    providerCostUsd: '0.01',
+    billedUsd: '0.01',
+    latencyMs: 1,
+    status: 'success'
+  })
+
+  const apiBudgetRequiredKey = await createKey(workspace.id, userId, {
+    name: 'Stress API Budget Required Key',
+    environment: 'test',
+    scopes: ['chat:write'],
+    allowedModels: ['brok-lite'],
+    rpmLimit: 5,
+    dailyRequestLimit: 5000,
+    monthlyBudgetCents: 0
+  })
+
+  const workspaceBudgetRequiredKey = await createKey(
+    workspaceRequiredWorkspace.id,
+    userId,
+    {
+      name: 'Stress Workspace Budget Required Key',
+      environment: 'test',
+      scopes: ['chat:write'],
+      allowedModels: ['brok-lite'],
+      rpmLimit: 5,
+      dailyRequestLimit: 5000,
+      monthlyBudgetCents: seedMonthlyBudgetCents
+    }
+  )
 
   const monthlyBudgetKey = await createKey(workspace.id, userId, {
     name: 'Stress Monthly Budget Key',
@@ -248,6 +316,9 @@ async function seedStress(userId: string) {
     lowRpmKey: lowRpmKey.key,
     dailyLimitedKey: dailyLimitedKey.key,
     monthlyBudgetKey: monthlyBudgetKey.key,
+    workspaceBudgetKey: workspaceBudgetKey.key,
+    apiBudgetRequiredKey: apiBudgetRequiredKey.key,
+    workspaceBudgetRequiredKey: workspaceBudgetRequiredKey.key,
     pausedKey: pausedKey.key,
     revokedKey: revokedKey.key,
     expiredKey: expiredKey.key

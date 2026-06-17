@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 
 import type { User } from '@supabase/supabase-js'
@@ -48,12 +48,18 @@ export function AppChrome({
     open: !isFocusWorkspace
   })
 
-  if (sidebarState.isFocusWorkspace !== isFocusWorkspace) {
-    setSidebarState({
-      isFocusWorkspace,
-      open: !isFocusWorkspace
+  useEffect(() => {
+    setSidebarState(current => {
+      if (current.isFocusWorkspace === isFocusWorkspace) {
+        return current
+      }
+
+      return {
+        isFocusWorkspace,
+        open: !isFocusWorkspace
+      }
     })
-  }
+  }, [isFocusWorkspace])
 
   const setSidebarOpen = (open: boolean) => {
     setSidebarState({

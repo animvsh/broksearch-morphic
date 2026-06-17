@@ -44,12 +44,13 @@ export function CodeSnippet({
         }
   const payloadJson = JSON.stringify(payload, null, 2)
 
-  const curl = `curl https://www.brok.fyi/api${endpoint} \\
+  const curlCommand = stream ? 'curl -N' : 'curl'
+  const curl = `${curlCommand} https://www.brok.fyi/api${endpoint} \\
   -H "Authorization: Bearer $BROK_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '${payloadJson}'`
 
-  const javascript = `const response = await fetch("https://www.brok.fyi/api${endpoint}", {
+  const javascriptJson = `const response = await fetch("https://www.brok.fyi/api${endpoint}", {
   method: "POST",
   headers: {
     "Authorization": \`Bearer \${process.env.BROK_API_KEY}\`,
@@ -61,7 +62,42 @@ export function CodeSnippet({
 const data = await response.json();
 console.log(data);`
 
-  const python = `import json
+  const javascriptStream = `const response = await fetch("https://www.brok.fyi/api${endpoint}", {
+  method: "POST",
+  headers: {
+    "Authorization": \`Bearer \${process.env.BROK_API_KEY}\`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify(${payloadJson})
+});
+
+if (!response.body) {
+  throw new Error("Streaming is not supported by this runtime.");
+}
+
+const decoder = new TextDecoder();
+const reader = response.body.getReader();
+let buffer = "";
+
+while (true) {
+  const { value, done } = await reader.read();
+  if (done) break;
+
+  buffer += decoder.decode(value, { stream: true });
+  const lines = buffer.split("\\n");
+  buffer = lines.pop() ?? "";
+
+  for (const line of lines) {
+    if (!line.startsWith("data: ")) continue;
+
+    const data = line.slice(6).trim();
+    if (data === "[DONE]") continue;
+
+    console.log(JSON.parse(data));
+  }
+}`
+
+  const pythonJson = `import json
 import os
 import requests
 
@@ -75,6 +111,34 @@ response = requests.post(
 )
 
 print(response.json())`
+
+  const pythonStream = `import json
+import os
+import requests
+
+with requests.post(
+    "https://www.brok.fyi/api${endpoint}",
+    headers={
+        "Authorization": f"Bearer {os.environ['BROK_API_KEY']}",
+        "Content-Type": "application/json"
+    },
+    json=json.loads('''${payloadJson}'''),
+    stream=True
+) as response:
+    response.raise_for_status()
+
+    for line in response.iter_lines(decode_unicode=True):
+        if not line or not line.startswith("data: "):
+            continue
+
+        data = line.removeprefix("data: ").strip()
+        if data == "[DONE]":
+            continue
+
+        print(json.loads(data))`
+
+  const javascript = stream ? javascriptStream : javascriptJson
+  const python = stream ? pythonStream : pythonJson
 
   const codex = `# Codex / OpenAI-compatible coding tools
 export OPENAI_API_KEY="$BROK_API_KEY"
