@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import type { SearchMode } from '@/lib/types/search'
@@ -23,10 +23,12 @@ export function SearchLanding({
 }: SearchLandingProps) {
   const router = useRouter()
   const submittingRef = useRef(false)
+  const [pendingQuery, setPendingQuery] = useState<string | null>(null)
 
   const handleSubmit = (query: string, mode: string, _files: File[]) => {
     if (submittingRef.current) return
     submittingRef.current = true
+    setPendingQuery(query)
     const params = new URLSearchParams({
       q: query,
       mode
@@ -36,6 +38,7 @@ export function SearchLanding({
 
   useEffect(() => {
     submittingRef.current = false
+    setPendingQuery(null)
   }, [])
 
   return (
@@ -50,6 +53,12 @@ export function SearchLanding({
         defaultMode={defaultMode}
         isCloudDeployment={isCloudDeployment}
         hasModels={hasModels}
+        isSubmitting={Boolean(pendingQuery)}
+        pendingQuery={pendingQuery ?? undefined}
+        onStop={() => {
+          submittingRef.current = false
+          setPendingQuery(null)
+        }}
       />
     </main>
   )
