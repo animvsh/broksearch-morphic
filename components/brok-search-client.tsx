@@ -104,6 +104,12 @@ const DEFAULT_API_BASE = '/api/search/session'
 const GUEST_CHAT_STORAGE_PREFIX = 'brok:guest-chat:'
 const SESSION_CITATION_TOOL_ID = 'brok-session-search'
 const EMPTY_INITIAL_MESSAGES: UIMessage[] = []
+const SEARCH_MODE_PROGRESS_LABELS: Record<SearchMode, string> = {
+  quick: 'Quick search',
+  search: 'Search',
+  deep: 'Deep search',
+  code: 'Code'
+}
 
 function getGuestChatStorageKey(chatId: string) {
   return `${GUEST_CHAT_STORAGE_PREFIX}${chatId}`
@@ -1376,7 +1382,7 @@ function SearchProgressIndicator({
       : order.indexOf(progress.status as (typeof order)[number])
   const safeActiveIndex = Math.max(0, activeIndex)
   const trimmedQuery = query?.trim()
-  const modeLabel = mode === 'deep' ? 'Deep search' : 'Quick search'
+  const modeLabel = SEARCH_MODE_PROGRESS_LABELS[mode]
 
   return (
     <div
