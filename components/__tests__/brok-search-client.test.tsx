@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -178,6 +178,7 @@ describe('BrokSearchClient', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks()
+    vi.useRealTimers()
     storage.clear()
     Object.defineProperty(window, 'localStorage', {
       configurable: true,
@@ -196,6 +197,10 @@ describe('BrokSearchClient', () => {
     })
     window.history.replaceState({}, '', '/search?q=What+is+Brok%3F&mode=quick')
     window.localStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('uses the browser-safe session stream endpoint by default', async () => {
@@ -745,6 +750,55 @@ describe('BrokSearchClient', () => {
     )
     expect(screen.getByTestId('brok-search-error')).toHaveTextContent('Retry')
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does not replay the same active search while a request is in flight', async () => {
+    const stream = controllableStreamResponse()
+    const fetchMock = vi.fn(async () => stream.response)
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="React hooks"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    fireEvent.submit(
+      screen.getByPlaceholderText('Ask anything...').closest('form')!
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      stream.close()
+    })
+  })
+
+  it('shows a clearer message when the browser cannot reach search', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="React hooks"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    expect(await screen.findByTestId('brok-search-error')).toHaveTextContent(
+      'Could not reach Brok Search'
+    )
+    expect(screen.queryByTestId('search-progress')).not.toBeInTheDocument()
   })
 
   it('shows an answer skeleton immediately while the stream is pending', async () => {

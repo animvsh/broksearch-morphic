@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { startBrokBuild } from '@/lib/actions/build'
+import { requireFeatureAccessForApi } from '@/lib/auth/app-access'
 import {
   enforceBrokCodeAccountOwnership,
   resolveBrokCodeRequestAuth
@@ -22,6 +23,9 @@ function encode(event: BrokStreamEvent) {
 }
 
 export async function POST(request: Request) {
+  const access = await requireFeatureAccessForApi('brokcode')
+  if (!access.ok) return access.response
+
   let body: {
     prompt?: unknown
     projectId?: unknown
