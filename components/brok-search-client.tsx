@@ -5,7 +5,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowUp,
+  Check,
   ChevronDown,
+  Copy,
   ExternalLink,
   Globe2,
   Info,
@@ -20,6 +22,7 @@ import type { SearchResultItem } from '@/lib/types'
 import type { UIMessage } from '@/lib/types/ai'
 import type { ModelSelectorData } from '@/lib/types/model-selector'
 import type { SearchMode } from '@/lib/types/search'
+import { safeCopyTextToClipboard } from '@/lib/utils/copy-to-clipboard'
 
 import { recordRecentSearch } from './search/recent-searches'
 import { SourceSidePanel } from './search/source-side-panel'
@@ -419,6 +422,7 @@ export function BrokSearchClient({
   const [activeSource, setActiveSource] = useState<SearchResultItem | null>(
     null
   )
+  const [copiedAnswer, setCopiedAnswer] = useState(false)
   const [progress, setProgress] = useState<SearchProgress>(() => ({
     searchQueries: [],
     sources: [],
@@ -921,6 +925,19 @@ export function BrokSearchClient({
     setQuery(text)
   }, [])
 
+  const copyAnswer = useCallback(async () => {
+    const text = answer.trim()
+    if (!text) return
+    const copied = await safeCopyTextToClipboard(text)
+    if (!copied) {
+      toast.error('Could not copy answer')
+      return
+    }
+    setCopiedAnswer(true)
+    toast.success('Answer copied')
+    window.setTimeout(() => setCopiedAnswer(false), 1600)
+  }, [answer])
+
   return (
     <div className="flex w-full gap-6">
       <section
@@ -1047,7 +1064,22 @@ export function BrokSearchClient({
                     : ''}
                 </span>
               </div>
-              <VoiceOutputButton text={answer} />
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={copyAnswer}
+                  className="inline-flex size-9 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+                  aria-label={copiedAnswer ? 'Answer copied' : 'Copy answer'}
+                  title={copiedAnswer ? 'Copied' : 'Copy answer'}
+                >
+                  {copiedAnswer ? (
+                    <Check className="size-3.5" />
+                  ) : (
+                    <Copy className="size-3.5" />
+                  )}
+                </button>
+                <VoiceOutputButton text={answer} />
+              </div>
             </div>
             <MarkdownMessage
               message={linkedAnswer}

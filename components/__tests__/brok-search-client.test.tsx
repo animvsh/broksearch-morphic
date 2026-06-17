@@ -199,6 +199,11 @@ describe('BrokSearchClient', () => {
   })
 
   it('uses the browser-safe session stream endpoint by default', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText }
+    })
     const fetchMock = vi.fn(async () =>
       streamResponse([
         {
@@ -309,6 +314,14 @@ describe('BrokSearchClient', () => {
     expect(screen.getByTestId('related-questions')).toHaveTextContent(
       'How does Brok cite sources?'
     )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy answer' }))
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('Brok answers with sources. [1]')
+    })
+    expect(
+      await screen.findByRole('button', { name: 'Answer copied' })
+    ).toBeInTheDocument()
 
     fireEvent.click(
       screen.getByRole('button', { name: /Verify source 1: Brok docs/i })
