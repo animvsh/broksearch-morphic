@@ -1,0 +1,5 @@
+{
+  "subject": "API key works locally but usage page is empty",
+  "plan": "starter",
+  "message": "We call chat completions from our staging app and get 200 responses, but our usage dashboard still looks empty. Can you help us figure out what to check?"
+}
