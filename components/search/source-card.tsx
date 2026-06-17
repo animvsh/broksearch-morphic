@@ -77,7 +77,7 @@ export function SourceCard({
                 type="button"
                 onClick={() => onOpen(source)}
                 className={cn(
-                  'inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors',
+                  'inline-flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors sm:size-8',
                   'hover:bg-foreground/5 hover:text-foreground',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
                 )}
@@ -91,7 +91,7 @@ export function SourceCard({
               type="button"
               onClick={copySourceLink}
               className={cn(
-                'inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors',
+                'inline-flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors sm:size-8',
                 'hover:bg-foreground/5 hover:text-foreground',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
               )}
@@ -113,7 +113,7 @@ export function SourceCard({
               target="_blank"
               rel="noreferrer noopener"
               className={cn(
-                'inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors',
+                'inline-flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors sm:size-8',
                 'hover:bg-foreground/5 hover:text-foreground',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
               )}
@@ -165,13 +165,14 @@ export function SourceCompactChip({
   onOpen?: (source: SourceCardData) => void
 }) {
   const title = source.title || source.domain
+  const label = title && title !== source.domain ? title : source.domain
 
   return (
     <button
       type="button"
       onClick={() => onOpen?.(source)}
       className={cn(
-        'inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-card px-2.5 text-xs text-foreground/85 transition-colors',
+        'inline-flex h-8 max-w-[18rem] items-center gap-1.5 rounded-full border border-border/70 bg-card px-2.5 text-xs text-foreground/85 transition-colors',
         'hover:border-foreground/15 hover:bg-foreground/[0.035]',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
       )}
@@ -182,7 +183,12 @@ export function SourceCompactChip({
         {index}
       </span>
       <SourceFavicon domain={source.domain} favicon={source.favicon} />
-      <span className="truncate">{source.domain}</span>
+      <span className="max-w-[11rem] truncate sm:max-w-[14rem]">{label}</span>
+      {title && title !== source.domain ? (
+        <span className="hidden max-w-[7rem] truncate text-muted-foreground sm:inline">
+          {source.domain}
+        </span>
+      ) : null}
       {source.publishedAt && (
         <>
           <span aria-hidden className="text-muted-foreground/70">
