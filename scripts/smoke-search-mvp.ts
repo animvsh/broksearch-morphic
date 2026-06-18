@@ -634,6 +634,10 @@ async function assertNoSourceFallbackBehavior(page: Page) {
     'expected visible model-knowledge no-sources notice'
   )
   await assert(
+    await page.getByText('Verify before relying').isVisible(),
+    'expected visible no-source trust badge'
+  )
+  await assert(
     (await page.locator('[data-testid^="brok-search-source-"]').count()) === 0,
     'expected no source cards for no-source fallback'
   )
