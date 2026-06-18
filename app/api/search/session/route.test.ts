@@ -193,6 +193,79 @@ describe('POST /api/search/session', () => {
     expect(mocks.checkAndEnforceOverallChatLimit).toHaveBeenCalledWith('user_1')
   })
 
+  it('rejects invalid depth before cache, rate limit, or search pipeline work', async () => {
+    const response = await POST(
+      makeRequest({
+        query: 'What is Brok search?',
+        mode: 'search',
+        depth: 'expensive'
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      type: 'invalid_request_error',
+      code: 'invalid_search_depth',
+      message:
+        'search_depth must be one of lite, standard, deep, basic, quick, or advanced.'
+    })
+    expect(mocks.selectModel).not.toHaveBeenCalled()
+    expect(mocks.getCachedSearchPipelineResponse).not.toHaveBeenCalled()
+    expect(mocks.checkAndEnforceOverallChatLimit).not.toHaveBeenCalled()
+    expect(mocks.checkAndEnforceGuestLimit).not.toHaveBeenCalled()
+    expect(mocks.runSearchPipeline).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid search_depth before cache, rate limit, or search pipeline work', async () => {
+    const response = await POST(
+      makeRequest({
+        query: 'What is Brok search?',
+        mode: 'search',
+        search_depth: 'expensive'
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      type: 'invalid_request_error',
+      code: 'invalid_search_depth',
+      message:
+        'search_depth must be one of lite, standard, deep, basic, quick, or advanced.'
+    })
+    expect(mocks.selectModel).not.toHaveBeenCalled()
+    expect(mocks.getCachedSearchPipelineResponse).not.toHaveBeenCalled()
+    expect(mocks.checkAndEnforceOverallChatLimit).not.toHaveBeenCalled()
+    expect(mocks.checkAndEnforceGuestLimit).not.toHaveBeenCalled()
+    expect(mocks.runSearchPipeline).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['depth quick alias', { depth: 'quick' }, 'lite'],
+    ['search_depth basic alias', { search_depth: 'basic' }, 'lite'],
+    ['mode quick alias', { mode: 'quick' }, 'lite'],
+    ['depth deep alias', { depth: 'deep' }, 'deep'],
+    ['search_depth advanced alias', { search_depth: 'advanced' }, 'deep'],
+    ['mode deep alias', { mode: 'deep' }, 'deep']
+  ])('maps %s to %s', async (_label, input, expectedDepth) => {
+    const response = await POST(
+      makeRequest({
+        query: 'What is Brok search?',
+        mode: 'search',
+        ...input
+      })
+    )
+    await response.text()
+
+    expect(response.status).toBe(200)
+    expect(mocks.runSearchPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        depth: expectedDepth
+      })
+    )
+  })
+
   it('streams the selected search answer model and uses it in the pipeline', async () => {
     mocks.selectModel.mockResolvedValueOnce({
       id: 'brok-m2-5-highspeed',
