@@ -221,11 +221,11 @@ export function Hero({
                 </>
               )}
               <ModeSelectorV2 value={mode} onChange={setLocalMode} size="sm" />
-              {modelSelectorData ? (
-                <div className="min-w-0 max-w-full">
+              <div className="min-w-0 max-w-full">
+                {modelSelectorData ? (
                   <ModelSelectorClient data={modelSelectorData} compact />
-                </div>
-              ) : null}
+                ) : null}
+              </div>
             </div>
 
             <button

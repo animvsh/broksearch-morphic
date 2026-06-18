@@ -1419,7 +1419,7 @@ export function BrokSearchClient({
               placeholder={
                 isLoading ? 'Waiting for this answer...' : 'Ask a follow-up...'
               }
-              className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none"
+              className="h-11 min-w-0 flex-1 bg-transparent px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none"
               aria-label="Ask a follow-up"
               disabled={isLoading}
             />
@@ -1705,7 +1705,7 @@ function SourceList({
         <button
           type="button"
           onClick={() => setExpanded(open => !open)}
-          className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
+          className="inline-flex min-h-11 items-center gap-1 rounded-full px-3 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300"
           aria-expanded={expanded}
           aria-controls="brok-source-details"
         >

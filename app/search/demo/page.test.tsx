@@ -100,6 +100,46 @@ describe('SearchDemoPage', () => {
     ).toBeVisible()
   })
 
+  it.each([
+    [
+      'Can Broksearch explain demo honesty?',
+      'What sources would Brok need for "Can Broksearch explain demo honesty?"',
+      'What sources would Brok need for "Can Broksearch explain demo honesty?"?'
+    ],
+    [
+      'Explain the launch plan!',
+      'What sources would Brok need for "Explain the launch plan!"',
+      'What sources would Brok need for "Explain the launch plan!"?'
+    ],
+    [
+      'Summarize market sizing.',
+      'What sources would Brok need for "Summarize market sizing."',
+      'What sources would Brok need for "Summarize market sizing."?'
+    ],
+    [
+      'Map the competitive landscape',
+      'What sources would Brok need for "Map the competitive landscape"?',
+      'What sources would Brok need for "Map the competitive landscape"'
+    ]
+  ])(
+    'formats fallback follow-up punctuation for %s',
+    (query, expectedFollowUp, unexpectedFollowUp) => {
+      render(<SearchDemoPage />)
+
+      fireEvent.change(screen.getByLabelText('Demo search query'), {
+        target: { value: query }
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+      expect(
+        screen.getByRole('button', { name: expectedFollowUp })
+      ).toBeVisible()
+      expect(
+        screen.queryByRole('button', { name: unexpectedFollowUp })
+      ).not.toBeInTheDocument()
+    }
+  )
+
   it('runs prompt chips and follow-ups through the answer state', () => {
     render(<SearchDemoPage />)
 
