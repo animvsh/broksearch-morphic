@@ -228,6 +228,32 @@ describe('POST /api/search', () => {
     })
     expect(createChatWithFirstMessage).not.toHaveBeenCalled()
     expect(mockPostSearchCompletion).not.toHaveBeenCalled()
+    expect(mockCheckUsageLimits).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-string models before usage, rate, or thread work', async () => {
+    const response = await searchPost(
+      makeRequest({
+        query: 'what is brok?',
+        model: 123,
+        stream: true
+      })
+    )
+
+    expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body).toMatchObject({
+      error: {
+        type: 'invalid_request_error',
+        code: 'invalid_model',
+        message: 'model must be a string.'
+      }
+    })
+    expect(mockCheckUsageLimits).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(createChatWithFirstMessage).not.toHaveBeenCalled()
+    expect(mockPostSearchCompletion).not.toHaveBeenCalled()
   })
 
   it('rejects invalid search depth before creating a thread or stream URL', async () => {
@@ -248,6 +274,8 @@ describe('POST /api/search', () => {
       }
     })
     expect(body).not.toHaveProperty('stream_url')
+    expect(mockCheckUsageLimits).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
     expect(createChatWithFirstMessage).not.toHaveBeenCalled()
     expect(mockPostSearchCompletion).not.toHaveBeenCalled()
   })
@@ -270,6 +298,8 @@ describe('POST /api/search', () => {
       }
     })
     expect(body).not.toHaveProperty('stream_url')
+    expect(mockCheckUsageLimits).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
     expect(createChatWithFirstMessage).not.toHaveBeenCalled()
     expect(mockPostSearchCompletion).not.toHaveBeenCalled()
   })
@@ -399,6 +429,28 @@ describe('POST /api/search', () => {
       stream: false
     })
     expect(mockPostSearchCompletion).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps /api/search strict domain normalization when forwarding', async () => {
+    mockPostSearchCompletion.mockImplementation(async (forwarded: Request) => {
+      const payload = await forwarded.json()
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      })
+    })
+
+    const response = await searchPost(
+      makeRequest({
+        query: 'domain compatibility',
+        stream: false,
+        domains: ['brok.fyi', 42]
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).not.toHaveProperty('domains')
   })
 
   it('returns PRD-style thread/message/stream_url envelope when stream is true', async () => {
