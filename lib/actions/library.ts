@@ -5,6 +5,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { type Chat, chats, messages, parts } from '@/lib/db/schema'
 import { libraryItems } from '@/lib/db/schema-brok'
 import { withRLS } from '@/lib/db/with-rls'
+import { countAnswerMetadataSources } from '@/lib/library/answer-metadata-sources'
 
 type SaveThreadToLibraryInput = {
   threadId: string
@@ -29,32 +30,6 @@ function summarizeAnswer(text: string | null | undefined) {
   return normalized.length > 220
     ? `${normalized.slice(0, 217).trimEnd()}...`
     : normalized
-}
-
-export function countAnswerMetadataSources(
-  metadata: Record<string, any> | null
-) {
-  const answer = metadata?.answer
-  if (!answer || typeof answer !== 'object') return 0
-
-  const sourceUrls = new Set<string>()
-  if (Array.isArray(answer.sources)) {
-    for (const source of answer.sources) {
-      const url =
-        source && typeof source === 'object' && typeof source.url === 'string'
-          ? source.url.trim()
-          : ''
-      if (url) sourceUrls.add(url)
-    }
-  }
-
-  if (sourceUrls.size > 0) return sourceUrls.size
-
-  const citationCount =
-    typeof answer.citationCount === 'number' ? answer.citationCount : 0
-  return Number.isFinite(citationCount) && citationCount > 0
-    ? Math.floor(citationCount)
-    : 0
 }
 
 export async function saveThreadToLibrary({
