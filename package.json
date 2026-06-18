@@ -27,6 +27,7 @@
     "smoke:search-demo": "bun run scripts/smoke-search-demo.ts",
     "smoke:search-mvp": "bun run scripts/smoke-search-mvp.ts",
     "smoke:search-provider-outage": "bun run scripts/smoke-search-provider-outage.ts",
+    "smoke:search-readiness": "bun run scripts/search-readiness.ts",
     "smoke:auth-platform": "PATH=$HOME/.bun/bin:$PATH bun run scripts/smoke-authenticated-platform.ts",
     "smoke:brokmail:composio": "PATH=$HOME/.bun/bin:$PATH bun run scripts/smoke-brokmail-composio.ts",
     "smoke:platform": "bun run --env-file=.env.local scripts/smoke-platform.ts",
