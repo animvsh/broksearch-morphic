@@ -176,6 +176,7 @@ export function Hero({
               }}
               onInput={e => {
                 const t = e.currentTarget
+                setQuery(t.value)
                 t.style.height = 'auto'
                 t.style.height = `${Math.min(t.scrollHeight, 280)}px`
                 t.style.overflowY = t.scrollHeight > 280 ? 'auto' : 'hidden'

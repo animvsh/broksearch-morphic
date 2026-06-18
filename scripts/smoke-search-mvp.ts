@@ -5,6 +5,7 @@ const baseUrl = (process.env.SMOKE_BASE_URL || 'http://localhost:3001').replace(
   ''
 )
 const initialQuery = 'Fixture query'
+const landingHandoffQuery = 'Fixture launch query'
 const followUpQuery = 'What should I compare next?'
 const initialAnswer =
   'Fixture answer cites the primary source before offering a concise recommendation. [1]'
@@ -336,6 +337,104 @@ async function assertSearchPageLoaded(page: Page) {
   await page.getByTestId('brok-search-client').waitFor({ timeout: 30_000 })
 }
 
+async function assertLandingSubmitFeedbackWithin100ms(page: Page) {
+  await page.goto(`${baseUrl}/search`, { waitUntil: 'domcontentloaded' })
+
+  const authRedirected =
+    /\/auth|\/login|\/signin|\/sign-in/.test(page.url()) ||
+    (await page
+      .getByText(/sign in|log in|authentication required/i)
+      .first()
+      .isVisible()
+      .catch(() => false))
+
+  if (authRedirected) {
+    fail(
+      [
+        'Search landing redirected to auth before the handoff smoke could run.',
+        'For local guest-mode smoke, run the dev server with auth disabled or guest search enabled.',
+        `Current URL: ${page.url()}`
+      ].join('\n')
+    )
+  }
+
+  await page.getByRole('form', { name: 'Ask Brok Search' }).waitFor({
+    timeout: 10_000
+  })
+  await page
+    .waitForLoadState('networkidle', { timeout: 10_000 })
+    .catch(() => {})
+  await page.waitForTimeout(250)
+  const queryInput = page.getByRole('textbox', { name: 'Search query' })
+  await queryInput.click()
+  await queryInput.type(landingHandoffQuery)
+  await page
+    .getByRole('button', { name: /send query/i })
+    .waitFor({ state: 'visible', timeout: 1_000 })
+  await page.waitForFunction(
+    () => {
+      const button = document.querySelector(
+        'form[aria-label="Ask Brok Search"] button[aria-label="Send query"]'
+      )
+      return button instanceof HTMLButtonElement && !button.disabled
+    },
+    undefined,
+    { timeout: 2_000 }
+  )
+  await assert(
+    await page.getByRole('button', { name: /send query/i }).isEnabled(),
+    'expected landing submit button to enable after typing a query'
+  )
+
+  const startedAt = await page.evaluate(() => performance.now())
+  await page.getByRole('button', { name: /send query/i }).click()
+
+  await page.waitForFunction(
+    () => {
+      function isVisible(element: Element | null) {
+        if (!(element instanceof HTMLElement)) return false
+        const style = window.getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          Number(style.opacity) > 0 &&
+          rect.width > 0 &&
+          rect.height > 0
+        )
+      }
+
+      const stopButton = Array.from(document.querySelectorAll('button')).find(
+        button =>
+          /stop generating/i.test(
+            `${button.getAttribute('aria-label') ?? ''} ${button.textContent ?? ''}`
+          )
+      )
+      return (
+        isVisible(stopButton ?? null) ||
+        isVisible(
+          document.querySelector('[data-testid="search-route-loading"]')
+        ) ||
+        isVisible(document.querySelector('[data-testid="search-progress"]')) ||
+        isVisible(
+          document.querySelector('[data-testid="brok-answer-loading-card"]')
+        )
+      )
+    },
+    undefined,
+    { timeout: 1_000 }
+  )
+
+  const elapsedMs = await page.evaluate(
+    start => performance.now() - start,
+    startedAt
+  )
+  await assert(
+    elapsedMs <= 100,
+    `expected visible search handoff within 100ms, got ${Math.round(elapsedMs)}ms`
+  )
+}
+
 async function assertFirstPaintLoadingSignal(page: Page) {
   await page.waitForFunction(
     () => {
@@ -505,6 +604,8 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
 
   try {
+    await assertLandingSubmitFeedbackWithin100ms(page)
+
     await installFirstPaintObserver(page)
     await installRoutes(page)
 
