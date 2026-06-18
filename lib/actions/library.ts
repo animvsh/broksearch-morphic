@@ -31,6 +31,32 @@ function summarizeAnswer(text: string | null | undefined) {
     : normalized
 }
 
+export function countAnswerMetadataSources(
+  metadata: Record<string, any> | null
+) {
+  const answer = metadata?.answer
+  if (!answer || typeof answer !== 'object') return 0
+
+  const sourceUrls = new Set<string>()
+  if (Array.isArray(answer.sources)) {
+    for (const source of answer.sources) {
+      const url =
+        source && typeof source === 'object' && typeof source.url === 'string'
+          ? source.url.trim()
+          : ''
+      if (url) sourceUrls.add(url)
+    }
+  }
+
+  if (sourceUrls.size > 0) return sourceUrls.size
+
+  const citationCount =
+    typeof answer.citationCount === 'number' ? answer.citationCount : 0
+  return Number.isFinite(citationCount) && citationCount > 0
+    ? Math.floor(citationCount)
+    : 0
+}
+
 export async function saveThreadToLibrary({
   threadId,
   userId,
@@ -57,7 +83,7 @@ export async function saveThreadToLibrary({
     const title = updatedThread.title?.trim() || 'Saved research thread'
     const href = `/search/${updatedThread.id}`
     const [threadSummary] = (await tx
-      .select({ text: parts.text_text })
+      .select({ text: parts.text_text, metadata: messages.metadata })
       .from(parts)
       .innerJoin(messages, eq(parts.messageId, messages.id))
       .where(
@@ -68,7 +94,10 @@ export async function saveThreadToLibrary({
         )
       )
       .orderBy(sql`${messages.createdAt} desc`, sql`${parts.order} asc`)
-      .limit(1)) as Array<{ text: string | null }>
+      .limit(1)) as Array<{
+      text: string | null
+      metadata: Record<string, any> | null
+    }>
 
     const [threadSources] = (await tx.execute(sql`
       select
@@ -90,12 +119,17 @@ export async function saveThreadToLibrary({
     `)) as unknown as Array<{ citeCount: number | null }>
 
     const summary = summarizeAnswer(threadSummary?.text)
-    const citeCount = Number(threadSources?.citeCount) || 0
+    const metadataCiteCount = countAnswerMetadataSources(
+      threadSummary?.metadata ?? null
+    )
+    const citeCount = metadataCiteCount || Number(threadSources?.citeCount) || 0
     const metadata = {
       threadId: updatedThread.id,
       visibility: updatedThread.visibility,
       savedFrom: 'thread_save',
-      sourceSignal: citeCount > 0 ? 'source_grounded' : 'thread'
+      sourceSignal: citeCount > 0 ? 'source_grounded' : 'thread',
+      sourceCountSource:
+        metadataCiteCount > 0 ? 'answer_metadata' : 'message_parts'
     }
 
     const [existing] = await tx
