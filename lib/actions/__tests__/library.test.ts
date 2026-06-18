@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { countAnswerMetadataSources } from '../library'
+import { countAnswerMetadataSources } from '@/lib/library/answer-metadata-sources'
 
 describe('library actions', () => {
   describe('countAnswerMetadataSources', () => {
