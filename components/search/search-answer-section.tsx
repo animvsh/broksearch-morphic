@@ -7,6 +7,7 @@ import { ChatRequestOptions } from 'ai'
 import { Info } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { shareChat } from '@/lib/actions/chat'
 import { extractFollowUpsFromText } from '@/lib/render/follow-ups'
 import type { SearchResultItem } from '@/lib/types'
 import type {
@@ -230,6 +231,7 @@ export function SearchAnswerSection({
   content,
   isOpen,
   onOpenChange,
+  chatId,
   messageId,
   metadata,
   status,
@@ -240,6 +242,7 @@ export function SearchAnswerSection({
   showActions = true,
   className
 }: SearchAnswerSectionProps) {
+  const [isSharing, setIsSharing] = useState(false)
   const metadataSources = useMemo(
     () => getMetadataSources(metadata),
     [metadata]
@@ -305,16 +308,34 @@ export function SearchAnswerSection({
   }
 
   const handleShare = async () => {
-    const url = typeof window !== 'undefined' ? window.location.href : ''
+    if (isSharing) return
+    setIsSharing(true)
     try {
+      let url = typeof window !== 'undefined' ? window.location.href : ''
+      if (chatId && !isGuest) {
+        const sharedChat = await shareChat(chatId)
+        if (!sharedChat) {
+          toast.error(
+            'Could not create a public share link. Check that you own this thread.'
+          )
+          return
+        }
+        url = new URL(
+          `/search/${sharedChat.id}`,
+          window.location.origin
+        ).toString()
+      }
+
       if (url && navigator.clipboard) {
         await navigator.clipboard.writeText(url)
-        toast.success('Link copied to clipboard')
+        toast.success(chatId && !isGuest ? 'Share link copied' : 'Link copied')
       } else {
         toast.error('Cannot copy in this environment')
       }
     } catch {
-      toast.error('Copy failed')
+      toast.error('Share failed right now. Please try again.')
+    } finally {
+      setIsSharing(false)
     }
   }
 

@@ -3,6 +3,24 @@ import { StrictMode } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const mocks = vi.hoisted(() => ({
+  shareChat: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn()
+}))
+
+vi.mock('@/lib/actions/chat', () => ({
+  shareChat: mocks.shareChat
+}))
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: mocks.toastError,
+    info: vi.fn(),
+    success: mocks.toastSuccess
+  }
+}))
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: vi.fn()
@@ -192,8 +210,16 @@ describe('BrokSearchClient', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks()
+    mocks.shareChat.mockReset()
+    mocks.toastError.mockReset()
+    mocks.toastSuccess.mockReset()
     vi.useRealTimers()
     storage.clear()
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined)
+      }
+    })
     Object.defineProperty(window, 'localStorage', {
       configurable: true,
       value: {
@@ -384,6 +410,91 @@ describe('BrokSearchClient', () => {
         }
       ]
     })
+  })
+
+  it('publishes persisted search threads before copying the share link', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    mocks.shareChat.mockResolvedValueOnce({ id: 'search_shared' })
+
+    render(
+      <BrokSearchClient
+        searchId="search_test"
+        persistToServer={true}
+        initialMessages={[
+          {
+            id: 'search_test_user',
+            role: 'user',
+            parts: [{ type: 'text', text: 'What is Brok?' }]
+          },
+          {
+            id: 'search_test_assistant',
+            role: 'assistant',
+            parts: [{ type: 'text', text: 'Brok answers with sources. [1]' }],
+            metadata: {
+              answer: {
+                sources: [
+                  {
+                    id: 'src_1',
+                    title: 'Brok docs',
+                    url: 'https://docs.example.com/search',
+                    publisher: 'docs.example.com',
+                    snippet: 'Brok search docs.'
+                  }
+                ],
+                citationCount: 1
+              }
+            }
+          }
+        ]}
+      />
+    )
+
+    await screen.findByTestId('brok-search-answer')
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+
+    await waitFor(() => {
+      expect(mocks.shareChat).toHaveBeenCalledWith('search_test')
+    })
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      'http://localhost:3000/search/search_shared'
+    )
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Share link copied')
+  })
+
+  it('copies the current URL for guest search threads without publishing', async () => {
+    vi.stubGlobal('fetch', vi.fn())
+    window.history.replaceState({}, '', '/search/search_guest')
+
+    render(
+      <BrokSearchClient
+        searchId="search_guest"
+        persistToServer={false}
+        initialMessages={[
+          {
+            id: 'search_guest_user',
+            role: 'user',
+            parts: [{ type: 'text', text: 'What is Brok?' }]
+          },
+          {
+            id: 'search_guest_assistant',
+            role: 'assistant',
+            parts: [{ type: 'text', text: 'Guest answer.' }]
+          }
+        ]}
+      />
+    )
+
+    await screen.findByTestId('brok-search-answer')
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        'http://localhost:3000/search/search_guest'
+      )
+    })
+    expect(mocks.shareChat).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Link copied')
   })
 
   it('restores a completed durable search instead of rerunning on reload', async () => {

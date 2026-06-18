@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { shareChat } from '@/lib/actions/chat'
 import type { SearchResultItem } from '@/lib/types'
 import type { UIMessage } from '@/lib/types/ai'
 import type { ModelSelectorData } from '@/lib/types/model-selector'
@@ -1175,18 +1176,34 @@ export function BrokSearchClient({
   }, [])
 
   const handleShareAnswer = useCallback(async () => {
-    const url = typeof window !== 'undefined' ? window.location.href : ''
     try {
+      let url = typeof window !== 'undefined' ? window.location.href : ''
+      if (persistToServer && searchId) {
+        const sharedChat = await shareChat(searchId)
+        if (!sharedChat) {
+          toast.error(
+            'Could not create a public share link. Check that you own this search.'
+          )
+          return
+        }
+        url = new URL(
+          `/search/${sharedChat.id}`,
+          window.location.origin
+        ).toString()
+      }
+
       if (url && navigator.clipboard) {
         await navigator.clipboard.writeText(url)
-        toast.success('Link copied to clipboard')
+        toast.success(
+          persistToServer && searchId ? 'Share link copied' : 'Link copied'
+        )
       } else {
         toast.error('Cannot copy in this environment')
       }
     } catch {
-      toast.error('Copy failed')
+      toast.error('Share failed right now. Please try again.')
     }
-  }, [])
+  }, [persistToServer, searchId])
 
   const handleRegenerateAnswer = useCallback(() => {
     const target = activeQuestion.trim()
