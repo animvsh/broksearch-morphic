@@ -1,11 +1,29 @@
 import type { ComponentProps } from 'react'
 
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { SearchResultItem } from '@/lib/types'
 
 import { extractSources, SearchAnswerSection } from '../search-answer-section'
+
+const mocks = vi.hoisted(() => ({
+  shareChat: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn()
+}))
+
+vi.mock('@/lib/actions/chat', () => ({
+  shareChat: mocks.shareChat
+}))
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: mocks.toastError,
+    info: vi.fn(),
+    success: mocks.toastSuccess
+  }
+}))
 
 vi.mock('@/components/message', () => ({
   MarkdownMessage: ({
@@ -38,7 +56,13 @@ vi.mock('@/components/message', () => ({
 }))
 
 vi.mock('@/components/search/answer-toolbar', () => ({
-  AnswerToolbar: () => <div data-testid="answer-toolbar" />
+  AnswerToolbar: ({ onShare }: { onShare?: () => void }) => (
+    <div data-testid="answer-toolbar">
+      <button type="button" onClick={() => onShare?.()}>
+        Share
+      </button>
+    </div>
+  )
 }))
 
 vi.mock('@/components/search/follow-up-suggestions', () => ({
@@ -114,6 +138,18 @@ describe('extractSources', () => {
 })
 
 describe('SearchAnswerSection actions', () => {
+  beforeEach(() => {
+    mocks.shareChat.mockReset()
+    mocks.toastSuccess.mockReset()
+    mocks.toastError.mockReset()
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined)
+      }
+    })
+    window.history.replaceState(null, '', '/search/private-thread')
+  })
+
   it('shows immediate progress and skeletons while an answer is starting', () => {
     renderAnswer({ status: 'submitted' })
 
@@ -151,6 +187,42 @@ describe('SearchAnswerSection actions', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(screen.getByTestId('answer-toolbar')).toBeInTheDocument()
     expect(screen.getByTestId('follow-up-suggestions')).toBeInTheDocument()
+  })
+
+  it('makes signed-in search threads public before copying a share link', async () => {
+    mocks.shareChat.mockResolvedValueOnce({ id: 'shared-thread' })
+    renderAnswer({
+      chatId: 'private-thread',
+      content: 'Shareable answer.'
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+
+    await waitFor(() => {
+      expect(mocks.shareChat).toHaveBeenCalledWith('private-thread')
+    })
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      'http://localhost:3000/search/shared-thread'
+    )
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Share link copied')
+  })
+
+  it('copies the current URL for guest search answers without changing visibility', async () => {
+    renderAnswer({
+      chatId: 'guest-thread',
+      content: 'Guest answer.',
+      isGuest: true
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        'http://localhost:3000/search/private-thread'
+      )
+    })
+    expect(mocks.shareChat).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Link copied')
   })
 
   it('places source chips before the answer for faster verification', () => {
