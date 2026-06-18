@@ -96,6 +96,44 @@ bun run smoke:search-provider-outage
 Set `BROK_SEARCH_OUTAGE_SMOKE_SERVER_COMMAND=dev` only when no other Next dev
 server is running for this checkout.
 
+## search-readiness.ts
+
+Narrow Brok Search readiness harness for issue #118/#122 style checks. It can
+run against `SMOKE_BASE_URL` or an already-running local dev server at
+`http://127.0.0.1:3000`.
+
+The default mode does not call paid/provider-backed search paths. It verifies:
+
+- `GET /search/demo` loads as a public HTML page.
+- `/api/v1/search/completions` rejects missing auth before search.
+- `/api/v1/search/completions` rejects an invalid key when auth storage is
+  available, or reports a clear skip when auth storage is unavailable.
+- Provider-backed session/API runs are skipped with explicit reasons.
+
+```bash
+bun run smoke:search-readiness
+
+SMOKE_BASE_URL=http://127.0.0.1:3001 \
+bun run smoke:search-readiness
+```
+
+Opt into the product session SSE run only when the target is allowed to use real
+search/LLM providers. The run posts a quick/lite query to
+`/api/search/session`, then asserts the SSE contract, latency, source/citation
+events, and follow-up events:
+
+```bash
+BROK_SEARCH_READINESS_RUN_SESSION=true \
+BROK_SEARCH_READINESS_QUERY="What is Brok Search?" \
+bun run smoke:search-readiness
+```
+
+For deployed/non-local targets, add
+`BROK_SEARCH_READINESS_ALLOW_LIVE_PROVIDER=true`. For the API-key backed
+`/api/v1/search/completions` success path, also set
+`BROK_SEARCH_READINESS_RUN_API_COMPLETION=true` and
+`BROK_SEARCH_READINESS_API_KEY`. Secret values are never printed.
+
 ## smoke-brokcode.ts
 
 End-to-end BrokCode builder smoke harness. It creates a project, runs the code
