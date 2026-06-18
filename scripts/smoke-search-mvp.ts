@@ -6,11 +6,14 @@ const baseUrl = (process.env.SMOKE_BASE_URL || 'http://localhost:3001').replace(
 )
 const initialQuery = 'Fixture query'
 const landingHandoffQuery = 'Fixture launch query'
+const noSourceQuery = 'Fixture no source query'
 const followUpQuery = 'What should I compare next?'
 const initialAnswer =
   'Fixture answer cites the primary source before offering a concise recommendation. [1]'
 const followUpAnswer =
   'Use the prior fixture context to compare the strongest source against implementation risk. [1]'
+const noSourceAnswer =
+  'Live web search was unavailable, so this is a fast local fallback based on model knowledge rather than verified web results. No web sources were attached.'
 
 type SessionSearchBody = {
   query?: unknown
@@ -73,7 +76,14 @@ async function installRoutes(page: Page) {
   )
 
   await page.addInitScript(
-    ({ fixtureSource, followUpAnswer, followUpQuery, initialAnswer }) => {
+    ({
+      fixtureSource,
+      followUpAnswer,
+      followUpQuery,
+      initialAnswer,
+      noSourceAnswer,
+      noSourceQuery
+    }) => {
       const originalFetch = window.fetch.bind(window)
       const encoder = new TextEncoder()
 
@@ -112,7 +122,13 @@ async function installRoutes(page: Page) {
         await (window as any).__recordSessionSearchRequest(body)
 
         const query = typeof body.query === 'string' ? body.query : ''
-        const answer = query === followUpQuery ? followUpAnswer : initialAnswer
+        const answer =
+          query === noSourceQuery
+            ? noSourceAnswer
+            : query === followUpQuery
+              ? followUpAnswer
+              : initialAnswer
+        const hasSources = query !== noSourceQuery
         let timers: number[] = []
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
@@ -150,6 +166,7 @@ async function installRoutes(page: Page) {
                 })
               }, 25),
               window.setTimeout(() => {
+                if (!hasSources) return
                 write(controller, 'source_found', {
                   id: 'fixture-session',
                   index: 1,
@@ -223,7 +240,9 @@ async function installRoutes(page: Page) {
       fixtureSource: source(),
       followUpAnswer,
       followUpQuery,
-      initialAnswer
+      initialAnswer,
+      noSourceAnswer,
+      noSourceQuery
     }
   )
 
@@ -597,6 +616,33 @@ async function assertMobileResultLayout(page: Page) {
   )
 }
 
+async function assertNoSourceFallbackBehavior(page: Page) {
+  const searchUrl = `${baseUrl}/search?q=${encodeURIComponent(noSourceQuery)}&mode=quick`
+  await page.goto(searchUrl, { waitUntil: 'domcontentloaded' })
+  await assertSearchPageLoaded(page)
+
+  await page.getByTestId('brok-search-answer').waitFor({ timeout: 10_000 })
+  await assert(
+    await page
+      .getByTestId('brok-search-answer')
+      .getByText('Live web search was unavailable')
+      .isVisible(),
+    'expected no-source fallback answer'
+  )
+  await assert(
+    await page.getByTestId('brok-no-sources-notice').isVisible(),
+    'expected visible model-knowledge no-sources notice'
+  )
+  await assert(
+    (await page.locator('[data-testid^="brok-search-source-"]').count()) === 0,
+    'expected no source cards for no-source fallback'
+  )
+  await assert(
+    (await page.locator('a[href^="#brok-session-search:"]').count()) === 0,
+    'expected no citation links without attached sources'
+  )
+}
+
 async function main() {
   await ensureServerAvailable()
 
@@ -713,6 +759,16 @@ async function main() {
         typeof followUpRequest.context[0]?.answer === 'string' &&
         followUpRequest.context[0].answer.includes('Fixture answer cites'),
       'follow-up request did not include previous context'
+    )
+
+    await assertNoSourceFallbackBehavior(page)
+    await assert(
+      sessionRequests.length === 3,
+      `expected exactly 3 session requests after no-source fallback, got ${sessionRequests.length}`
+    )
+    await assert(
+      sessionRequests[2]?.query === noSourceQuery,
+      'no-source fallback query was not submitted'
     )
 
     console.log(
