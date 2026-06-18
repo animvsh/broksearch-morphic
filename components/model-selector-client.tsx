@@ -109,6 +109,28 @@ export function ModelSelectorClient({
 
   const selectedModel = selectableByKey[selectedModelKey]
 
+  const closePicker = () => {
+    setOpen(false)
+    window.requestAnimationFrame(() => setOpen(false))
+  }
+
+  const handleModelSelect = (value: string) => {
+    const nextModel = selectableByKey[value]
+    if (!nextModel) {
+      return
+    }
+
+    setSelectedModelKey(value)
+    setCookie(
+      MODEL_SELECTION_COOKIE,
+      serializeModelSelectionCookie({
+        providerId: nextModel.providerId,
+        modelId: nextModel.id
+      })
+    )
+    closePicker()
+  }
+
   if (!data.enabled) {
     return null
   }
@@ -185,22 +207,8 @@ export function ModelSelectorClient({
                     <CommandItem
                       key={value}
                       value={`${value} ${modelAlias(model)} ${model.name} ${model.description ?? ''} ${provider}`}
-                      onSelect={() => {
-                        const nextModel = selectableByKey[value]
-                        if (!nextModel) {
-                          return
-                        }
-
-                        setSelectedModelKey(value)
-                        setCookie(
-                          MODEL_SELECTION_COOKIE,
-                          serializeModelSelectionCookie({
-                            providerId: nextModel.providerId,
-                            modelId: nextModel.id
-                          })
-                        )
-                        setOpen(false)
-                      }}
+                      onClick={() => handleModelSelect(value)}
+                      onSelect={() => handleModelSelect(value)}
                       className="cursor-pointer items-start gap-2 py-2"
                     >
                       <Check

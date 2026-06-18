@@ -555,7 +555,7 @@ async function main() {
         .isVisible(),
       'expected answer citation link'
     )
-    await page.getByTestId('follow-up-chips').waitFor({ timeout: 10_000 })
+    await page.getByTestId('follow-up-chip-0').waitFor({ timeout: 10_000 })
     await assert(
       await page
         .getByTestId('follow-up-chip-0')

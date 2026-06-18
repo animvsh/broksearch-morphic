@@ -1582,7 +1582,7 @@ export function rankAndDedupeSources(
       .filter(host => canonicalDomains.includes(host))
   )
 
-  return sources
+  const rankedSources = sources
     .filter(source => {
       const key = normalizeSourceKey(source.url)
       if (!key || seen.has(key)) return false
@@ -1598,11 +1598,65 @@ export function rankAndDedupeSources(
       qualityScore: scoreSource(source, query)
     }))
     .sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0))
+
+  return filterNearNameFalsePositiveSources(rankedSources, query, limit)
     .slice(0, limit)
     .map((source, index) => ({
       ...source,
       id: `src_${index + 1}`
     }))
+}
+
+function filterNearNameFalsePositiveSources(
+  sources: Array<Omit<SearchResult, 'id'> & { qualityScore: number }>,
+  query: string,
+  limit: number
+) {
+  const identitySubject = getIdentitySubject(query)
+  if (!identitySubject) return sources
+
+  const exactMatches = sources.filter(source =>
+    sourceMatchesExactSubject(source, identitySubject)
+  )
+  const needed = Math.min(limit, 2)
+  if (exactMatches.length < needed) return sources
+
+  return sources.filter(source =>
+    sourceMatchesExactSubject(source, identitySubject)
+  )
+}
+
+function getIdentitySubject(query: string) {
+  const match = query
+    .trim()
+    .replace(/[?.!]+$/, '')
+    .match(/^(?:who|what)\s+(?:is|was)\s+(.+)$/i)
+  const subject = match?.[1]?.trim()
+  if (!subject) return null
+
+  const words = subject.split(/\s+/).filter(Boolean)
+  if (words.length < 2 || words.length > 6) return null
+  return normalizeSubjectPhrase(subject)
+}
+
+function normalizeSubjectPhrase(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function sourceMatchesExactSubject(
+  source: Pick<SearchResult, 'title' | 'url' | 'publisher' | 'snippet'>,
+  normalizedSubject: string
+) {
+  const haystack = normalizeSubjectPhrase(
+    `${source.title} ${source.publisher ?? ''} ${source.url} ${source.snippet}`
+  )
+  return haystack.includes(normalizedSubject)
 }
 
 function normalizeSourceKey(url: string) {
@@ -1787,14 +1841,53 @@ export function generateFollowUps(
 ): Array<{ label: string; query: string }> {
   const sourceDomain = citations[0]?.publisher
   const base = query.replace(/[?.!]+$/, '')
+  const identitySubject = getIdentitySubject(query)
+
+  if (identitySubject) {
+    const person = base.replace(/^(?:who|what)\s+(?:is|was)\s+/i, '').trim()
+    return [
+      {
+        label: `What is ${shortenLabel(person)} known for?`,
+        query: `What is ${person} best known for, based on the strongest sources?`
+      },
+      {
+        label: `Show ${shortenLabel(person)}'s work`,
+        query: `What are ${person}'s main work, publications, or projects?`
+      },
+      {
+        label: `Why is ${shortenLabel(person)} notable?`,
+        query: `Why is ${person} notable, and what evidence supports that?`
+      },
+      {
+        label: `Find recent updates`,
+        query: `Find recent updates and primary sources about ${person}`
+      },
+      {
+        label: sourceDomain ? `Ask about ${sourceDomain}` : 'Go deeper',
+        query: sourceDomain
+          ? `What does ${sourceDomain} specifically say about ${person}?`
+          : `Go deeper on ${person} with more source detail`
+      }
+    ].slice(0, 5)
+  }
+
   const suggestions = [
     {
-      label: `Compare options for ${shortenLabel(base)}`,
+      label:
+        classification.type === 'comparison'
+          ? `Compare the tradeoffs`
+          : `Explore angles for ${shortenLabel(base)}`,
       query: `Compare the strongest options and tradeoffs for ${base}`
     },
     {
-      label: `Turn this into an implementation plan`,
-      query: `Create a step-by-step implementation plan for ${base}`
+      label:
+        classification.type === 'technical'
+          ? `Show the implementation path`
+          : `What matters most?`,
+      query:
+        classification.type === 'technical'
+          ? `Create a step-by-step implementation plan for ${base}`
+          : `What are the most important takeaways for ${base}?`
     },
     {
       label: `What are the risks?`,

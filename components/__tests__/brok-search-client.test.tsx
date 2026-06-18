@@ -78,12 +78,18 @@ vi.mock('../model-selector-client', () => ({
 
 vi.mock('../follow-up-chips', () => ({
   FollowUpChips: ({
-    followUps
+    followUps,
+    isLoading
   }: {
     followUps: Array<{ label?: string; query: string }>
+    isLoading?: boolean
   }) => (
     <div data-testid="follow-up-chips">
-      {followUps.map(followUp => followUp.label ?? followUp.query).join(', ')}
+      {isLoading
+        ? 'Generating related questions...'
+        : followUps
+            .map(followUp => followUp.label ?? followUp.query)
+            .join(', ')}
     </div>
   )
 }))
@@ -1163,6 +1169,41 @@ describe('BrokSearchClient', () => {
     fireEvent.submit(screen.getByTestId('brok-follow-up-form'))
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      stream.close()
+    })
+  })
+
+  it('shows related-question loading while an answer is streaming without follow-ups', async () => {
+    const stream = controllableStreamResponse()
+    const fetchMock = vi.fn(async () => stream.response)
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <BrokSearchClient
+        initialQuery="React hooks"
+        initialMode="quick"
+        searchId="search_test"
+      />
+    )
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    await act(async () => {
+      stream.send('answer_delta', {
+        delta: 'React hooks coordinate component state.'
+      })
+    })
+
+    expect(await screen.findByTestId('brok-search-answer')).toHaveTextContent(
+      'React hooks coordinate component state.'
+    )
+    expect(screen.getByTestId('follow-up-chips')).toHaveTextContent(
+      'Generating related questions...'
+    )
 
     await act(async () => {
       stream.close()

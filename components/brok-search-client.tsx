@@ -1145,6 +1145,14 @@ export function BrokSearchClient({
     progress.status === 'searching' ||
     progress.status === 'reading' ||
     progress.status === 'answering'
+  const isWaitingForFollowUps =
+    progress.status === 'answering' &&
+    Boolean(answer.trim()) &&
+    followUps.length === 0
+  const shouldShowFollowUps =
+    progress.status === 'done' ||
+    displayFollowUps.length > 0 ||
+    isWaitingForFollowUps
   const hasTrustedSources =
     progress.sources.length > 0 &&
     !hasOnlyLocalFallbackSources(progress.sources)
@@ -1398,12 +1406,12 @@ export function BrokSearchClient({
           </article>
         )}
 
-        {progress.status === 'done' && (
+        {shouldShowFollowUps && (
           <FollowUpChips
             followUps={displayFollowUps}
             onSelect={handleFollowUp}
             disabled={isLoading}
-            isLoading={isLoading}
+            isLoading={Boolean(isWaitingForFollowUps)}
           />
         )}
 
