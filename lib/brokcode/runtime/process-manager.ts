@@ -1,6 +1,10 @@
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 
+import type {
+  BrokCodePackageManager,
+  BrokCodeRuntimeAppType
+} from '@/lib/brokcode/runtime/contract'
 import { getBrokCodeRuntimeStartReadiness } from '@/lib/brokcode/runtime/contract'
 import {
   BrokCodeRuntimeSandbox,
@@ -157,6 +161,123 @@ async function waitForRuntime(url: string) {
   return false
 }
 
+function packageManagerLabel(packageManager: BrokCodePackageManager) {
+  if (packageManager === 'npm') return 'npm'
+  if (packageManager === 'pnpm') return 'pnpm'
+  if (packageManager === 'yarn') return 'yarn'
+  return 'bun'
+}
+
+export function getBrokCodeRuntimeInstallCommand(
+  packageManager: BrokCodePackageManager
+) {
+  if (packageManager === 'none') return null
+  if (packageManager === 'npm') {
+    return {
+      command: 'npm',
+      args: ['install'],
+      label: 'npm install'
+    }
+  }
+  if (packageManager === 'pnpm') {
+    return {
+      command: 'pnpm',
+      args: ['install'],
+      label: 'pnpm install'
+    }
+  }
+  if (packageManager === 'yarn') {
+    return {
+      command: 'yarn',
+      args: ['install'],
+      label: 'yarn install'
+    }
+  }
+
+  return {
+    command: 'bun',
+    args: ['install'],
+    label: 'bun install'
+  }
+}
+
+function devCommandForPackageManager({
+  appType,
+  packageManager,
+  port
+}: {
+  appType: BrokCodeRuntimeAppType
+  packageManager: BrokCodePackageManager
+  port: number
+}) {
+  const portText = String(port)
+  if (appType === 'vite_react') {
+    if (packageManager === 'npm') {
+      return {
+        command: 'npm',
+        args: ['run', 'dev', '--', '--host', '127.0.0.1', '--port', portText]
+      }
+    }
+    if (packageManager === 'pnpm') {
+      return {
+        command: 'pnpm',
+        args: ['dev', '--host', '127.0.0.1', '--port', portText]
+      }
+    }
+    if (packageManager === 'yarn') {
+      return {
+        command: 'yarn',
+        args: ['dev', '--host', '127.0.0.1', '--port', portText]
+      }
+    }
+    return {
+      command: 'bun',
+      args: ['x', 'vite', '--host', '127.0.0.1', '--port', portText]
+    }
+  }
+
+  if (appType === 'nextjs') {
+    if (packageManager === 'npm') {
+      return {
+        command: 'npm',
+        args: ['run', 'dev', '--', '-H', '127.0.0.1', '-p', portText]
+      }
+    }
+    if (packageManager === 'pnpm') {
+      return {
+        command: 'pnpm',
+        args: ['dev', '-H', '127.0.0.1', '-p', portText]
+      }
+    }
+    if (packageManager === 'yarn') {
+      return {
+        command: 'yarn',
+        args: ['dev', '-H', '127.0.0.1', '-p', portText]
+      }
+    }
+    return {
+      command: 'bun',
+      args: ['x', 'next', 'dev', '-H', '127.0.0.1', '-p', portText]
+    }
+  }
+
+  return null
+}
+
+export function getBrokCodeRuntimeDevCommand({
+  manifest,
+  port
+}: {
+  manifest: Pick<BrokCodeRuntimeWorkspaceManifest, 'appType' | 'packageManager'>
+  port: number
+}) {
+  return devCommandForPackageManager({
+    appType: manifest.appType,
+    packageManager: manifest.packageManager,
+    port
+  })
+}
+
 function commandFor({
   manifest,
   port
@@ -164,21 +285,7 @@ function commandFor({
   manifest: BrokCodeRuntimeWorkspaceManifest
   port: number
 }) {
-  if (manifest.appType === 'vite_react') {
-    return {
-      command: 'bun',
-      args: ['x', 'vite', '--host', '127.0.0.1', '--port', String(port)]
-    }
-  }
-
-  if (manifest.appType === 'nextjs') {
-    return {
-      command: 'bun',
-      args: ['x', 'next', 'dev', '-H', '127.0.0.1', '-p', String(port)]
-    }
-  }
-
-  return null
+  return getBrokCodeRuntimeDevCommand({ manifest, port })
 }
 
 function manifestFileHash({
@@ -273,12 +380,22 @@ async function installDependencies({
 }) {
   if (manifest.packageManager === 'none') return
 
-  appendLog(entry, 'info', 'Installing dependencies with bun install.', {
-    source: 'install',
-    command: 'bun install'
-  })
+  const installCommand = getBrokCodeRuntimeInstallCommand(
+    manifest.packageManager
+  )
+  if (!installCommand) return
+
+  appendLog(
+    entry,
+    'info',
+    `Installing dependencies with ${packageManagerLabel(manifest.packageManager)}.`,
+    {
+      source: 'install',
+      command: installCommand.label
+    }
+  )
   await new Promise<void>((resolve, reject) => {
-    const child = spawn('bun', ['install'], {
+    const child = spawn(installCommand.command, installCommand.args, {
       cwd: workspacePath,
       env: {
         ...process.env,
@@ -290,20 +407,23 @@ async function installDependencies({
     child.stdout.on('data', chunk => {
       appendLog(entry, 'info', String(chunk), {
         source: 'install',
-        command: 'bun install'
+        command: installCommand.label
       })
     })
     child.stderr.on('data', chunk => {
       stderr += String(chunk)
       appendLog(entry, 'error', String(chunk), {
         source: 'install',
-        command: 'bun install'
+        command: installCommand.label
       })
     })
     child.on('error', reject)
     child.on('exit', code => {
       if (code === 0) resolve()
-      else reject(new Error(stderr.trim() || `bun install exited ${code}`))
+      else
+        reject(
+          new Error(stderr.trim() || `${installCommand.label} exited ${code}`)
+        )
     })
   })
 }

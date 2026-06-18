@@ -69,7 +69,7 @@ const DELAY_PER_PHASE_MS = 220
 
 export type BuildStreamOptions = {
   prompt: string
-  projectId: string
+  projectId?: string | null
   emit?: (event: BrokStreamEvent) => void
   signal?: AbortSignal
   now?: () => number
@@ -230,11 +230,13 @@ export async function runBuildStream(
   emit({ kind: 'backend_plan', plan: backendPlan })
   events.push({ kind: 'backend_plan', plan: backendPlan })
 
-  if (options.brokCodeProject) {
+  async function persistManagedProject() {
+    if (!options.brokCodeProject || persistedProject) return true
     try {
       persistedProject = await persistBrokBuildProject({
         ...options.brokCodeProject,
         prompt: options.prompt,
+        projectId: options.projectId ?? undefined,
         userPlan,
         backendPlan
       })
@@ -290,6 +292,8 @@ export async function runBuildStream(
       emit(warnEvent)
       events.push(warnEvent)
     }
+
+    return true
   }
 
   for (const step of PHASE_SEQUENCE) {
@@ -319,14 +323,22 @@ export async function runBuildStream(
     emit({ kind: 'progress', phase: step.phase, percent: step.percent })
     events.push({ kind: 'progress', phase: step.phase, percent: step.percent })
 
+    if (step.phase === 'starting_opencode') {
+      const shouldContinue = await persistManagedProject()
+      if (shouldContinue !== true) {
+        return shouldContinue
+      }
+    }
+
     await sleep(DELAY_PER_PHASE_MS, signal)
   }
 
-  const filePreview = persistedProject?.files ?? filePreviewForPlan(internalPlan)
+  const completedProject = persistedProject as PersistedBrokBuildProject | null
+  const filePreview = completedProject?.files ?? filePreviewForPlan(internalPlan)
   emit({ kind: 'files', files: filePreview })
   events.push({ kind: 'files', files: filePreview })
 
-  const previewUrl = persistedProject?.previewUrl ?? null
+  const previewUrl = completedProject?.previewUrl ?? null
   emit({ kind: 'preview_url', url: previewUrl })
   events.push({ kind: 'preview_url', url: previewUrl })
 

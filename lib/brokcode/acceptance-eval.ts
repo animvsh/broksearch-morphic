@@ -37,6 +37,23 @@ export type BrokCodeAcceptanceSuiteEval = BrokCodeAcceptanceSuiteEvalInput & {
   blockers: string[]
 }
 
+function blockerForCase(testCase: BrokCodeAcceptanceCaseEval) {
+  const error = testCase.error ?? 'failed'
+  if (
+    /runtime provider rejected the configured API key|incorrect api key|invalid api key/i.test(
+      error
+    )
+  ) {
+    return `${testCase.id}: runtime_configuration - provider API key rejected; rotate or replace the BrokCode Cloud/Pi provider credential and rerun no-fallback smoke.`
+  }
+
+  if (/runtime_unavailable|BrokCode Cloud runtime is required/i.test(error)) {
+    return `${testCase.id}: runtime_configuration - BrokCode Cloud/Pi runtime is unavailable; configure a no-fallback runtime and rerun smoke.`
+  }
+
+  return `${testCase.id}: ${error}`
+}
+
 export function buildBrokCodeAcceptanceSuiteEval(
   input: BrokCodeAcceptanceSuiteEvalInput
 ): BrokCodeAcceptanceSuiteEval {
@@ -47,7 +64,7 @@ export function buildBrokCodeAcceptanceSuiteEval(
   const failCount = totalCount - passCount
   const blockers = input.cases
     .filter(testCase => testCase.status === 'failed')
-    .map(testCase => `${testCase.id}: ${testCase.error ?? 'failed'}`)
+    .map(blockerForCase)
   if (input.tuiStatus === 'failed' || input.tuiStatus === 'not-run') {
     blockers.push(`tui: ${input.tuiStatus}`)
   }

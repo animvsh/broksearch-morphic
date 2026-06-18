@@ -18,5 +18,5 @@ export function canUseGenericBrokFallback({
   }
 
   if (allowBrokFallback) return true
-  return true
+  return false
 }

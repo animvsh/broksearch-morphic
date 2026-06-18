@@ -17,12 +17,21 @@ export type BuildStreamState = {
   files: BrokBuildFilePreview[]
   logs: Array<{ time: string; level: 'info' | 'warn' | 'error'; message: string }>
   previewUrl: string | null
+  previewUnavailableReason: string | null
   projectId: string | null
   deploymentUrl: string | null
   opencodeSessionId: string | null
+  projectSource: 'brokcode_execute' | 'degraded_fallback' | null
+  projectDegraded: boolean
+  projectMessage: string | null
   backendStatus: BrokBuildBackendStatus
   backendPlan: BrokBuildBackendResourcePlan | null
   errorMessage: string | null
+}
+
+type BuildStreamStartOptions = {
+  projectId?: string
+  requireBrokCodeExecution?: boolean
 }
 
 const INITIAL_STATE: BuildStreamState = {
@@ -32,9 +41,13 @@ const INITIAL_STATE: BuildStreamState = {
   files: [],
   logs: [],
   previewUrl: null,
+  previewUnavailableReason: null,
   projectId: null,
   deploymentUrl: null,
   opencodeSessionId: null,
+  projectSource: null,
+  projectDegraded: false,
+  projectMessage: null,
   backendStatus: 'not_started',
   backendPlan: null,
   errorMessage: null
@@ -66,14 +79,25 @@ function applyEvent(
         ]
       }
     case 'preview_url':
-      return { ...state, events: nextEvents, previewUrl: event.url }
+      return {
+        ...state,
+        events: nextEvents,
+        previewUrl: event.url,
+        previewUnavailableReason: event.url ? null : state.previewUnavailableReason
+      }
     case 'brokcode_project':
       return {
         ...state,
         events: nextEvents,
         projectId: event.projectId,
         previewUrl: event.previewUrl,
-        deploymentUrl: event.deploymentUrl
+        previewUnavailableReason: event.previewUrl
+          ? null
+          : (event.message ?? state.previewUnavailableReason),
+        deploymentUrl: event.deploymentUrl,
+        projectSource: event.source ?? null,
+        projectDegraded: event.degraded === true,
+        projectMessage: event.message ?? null
       }
     case 'opencode_session':
       return {
@@ -99,6 +123,7 @@ function applyEvent(
         phase: 'ready',
         progress: 100,
         previewUrl: event.previewUrl,
+        previewUnavailableReason: event.previewUrl ? null : state.previewUnavailableReason,
         projectId: event.projectId
       }
     default:
@@ -110,9 +135,17 @@ export function useBrokBuildStream() {
   const [state, setState] = useState<BuildStreamState>(INITIAL_STATE)
   const abortRef = useRef<AbortController | null>(null)
   const latestPromptRef = useRef<string | null>(null)
+  const projectIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    projectIdRef.current = state.projectId
+  }, [state.projectId])
 
   const start = useCallback(
-    async (prompt: string) => {
+    async (
+      prompt: string,
+      options?: BuildStreamStartOptions
+    ) => {
       latestPromptRef.current = prompt
       abortRef.current?.abort()
       const ctrl = new AbortController()
@@ -123,7 +156,11 @@ export function useBrokBuildStream() {
         const res = await fetch('/api/build/stream', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ prompt }),
+          body: JSON.stringify({
+            prompt,
+            projectId: options?.projectId,
+            require_brokcode_execution: options?.requireBrokCodeExecution
+          }),
           signal: ctrl.signal
         })
 
@@ -133,12 +170,13 @@ export function useBrokBuildStream() {
             phase: 'failed',
             errorMessage: `Stream failed (${res.status}).`
           }))
-          return
+          return false
         }
 
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
+        let failed = false
 
         while (true) {
           const { done, value } = await reader.read()
@@ -155,20 +193,23 @@ export function useBrokBuildStream() {
               const json = line.slice(5).trim()
               if (!json) continue
               const event = JSON.parse(json) as BrokStreamEvent
+              if (event.kind === 'error') failed = true
               setState(s => applyEvent(s, event))
             } catch {
               // ignore malformed lines
             }
           }
         }
+        return !failed
       } catch (error) {
-        if ((error as Error).name === 'AbortError') return
+        if ((error as Error).name === 'AbortError') return false
         setState(s => ({
           ...s,
           phase: 'failed',
           errorMessage:
             error instanceof Error ? error.message : 'Build stream failed.'
         }))
+        return false
       }
     },
     []
@@ -179,30 +220,53 @@ export function useBrokBuildStream() {
     abortRef.current = null
   }, [])
 
-  const send = useCallback(async (basePrompt: string, editMessage: string) => {
-    const message = editMessage.trim()
-    if (!message) return
-    const combined = `${basePrompt}\n\nEdit request: ${message}`
-    setState(s => ({
-      ...s,
-      phase: 'adjusting',
-      logs: [
-        ...s.logs,
-        {
-          time: new Date().toISOString(),
-          level: 'info',
-          message: `Edit requested: ${message}`
-        }
-      ]
-    }))
-    await start(combined)
-  }, [start])
+  const send = useCallback(
+    async (
+      basePrompt: string,
+      editMessage: string,
+      options?: Pick<BuildStreamStartOptions, 'requireBrokCodeExecution'>
+    ) => {
+      const message = editMessage.trim()
+      if (!message) return false
+      const combined = `${basePrompt}\n\nEdit request: ${message}`
+      const projectId = projectIdRef.current
+      setState(s => ({
+        ...s,
+        phase: 'adjusting',
+        logs: [
+          ...s.logs,
+          {
+            time: new Date().toISOString(),
+            level: 'info',
+            message: projectId
+              ? `Edit requested for project ${projectId}: ${message}`
+              : `Edit requested: ${message}`
+          }
+        ]
+      }))
+      return await start(
+        combined,
+        projectId
+          ? {
+              projectId,
+              requireBrokCodeExecution: options?.requireBrokCodeExecution
+            }
+          : {
+              requireBrokCodeExecution: options?.requireBrokCodeExecution
+            }
+      )
+    },
+    [start]
+  )
 
   const sendEdit = useCallback(
-    async (message: string) => {
+    async (
+      message: string,
+      options?: Pick<BuildStreamStartOptions, 'requireBrokCodeExecution'>
+    ) => {
       const prompt = latestPromptRef.current
-      if (!prompt) return
-      await send(prompt, message)
+      if (!prompt) return false
+      return await send(prompt, message, options)
     },
     [send]
   )
@@ -215,7 +279,38 @@ export function useBrokBuildStream() {
   }, [])
 
   return useMemo(
-    () => ({ state, start, stop, send, sendEdit }),
+    () => ({
+      state,
+      start,
+      stop,
+      send,
+      sendEdit,
+      setFiles: (
+        files: BrokBuildFilePreview[],
+        options?: {
+          previewUrl?: string | null
+          previewUnavailableReason?: string | null
+          projectMessage?: string | null
+        }
+      ) => {
+        setState(s => ({
+          ...s,
+          files,
+          previewUrl:
+            options && 'previewUrl' in options
+              ? (options.previewUrl ?? null)
+              : s.previewUrl,
+          previewUnavailableReason:
+            options && 'previewUnavailableReason' in options
+              ? (options.previewUnavailableReason ?? null)
+              : s.previewUnavailableReason,
+          projectMessage:
+            options && 'projectMessage' in options
+              ? (options.projectMessage ?? null)
+              : s.projectMessage
+        }))
+      }
+    }),
     [state, start, stop, send, sendEdit]
   )
 }

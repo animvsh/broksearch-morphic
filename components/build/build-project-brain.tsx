@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import {
   Boxes,
@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 type BrainProps = {
+  projectId: string | null
   phase: BrokBuildPhase
   plan: UserVisiblePlan | null
   internalPlan: InternalPlan | null
@@ -36,9 +37,70 @@ type BrainProps = {
   backendStatus: BrokBuildBackendStatus
   opencodeSessionId: string | null
   events: BrokStreamEvent[]
+  onFilesUpdated?: (
+    files: BrokBuildFilePreview[],
+    reason: 'loaded' | 'saved',
+    metadata?: FilesUpdateMetadata
+  ) => void
+}
+
+type EditableProjectFile = BrokBuildFilePreview & {
+  content: string
+}
+
+export type FilesUpdateMetadata = {
+  previewUrl?: string | null
+  previewUnavailableReason?: string | null
+  projectMessage?: string | null
+}
+
+function previewUnavailableMessage(reason: string | null) {
+  if (reason === 'missing_renderable_entry') {
+    return 'Preview unavailable because this project has no renderable index.html.'
+  }
+  return reason
+}
+
+function extractFilesUpdateMetadata(body: unknown): FilesUpdateMetadata {
+  if (!body || typeof body !== 'object') return {}
+  const record = body as Record<string, unknown>
+  const project =
+    record.project && typeof record.project === 'object'
+      ? (record.project as Record<string, unknown>)
+      : null
+  const metadata =
+    project?.metadata && typeof project.metadata === 'object'
+      ? (project.metadata as Record<string, unknown>)
+      : null
+  const previewMetadata =
+    metadata?.preview && typeof metadata.preview === 'object'
+      ? (metadata.preview as Record<string, unknown>)
+      : null
+  const previewUrl =
+    typeof record.previewUrl === 'string'
+      ? record.previewUrl
+      : record.previewUrl === null
+        ? null
+        : typeof project?.previewUrl === 'string'
+          ? project.previewUrl
+          : project && project.previewUrl === null
+            ? null
+            : undefined
+  const unavailableReason =
+    typeof previewMetadata?.unavailableReason === 'string'
+      ? previewMetadata.unavailableReason
+      : null
+  const projectMessage = previewUnavailableMessage(unavailableReason)
+
+  return {
+    previewUrl,
+    previewUnavailableReason: projectMessage,
+    projectMessage
+  }
 }
 
 export function BuildProjectBrain({
+  projectId,
   phase,
   plan,
   internalPlan,
@@ -46,7 +108,8 @@ export function BuildProjectBrain({
   files,
   logs,
   backendStatus,
-  events
+  events,
+  onFilesUpdated
 }: BrainProps) {
   const [tab, setTab] = useState('brain')
 
@@ -85,7 +148,11 @@ export function BuildProjectBrain({
           className="mt-0 flex-1 min-h-0 overflow-y-auto p-3"
           hidden={tab !== 'files'}
         >
-          <FilesTab files={files} />
+          <FilesTab
+            files={files}
+            projectId={projectId}
+            onFilesUpdated={onFilesUpdated}
+          />
         </TabsContent>
 
         <TabsContent
@@ -255,7 +322,190 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function FilesTab({ files }: { files: BrokBuildFilePreview[] }) {
+function toFilePreview(file: EditableProjectFile): BrokBuildFilePreview {
+  return {
+    path: file.path,
+    language: file.language,
+    size: file.content.length,
+    preview: file.content.slice(0, 240)
+  }
+}
+
+function normalizeApiFiles(files: unknown): EditableProjectFile[] {
+  if (!Array.isArray(files)) return []
+  return files.flatMap(file => {
+    if (
+      !file ||
+      typeof file !== 'object' ||
+      !('path' in file) ||
+      typeof file.path !== 'string'
+    ) {
+      return []
+    }
+    const content =
+      'content' in file && typeof file.content === 'string'
+        ? file.content
+        : 'preview' in file && typeof file.preview === 'string'
+          ? file.preview
+          : ''
+    const language =
+      'language' in file && typeof file.language === 'string'
+        ? file.language
+        : null
+    return [
+      {
+        path: file.path,
+        language,
+        size: content.length,
+        preview: content.slice(0, 240),
+        content
+      }
+    ]
+  })
+}
+
+export function FilesTab({
+  files,
+  projectId,
+  onFilesUpdated
+}: {
+  files: BrokBuildFilePreview[]
+  projectId: string | null
+  onFilesUpdated?: (
+    files: BrokBuildFilePreview[],
+    reason: 'loaded' | 'saved',
+    metadata?: FilesUpdateMetadata
+  ) => void
+}) {
+  const [projectFiles, setProjectFiles] = useState<EditableProjectFile[]>([])
+  const [selectedPath, setSelectedPath] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [status, setStatus] = useState<{
+    tone: 'idle' | 'loading' | 'saving' | 'saved' | 'error'
+    message: string
+  }>({ tone: 'idle', message: '' })
+
+  const selectedFile =
+    projectFiles.find(file => file.path === selectedPath) ?? null
+
+  useEffect(() => {
+    if (!projectId || files.length === 0 || projectFiles.length > 0) return
+    void loadProjectFiles(undefined, 'loaded')
+    // loadProjectFiles reads current selection state; keep this effect scoped to
+    // the first persisted-file load for a new project.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files.length, projectFiles.length, projectId])
+
+  async function loadProjectFiles(
+    pathToSelect?: string,
+    reason: 'loaded' | 'saved' = 'loaded'
+  ) {
+    if (!projectId) return
+    setStatus({ tone: 'loading', message: 'Loading project files...' })
+    try {
+      const response = await fetch(`/api/brokcode/projects/${projectId}/files`)
+      const body = (await response.json().catch(() => null)) as {
+        files?: unknown
+        error?: unknown
+      } | null
+      if (!response.ok) {
+        throw new Error(
+          typeof body?.error === 'string'
+            ? body.error
+            : `Could not load files (${response.status}).`
+        )
+      }
+      const loadedFiles = normalizeApiFiles(body?.files)
+      setProjectFiles(loadedFiles)
+      onFilesUpdated?.(
+        loadedFiles.map(toFilePreview),
+        reason,
+        extractFilesUpdateMetadata(body)
+      )
+      const nextSelected =
+        pathToSelect ??
+        selectedPath ??
+        loadedFiles[0]?.path ??
+        null
+      setSelectedPath(nextSelected)
+      const nextFile =
+        loadedFiles.find(file => file.path === nextSelected) ?? loadedFiles[0]
+      setDraft(nextFile?.content ?? '')
+      setStatus({
+        tone: 'idle',
+        message: loadedFiles.length
+          ? ''
+          : 'No saved files were found for this project.'
+      })
+    } catch (error) {
+      setStatus({
+        tone: 'error',
+        message:
+          error instanceof Error ? error.message : 'Could not load files.'
+      })
+    }
+  }
+
+  async function saveSelectedFile() {
+    if (!projectId || !selectedFile) return
+    setStatus({ tone: 'saving', message: `Saving ${selectedFile.path}...` })
+    try {
+      const response = await fetch(
+        `/api/brokcode/projects/${projectId}/files`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            path: selectedFile.path,
+            content: draft,
+            language: selectedFile.language
+          })
+        }
+      )
+      const body = (await response.json().catch(() => null)) as {
+        allFiles?: unknown
+        error?: unknown
+        files?: unknown
+      } | null
+      if (!response.ok) {
+        throw new Error(
+          typeof body?.error === 'string'
+            ? body.error
+            : `Could not save file (${response.status}).`
+        )
+      }
+      const serverFiles = normalizeApiFiles(body?.allFiles ?? body?.files)
+      const updatedFiles =
+        serverFiles.length > 0
+          ? serverFiles
+          : projectFiles.map(file =>
+              file.path === selectedFile.path
+                ? {
+                    ...file,
+                    content: draft,
+                    size: draft.length,
+                    preview: draft.slice(0, 240)
+                  }
+                : file
+            )
+      setProjectFiles(updatedFiles)
+      const metadata = extractFilesUpdateMetadata(body)
+      onFilesUpdated?.(updatedFiles.map(toFilePreview), 'saved', metadata)
+      setStatus({
+        tone: 'saved',
+        message: metadata.previewUnavailableReason
+          ? `${selectedFile.path} saved. ${metadata.previewUnavailableReason}`
+          : `${selectedFile.path} saved. Recheck preview and publish readiness.`
+      })
+    } catch (error) {
+      setStatus({
+        tone: 'error',
+        message:
+          error instanceof Error ? error.message : 'Could not save file.'
+      })
+    }
+  }
+
   if (files.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
@@ -263,24 +513,119 @@ function FilesTab({ files }: { files: BrokBuildFilePreview[] }) {
       </div>
     )
   }
+  const visibleFiles = projectFiles.length > 0 ? projectFiles : files
+  const canEdit = !!projectId && projectFiles.length > 0 && !!selectedFile
+
   return (
-    <div className="flex flex-col gap-1.5 text-xs">
-      {files.map(file => (
-        <div
-          key={file.path}
-          className="flex items-center justify-between rounded-md border border-border/60 bg-background px-2 py-1.5"
-        >
-          <div className="flex min-w-0 items-center gap-2">
-            <FileCode2 className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-            <span className="truncate font-mono text-[11px] text-foreground/80">
-              {file.path}
-            </span>
-          </div>
-          <Badge variant="secondary" className="text-[10px] uppercase">
-            {file.language ?? 'txt'}
-          </Badge>
+    <div className="flex h-full min-h-0 flex-col gap-3 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            Project files
+          </p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            {projectId
+              ? 'Load a saved file, edit it, and refresh the managed preview.'
+              : 'Start a managed build to edit persisted files.'}
+          </p>
         </div>
-      ))}
+        <button
+          type="button"
+          onClick={() => {
+            void loadProjectFiles()
+          }}
+          disabled={!projectId || status.tone === 'loading'}
+          className="rounded-md border border-border/60 bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] transition hover:border-foreground/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        >
+          {status.tone === 'loading' ? 'Loading...' : 'Load saved'}
+        </button>
+      </div>
+
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(220px,1fr)] gap-3">
+        <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+          {visibleFiles.map(file => {
+            const selected = file.path === selectedPath
+            return (
+              <button
+                key={file.path}
+                type="button"
+                onClick={() => {
+                  if (!projectId || projectFiles.length === 0) {
+                    return
+                  }
+                  setSelectedPath(file.path)
+                  setDraft(
+                    projectFiles.find(projectFile => projectFile.path === file.path)
+                      ?.content ?? ''
+                  )
+                }}
+                className={cn(
+                  'flex items-center justify-between rounded-md border px-2 py-1.5 text-left transition',
+                  selected
+                    ? 'border-foreground/40 bg-foreground/[0.04]'
+                    : 'border-border/60 bg-background hover:border-foreground/30'
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <FileCode2 className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                  <span className="truncate font-mono text-[11px] text-foreground/80">
+                    {file.path}
+                  </span>
+                </div>
+                <Badge variant="secondary" className="text-[10px] uppercase">
+                  {file.language ?? 'txt'}
+                </Badge>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex min-h-0 flex-col rounded-md border border-border/60 bg-background">
+          <div className="flex items-center justify-between gap-2 border-b border-border/60 px-2 py-1.5">
+            <span className="truncate font-mono text-[11px] text-muted-foreground">
+              {selectedFile?.path ?? 'No saved file loaded'}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                void saveSelectedFile()
+              }}
+              disabled={!canEdit || status.tone === 'saving'}
+              className="rounded-md border border-border/60 bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] transition hover:border-foreground/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+            >
+              {status.tone === 'saving' ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+          <textarea
+            value={draft}
+            onChange={event => setDraft(event.target.value)}
+            disabled={!canEdit}
+            spellCheck={false}
+            className="min-h-0 flex-1 resize-none bg-transparent p-2 font-mono text-[11px] leading-relaxed outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-60"
+            placeholder={
+              projectId
+                ? 'Load saved project files to edit them here.'
+                : 'Create a managed BrokCode project before editing files.'
+            }
+          />
+        </div>
+      </div>
+
+      {status.message ? (
+        <p
+          role={status.tone === 'error' ? 'alert' : 'status'}
+          className={cn(
+            'text-[11px]',
+            status.tone === 'error'
+              ? 'text-rose-600 dark:text-rose-400'
+              : status.tone === 'saved'
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-muted-foreground'
+          )}
+        >
+          {status.message}
+        </p>
+      ) : null}
     </div>
   )
 }

@@ -103,6 +103,19 @@ import { stripThinkingBlocks } from '@/lib/utils/strip-thinking-blocks'
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
+function canUseLocalDirectStreamFallback() {
+  const localProjectStorage = process.env.BROKCODE_PROJECT_STORAGE === 'file'
+  const localDbFallback = process.env.BROK_DEV_DB_FALLBACK === 'true'
+
+  return (
+    (localDbFallback || localProjectStorage) &&
+    (process.env.BROKCODE_ALLOW_LOCAL_AUTH_FALLBACK === 'true' ||
+      process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK === 'true') &&
+    process.env.BROK_CLOUD_DEPLOYMENT !== 'true' &&
+    process.env.MORPHIC_CLOUD_DEPLOYMENT !== 'true'
+  )
+}
+
 type OpenAiMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
@@ -273,11 +286,18 @@ function formatBrokCodeRuntimeError(error: unknown) {
   const message =
     error instanceof Error ? error.message : 'BrokCode Cloud execution failed.'
 
+  if (/incorrect api key|invalid api key|unauthorized/i.test(message)) {
+    return 'BrokCode runtime provider rejected the configured API key. Rotate or replace the provider key, then retry the no-fallback run.'
+  }
+
   if (/^fetch failed$/i.test(message.trim())) {
     return 'BrokCode runtime could not reach its configured model provider. Check the BrokCode Pi/OpenCode provider base URL and API key configuration, then try again.'
   }
 
-  return message
+  return message.replace(
+    /\b(?:sk|tp)-[A-Za-z0-9_*.-]{12,}\b/g,
+    '[redacted provider key]'
+  )
 }
 
 function usageNumber(usage: unknown, keys: string[]) {
@@ -1185,9 +1205,6 @@ function createExecutionStream({
                 command,
                 taskId,
                 send
-              }).catch(error => {
-                console.error('Failed to persist Pi BrokCode output:', error)
-                return null
               })
               const previewUrl =
                 persisted?.previewUrl ??
@@ -1248,10 +1265,7 @@ function createExecutionStream({
               close()
               return
             } catch (error) {
-              piFailure =
-                error instanceof Error
-                  ? error.message
-                  : 'Pi coding-agent runtime failed.'
+              piFailure = formatBrokCodeRuntimeError(error)
 
               if (requirePi) {
                 await recordCodeExecutionUsage({
@@ -1342,12 +1356,6 @@ function createExecutionStream({
                 command,
                 taskId,
                 send
-              }).catch(error => {
-                console.error(
-                  'Failed to persist OpenCode BrokCode output:',
-                  error
-                )
-                return null
               })
               const previewUrl =
                 persisted?.previewUrl ??
@@ -1410,10 +1418,13 @@ function createExecutionStream({
             }
 
             const opencodeBody = await opencodeResponse.json().catch(() => null)
-            opencodeFailure =
-              opencodeBody?.error?.message ??
-              opencodeBody?.message ??
-              `OpenCode returned ${opencodeResponse.status}.`
+            opencodeFailure = formatBrokCodeRuntimeError(
+              new Error(
+                opencodeBody?.error?.message ??
+                  opencodeBody?.message ??
+                  `OpenCode returned ${opencodeResponse.status}.`
+              )
+            )
 
             if (requireOpenCode) {
               await recordCodeExecutionUsage({
@@ -1517,14 +1528,34 @@ function createExecutionStream({
           let content = ''
           let usage: unknown = null
 
-          const direct = await runDirectBrokRuntime({
-            model,
-            messages,
-            stream: true,
-            send
-          })
-          content = direct.content
-          usage = direct.usage
+          try {
+            const direct = await runDirectBrokRuntime({
+              model,
+              messages,
+              stream: true,
+              send
+            })
+            content = direct.content
+            usage = direct.usage
+          } catch (error) {
+            const runtimeMessage = formatBrokCodeRuntimeError(error)
+            if (
+              runtimeMessage.includes('Provider API key not configured') &&
+              shouldCreateFallbackGeneratedApp(command)
+            ) {
+              send('status', {
+                message:
+                  'Provider key is not configured. Creating a local starter app.'
+              })
+              send('delta', {
+                content: 'Generated a local starter app from the build prompt.'
+              })
+              content = ''
+              usage = null
+            } else {
+              throw error
+            }
+          }
           const persisted = await persistGeneratedProjectOutput({
             auth,
             projectId: usageContext.projectId,
@@ -2232,6 +2263,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (body?.stream === true && canUseLocalDirectStreamFallback()) {
+      return createExecutionStream({
+        auth: authResult,
+        requestId,
+        startTime,
+        command,
+        model,
+        messages,
+        authorization,
+        xApiKey,
+        opencodeBase,
+        opencodeApiKey,
+        requireOpenCode,
+        preferPi,
+        requirePi,
+        piNoTools,
+        piScratchCwd,
+        allowBrokFallback: body?.allow_brok_fallback === true,
+        requestOrigin: publicOrigin,
+        usageContext: codeUsageContext
+      })
+    }
+
     if (body?.stream === true) {
       const task = await createBackgroundTask({
         userId: authResult.apiKey.userId,
@@ -2369,9 +2423,6 @@ export async function POST(request: NextRequest) {
           origin: publicOrigin,
           content: result.content,
           command
-        }).catch(error => {
-          console.error('Failed to persist Pi BrokCode output:', error)
-          return null
         })
         const previewUrl =
           persisted?.previewUrl ??
@@ -2409,10 +2460,7 @@ export async function POST(request: NextRequest) {
           note: 'Built with BrokCode Cloud.'
         })
       } catch (error) {
-        piFailure =
-          error instanceof Error
-            ? error.message
-            : 'Pi coding-agent runtime failed.'
+        piFailure = formatBrokCodeRuntimeError(error)
 
         if (requirePi) {
           await recordCodeExecutionUsage({
@@ -2470,9 +2518,6 @@ export async function POST(request: NextRequest) {
             origin: publicOrigin,
             content,
             command
-          }).catch(error => {
-            console.error('Failed to persist OpenCode BrokCode output:', error)
-            return null
           })
           const previewUrl =
             persisted?.previewUrl ?? extractPreviewUrl(`${command}\n${content}`)
@@ -2513,10 +2558,13 @@ export async function POST(request: NextRequest) {
         }
 
         const opencodeBody = await opencodeResponse.json().catch(() => null)
-        const errorMessage =
-          opencodeBody?.error?.message ??
-          opencodeBody?.message ??
-          `OpenCode returned ${opencodeResponse.status}.`
+        const errorMessage = formatBrokCodeRuntimeError(
+          new Error(
+            opencodeBody?.error?.message ??
+              opencodeBody?.message ??
+              `OpenCode returned ${opencodeResponse.status}.`
+          )
+        )
         opencodeFailure = errorMessage
 
         if (requireOpenCode) {
@@ -2622,9 +2670,6 @@ export async function POST(request: NextRequest) {
       origin: publicOrigin,
       content,
       command
-    }).catch(error => {
-      console.error('Failed to persist BrokCode output:', error)
-      return null
     })
     const previewUrl =
       persisted?.previewUrl ?? extractPreviewUrl(`${command}\n${content}`)

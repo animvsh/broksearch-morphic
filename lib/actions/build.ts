@@ -41,12 +41,11 @@ export async function startBrokBuild(input: {
   signal?: AbortSignal
   brokCodeProject?: Omit<PersistBrokBuildProjectOptions, 'prompt' | 'userPlan'>
 }) {
-  const projectId = input.projectId ?? newProjectId()
   const { runBuildStream } = await import('@/lib/build/stream')
 
   return runBuildStream({
     prompt: input.prompt,
-    projectId,
+    projectId: input.projectId,
     emit: input.emit,
     signal: input.signal,
     brokCodeProject: input.brokCodeProject

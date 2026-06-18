@@ -57,6 +57,38 @@ async function authorizeProject(request: Request, id: string) {
   return { ok: true as const, authResult, project }
 }
 
+function backendContextUnavailable(
+  context: Awaited<ReturnType<typeof fetchInsForgeBackendContext>> | null
+) {
+  if (!context) return true
+
+  const hasDatabaseMetadata =
+    context.database.totalTables !== null ||
+    context.database.totalRecords !== null ||
+    context.database.databaseSize !== null
+  const hasDiscoveredResources =
+    context.database.tables.length > 0 ||
+    context.storageBuckets.length > 0 ||
+    context.functions.length > 0
+
+  return (
+    !hasDatabaseMetadata &&
+    !hasDiscoveredResources &&
+    context.errors.length >= 4
+  )
+}
+
+function backendContextFailureResponse() {
+  return NextResponse.json(
+    {
+      error:
+        'InsForge backend context could not be fetched. Check backend health and admin key, then retry Backend setup.',
+      code: 'insforge_context_unavailable'
+    },
+    { status: 502 }
+  )
+}
+
 /**
  * GET /api/brokcode/projects/[id]/backend/context
  *
@@ -95,16 +127,31 @@ export async function GET(
   }
 
   const tableLimit = 8
-  const context = await fetchInsForgeBackendContext({
-    projectUrl: backend.projectUrl,
-    adminKey,
-    tableLimit
-  }).catch(error => {
+  let context: Awaited<ReturnType<typeof fetchInsForgeBackendContext>> | null
+  try {
+    context = await fetchInsForgeBackendContext({
+      projectUrl: backend.projectUrl,
+      adminKey,
+      tableLimit
+    })
+  } catch (error) {
     console.error('InsForge context fetch failed:', error)
-    return null
-  })
+    return backendContextFailureResponse()
+  }
+
+  if (backendContextUnavailable(context)) {
+    console.error('InsForge context fetch returned no usable context:', {
+      projectId: id,
+      errors: context?.errors ?? []
+    })
+    return backendContextFailureResponse()
+  }
 
   const promptText = formatInsForgeBackendContextForPrompt(context)
+  if (!promptText.trim()) {
+    console.error('InsForge context prompt was empty:', { projectId: id })
+    return backendContextFailureResponse()
+  }
 
   return NextResponse.json({
     context,

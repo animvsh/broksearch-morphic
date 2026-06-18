@@ -42,6 +42,14 @@ function canUseLocalBrowserSessionFallback() {
   return process.env.NODE_ENV !== 'production'
 }
 
+function canUseLocalApiKeyFallbackForBrokCode() {
+  if (process.env.BROKCODE_ALLOW_LOCAL_AUTH_FALLBACK === 'true') {
+    return true
+  }
+
+  return process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK === 'true'
+}
+
 function createBrowserSessionAuth({
   user,
   workspace
@@ -267,10 +275,7 @@ export async function enforceBrokCodeAccountOwnership(
     authResult.apiKey.id === LOCAL_FALLBACK_API_KEY_ID ||
     authResult.workspace.id === LOCAL_FALLBACK_WORKSPACE_ID
 
-  if (
-    isLocalFallbackKey &&
-    process.env.BROKCODE_ALLOW_LOCAL_AUTH_FALLBACK !== 'true'
-  ) {
+  if (isLocalFallbackKey && !canUseLocalApiKeyFallbackForBrokCode()) {
     return NextResponse.json(
       {
         error: {

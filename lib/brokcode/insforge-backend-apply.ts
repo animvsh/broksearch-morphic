@@ -1,4 +1,5 @@
 import type { BrokBuildBackendResourcePlan } from '@/lib/build/types'
+import { redactSensitiveData } from '@/lib/redaction'
 
 export type InsForgeBackendApplyStep = {
   id: string
@@ -50,6 +51,12 @@ function getMessage(value: unknown, fallback: string) {
     if (typeof value.error === 'string') return value.error
   }
   return fallback
+}
+
+function redactApplyMessage(value: string, adminKey: string) {
+  const redacted = redactSensitiveData(value)
+  if (!adminKey) return redacted
+  return redacted.split(adminKey).join('***REDACTED***')
 }
 
 function sanitizeMigrationName(value: string) {
@@ -400,7 +407,7 @@ export async function applyInsForgeBackendResourcePlan({
             : null,
         message:
           error instanceof Error
-            ? error.message
+            ? redactApplyMessage(error.message, adminKey)
             : 'InsForge backend apply failed.'
       })
     }

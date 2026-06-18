@@ -32,12 +32,36 @@ describe('canUseGenericBrokFallback', () => {
     ).toBe(true)
   })
 
-  it('keeps non-browser clients compatible with existing fallback behavior', () => {
+  it('honors explicit no-fallback requests from non-browser clients', () => {
     expect(
       canUseGenericBrokFallback({
         source: 'api',
         commandType: 'build',
         allowBrokFallback: false
+      })
+    ).toBe(false)
+    expect(
+      canUseGenericBrokFallback({
+        source: 'tui',
+        commandType: 'fix',
+        allowBrokFallback: false
+      })
+    ).toBe(false)
+    expect(
+      canUseGenericBrokFallback({
+        source: 'worker',
+        commandType: 'deploy',
+        allowBrokFallback: false
+      })
+    ).toBe(false)
+  })
+
+  it('keeps non-browser fallback available when explicitly allowed', () => {
+    expect(
+      canUseGenericBrokFallback({
+        source: 'api',
+        commandType: 'build',
+        allowBrokFallback: true
       })
     ).toBe(true)
   })

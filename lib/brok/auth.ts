@@ -392,7 +392,7 @@ async function createLocalFallbackAuth(
       keySalt: null,
       environment: key.includes('_test_') ? 'test' : 'live',
       status: 'active',
-      scopes: ['chat:write', 'search:write', 'usage:read'],
+      scopes: ['chat:write', 'search:write', 'code:write', 'usage:read'],
       allowedModels: [],
       rpmLimit: 60,
       dailyRequestLimit: 1000,

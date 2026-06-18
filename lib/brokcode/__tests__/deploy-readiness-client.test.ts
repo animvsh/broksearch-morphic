@@ -79,4 +79,57 @@ describe('summarizeBrokCodeDeployReadiness', () => {
       tone: 'blocked'
     })
   })
+
+  it('summarizes backend-pending readiness separately from quality issues', () => {
+    expect(
+      summarizeBrokCodeDeployReadiness({
+        hasProject: true,
+        loading: false,
+        readiness: {
+          ...baseReadiness,
+          ready: false,
+          status: 'backend_not_applied',
+          message:
+            'BrokCode cannot publish this project yet because its InsForge backend plan has not been applied.'
+        }
+      })
+    ).toMatchObject({
+      label: 'Backend pending',
+      tone: 'blocked'
+    })
+  })
+
+  it('summarizes backend rewire and runtime proof blockers', () => {
+    expect(
+      summarizeBrokCodeDeployReadiness({
+        hasProject: true,
+        loading: false,
+        readiness: {
+          ...baseReadiness,
+          ready: false,
+          status: 'backend_not_rewired',
+          message: 'Backend applied but app is not rewired.'
+        }
+      })
+    ).toMatchObject({
+      label: 'Backend rewire needed',
+      tone: 'blocked'
+    })
+
+    expect(
+      summarizeBrokCodeDeployReadiness({
+        hasProject: true,
+        loading: false,
+        readiness: {
+          ...baseReadiness,
+          ready: false,
+          status: 'degraded_fallback',
+          message: 'Runtime proof is required.'
+        }
+      })
+    ).toMatchObject({
+      label: 'Runtime proof needed',
+      tone: 'blocked'
+    })
+  })
 })

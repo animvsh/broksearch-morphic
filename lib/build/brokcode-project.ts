@@ -1,4 +1,5 @@
 import { getBrokCodeManagedDeployReadiness } from '@/lib/brokcode/deploy-readiness'
+import { hasInsForgeBackendUsage } from '@/lib/brokcode/deploy-readiness'
 import {
   buildFallbackGeneratedAppFiles,
   inspectGeneratedBrokCodeAppQuality,
@@ -22,6 +23,7 @@ export type PersistBrokBuildProjectOptions = {
   prompt: string
   userPlan: UserVisiblePlan
   backendPlan?: BrokBuildBackendResourcePlan
+  projectId?: string
   requireBrokCodeExecution?: boolean
   workspaceId: string
   userId: string
@@ -50,6 +52,38 @@ export type PersistedBrokBuildProject = {
   source: 'brokcode_execute' | 'degraded_fallback'
   degraded: boolean
   message: string
+}
+
+async function getOrCreateBrokBuildProject({
+  projectId,
+  workspaceId,
+  userId,
+  name
+}: {
+  projectId?: string
+  workspaceId: string
+  userId: string
+  name: string
+}) {
+  if (projectId) {
+    const existingProject = await getBrokCodeProject({
+      id: projectId,
+      workspaceId,
+      userId
+    })
+    if (existingProject) {
+      return existingProject
+    }
+    throw new Error(
+      'Selected BrokCode project was not found. Refresh the builder and try again.'
+    )
+  }
+
+  return createBrokCodeProject({
+    workspaceId,
+    userId,
+    name
+  })
 }
 
 function toFilePreview(file: {
@@ -338,17 +372,59 @@ function buildBrokCodeExecutionPrompt({
   ].join('\n')
 }
 
+function isBackendRewirePrompt(prompt: string) {
+  return /InsForge backend has been provisioned/i.test(prompt)
+}
+
+function getBackendRewireMetadata({
+  backendPlan,
+  files,
+  generatedAt,
+  prompt
+}: {
+  backendPlan?: BrokBuildBackendResourcePlan
+  files: Array<{ path: string; content: string; language?: string | null }>
+  generatedAt: string
+  prompt: string
+}) {
+  if (backendPlan?.provider !== 'insforge' || !isBackendRewirePrompt(prompt)) {
+    return undefined
+  }
+
+  if (!hasInsForgeBackendUsage(files)) {
+    return {
+      provider: 'insforge',
+      status: 'unverified',
+      rewiredAt: generatedAt,
+      evidence: {
+        insforgeUsageDetected: false
+      }
+    }
+  }
+
+  return {
+    provider: 'insforge',
+    status: 'rewired',
+    rewiredAt: generatedAt,
+    evidence: {
+      insforgeUsageDetected: true
+    }
+  }
+}
+
 export async function persistBrokBuildProject({
   prompt,
   userPlan,
   backendPlan,
+  projectId,
   requireBrokCodeExecution = false,
   workspaceId,
   userId,
   request,
   executeBrokCodeBuild
 }: PersistBrokBuildProjectOptions): Promise<PersistedBrokBuildProject> {
-  const project = await createBrokCodeProject({
+  const project = await getOrCreateBrokBuildProject({
+    projectId,
     workspaceId,
     userId,
     name: userPlan.title
@@ -415,6 +491,12 @@ export async function persistBrokBuildProject({
         backendProvider: backendPlan?.provider,
         backendPlanStatus: backendPlan?.status,
         backendPlan,
+        backendRewire: getBackendRewireMetadata({
+          backendPlan,
+          files,
+          generatedAt,
+          prompt
+        }),
         runtime: execution.runtime,
         note: execution.note,
         generatedFiles: execution.generated_files,

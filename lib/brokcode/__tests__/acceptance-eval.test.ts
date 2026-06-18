@@ -106,4 +106,34 @@ describe('BrokCode acceptance eval', () => {
     expect(evalRecord.status).toBe('failed')
     expect(evalRecord.blockers).toContain('tui: not-run')
   })
+
+  it('classifies rejected no-fallback provider keys as runtime configuration blockers', () => {
+    const evalRecord = buildBrokCodeAcceptanceSuiteEval({
+      startedAt: '2026-06-17T00:00:00.000Z',
+      completedAt: '2026-06-17T00:01:00.000Z',
+      baseUrl: 'http://127.0.0.1:3000',
+      matrixMode: false,
+      fallbackPolicy: 'disallowed',
+      tuiStatus: 'skipped',
+      cases: [
+        {
+          id: 'landing-bakery',
+          title: 'Landing page',
+          category: 'landing',
+          status: 'failed',
+          checks: ['project-created'],
+          startedAt: '2026-06-17T00:00:00.000Z',
+          error:
+            'BrokCode runtime provider rejected the configured API key. Rotate or replace the provider key, then retry the no-fallback run.'
+        }
+      ]
+    })
+
+    expect(evalRecord.blockers).toEqual([
+      'landing-bakery: runtime_configuration - provider API key rejected; rotate or replace the BrokCode Cloud/Pi provider credential and rerun no-fallback smoke.'
+    ])
+    expect(formatBrokCodeAcceptanceAdminReview(evalRecord)).toContain(
+      'runtime_configuration'
+    )
+  })
 })

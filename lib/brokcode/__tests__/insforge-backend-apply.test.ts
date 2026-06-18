@@ -127,4 +127,37 @@ describe('applyInsForgeBackendResourcePlan', () => {
       true
     )
   })
+
+  test('redacts InsForge admin secrets from failed apply messages', async () => {
+    const adminKey = 'ik_live_super_secret_admin_key_123456'
+    const fetchImpl = (async (
+      url: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      const urlText = String(url)
+      if (urlText.endsWith('/api/database/migrations') && !init?.method) {
+        return jsonResponse({ migrations: [] })
+      }
+      return jsonResponse(
+        {
+          message: `Authorization: Bearer ${adminKey} rejected`
+        },
+        401
+      )
+    }) as typeof fetch
+
+    const result = await applyInsForgeBackendResourcePlan({
+      projectUrl: 'https://example.insforge.app',
+      adminKey,
+      plan,
+      migrationNameSeed: 'CRM',
+      now: new Date('2026-06-17T00:00:00Z'),
+      fetchImpl
+    })
+
+    expect(result.status).toBe('failed')
+    expect(result.steps[0].message).toBeTruthy()
+    expect(JSON.stringify(result)).not.toContain(adminKey)
+    expect(JSON.stringify(result)).not.toContain('ik_live')
+  })
 })

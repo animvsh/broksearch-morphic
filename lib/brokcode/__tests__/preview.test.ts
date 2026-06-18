@@ -192,6 +192,299 @@ describe('BrokCode managed preview', () => {
     })
   })
 
+  it('blocks publish when an InsForge backend plan has not been applied', () => {
+    const request = {
+      url: 'https://www.brok.fyi/api/brokcode/deploy',
+      headers: new Headers()
+    }
+
+    expect(
+      getBrokCodeManagedDeployReadiness({
+        project: {
+          ...project,
+          metadata: {
+            preview: {
+              backendPlan: {
+                provider: 'insforge',
+                status: 'planned',
+                migrationSql: 'create table public.customers(id uuid);'
+              }
+            }
+          }
+        },
+        request,
+        files: [
+          {
+            path: 'index.html',
+            content:
+              '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Coffee Shop</title><style>body{font-family:system-ui}.hero{padding:48px}.card{border:1px solid #ddd}</style></head><body><main class="hero"><h1>Coffee Shop</h1><p>Order fresh espresso, pastries, and campus-friendly study snacks from a polished student coffee shop app. Browse featured drinks, save favorites, and start a pickup order before class.</p><button>Order now</button></main></body></html>'
+          }
+        ]
+      })
+    ).toMatchObject({
+      ready: false,
+      status: 'backend_not_applied'
+    })
+  })
+
+  it('blocks publish when an applied InsForge backend has not been rewired into the app', () => {
+    const request = {
+      url: 'https://www.brok.fyi/api/brokcode/deploy',
+      headers: new Headers()
+    }
+
+    expect(
+      getBrokCodeManagedDeployReadiness({
+        project: {
+          ...project,
+          metadata: {
+            preview: {
+              backendPlan: {
+                provider: 'insforge',
+                status: 'planned',
+                migrationSql: 'create table public.customers(id uuid);'
+              },
+              backendApply: {
+                provider: 'insforge',
+                status: 'applied'
+              }
+            }
+          }
+        },
+        request,
+        files: [
+          {
+            path: 'index.html',
+            content:
+              '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Coffee Shop</title><style>body{font-family:system-ui}.hero{padding:48px}.card{border:1px solid #ddd}</style></head><body><main class="hero"><h1>Coffee Shop</h1><p>Order fresh espresso, pastries, and campus-friendly study snacks from a polished student coffee shop app. Browse featured drinks, save favorites, and start a pickup order before class.</p><button>Order now</button></main></body></html>'
+          }
+        ]
+      })
+    ).toMatchObject({
+      ready: false,
+      status: 'backend_not_rewired'
+    })
+  })
+
+  it('allows publish after InsForge backend apply and required app rewire', () => {
+    const request = {
+      url: 'https://www.brok.fyi/api/brokcode/deploy',
+      headers: new Headers()
+    }
+
+    expect(
+      getBrokCodeManagedDeployReadiness({
+        project: {
+          ...project,
+          metadata: {
+            preview: {
+              backendPlan: {
+                provider: 'insforge',
+                status: 'planned',
+                migrationSql: 'create table public.customers(id uuid);'
+              },
+              backendApply: {
+                provider: 'insforge',
+                status: 'applied'
+              },
+              backendRewire: {
+                provider: 'insforge',
+                status: 'rewired'
+              }
+            }
+          }
+        },
+        request,
+        files: [
+          {
+            path: 'index.html',
+            content:
+              '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Coffee Shop</title><style>body{font-family:system-ui}.hero{padding:48px}.card{border:1px solid #ddd}</style></head><body><main class="hero"><h1>Coffee Shop</h1><p>Order fresh espresso, pastries, and campus-friendly study snacks from a polished student coffee shop app. Browse featured drinks, save favorites, and start a pickup order before class.</p><button>Order now</button></main></body></html>'
+          },
+          {
+            path: 'app.js',
+            content:
+              "const NEXT_PUBLIC_INSFORGE_URL = 'https://example.insforge.app';\nconst NEXT_PUBLIC_INSFORGE_APP_KEY = 'if_public_demo';\nfetch(`${NEXT_PUBLIC_INSFORGE_URL}/api/database/tables/orders/records?appKey=${NEXT_PUBLIC_INSFORGE_APP_KEY}`);"
+          }
+        ]
+      })
+    ).toMatchObject({
+      ready: true,
+      status: 'ready'
+    })
+  })
+
+  it('blocks publish when rewire proof only declares InsForge env without a backend call', () => {
+    const request = {
+      url: 'https://www.brok.fyi/api/brokcode/deploy',
+      headers: new Headers()
+    }
+
+    expect(
+      getBrokCodeManagedDeployReadiness({
+        project: {
+          ...project,
+          metadata: {
+            preview: {
+              backendPlan: {
+                provider: 'insforge',
+                status: 'planned',
+                migrationSql: 'create table public.customers(id uuid);'
+              },
+              backendApply: {
+                provider: 'insforge',
+                status: 'applied'
+              },
+              backendRewire: {
+                provider: 'insforge',
+                status: 'rewired'
+              }
+            }
+          }
+        },
+        request,
+        files: [
+          {
+            path: 'index.html',
+            content:
+              '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Coffee Shop</title><style>body{font-family:system-ui}.hero{padding:48px}.card{border:1px solid #ddd}</style></head><body><main class="hero"><h1>Coffee Shop</h1><p>Order fresh espresso, pastries, and campus-friendly study snacks from a polished student coffee shop app. Browse featured drinks, save favorites, and start a pickup order before class.</p><button>Order now</button></main></body></html>'
+          },
+          {
+            path: 'app.js',
+            content:
+              "const NEXT_PUBLIC_INSFORGE_URL = 'https://example.insforge.app';\nconst NEXT_PUBLIC_INSFORGE_APP_KEY = 'if_public_demo';"
+          }
+        ]
+      })
+    ).toMatchObject({
+      ready: false,
+      status: 'backend_not_rewired'
+    })
+  })
+
+  it('blocks publish when generated files use InsForge admin or auth headers', () => {
+    const request = {
+      url: 'https://www.brok.fyi/api/brokcode/deploy',
+      headers: new Headers()
+    }
+
+    expect(
+      getBrokCodeManagedDeployReadiness({
+        project: {
+          ...project,
+          metadata: {
+            preview: {
+              backendPlan: {
+                provider: 'insforge',
+                status: 'planned',
+                migrationSql: 'create table public.customers(id uuid);'
+              },
+              backendApply: {
+                provider: 'insforge',
+                status: 'applied'
+              },
+              backendRewire: {
+                provider: 'insforge',
+                status: 'rewired'
+              }
+            }
+          }
+        },
+        request,
+        files: [
+          {
+            path: 'index.html',
+            content:
+              '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Coffee Shop</title><style>body{font-family:system-ui}.hero{padding:48px}.card{border:1px solid #ddd}</style></head><body><main class="hero"><h1>Coffee Shop</h1><p>Order fresh espresso, pastries, and campus-friendly study snacks from a polished student coffee shop app. Browse featured drinks, save favorites, and start a pickup order before class.</p><button>Order now</button></main></body></html>'
+          },
+          {
+            path: 'app.js',
+            content:
+              "const NEXT_PUBLIC_INSFORGE_URL = 'https://example.insforge.app';\nconst NEXT_PUBLIC_INSFORGE_APP_KEY = 'if_public_demo';\nconst INSFORGE_ADMIN_KEY = 'ik_live_should_not_ship';\nfetch(`${NEXT_PUBLIC_INSFORGE_URL}/api/database/tables/orders/records`, { headers: { Authorization: `Bearer ${INSFORGE_ADMIN_KEY}` } });"
+          }
+        ]
+      })
+    ).toMatchObject({
+      ready: false,
+      status: 'backend_not_rewired'
+    })
+  })
+
+  it('blocks publish when rewire metadata exists but generated files do not use InsForge', () => {
+    const request = {
+      url: 'https://www.brok.fyi/api/brokcode/deploy',
+      headers: new Headers()
+    }
+
+    expect(
+      getBrokCodeManagedDeployReadiness({
+        project: {
+          ...project,
+          metadata: {
+            preview: {
+              backendPlan: {
+                provider: 'insforge',
+                status: 'planned',
+                migrationSql: 'create table public.customers(id uuid);'
+              },
+              backendApply: {
+                provider: 'insforge',
+                status: 'applied'
+              },
+              backendRewire: {
+                provider: 'insforge',
+                status: 'rewired'
+              }
+            }
+          }
+        },
+        request,
+        files: [
+          {
+            path: 'index.html',
+            content:
+              '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Coffee Shop</title><style>body{font-family:system-ui}.hero{padding:48px}.card{border:1px solid #ddd}</style></head><body><main class="hero"><h1>Coffee Shop</h1><p>Order fresh espresso, pastries, and campus-friendly study snacks from a polished student coffee shop app. Browse featured drinks, save favorites, and start a pickup order before class.</p><button>Order now</button></main></body></html>'
+          }
+        ]
+      })
+    ).toMatchObject({
+      ready: false,
+      status: 'backend_not_rewired'
+    })
+  })
+
+  it('blocks publish for degraded fallback previews', () => {
+    const request = {
+      url: 'https://www.brok.fyi/api/brokcode/deploy',
+      headers: new Headers()
+    }
+
+    expect(
+      getBrokCodeManagedDeployReadiness({
+        project: {
+          ...project,
+          metadata: {
+            preview: {
+              mode: 'degraded_fallback',
+              degraded: true
+            }
+          }
+        },
+        request,
+        files: [
+          {
+            path: 'index.html',
+            content:
+              '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Coffee Shop</title><style>body{font-family:system-ui}.hero{padding:48px}.card{border:1px solid #ddd}</style></head><body><main class="hero"><h1>Coffee Shop</h1><p>Order fresh espresso, pastries, and campus-friendly study snacks from a polished student coffee shop app. Browse featured drinks, save favorites, and start a pickup order before class.</p><button>Order now</button></main></body></html>'
+          }
+        ]
+      })
+    ).toMatchObject({
+      ready: false,
+      status: 'degraded_fallback'
+    })
+  })
+
   it('serves the hot reload manifest for managed previews', () => {
     const asset = getManagedPreviewAsset({
       project,

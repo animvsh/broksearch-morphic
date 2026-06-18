@@ -1,6 +1,6 @@
 'use client'
 
-import { type ReactNode,useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   Bot,
@@ -35,14 +35,19 @@ type ChatPanelProps = {
   isBuilding: boolean
   phase: BrokBuildPhase
   previewUrl: string | null
+  canSendEdit: boolean
   onSendEdit: (message: string) => void
   planCard?: ReactNode
 }
 
-function phaseEventToMessage(event: BrokStreamEvent, time: string): ChatMessage | null {
+function phaseEventToMessage(
+  event: BrokStreamEvent,
+  time: string,
+  index: number
+): ChatMessage | null {
   if (event.kind === 'phase') {
     return {
-      id: `phase-${time}-${event.phase}`,
+      id: `phase-${index}-${event.phase}`,
       role: 'assistant',
       kind: 'phase',
       phase: event.phase,
@@ -52,7 +57,7 @@ function phaseEventToMessage(event: BrokStreamEvent, time: string): ChatMessage 
   }
   if (event.kind === 'log') {
     return {
-      id: `log-${time}-${event.message.slice(0, 32)}`,
+      id: `log-${index}-${event.message.slice(0, 32)}`,
       role: 'system',
       kind: 'log',
       content: event.message,
@@ -68,6 +73,7 @@ export function BuildChatPanel({
   isBuilding,
   phase,
   previewUrl,
+  canSendEdit,
   onSendEdit,
   planCard
 }: ChatPanelProps) {
@@ -82,10 +88,10 @@ export function BuildChatPanel({
       time: new Date().toISOString()
     }
     const derived: ChatMessage[] = [initialUser]
-    for (const event of events) {
-      const msg = phaseEventToMessage(event, new Date().toISOString())
+    events.forEach((event, index) => {
+      const msg = phaseEventToMessage(event, new Date().toISOString(), index)
       if (msg) derived.push(msg)
-    }
+    })
     return derived
   }, [events, prompt])
 
@@ -96,7 +102,7 @@ export function BuildChatPanel({
 
   const send = () => {
     const trimmed = value.trim()
-    if (!trimmed) return
+    if (!trimmed || !canSendEdit || phase === 'failed') return
     onSendEdit(trimmed)
     setValue('')
   }
@@ -124,7 +130,9 @@ export function BuildChatPanel({
             placeholder={
               phase === 'ready'
                 ? 'Make it feel more premium, add onboarding, ...'
-                : 'Type to add a follow-up. Brok will keep editing by chat.'
+                : canSendEdit
+                  ? 'Type a follow-up. Brok will keep editing by chat.'
+                  : 'Start the build before sending follow-up edits.'
             }
             rows={2}
             className="min-h-[56px] resize-none border-border/60 bg-background"
@@ -142,7 +150,7 @@ export function BuildChatPanel({
           <Button
             type="button"
             onClick={send}
-            disabled={!value.trim() || phase === 'failed'}
+            disabled={!value.trim() || !canSendEdit || phase === 'failed'}
             className="h-10"
           >
             {isBuilding ? (
