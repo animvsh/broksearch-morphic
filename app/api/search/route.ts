@@ -9,6 +9,7 @@ import {
   verifyRequestAuth
 } from '@/lib/brok/auth'
 import { invalidRequestResponse, readJsonBody } from '@/lib/brok/http'
+import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import {
   makeSearchThreadId,
   registerSearchStreamRequest
@@ -19,10 +20,35 @@ import { POST as postSearchCompletion } from '@/app/api/v1/search/completions/ro
 
 export const runtime = 'nodejs'
 
-function normalizeSearchDepth(value: unknown) {
-  if (value === 'deep' || value === 'advanced') return 'deep'
-  if (value === 'lite' || value === 'basic' || value === 'quick') return 'lite'
-  return 'standard'
+type SearchDepth = 'lite' | 'standard' | 'deep'
+
+function parseSearchDepth(
+  value: unknown
+):
+  | { ok: true; depth: SearchDepth }
+  | { ok: false; code: string; message: string } {
+  if (value === undefined || value === null) {
+    return { ok: true, depth: 'standard' }
+  }
+
+  if (value === 'deep' || value === 'advanced') {
+    return { ok: true, depth: 'deep' }
+  }
+
+  if (value === 'lite' || value === 'basic' || value === 'quick') {
+    return { ok: true, depth: 'lite' }
+  }
+
+  if (value === 'standard') {
+    return { ok: true, depth: 'standard' }
+  }
+
+  return {
+    ok: false,
+    code: 'invalid_search_depth',
+    message:
+      'search_depth must be one of lite, standard, deep, basic, quick, or advanced.'
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -47,20 +73,15 @@ export async function POST(request: NextRequest) {
   }>(request)
 
   if (!parsedBody.ok) {
-    return NextResponse.json(
-      { message: 'Invalid JSON payload' },
-      { status: 400 }
-    )
+    return parsedBody.response
   }
 
   const body = parsedBody.body
 
   if (typeof body.query !== 'string' || !body.query.trim()) {
-    return NextResponse.json(
-      {
-        message: 'Missing required field: query'
-      },
-      { status: 400 }
+    return invalidRequestResponse(
+      'missing_query',
+      'query must be a non-empty string.'
     )
   }
 
@@ -76,12 +97,35 @@ export async function POST(request: NextRequest) {
 
   const shouldStream = body.stream === false ? false : true
 
-  const depth =
+  if (typeof model !== 'string') {
+    return invalidRequestResponse('invalid_model', 'model must be a string.')
+  }
+
+  if (!isValidBrokModel(model) || !BROK_MODELS[model].supportsSearch) {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'invalid_request_error',
+          code: 'invalid_model',
+          message:
+            'Model does not support search. Use brok-search or brok-search-pro.'
+        }
+      },
+      { status: 400 }
+    )
+  }
+
+  const depthInput =
     body.mode === 'deep' || body.mode === 'deep_search'
       ? 'deep'
       : body.mode === 'quick' || body.mode === 'lite'
         ? 'lite'
-        : normalizeSearchDepth(body.depth || body.search_depth)
+        : (body.depth ?? body.search_depth)
+  const depthResult = parseSearchDepth(depthInput)
+  if (!depthResult.ok) {
+    return invalidRequestResponse(depthResult.code, depthResult.message)
+  }
+  const depth = depthResult.depth
 
   const domains =
     Array.isArray(body.domains) &&

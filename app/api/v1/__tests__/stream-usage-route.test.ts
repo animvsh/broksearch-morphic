@@ -290,6 +290,33 @@ describe('streaming usage metering', () => {
     expect(mockRecordUsage).not.toHaveBeenCalled()
   })
 
+  it('rejects chat web_search on non-search models before usage or RPM checks', async () => {
+    mockVerifyRequestAuth.mockResolvedValue(authResult(['chat:write']))
+
+    const response = await chatPost(
+      request('/api/v1/chat/completions', {
+        model: 'brok-code',
+        stream: true,
+        tools: [{ type: 'web_search_preview' }],
+        messages: [{ role: 'user', content: 'Search the web for Brok' }]
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      type: 'invalid_request_error',
+      code: 'invalid_model',
+      message:
+        'Model does not support search. Use brok-search or brok-search-pro.'
+    })
+    expect(mockCheckUsageLimits).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRecordRateLimitEvent).not.toHaveBeenCalled()
+    expect(mockRouteToProviderResponse).not.toHaveBeenCalled()
+    expect(mockRecordUsage).not.toHaveBeenCalled()
+  })
+
   it('estimates token usage for Anthropic-compatible message streams without provider usage', async () => {
     mockVerifyRequestAuth.mockResolvedValue(authResult(['code:write']))
     mockRouteToProviderResponse.mockResolvedValue(
