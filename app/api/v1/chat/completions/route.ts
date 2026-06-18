@@ -160,6 +160,22 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  if (isWebSearchToolRequest(tools, tool_choice)) {
+    if (!BROK_MODELS[modelId].supportsSearch) {
+      return NextResponse.json(
+        {
+          error: {
+            type: 'invalid_request_error',
+            code: 'invalid_model',
+            message:
+              'Model does not support search. Use brok-search or brok-search-pro.'
+          }
+        },
+        { status: 400 }
+      )
+    }
+  }
+
   const idempotency = await beginIdempotentRequest({
     request,
     workspaceId: auth.workspace.id,

@@ -155,7 +155,12 @@ describe('POST /api/search', () => {
 
     expect(response.status).toBe(400)
     const body = await response.json()
-    expect(body).toMatchObject({ message: 'Invalid JSON payload' })
+    expect(body).toMatchObject({
+      error: {
+        type: 'invalid_request_error',
+        code: 'invalid_json'
+      }
+    })
     expect(mockPostSearchCompletion).not.toHaveBeenCalled()
   })
 
@@ -164,7 +169,58 @@ describe('POST /api/search', () => {
 
     expect(response.status).toBe(400)
     const body = await response.json()
-    expect(body).toMatchObject({ message: 'Missing required field: query' })
+    expect(body).toMatchObject({
+      error: {
+        type: 'invalid_request_error',
+        code: 'missing_query',
+        message: 'query must be a non-empty string.'
+      }
+    })
+    expect(createChatWithFirstMessage).not.toHaveBeenCalled()
+    expect(mockPostSearchCompletion).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid search depth before creating a thread or stream URL', async () => {
+    const response = await searchPost(
+      makeRequest({
+        query: 'what is brok?',
+        stream: true,
+        search_depth: 'expensive'
+      })
+    )
+
+    expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body).toMatchObject({
+      error: {
+        type: 'invalid_request_error',
+        code: 'invalid_search_depth'
+      }
+    })
+    expect(body).not.toHaveProperty('stream_url')
+    expect(createChatWithFirstMessage).not.toHaveBeenCalled()
+    expect(mockPostSearchCompletion).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-search models before creating a thread or stream URL', async () => {
+    const response = await searchPost(
+      makeRequest({
+        query: 'what is brok?',
+        model: 'brok-code',
+        stream: true
+      })
+    )
+
+    expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body).toMatchObject({
+      error: {
+        type: 'invalid_request_error',
+        code: 'invalid_model'
+      }
+    })
+    expect(body).not.toHaveProperty('stream_url')
+    expect(createChatWithFirstMessage).not.toHaveBeenCalled()
     expect(mockPostSearchCompletion).not.toHaveBeenCalled()
   })
 
@@ -180,7 +236,7 @@ describe('POST /api/search', () => {
     const response = await searchPost(
       makeRequest({
         query: '  hello world  ',
-        model: 'custom-model',
+        model: 'brok-search',
         stream: false
       })
     )
@@ -188,7 +244,7 @@ describe('POST /api/search', () => {
 
     expect(response.status).toBe(200)
     expect(body).toMatchObject({
-      model: 'custom-model',
+      model: 'brok-search',
       query: 'hello world',
       depth: 'standard',
       stream: false
