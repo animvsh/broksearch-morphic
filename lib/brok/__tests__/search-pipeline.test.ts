@@ -866,6 +866,44 @@ describe('Brok search pipeline helpers', () => {
     )
   })
 
+  it('filters near-name false positives for exact person lookups', () => {
+    const sources = rankAndDedupeSources(
+      [
+        {
+          title: 'Home - Anirudh Krishna - Sanford School WordPress Network',
+          url: 'https://sites.sanford.duke.edu/krishna/',
+          publisher: 'sites.sanford.duke.edu',
+          snippet:
+            'ANIRUDH KRISHNA is the Edgar T. Thompson Professor of Public Policy.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'Anirudh Krishna - Duke Sanford School of Public Policy',
+          url: 'https://sanford.duke.edu/profile/anirudh-krishna/',
+          publisher: 'sanford.duke.edu',
+          snippet:
+            'Anirudh Krishna researches poverty, public policy, and social mobility.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        },
+        {
+          title: 'Vishnu - Pradyumna and Aniruddha',
+          url: 'https://sfipodcast.com/vishnu-pradyumna-and-aniruddha/',
+          publisher: 'sfipodcast.com',
+          snippet:
+            'Stories about Pradyumna and Aniruddha, Krishna son and grandson.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        }
+      ],
+      'who is Anirudh Krishna',
+      3
+    )
+
+    expect(sources.map(source => source.publisher)).toEqual([
+      'sites.sanford.duke.edu',
+      'sanford.duke.edu'
+    ])
+  })
+
   it('creates follow-up questions grounded in query and sources', () => {
     const classification = classifyQuery('How does Brok search work?')
     const followUps = generateFollowUps(
@@ -889,5 +927,33 @@ describe('Brok search pipeline helpers', () => {
       query:
         'What does docs.brok.ai specifically say about How does Brok search work?'
     })
+  })
+
+  it('creates person-specific follow-up questions for identity lookups', () => {
+    const classification = classifyQuery('who is Anirudh Krishna')
+    const followUps = generateFollowUps(
+      'who is Anirudh Krishna',
+      classification,
+      [
+        {
+          id: 'src_1',
+          title: 'Anirudh Krishna - Duke Sanford School of Public Policy',
+          url: 'https://sanford.duke.edu/profile/anirudh-krishna/',
+          publisher: 'sanford.duke.edu',
+          snippet:
+            'Anirudh Krishna is a professor of public policy and political science.',
+          retrievedAt: '2026-05-12T00:00:00.000Z'
+        }
+      ]
+    )
+
+    expect(followUps.map(followUp => followUp.label)).toEqual([
+      'What is Anirudh Krishna known for?',
+      "Show Anirudh Krishna's work",
+      'Why is Anirudh Krishna notable?',
+      'Find recent updates',
+      'Ask about sanford.duke.edu'
+    ])
+    expect(followUps[1].query).toContain('main work')
   })
 })

@@ -112,7 +112,7 @@ export default function AppSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
               className={navButtonClass}
               isActive={isActive('/') || isActive('/search')}
             >
-              <Link href="/" className="flex items-center gap-2">
+              <Link href="/search" className="flex items-center gap-2">
                 <span className={iconShellClass}>
                   <Search className="size-4" />
                 </span>

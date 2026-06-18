@@ -10,7 +10,10 @@ A command-line interface for testing the chat API without a browser client. This
 
 Browser smoke harness for protected Brok product surfaces. It can run without
 auth to verify clean redirects, or with an authenticated Playwright storage
-state to prove the signed-in experience.
+state to prove the signed-in experience. When auth input is present, it also
+runs a signed-in `/search?q=...&mode=quick` browser smoke that verifies
+progress, answer, sources, follow-up UI, durable answer reload/URL state, and
+browser fetch/page errors.
 
 ```bash
 # Unauthenticated smoke, useful for checking login redirects and public routes
@@ -24,7 +27,9 @@ bun run smoke:auth-platform
 
 Optional credential mode is supported with `BROK_SMOKE_EMAIL` and
 `BROK_SMOKE_PASSWORD`, but storage state is preferred so secrets are never
-written into repo files. Reports are written under `.brok-smoke/`.
+written into repo files. Tune the search probe with
+`BROK_SMOKE_SEARCH_QUERY`, `BROK_SMOKE_SEARCH_MODE`, and
+`BROK_SMOKE_SEARCH_TIMEOUT_MS`. Reports are written under `.brok-smoke/`.
 
 ## smoke-brokmail-composio.ts
 
