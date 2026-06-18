@@ -6,17 +6,12 @@ import {
   unauthorizedResponse,
   verifyRequestAuth
 } from '@/lib/brok/auth'
-import {
-  brokRateLimitHeaders,
-  invalidRequestResponse,
-  readJsonBody
-} from '@/lib/brok/http'
+import { brokRateLimitHeaders, readJsonBody } from '@/lib/brok/http'
 import {
   beginIdempotentRequest,
   completeIdempotentRequest,
   idempotencyHeaders
 } from '@/lib/brok/idempotency'
-import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
 import {
   applyBrokMarkup,
   calculateSearchProviderCostUsd
@@ -28,6 +23,7 @@ import {
   resolveQuery,
   runSearchPipeline
 } from '@/lib/brok/search-pipeline'
+import { validateSearchApiRequest } from '@/lib/brok/search-request-validation'
 import {
   checkUsageLimits,
   generateRequestId,
@@ -88,37 +84,6 @@ function completionPayload({
   }
 }
 
-type SearchDepth = 'lite' | 'standard' | 'deep'
-
-function parseSearchDepth(
-  value: unknown
-):
-  | { ok: true; depth: SearchDepth }
-  | { ok: false; code: string; message: string } {
-  if (value === undefined || value === null) {
-    return { ok: true, depth: 'standard' }
-  }
-
-  if (value === 'deep' || value === 'advanced') {
-    return { ok: true, depth: 'deep' }
-  }
-
-  if (value === 'lite' || value === 'basic' || value === 'quick') {
-    return { ok: true, depth: 'lite' }
-  }
-
-  if (value === 'standard') {
-    return { ok: true, depth: 'standard' }
-  }
-
-  return {
-    ok: false,
-    code: 'invalid_search_depth',
-    message:
-      'search_depth must be one of lite, standard, deep, basic, quick, or advanced.'
-  }
-}
-
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
   const requestId = generateRequestId()
@@ -147,66 +112,22 @@ export async function POST(request: NextRequest) {
   }
 
   const body = parsedBody.body
+  const validation = validateSearchApiRequest({
+    body,
+    allowedModels: auth.apiKey.allowedModels,
+    domainMode: 'filter'
+  })
+  if (!validation.ok) {
+    return validation.response
+  }
   const {
     query,
-    model = 'brok-search',
-    stream = true,
-    recency_days,
-    domains
-  } = body
-  if (typeof stream !== 'boolean') {
-    return invalidRequestResponse('invalid_stream', 'stream must be a boolean.')
-  }
-
-  const shouldStream = stream
-  const depthResult = parseSearchDepth(body.depth ?? body.search_depth)
-  if (!depthResult.ok) {
-    return invalidRequestResponse(depthResult.code, depthResult.message)
-  }
-  const depth = depthResult.depth
-  const searchDomains = Array.isArray(domains)
-    ? domains.filter((domain): domain is string => typeof domain === 'string')
-    : undefined
-
-  if (typeof query !== 'string' || query.trim().length === 0) {
-    return invalidRequestResponse(
-      'missing_query',
-      'query must be a non-empty string.'
-    )
-  }
-
-  if (typeof model !== 'string') {
-    return invalidRequestResponse('invalid_model', 'model must be a string.')
-  }
-
-  // Validate model supports search
-  if (!isValidBrokModel(model) || !BROK_MODELS[model].supportsSearch) {
-    return NextResponse.json(
-      {
-        error: {
-          type: 'invalid_request_error',
-          code: 'invalid_model',
-          message:
-            'Model does not support search. Use brok-search or brok-search-pro.'
-        }
-      },
-      { status: 400 }
-    )
-  }
-
-  const allowedModels = auth.apiKey.allowedModels as string[]
-  if (allowedModels.length > 0 && !allowedModels.includes(model)) {
-    return NextResponse.json(
-      {
-        error: {
-          type: 'invalid_request_error',
-          code: 'model_not_allowed',
-          message: `This API key does not have access to ${model}.`
-        }
-      },
-      { status: 403 }
-    )
-  }
+    model,
+    stream: shouldStream,
+    depth,
+    domains: searchDomains,
+    recencyDays
+  } = validation.value
 
   const idempotency = await beginIdempotentRequest({
     request,
@@ -375,7 +296,7 @@ export async function POST(request: NextRequest) {
             classification,
             depth,
             limit: depth === 'deep' ? 5 : depth === 'lite' ? 1 : 3,
-            recencyDays: recency_days,
+            recencyDays,
             domains: searchDomains
           })
 
@@ -416,7 +337,7 @@ export async function POST(request: NextRequest) {
             send('search_started', {
               id: requestId,
               depth,
-              recency_days,
+              recency_days: recencyDays,
               domains: searchDomains ?? [],
               search_queries: searchQueries
             })
@@ -424,7 +345,7 @@ export async function POST(request: NextRequest) {
             const searchResult = await runSearchPipeline({
               query,
               depth,
-              recencyDays: recency_days,
+              recencyDays,
               domains: searchDomains,
               signal: request.signal,
               onSources: sources => {
@@ -626,7 +547,7 @@ export async function POST(request: NextRequest) {
     const searchResult = await runSearchPipeline({
       query,
       depth,
-      recencyDays: recency_days,
+      recencyDays,
       domains: searchDomains
     })
 

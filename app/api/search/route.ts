@@ -8,13 +8,9 @@ import {
   unauthorizedResponse,
   verifyRequestAuth
 } from '@/lib/brok/auth'
-import {
-  brokRateLimitHeaders,
-  invalidRequestResponse,
-  readJsonBody
-} from '@/lib/brok/http'
-import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
+import { brokRateLimitHeaders, readJsonBody } from '@/lib/brok/http'
 import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
+import { validateSearchApiRequest } from '@/lib/brok/search-request-validation'
 import {
   makeSearchThreadId,
   registerSearchStreamRequest
@@ -25,37 +21,6 @@ import { generateId } from '@/lib/db/schema'
 import { POST as postSearchCompletion } from '@/app/api/v1/search/completions/route'
 
 export const runtime = 'nodejs'
-
-type SearchDepth = 'lite' | 'standard' | 'deep'
-
-function parseSearchDepth(
-  value: unknown
-):
-  | { ok: true; depth: SearchDepth }
-  | { ok: false; code: string; message: string } {
-  if (value === undefined || value === null) {
-    return { ok: true, depth: 'standard' }
-  }
-
-  if (value === 'deep' || value === 'advanced') {
-    return { ok: true, depth: 'deep' }
-  }
-
-  if (value === 'lite' || value === 'basic' || value === 'quick') {
-    return { ok: true, depth: 'lite' }
-  }
-
-  if (value === 'standard') {
-    return { ok: true, depth: 'standard' }
-  }
-
-  return {
-    ok: false,
-    code: 'invalid_search_depth',
-    message:
-      'search_depth must be one of lite, standard, deep, basic, quick, or advanced.'
-  }
-}
 
 export async function POST(request: NextRequest) {
   const auth = await verifyRequestAuth(request)
@@ -83,80 +48,22 @@ export async function POST(request: NextRequest) {
   }
 
   const body = parsedBody.body
-
-  if (typeof body.query !== 'string' || !body.query.trim()) {
-    return invalidRequestResponse(
-      'missing_query',
-      'query must be a non-empty string.'
-    )
+  const validation = validateSearchApiRequest({
+    body,
+    allowedModels: auth.apiKey.allowedModels,
+    allowModeDepthAliases: true
+  })
+  if (!validation.ok) {
+    return validation.response
   }
-
-  const model =
-    typeof body.model === 'string' && body.model.trim().length > 0
-      ? body.model
-      : 'brok-search'
-  const query = body.query.trim()
-
-  if (body.stream !== undefined && typeof body.stream !== 'boolean') {
-    return invalidRequestResponse('invalid_stream', 'stream must be a boolean.')
-  }
-
-  const shouldStream = body.stream === false ? false : true
-
-  if (typeof model !== 'string') {
-    return invalidRequestResponse('invalid_model', 'model must be a string.')
-  }
-
-  if (!isValidBrokModel(model) || !BROK_MODELS[model].supportsSearch) {
-    return NextResponse.json(
-      {
-        error: {
-          type: 'invalid_request_error',
-          code: 'invalid_model',
-          message:
-            'Model does not support search. Use brok-search or brok-search-pro.'
-        }
-      },
-      { status: 400 }
-    )
-  }
-
-  const allowedModels = Array.isArray(auth.apiKey.allowedModels)
-    ? (auth.apiKey.allowedModels as string[])
-    : []
-  if (allowedModels.length > 0 && !allowedModels.includes(model)) {
-    return NextResponse.json(
-      {
-        error: {
-          type: 'invalid_request_error',
-          code: 'model_not_allowed',
-          message: `This API key does not have access to ${model}.`
-        }
-      },
-      { status: 403 }
-    )
-  }
-
-  const depthInput =
-    body.mode === 'deep' || body.mode === 'deep_search'
-      ? 'deep'
-      : body.mode === 'quick' || body.mode === 'lite'
-        ? 'lite'
-        : (body.depth ?? body.search_depth)
-  const depthResult = parseSearchDepth(depthInput)
-  if (!depthResult.ok) {
-    return invalidRequestResponse(depthResult.code, depthResult.message)
-  }
-  const depth = depthResult.depth
-
-  const domains =
-    Array.isArray(body.domains) &&
-    body.domains.every(domain => typeof domain === 'string')
-      ? body.domains
-      : undefined
-
-  const recency_days =
-    typeof body.recency_days === 'number' ? body.recency_days : undefined
+  const {
+    query,
+    model,
+    stream: shouldStream,
+    depth,
+    domains,
+    recencyDays
+  } = validation.value
 
   const headers = new Headers(request.headers)
   headers.set('content-type', 'application/json')
@@ -167,7 +74,7 @@ export async function POST(request: NextRequest) {
     query,
     depth,
     stream: shouldStream,
-    recency_days,
+    recency_days: recencyDays,
     domains
   }
 

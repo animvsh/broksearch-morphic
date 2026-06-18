@@ -138,7 +138,51 @@ describe('POST /api/v1/search/completions', () => {
       code: 'invalid_stream',
       message: 'stream must be a boolean.'
     })
+    expect(mockCheckUsageLimits).not.toHaveBeenCalled()
     expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRunSearchPipeline).not.toHaveBeenCalled()
+  })
+
+  it('rejects missing query before consuming usage, RPM, or search work', async () => {
+    const response = await POST(
+      searchRequest({
+        model: 'brok-lite',
+        stream: false
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      type: 'invalid_request_error',
+      code: 'missing_query',
+      message: 'query must be a non-empty string.'
+    })
+    expect(mockCheckUsageLimits).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRecordRateLimitEvent).not.toHaveBeenCalled()
+    expect(mockRunSearchPipeline).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid model types before consuming usage, RPM, or search work', async () => {
+    const response = await POST(
+      searchRequest({
+        query: 'What is Brok?',
+        model: 123,
+        stream: false
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      type: 'invalid_request_error',
+      code: 'invalid_model',
+      message: 'model must be a string.'
+    })
+    expect(mockCheckUsageLimits).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(mockRecordRateLimitEvent).not.toHaveBeenCalled()
     expect(mockRunSearchPipeline).not.toHaveBeenCalled()
   })
 
@@ -160,6 +204,7 @@ describe('POST /api/v1/search/completions', () => {
       message:
         'search_depth must be one of lite, standard, deep, basic, quick, or advanced.'
     })
+    expect(mockCheckUsageLimits).not.toHaveBeenCalled()
     expect(mockCheckRateLimit).not.toHaveBeenCalled()
     expect(mockRecordRateLimitEvent).not.toHaveBeenCalled()
     expect(mockRunSearchPipeline).not.toHaveBeenCalled()
@@ -181,6 +226,25 @@ describe('POST /api/v1/search/completions', () => {
       depth: 'lite',
       recencyDays: undefined,
       domains: undefined
+    })
+  })
+
+  it('preserves v1 domain filtering compatibility for mixed domain arrays', async () => {
+    const response = await POST(
+      searchRequest({
+        query: 'What is Brok?',
+        model: 'brok-lite',
+        stream: false,
+        domains: ['brok.fyi', 42, 'docs.brok.fyi']
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockRunSearchPipeline).toHaveBeenCalledWith({
+      query: 'What is Brok?',
+      depth: 'standard',
+      recencyDays: undefined,
+      domains: ['brok.fyi', 'docs.brok.fyi']
     })
   })
 

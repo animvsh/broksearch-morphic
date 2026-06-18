@@ -147,6 +147,29 @@ describe('POST /api/search/session', () => {
     mocks.runSearchPipeline.mockResolvedValue(result())
   })
 
+  it('rejects missing query before auth, cache, rate limit, or search pipeline work', async () => {
+    const response = await POST(
+      makeRequest({
+        mode: 'search'
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      type: 'invalid_request_error',
+      code: 'missing_query',
+      message: 'query must be a non-empty string.'
+    })
+    expect(mocks.getCurrentUserIdForOptionalGuestSearch).not.toHaveBeenCalled()
+    expect(mocks.getCurrentAppAccess).not.toHaveBeenCalled()
+    expect(mocks.selectModel).not.toHaveBeenCalled()
+    expect(mocks.getCachedSearchPipelineResponse).not.toHaveBeenCalled()
+    expect(mocks.checkAndEnforceOverallChatLimit).not.toHaveBeenCalled()
+    expect(mocks.checkAndEnforceGuestLimit).not.toHaveBeenCalled()
+    expect(mocks.runSearchPipeline).not.toHaveBeenCalled()
+  })
+
   it('streams session search sources before the answer without an API key', async () => {
     const earlySource = source()
     mocks.runSearchPipeline.mockImplementationOnce(async request => {

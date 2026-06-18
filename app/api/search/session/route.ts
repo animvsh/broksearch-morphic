@@ -10,6 +10,7 @@ import {
   isGuestSearchEnabled,
   isGuestSearchMode
 } from '@/lib/auth/guest-search'
+import { invalidRequestResponse } from '@/lib/brok/http'
 import {
   buildSearchQueries,
   classifyQuery,
@@ -20,6 +21,11 @@ import {
   type SearchResponse,
   type SearchResult
 } from '@/lib/brok/search-pipeline'
+import {
+  invalidSearchDepthResponse,
+  modeDefaultSearchDepth,
+  parseSearchDepth
+} from '@/lib/brok/search-request-validation'
 import { normalizeSearchMode } from '@/lib/config/search-modes'
 import { isSupportedSearchModel } from '@/lib/model-selector/search-models'
 import { checkAndEnforceOverallChatLimit } from '@/lib/rate-limit/chat-limits'
@@ -45,49 +51,8 @@ type SessionSearchContextTurn = {
   answer: string
 }
 
-type SessionSearchDepth = 'lite' | 'standard' | 'deep'
-
 function sseEvent(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
-}
-
-function invalidSearchDepthResponse() {
-  return Response.json(
-    {
-      error: {
-        type: 'invalid_request_error',
-        code: 'invalid_search_depth',
-        message:
-          'search_depth must be one of lite, standard, deep, basic, quick, or advanced.'
-      }
-    },
-    { status: 400 }
-  )
-}
-
-function parseSearchDepth(
-  mode: SearchMode,
-  value: unknown
-): { ok: true; depth: SessionSearchDepth } | { ok: false } {
-  if (value === undefined || value === null) {
-    if (mode === 'deep') return { ok: true, depth: 'deep' }
-    if (mode === 'quick') return { ok: true, depth: 'lite' }
-    return { ok: true, depth: 'standard' }
-  }
-
-  if (value === 'deep' || value === 'advanced') {
-    return { ok: true, depth: 'deep' }
-  }
-
-  if (value === 'lite' || value === 'basic' || value === 'quick') {
-    return { ok: true, depth: 'lite' }
-  }
-
-  if (value === 'standard') {
-    return { ok: true, depth: 'standard' }
-  }
-
-  return { ok: false }
 }
 
 function sourceEventKey(source: Pick<SearchResult, 'id' | 'url'>) {
@@ -253,7 +218,10 @@ export async function POST(req: Request) {
 
   const query = typeof body.query === 'string' ? body.query.trim() : ''
   if (!query) {
-    return Response.json({ error: 'query is required' }, { status: 400 })
+    return invalidRequestResponse(
+      'missing_query',
+      'query must be a non-empty string.'
+    )
   }
 
   const mode = normalizeSearchMode(
@@ -284,7 +252,10 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Authentication required' }, { status: 401 })
   }
 
-  const depthResult = parseSearchDepth(mode, body.depth ?? body.search_depth)
+  const depthResult = parseSearchDepth(
+    body.depth ?? body.search_depth,
+    modeDefaultSearchDepth(mode)
+  )
   if (!depthResult.ok) {
     return invalidSearchDepthResponse()
   }
