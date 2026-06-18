@@ -34,6 +34,7 @@ type SessionSearchBody = {
   query?: unknown
   mode?: unknown
   depth?: unknown
+  search_depth?: unknown
   recency_days?: unknown
   domains?: unknown
   context?: unknown
@@ -44,14 +45,49 @@ type SessionSearchContextTurn = {
   answer: string
 }
 
+type SessionSearchDepth = 'lite' | 'standard' | 'deep'
+
 function sseEvent(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }
 
-function normalizeDepth(mode: SearchMode, value: unknown) {
-  if (value === 'deep' || mode === 'deep') return 'deep'
-  if (value === 'lite' || value === 'basic' || mode === 'quick') return 'lite'
-  return 'standard'
+function invalidSearchDepthResponse() {
+  return Response.json(
+    {
+      error: {
+        type: 'invalid_request_error',
+        code: 'invalid_search_depth',
+        message:
+          'search_depth must be one of lite, standard, deep, basic, quick, or advanced.'
+      }
+    },
+    { status: 400 }
+  )
+}
+
+function parseSearchDepth(
+  mode: SearchMode,
+  value: unknown
+): { ok: true; depth: SessionSearchDepth } | { ok: false } {
+  if (value === undefined || value === null) {
+    if (mode === 'deep') return { ok: true, depth: 'deep' }
+    if (mode === 'quick') return { ok: true, depth: 'lite' }
+    return { ok: true, depth: 'standard' }
+  }
+
+  if (value === 'deep' || value === 'advanced') {
+    return { ok: true, depth: 'deep' }
+  }
+
+  if (value === 'lite' || value === 'basic' || value === 'quick') {
+    return { ok: true, depth: 'lite' }
+  }
+
+  if (value === 'standard') {
+    return { ok: true, depth: 'standard' }
+  }
+
+  return { ok: false }
 }
 
 function sourceEventKey(source: Pick<SearchResult, 'id' | 'url'>) {
@@ -248,7 +284,11 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Authentication required' }, { status: 401 })
   }
 
-  const depth = normalizeDepth(mode, body.depth)
+  const depthResult = parseSearchDepth(mode, body.depth ?? body.search_depth)
+  if (!depthResult.ok) {
+    return invalidSearchDepthResponse()
+  }
+  const depth = depthResult.depth
   const recencyDays =
     typeof body.recency_days === 'number' ? body.recency_days : undefined
   const domains = normalizeDomains(body.domains)
