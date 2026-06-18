@@ -1,3 +1,7 @@
+import { act } from 'react'
+import { hydrateRoot } from 'react-dom/client'
+import { renderToString } from 'react-dom/server'
+
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -41,6 +45,13 @@ const modelSelectorData = {
       }
     ]
   }
+}
+
+function getModelControlsWrapper(root: ParentNode = document) {
+  const modelSelector = root.querySelector('[data-testid="model-selector"]')
+  const controls = modelSelector?.parentElement?.parentElement
+  expect(controls).not.toBeNull()
+  return controls as HTMLElement
 }
 
 describe('SearchLanding', () => {
@@ -129,6 +140,14 @@ describe('SearchLanding', () => {
   it('shows the answer model selector on the landing search form', () => {
     render(<SearchLanding modelSelectorData={modelSelectorData} />)
 
+    expect(getModelControlsWrapper()).toHaveClass(
+      'flex',
+      'min-w-0',
+      'flex-1',
+      'flex-wrap',
+      'items-center',
+      'gap-1.5'
+    )
     expect(screen.getByTestId('model-selector')).toHaveTextContent(
       'openai-compatible:brok-m2-5-highspeed'
     )
@@ -136,6 +155,56 @@ describe('SearchLanding', () => {
       'data-compact',
       'true'
     )
+  })
+
+  it('hydrates model controls without changing the landing form structure', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const container = document.createElement('div')
+    const view = <SearchLanding modelSelectorData={modelSelectorData} />
+
+    container.innerHTML = renderToString(view)
+    document.body.appendChild(container)
+
+    const serverControls = getModelControlsWrapper(container)
+    expect(serverControls).toHaveClass(
+      'flex',
+      'min-w-0',
+      'flex-1',
+      'flex-wrap',
+      'items-center',
+      'gap-1.5'
+    )
+
+    let root: ReturnType<typeof hydrateRoot> | undefined
+    await act(async () => {
+      root = hydrateRoot(container, view)
+    })
+
+    const hydratedControls = getModelControlsWrapper(container)
+    expect(hydratedControls).toHaveClass(
+      'flex',
+      'min-w-0',
+      'flex-1',
+      'flex-wrap',
+      'items-center',
+      'gap-1.5'
+    )
+    expect(screen.getAllByTestId('model-selector')).toHaveLength(1)
+    expect(
+      errorSpy.mock.calls.some(call =>
+        call.some(
+          arg =>
+            typeof arg === 'string' &&
+            arg.includes('Hydration failed because the server rendered HTML')
+        )
+      )
+    ).toBe(false)
+
+    await act(async () => {
+      root?.unmount()
+    })
+    container.remove()
+    errorSpy.mockRestore()
   })
 
   it('shows the MVP example prompts and starts from one immediately', () => {

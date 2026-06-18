@@ -137,6 +137,11 @@ function findScenario(query: string) {
   )
 }
 
+function quoteQueryAsQuestion(query: string) {
+  const suffix = /[.!?]$/.test(query) ? '' : '?'
+  return `"${query}"${suffix}`
+}
+
 function buildFallbackScenario(query: string): DemoScenario {
   return {
     id: 'custom',
@@ -150,7 +155,7 @@ Try one of the suggested prompts to see a more complete prewritten answer, or us
     followUps: [
       {
         id: 'custom-1',
-        query: `What sources would Brok need for "${query}"?`,
+        query: `What sources would Brok need for ${quoteQueryAsQuestion(query)}`,
         kind: 'dive-deeper'
       },
       {

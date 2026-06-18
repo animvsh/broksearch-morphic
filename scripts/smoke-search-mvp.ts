@@ -452,11 +452,57 @@ async function waitForFirstVisibleSearchResult(page: Page) {
   )
 }
 
+async function assertMobileResultLayout(page: Page) {
+  const result = await page.evaluate(() => {
+    const width = window.innerWidth
+    const height = window.innerHeight
+    const scrollWidth = document.documentElement.scrollWidth
+    const shortTargets: string[] = []
+    const selectors = [
+      '[data-testid="brok-search-source-0"] button',
+      'button[aria-controls="brok-source-details"]',
+      '[data-testid="follow-up-chip-0"]',
+      '[data-testid="brok-follow-up-form"] input',
+      '[data-testid="brok-follow-up-form"] button'
+    ]
+
+    for (const selector of selectors) {
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) {
+        shortTargets.push(`${selector}:missing`)
+        continue
+      }
+
+      const rect = element.getBoundingClientRect()
+      if (rect.width < 44 || rect.height < 44) {
+        shortTargets.push(
+          `${selector}:${Math.round(rect.width)}x${Math.round(rect.height)}`
+        )
+      }
+    }
+
+    return { height, scrollWidth, shortTargets, width }
+  })
+
+  await assert(
+    result.width === 390 && result.height === 844,
+    `expected mobile viewport 390x844, got ${result.width}x${result.height}`
+  )
+  await assert(
+    result.scrollWidth <= result.width,
+    `expected no horizontal overflow on mobile result page, got scrollWidth=${result.scrollWidth}, width=${result.width}`
+  )
+  await assert(
+    result.shortTargets.length === 0,
+    `expected important mobile search controls to be at least 44px, got ${result.shortTargets.join(', ')}`
+  )
+}
+
 async function main() {
   await ensureServerAvailable()
 
   const browser = await chromium.launch()
-  const page = await browser.newPage()
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
 
   try {
     await installFirstPaintObserver(page)
@@ -518,10 +564,12 @@ async function main() {
       'expected follow-up chips'
     )
     await page.getByTestId('brok-follow-up-form').waitFor({ timeout: 10_000 })
+    await assertMobileResultLayout(page)
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await assertSearchPageLoaded(page)
     await page.getByTestId('brok-search-answer').waitFor({ timeout: 10_000 })
+    await assertMobileResultLayout(page)
     await assert(
       sessionRequests.length === 1,
       `expected reload restore without rerunning, got ${sessionRequests.length} session requests`
