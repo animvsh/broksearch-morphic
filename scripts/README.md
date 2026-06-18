@@ -70,6 +70,32 @@ The managed server path sets `ENABLE_AUTH=false`, `APP_ACCESS_GATE=false`,
 `BROKCODE_ALLOW_LOCAL_BROWSER_SESSION_FALLBACK=true`. Reports are written under
 `.brok-smoke/local-product/`.
 
+## smoke-search-provider-outage.ts
+
+Direct backend smoke for `/api/search/session` provider-outage behavior. It does
+not intercept `window.fetch`; it posts to the real route, reads the SSE stream,
+and verifies the answer completes with a clearly labeled local fallback, no
+source events, and no citation events or markers.
+
+```bash
+bun run smoke:search-provider-outage
+```
+
+By default it starts a local production server on `http://127.0.0.1:3017` with
+auth disabled, Brok provider keys blanked, search cache disabled, and a 1ms
+provider timeout so the backend exercises the no-source outage path. Run
+`bun run build` first if `.next/BUILD_ID` is missing. To use an already
+configured outage target:
+
+```bash
+BROK_SEARCH_OUTAGE_SMOKE_START_SERVER=false \
+SMOKE_BASE_URL=http://127.0.0.1:3001 \
+bun run smoke:search-provider-outage
+```
+
+Set `BROK_SEARCH_OUTAGE_SMOKE_SERVER_COMMAND=dev` only when no other Next dev
+server is running for this checkout.
+
 ## smoke-brokcode.ts
 
 End-to-end BrokCode builder smoke harness. It creates a project, runs the code
