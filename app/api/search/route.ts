@@ -8,12 +8,18 @@ import {
   unauthorizedResponse,
   verifyRequestAuth
 } from '@/lib/brok/auth'
-import { invalidRequestResponse, readJsonBody } from '@/lib/brok/http'
+import {
+  brokRateLimitHeaders,
+  invalidRequestResponse,
+  readJsonBody
+} from '@/lib/brok/http'
 import { BROK_MODELS, isValidBrokModel } from '@/lib/brok/models'
+import { checkRateLimit, recordRateLimitEvent } from '@/lib/brok/rate-limiter'
 import {
   makeSearchThreadId,
   registerSearchStreamRequest
 } from '@/lib/brok/search-stream-registry'
+import { checkUsageLimits, usageLimitResponse } from '@/lib/brok/usage-tracker'
 import { generateId } from '@/lib/db/schema'
 
 import { POST as postSearchCompletion } from '@/app/api/v1/search/completions/route'
@@ -115,6 +121,22 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  const allowedModels = Array.isArray(auth.apiKey.allowedModels)
+    ? (auth.apiKey.allowedModels as string[])
+    : []
+  if (allowedModels.length > 0 && !allowedModels.includes(model)) {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'invalid_request_error',
+          code: 'model_not_allowed',
+          message: `This API key does not have access to ${model}.`
+        }
+      },
+      { status: 403 }
+    )
+  }
+
   const depthInput =
     body.mode === 'deep' || body.mode === 'deep_search'
       ? 'deep'
@@ -160,6 +182,68 @@ export async function POST(request: NextRequest) {
     )
 
     return postSearchCompletion(forwarded)
+  }
+
+  const usageLimit = await checkUsageLimits({
+    apiKey: auth.apiKey,
+    workspace: auth.workspace
+  })
+  if (!usageLimit.allowed) {
+    return usageLimitResponse(usageLimit)
+  }
+
+  const rateLimit = await checkRateLimit(
+    auth.apiKey.id,
+    auth.workspace.id,
+    auth.apiKey.rpmLimit ?? 60
+  )
+
+  if (!rateLimit.allowed) {
+    if (rateLimit.reason === 'rate_limit_check_failed') {
+      return NextResponse.json(
+        {
+          error: {
+            type: 'service_unavailable',
+            code: 'rate_limit_check_failed',
+            message:
+              'Rate limit check is temporarily unavailable. Please retry shortly.'
+          }
+        },
+        { status: 503 }
+      )
+    }
+
+    await recordRateLimitEvent(
+      auth.apiKey.id,
+      auth.workspace.id,
+      'rpm',
+      rateLimit.limit,
+      rateLimit.current + 1,
+      true
+    )
+
+    return NextResponse.json(
+      {
+        error: {
+          type: 'rate_limit_error',
+          code: 'rate_limit_exceeded',
+          message: 'Rate limit exceeded for this API key.',
+          limit: `${rateLimit.limit} requests per minute`,
+          retry_after_seconds: Math.ceil(
+            (rateLimit.resetAt * 1000 - Date.now()) / 1000
+          )
+        }
+      },
+      {
+        status: 429,
+        headers: brokRateLimitHeaders({
+          limit: rateLimit.limit,
+          current: rateLimit.limit,
+          resetAt: rateLimit.resetAt,
+          includeRetryAfter: true
+        })
+      }
+    )
   }
 
   const threadId = makeSearchThreadId()

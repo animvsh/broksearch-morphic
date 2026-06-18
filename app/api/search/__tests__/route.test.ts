@@ -8,8 +8,17 @@ import { getSearchStreamRequest } from '@/lib/brok/search-stream-registry'
 
 import { POST as searchPost } from '../route'
 
-const { mockPostSearchCompletion, mockVerifyRequestAuth } = vi.hoisted(() => ({
+const {
+  mockCheckRateLimit,
+  mockCheckUsageLimits,
+  mockPostSearchCompletion,
+  mockRecordRateLimitEvent,
+  mockVerifyRequestAuth
+} = vi.hoisted(() => ({
+  mockCheckRateLimit: vi.fn(),
+  mockCheckUsageLimits: vi.fn(),
   mockPostSearchCompletion: vi.fn(),
+  mockRecordRateLimitEvent: vi.fn(),
   mockVerifyRequestAuth: vi.fn()
 }))
 
@@ -29,6 +38,35 @@ vi.mock('@/lib/brok/auth', async importOriginal => {
       (apiKey.scopes.includes(scope) || apiKey.scopes.includes('*'))
   }
 })
+
+vi.mock('@/lib/brok/rate-limiter', () => ({
+  checkRateLimit: mockCheckRateLimit,
+  recordRateLimitEvent: mockRecordRateLimitEvent
+}))
+
+vi.mock('@/lib/brok/usage-tracker', () => ({
+  checkUsageLimits: mockCheckUsageLimits,
+  usageLimitResponse: (result: {
+    code: string
+    message: string
+    status: number
+  }) =>
+    Response.json(
+      {
+        error: {
+          type:
+            result.status === 429
+              ? 'rate_limit_error'
+              : result.status === 402
+                ? 'billing_error'
+                : 'server_error',
+          code: result.code,
+          message: result.message
+        }
+      },
+      { status: result.status }
+    )
+}))
 
 vi.mock('@/lib/auth/get-current-user', () => ({
   getCurrentUserId: vi.fn()
@@ -68,7 +106,9 @@ function authSuccess(userId = 'api_user_1') {
     apiKey: {
       id: 'key_1',
       userId,
-      scopes: ['search:write']
+      scopes: ['search:write'],
+      allowedModels: [],
+      rpmLimit: 60
     },
     workspace: {
       id: 'ws_1'
@@ -86,6 +126,16 @@ describe('POST /api/search', () => {
 
     mockVerifyRequestAuth.mockReset()
     mockVerifyRequestAuth.mockResolvedValue(authSuccess())
+    mockCheckUsageLimits.mockReset()
+    mockCheckUsageLimits.mockResolvedValue({ allowed: true })
+    mockCheckRateLimit.mockReset()
+    mockCheckRateLimit.mockResolvedValue({
+      allowed: true,
+      current: 0,
+      limit: 60,
+      resetAt: Math.floor(Date.now() / 1000) + 60
+    })
+    mockRecordRateLimitEvent.mockReset()
 
     mockPostSearchCompletion.mockReset()
     vi.mocked(getCurrentUserId).mockReset()
@@ -224,6 +274,105 @@ describe('POST /api/search', () => {
     expect(mockPostSearchCompletion).not.toHaveBeenCalled()
   })
 
+  it('rejects disallowed search models before creating a thread or stream URL', async () => {
+    mockVerifyRequestAuth.mockResolvedValueOnce({
+      ...authSuccess(),
+      apiKey: {
+        ...authSuccess().apiKey,
+        allowedModels: ['brok-fast']
+      }
+    })
+
+    const response = await searchPost(
+      makeRequest({
+        query: 'what is brok?',
+        model: 'brok-search',
+        stream: true
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body).toMatchObject({
+      error: {
+        type: 'invalid_request_error',
+        code: 'model_not_allowed'
+      }
+    })
+    expect(body).not.toHaveProperty('stream_url')
+    expect(mockCheckUsageLimits).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(createChatWithFirstMessage).not.toHaveBeenCalled()
+    expect(mockPostSearchCompletion).not.toHaveBeenCalled()
+  })
+
+  it('rejects over-budget stream requests before creating a thread or stream URL', async () => {
+    mockCheckUsageLimits.mockResolvedValueOnce({
+      allowed: false,
+      code: 'workspace_monthly_budget_exceeded',
+      message: 'Workspace monthly budget exceeded.',
+      status: 402
+    })
+
+    const response = await searchPost(
+      makeRequest({
+        query: 'what is brok?',
+        model: 'brok-search',
+        stream: true
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(402)
+    expect(body).toMatchObject({
+      error: {
+        code: 'workspace_monthly_budget_exceeded'
+      }
+    })
+    expect(body).not.toHaveProperty('stream_url')
+    expect(mockCheckRateLimit).not.toHaveBeenCalled()
+    expect(createChatWithFirstMessage).not.toHaveBeenCalled()
+    expect(mockPostSearchCompletion).not.toHaveBeenCalled()
+  })
+
+  it('rejects rate-limited stream requests before creating a thread or stream URL', async () => {
+    mockCheckRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      current: 60,
+      limit: 60,
+      resetAt: Math.floor(Date.now() / 1000) + 60,
+      reason: 'rate_limit_exceeded'
+    })
+
+    const response = await searchPost(
+      makeRequest({
+        query: 'what is brok?',
+        model: 'brok-search',
+        stream: true
+      })
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(429)
+    expect(body).toMatchObject({
+      error: {
+        type: 'rate_limit_error',
+        code: 'rate_limit_exceeded'
+      }
+    })
+    expect(body).not.toHaveProperty('stream_url')
+    expect(mockRecordRateLimitEvent).toHaveBeenCalledWith(
+      'key_1',
+      'ws_1',
+      'rpm',
+      60,
+      61,
+      true
+    )
+    expect(createChatWithFirstMessage).not.toHaveBeenCalled()
+    expect(mockPostSearchCompletion).not.toHaveBeenCalled()
+  })
+
   it('forwards stream=false requests to /api/v1/search/completions', async () => {
     mockPostSearchCompletion.mockImplementation(async (forwarded: Request) => {
       const payload = await forwarded.json()
@@ -289,6 +438,7 @@ describe('POST /api/search', () => {
       'user_1',
       'Brok is awesome?'
     )
+    expect(mockRecordRateLimitEvent).not.toHaveBeenCalled()
   })
 
   it('returns PRD-style envelope when stream is omitted', async () => {
