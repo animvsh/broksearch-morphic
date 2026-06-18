@@ -20,6 +20,13 @@ type BrokCodeProject = typeof brokCodeProjects.$inferSelect
 type BrokCodeProjectFile = typeof brokCodeProjectFiles.$inferSelect
 type BrokCodeDeployment = typeof brokCodeDeployments.$inferSelect
 
+export type BrokCodeDeploymentFileSnapshot = Array<{
+  path: string
+  content: string
+  language?: string | null
+  updatedAt?: string | Date | null
+}>
+
 type BrokCodeProjectStoreFile = {
   projects: BrokCodeProject[]
   files: BrokCodeProjectFile[]
@@ -125,6 +132,52 @@ function fallbackProjectStatus(status: string) {
     return 'deploying'
   }
   return 'deployed'
+}
+
+function normalizeDeploymentFileSnapshot(
+  value: unknown
+): BrokCodeDeploymentFileSnapshot {
+  if (!Array.isArray(value)) return []
+
+  return value.flatMap(file => {
+    if (
+      !file ||
+      typeof file !== 'object' ||
+      !('path' in file) ||
+      typeof file.path !== 'string' ||
+      !('content' in file) ||
+      typeof file.content !== 'string'
+    ) {
+      return []
+    }
+
+    return [
+      {
+        path: file.path,
+        content: file.content,
+        language:
+          'language' in file && typeof file.language === 'string'
+            ? file.language
+            : null,
+        updatedAt:
+          'updatedAt' in file &&
+          (typeof file.updatedAt === 'string' || file.updatedAt instanceof Date)
+            ? file.updatedAt
+            : null
+      }
+    ]
+  })
+}
+
+export function createBrokCodeDeploymentFileSnapshot(
+  files: Array<{
+    path: string
+    content: string
+    language?: string | null
+    updatedAt?: string | Date | null
+  }>
+): BrokCodeDeploymentFileSnapshot {
+  return normalizeDeploymentFileSnapshot(files)
 }
 
 export function makeBrokCodeSlug(value: string) {
@@ -725,6 +778,65 @@ export async function updateBrokCodeProjectPreview({
   }))
 }
 
+export async function clearBrokCodeProjectPreview({
+  projectId,
+  workspaceId,
+  userId,
+  metadata
+}: {
+  projectId: string
+  workspaceId: string
+  userId: string
+  metadata?: Record<string, unknown> | null
+}) {
+  const project = await getBrokCodeProject({
+    id: projectId,
+    workspaceId,
+    userId
+  })
+  if (!project) return null
+
+  const nextMetadata = metadata
+    ? {
+        ...(project.metadata ?? {}),
+        preview: {
+          ...((project.metadata?.preview as Record<string, unknown>) ?? {}),
+          ...metadata
+        }
+      }
+    : project.metadata
+
+  if (canUseDatabaseStoreForWorkspace(workspaceId)) {
+    try {
+      const [updatedProject] = await db
+        .update(brokCodeProjects)
+        .set({
+          status: 'draft',
+          previewUrl: null,
+          metadata: nextMetadata,
+          updatedAt: new Date()
+        })
+        .where(eq(brokCodeProjects.id, projectId))
+        .returning()
+
+      return updatedProject ?? null
+    } catch (error) {
+      console.error(
+        'BrokCode project DB preview clear failed; using file store:',
+        error
+      )
+    }
+  }
+
+  return updateFallbackProject(projectId, current => ({
+    ...current,
+    status: 'draft',
+    previewUrl: null,
+    metadata: nextMetadata,
+    updatedAt: new Date()
+  }))
+}
+
 export async function updateBrokCodeProjectMetadata({
   projectId,
   workspaceId,
@@ -923,6 +1035,34 @@ export async function listBrokCodeProjectDeployments({
     )
     .map(({ deployment }) => deployment)
     .slice(0, boundedMaxResults)
+}
+
+export async function getLatestBrokCodeDeploymentFileSnapshot({
+  projectId,
+  workspaceId,
+  userId
+}: {
+  projectId: string
+  workspaceId: string
+  userId: string
+}) {
+  const deployments = await listBrokCodeProjectDeployments({
+    projectId,
+    workspaceId,
+    userId,
+    maxResults: 25
+  })
+  const deployed = deployments.find(
+    deployment =>
+      deployment.provider === 'managed_preview' &&
+      deployment.status === 'deployed'
+  )
+  if (!deployed) return []
+
+  const metadata = deployed.metadata ?? {}
+  return normalizeDeploymentFileSnapshot(
+    metadata.fileSnapshot ?? metadata.filesSnapshot ?? metadata.files
+  )
 }
 
 export async function listBrokCodeProjectFiles({

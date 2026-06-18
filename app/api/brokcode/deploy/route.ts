@@ -14,6 +14,7 @@ import {
 } from '@/lib/brokcode/account-guard'
 import { getBrokCodeManagedDeployReadiness } from '@/lib/brokcode/deploy-readiness'
 import {
+  createBrokCodeDeploymentFileSnapshot,
   getBrokCodeProject,
   listBrokCodeProjectDeployments,
   listBrokCodeProjectFiles,
@@ -48,6 +49,34 @@ type RailwayNode = {
 
 class ManagedDeployValidationError extends Error {
   status = 422
+}
+
+function hasConfiguredWebhookDeployTarget() {
+  return Boolean(process.env.BROKCODE_DEPLOY_WEBHOOK_URL?.trim())
+}
+
+function hasConfiguredRailwayDeployTarget() {
+  return Boolean(process.env.RAILWAY_API_TOKEN?.trim())
+}
+
+function getDeployTargetSummary() {
+  return {
+    managed: {
+      available: true,
+      strategy: 'managed_live_preview',
+      label: 'Brok managed URL'
+    },
+    webhook: {
+      available: hasConfiguredWebhookDeployTarget(),
+      strategy: 'webhook',
+      label: 'Configured deploy webhook'
+    },
+    railway: {
+      available: hasConfiguredRailwayDeployTarget(),
+      strategy: 'railway',
+      label: 'Railway deployment'
+    }
+  }
 }
 
 function normalizeDeployPreviewUrl(value: unknown) {
@@ -144,6 +173,54 @@ async function persistDeploymentIfProjectSelected({
   })
 }
 
+async function getProjectDeploymentArtifact({
+  auth,
+  projectId,
+  request
+}: {
+  auth: BrokCodeAuthResult
+  projectId: string | null
+  request: NextRequest
+}) {
+  if (!projectId) return null
+
+  const project = await getBrokCodeProject({
+    id: projectId,
+    workspaceId: auth.workspace.id,
+    userId: auth.apiKey.userId
+  })
+  if (!project) {
+    throw new Error('Selected BrokCode project was not found.')
+  }
+
+  const files = await listBrokCodeProjectFiles({
+    projectId: project.id,
+    workspaceId: auth.workspace.id
+  })
+  const readiness = getBrokCodeManagedDeployReadiness({
+    files,
+    project,
+    request
+  })
+  if (!readiness.ready) {
+    throw new ManagedDeployValidationError(readiness.message)
+  }
+
+  return {
+    project: {
+      id: project.id,
+      name: project.name,
+      slug: project.slug,
+      username: project.username,
+      previewUrl: readiness.previewUrl,
+      deploymentUrl: readiness.deploymentUrl
+    },
+    readiness,
+    fileCount: readiness.fileCount,
+    fileSnapshot: createBrokCodeDeploymentFileSnapshot(files)
+  }
+}
+
 async function triggerManagedPreviewDeployment({
   auth,
   projectId,
@@ -203,6 +280,7 @@ async function triggerManagedPreviewDeployment({
     metadata: {
       strategy: readiness.strategy,
       previewUrl: readiness.previewUrl,
+      fileSnapshot: createBrokCodeDeploymentFileSnapshot(files),
       fileCount: readiness.fileCount,
       quality: readiness.quality,
       deployReadiness: readiness,
@@ -213,7 +291,10 @@ async function triggerManagedPreviewDeployment({
   return {
     status: 'deployed',
     strategy: readiness.strategy,
-    message: 'BrokCode app is live on its managed URL.',
+    deploymentKind: 'managed_static',
+    externalDeployment: false,
+    message:
+      'BrokCode app is published on its managed URL. No external deployment was triggered.',
     deploymentId: persistedDeployment?.id ?? null,
     persistedDeployment,
     project: updatedProject ?? project,
@@ -586,7 +667,60 @@ export async function POST(request: NextRequest) {
   const webhookUrl = process.env.BROKCODE_DEPLOY_WEBHOOK_URL?.trim()
   const webhookBearer = process.env.BROKCODE_DEPLOY_WEBHOOK_BEARER?.trim()
 
-  if (webhookUrl) {
+  if (deployStrategy === 'webhook' && !webhookUrl) {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'configuration_error',
+          message:
+            'Webhook deployment is not configured. Set BROKCODE_DEPLOY_WEBHOOK_URL or choose the managed publish path.'
+        }
+      },
+      { status: 503 }
+    )
+  }
+
+  if (deployStrategy === 'webhook' || (!deployStrategy && webhookUrl)) {
+    if (!webhookUrl) {
+      return NextResponse.json(
+        {
+          error: {
+            type: 'configuration_error',
+            message:
+              'Webhook deployment is not configured. Set BROKCODE_DEPLOY_WEBHOOK_URL or choose the managed publish path.'
+          }
+        },
+        { status: 503 }
+      )
+    }
+
+    let deploymentArtifact: Awaited<
+      ReturnType<typeof getProjectDeploymentArtifact>
+    > = null
+    try {
+      deploymentArtifact = await getProjectDeploymentArtifact({
+        auth: successfulAuth,
+        projectId,
+        request
+      })
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error: {
+            type: 'deploy_error',
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Could not prepare BrokCode deployment artifact.'
+          }
+        },
+        {
+          status:
+            error instanceof ManagedDeployValidationError ? error.status : 502
+        }
+      )
+    }
+
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
@@ -597,7 +731,18 @@ export async function POST(request: NextRequest) {
         source: 'brokcode',
         requestedAt: new Date().toISOString(),
         requestedByWorkspaceId: successfulAuth.workspace.id,
-        commitSha: commitSha || undefined
+        commitSha: commitSha || undefined,
+        projectId: projectId || undefined,
+        project: deploymentArtifact?.project,
+        managedPreview: deploymentArtifact
+          ? {
+              previewUrl: deploymentArtifact.readiness.previewUrl,
+              deploymentUrl: deploymentArtifact.readiness.deploymentUrl,
+              fileCount: deploymentArtifact.fileCount,
+              quality: deploymentArtifact.readiness.quality
+            }
+          : undefined,
+        files: deploymentArtifact?.fileSnapshot
       })
     })
 
@@ -626,13 +771,17 @@ export async function POST(request: NextRequest) {
       metadata: {
         strategy: 'webhook',
         commitSha,
-        deployment: payload
+        deployment: payload,
+        fileSnapshot: deploymentArtifact?.fileSnapshot,
+        deployReadiness: deploymentArtifact?.readiness
       }
     })
 
     return NextResponse.json({
       status: 'triggered',
       strategy: 'webhook',
+      deploymentKind: 'external',
+      externalDeployment: true,
       message: 'Deployment triggered via configured webhook.',
       deployment: payload,
       persistedDeployment,
@@ -692,6 +841,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       status: 'triggered',
       strategy: deployment.strategy,
+      deploymentKind: 'external',
+      externalDeployment: true,
       message: deployment.message,
       deploymentId: deployment.deploymentId,
       railway: target,
@@ -794,6 +945,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     project,
     readiness,
+    deployTargets: getDeployTargetSummary(),
     latestDeployment: deployments[0] ?? null,
     deployments,
     previewUrl: project.previewUrl ?? readiness.previewUrl,

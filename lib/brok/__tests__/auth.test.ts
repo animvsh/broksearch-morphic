@@ -120,6 +120,7 @@ describe('verifyRequestAuth', () => {
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.apiKey.scopes).toContain('usage:read')
+      expect(result.apiKey.scopes).toContain('code:write')
     }
   })
 

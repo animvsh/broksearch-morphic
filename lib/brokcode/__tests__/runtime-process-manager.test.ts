@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createBrokCodeRuntimeSpec } from '../runtime/contract'
 import {
   createRuntimeLogs,
+  getBrokCodeRuntimeDevCommand,
+  getBrokCodeRuntimeInstallCommand,
   getBrokCodeRuntimeProcessReuseDecision,
   persistBrokCodeRuntimeProcessExit,
   redactBrokCodeRuntimeLog,
@@ -283,6 +285,87 @@ describe('BrokCode runtime process diagnostics', () => {
     ).toMatchObject({
       action: 'restart',
       reason: 'Runtime contract changed.'
+    })
+  })
+
+  it('uses the detected package manager for installs and Vite dev commands', () => {
+    expect(getBrokCodeRuntimeInstallCommand('bun')).toMatchObject({
+      command: 'bun',
+      args: ['install'],
+      label: 'bun install'
+    })
+    expect(getBrokCodeRuntimeInstallCommand('npm')).toMatchObject({
+      command: 'npm',
+      args: ['install'],
+      label: 'npm install'
+    })
+    expect(getBrokCodeRuntimeInstallCommand('pnpm')).toMatchObject({
+      command: 'pnpm',
+      args: ['install'],
+      label: 'pnpm install'
+    })
+    expect(getBrokCodeRuntimeInstallCommand('yarn')).toMatchObject({
+      command: 'yarn',
+      args: ['install'],
+      label: 'yarn install'
+    })
+
+    expect(
+      getBrokCodeRuntimeDevCommand({
+        manifest: { appType: 'vite_react', packageManager: 'npm' },
+        port: 4173
+      })
+    ).toMatchObject({
+      command: 'npm',
+      args: ['run', 'dev', '--', '--host', '127.0.0.1', '--port', '4173']
+    })
+    expect(
+      getBrokCodeRuntimeDevCommand({
+        manifest: { appType: 'vite_react', packageManager: 'pnpm' },
+        port: 4173
+      })
+    ).toMatchObject({
+      command: 'pnpm',
+      args: ['dev', '--host', '127.0.0.1', '--port', '4173']
+    })
+    expect(
+      getBrokCodeRuntimeDevCommand({
+        manifest: { appType: 'vite_react', packageManager: 'yarn' },
+        port: 4173
+      })
+    ).toMatchObject({
+      command: 'yarn',
+      args: ['dev', '--host', '127.0.0.1', '--port', '4173']
+    })
+  })
+
+  it('uses the detected package manager for Next dev commands', () => {
+    expect(
+      getBrokCodeRuntimeDevCommand({
+        manifest: { appType: 'nextjs', packageManager: 'npm' },
+        port: 3100
+      })
+    ).toMatchObject({
+      command: 'npm',
+      args: ['run', 'dev', '--', '-H', '127.0.0.1', '-p', '3100']
+    })
+    expect(
+      getBrokCodeRuntimeDevCommand({
+        manifest: { appType: 'nextjs', packageManager: 'pnpm' },
+        port: 3100
+      })
+    ).toMatchObject({
+      command: 'pnpm',
+      args: ['dev', '-H', '127.0.0.1', '-p', '3100']
+    })
+    expect(
+      getBrokCodeRuntimeDevCommand({
+        manifest: { appType: 'nextjs', packageManager: 'yarn' },
+        port: 3100
+      })
+    ).toMatchObject({
+      command: 'yarn',
+      args: ['dev', '-H', '127.0.0.1', '-p', '3100']
     })
   })
 })

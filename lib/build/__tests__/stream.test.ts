@@ -4,6 +4,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
+  createBrokCodeProject,
   getBrokCodeProject,
   listBrokCodeProjectDeployments,
   listBrokCodeProjectFiles,
@@ -75,7 +76,6 @@ describe('runBuildStream', () => {
     try {
       const result = await runBuildStream({
         prompt: 'Build me a CRM with login, customers, notes, and tasks',
-        projectId: 'brok-test-persist',
         brokCodeProject: {
           workspaceId: '00000000-0000-0000-0000-000000000003',
           userId: 'user_test',
@@ -135,7 +135,6 @@ describe('runBuildStream', () => {
       expect(executionPrompt).toContain('mock account/status panel')
       expect(executionPrompt).toContain('attachment/file list UI')
       expect(executionPrompt).toContain('Tables: users, customers, notes, tasks')
-      expect(result.projectId).not.toBe('brok-test-persist')
       expect(result.projectId).toBeTruthy()
       const persistedProjectId = result.projectId
       if (!persistedProjectId) {
@@ -201,6 +200,105 @@ describe('runBuildStream', () => {
     }
   }, 15000)
 
+  it('continues an authenticated build in the requested BrokCode project', async () => {
+    const syncDir = await mkdtemp(path.join(tmpdir(), 'brok-build-edit-'))
+    const previousStorage = process.env.BROKCODE_PROJECT_STORAGE
+    const previousSyncDir = process.env.BROKCODE_SYNC_DIR
+    process.env.BROKCODE_PROJECT_STORAGE = 'file'
+    process.env.BROKCODE_SYNC_DIR = syncDir
+
+    try {
+      const project = await createBrokCodeProject({
+        workspaceId: '00000000-0000-0000-0000-000000000003',
+        userId: 'user_test',
+        name: 'Existing CRM'
+      })
+      await upsertBrokCodeProjectFile({
+        projectId: project.id,
+        workspaceId: '00000000-0000-0000-0000-000000000003',
+        path: 'index.html',
+        content: '<!doctype html><html><body>Old CRM</body></html>',
+        language: 'html'
+      })
+
+      const result = await runBuildStream({
+        prompt:
+          'The InsForge backend has been provisioned and its planned resources were applied.\n\nEdit request: add premium onboarding',
+        projectId: project.id,
+        brokCodeProject: {
+          workspaceId: '00000000-0000-0000-0000-000000000003',
+          userId: 'user_test',
+          request: {
+            headers: new Headers({ host: 'localhost:3000' }),
+            url: 'http://localhost:3000/api/build/stream'
+          },
+          executeBrokCodeBuild: async ({ projectId, workspaceId }) => {
+            await upsertBrokCodeProjectFile({
+              projectId,
+              workspaceId,
+              path: 'onboarding.js',
+              content:
+                "const NEXT_PUBLIC_INSFORGE_URL = 'https://example.insforge.app';\nconst NEXT_PUBLIC_INSFORGE_APP_KEY = 'if_public_demo';\nexport async function loadCustomers() { return fetch(`${NEXT_PUBLIC_INSFORGE_URL}/api/database/tables/customers/records?appKey=${NEXT_PUBLIC_INSFORGE_APP_KEY}`); }",
+              language: 'js'
+            })
+            return {
+              preview_url: `http://localhost:3000/api/brokcode/previews/${projectId}`,
+              generated_files: ['onboarding.js'],
+              runtime: 'pi',
+              note: 'Edited existing BrokCode project.'
+            }
+          }
+        }
+      })
+
+      expect(result.projectId).toBe(project.id)
+      const projectEvent = result.events.find(
+        event => event.kind === 'brokcode_project'
+      )
+      expect(projectEvent).toMatchObject({
+        kind: 'brokcode_project',
+        projectId: project.id,
+        source: 'brokcode_execute',
+        degraded: false
+      })
+
+      const updatedProject = await getBrokCodeProject({
+        id: project.id,
+        workspaceId: '00000000-0000-0000-0000-000000000003',
+        userId: 'user_test'
+      })
+      expect(updatedProject?.metadata?.preview).toMatchObject({
+        beforeFileCount: 1,
+        source: 'brok_build_execute',
+        note: 'Edited existing BrokCode project.',
+        backendRewire: {
+          provider: 'insforge',
+          status: 'rewired'
+        }
+      })
+      const files = await listBrokCodeProjectFiles({
+        projectId: project.id,
+        workspaceId: '00000000-0000-0000-0000-000000000003'
+      })
+      expect(files.map(file => file.path).sort()).toEqual([
+        'index.html',
+        'onboarding.js'
+      ])
+    } finally {
+      if (previousStorage === undefined) {
+        delete process.env.BROKCODE_PROJECT_STORAGE
+      } else {
+        process.env.BROKCODE_PROJECT_STORAGE = previousStorage
+      }
+      if (previousSyncDir === undefined) {
+        delete process.env.BROKCODE_SYNC_DIR
+      } else {
+        process.env.BROKCODE_SYNC_DIR = previousSyncDir
+      }
+      await rm(syncDir, { recursive: true, force: true })
+    }
+  }, 15000)
+
   it('marks fallback builds as degraded and does not record a deployment', async () => {
     const syncDir = await mkdtemp(path.join(tmpdir(), 'brok-build-fallback-'))
     const previousStorage = process.env.BROKCODE_PROJECT_STORAGE
@@ -211,7 +309,6 @@ describe('runBuildStream', () => {
     try {
       const result = await runBuildStream({
         prompt: 'Build me a CRM with login, customers, notes, and tasks',
-        projectId: 'brok-test-fallback',
         brokCodeProject: {
           workspaceId: '00000000-0000-0000-0000-000000000003',
           userId: 'user_test',
@@ -298,7 +395,6 @@ describe('runBuildStream', () => {
     try {
       const result = await runBuildStream({
         prompt: 'Build me a CRM with login, customers, notes, and tasks',
-        projectId: 'brok-test-required',
         brokCodeProject: {
           workspaceId: '00000000-0000-0000-0000-000000000003',
           userId: 'user_test',
@@ -326,6 +422,55 @@ describe('runBuildStream', () => {
         result.events.some(event => event.kind === 'phase' && event.phase === 'ready')
       ).toBe(false)
       expect(result.projectId).toBeNull()
+    } finally {
+      if (previousStorage === undefined) {
+        delete process.env.BROKCODE_PROJECT_STORAGE
+      } else {
+        process.env.BROKCODE_PROJECT_STORAGE = previousStorage
+      }
+      if (previousSyncDir === undefined) {
+        delete process.env.BROKCODE_SYNC_DIR
+      } else {
+        process.env.BROKCODE_SYNC_DIR = previousSyncDir
+      }
+      await rm(syncDir, { recursive: true, force: true })
+    }
+  }, 15000)
+
+  it('fails closed instead of creating a new app for a stale continuation project id', async () => {
+    const syncDir = await mkdtemp(path.join(tmpdir(), 'brok-build-stale-'))
+    const previousStorage = process.env.BROKCODE_PROJECT_STORAGE
+    const previousSyncDir = process.env.BROKCODE_SYNC_DIR
+    process.env.BROKCODE_PROJECT_STORAGE = 'file'
+    process.env.BROKCODE_SYNC_DIR = syncDir
+
+    try {
+      const result = await runBuildStream({
+        prompt: 'Edit the current CRM',
+        projectId: 'missing-project-id',
+        brokCodeProject: {
+          workspaceId: '00000000-0000-0000-0000-000000000003',
+          userId: 'user_test',
+          request: {
+            headers: new Headers({ host: 'localhost:3000' }),
+            url: 'http://localhost:3000/api/build/stream'
+          },
+          requireBrokCodeExecution: true,
+          executeBrokCodeBuild: async () => {
+            throw new Error('should not execute')
+          }
+        }
+      })
+
+      expect(result.projectId).toBeNull()
+      expect(result.events).toContainEqual({
+        kind: 'error',
+        message:
+          'Selected BrokCode project was not found. Refresh the builder and try again.'
+      })
+      expect(
+        result.events.some(event => event.kind === 'brokcode_project')
+      ).toBe(false)
     } finally {
       if (previousStorage === undefined) {
         delete process.env.BROKCODE_PROJECT_STORAGE

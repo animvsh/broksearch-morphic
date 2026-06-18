@@ -15,10 +15,17 @@ import {
   prepareGeneratedBrokCodeFiles
 } from '@/lib/brokcode/generated-files'
 import {
+  hasRenderableManagedPreview,
+  makeManagedPreviewUrl,
+  resolvePublicPreviewOrigin
+} from '@/lib/brokcode/preview'
+import {
+  clearBrokCodeProjectPreview,
   deleteBrokCodeProjectFile,
   getBrokCodeProject,
   listBrokCodeProjectFiles,
   renameBrokCodeProjectFile,
+  updateBrokCodeProjectPreview,
   upsertBrokCodeProjectFile
 } from '@/lib/brokcode/project-store'
 import { createBrokCodeRuntimeSpec } from '@/lib/brokcode/runtime/contract'
@@ -77,6 +84,57 @@ async function authorizeProject(request: Request, id: string) {
   }
 
   return { ok: true as const, authResult, project }
+}
+
+async function refreshManagedPreviewAfterFileChange({
+  request,
+  access,
+  files,
+  changeType
+}: {
+  request: Request
+  access: Extract<Awaited<ReturnType<typeof authorizeProject>>, { ok: true }>
+  files: Awaited<ReturnType<typeof listBrokCodeProjectFiles>>
+  changeType: 'file_save' | 'file_operations'
+}) {
+  if (!hasRenderableManagedPreview(files)) {
+    return (
+      (await clearBrokCodeProjectPreview({
+        projectId: access.project.id,
+        workspaceId: access.authResult.workspace.id,
+        userId: access.authResult.apiKey.userId,
+        metadata: {
+          mode: 'managed_live_preview',
+          fileCount: files.length,
+          generatedAt: new Date().toISOString(),
+          hotReload: false,
+          refreshReason: changeType,
+          unavailableReason: 'missing_renderable_entry'
+        }
+      })) ?? access.project
+    )
+  }
+
+  const previewUrl = makeManagedPreviewUrl({
+    origin: resolvePublicPreviewOrigin(request),
+    projectId: access.project.id
+  })
+
+  return (
+    (await updateBrokCodeProjectPreview({
+      projectId: access.project.id,
+      workspaceId: access.authResult.workspace.id,
+      userId: access.authResult.apiKey.userId,
+      previewUrl,
+      metadata: {
+        mode: 'managed_live_preview',
+        fileCount: files.length,
+        generatedAt: new Date().toISOString(),
+        hotReload: true,
+        refreshReason: changeType
+      }
+    })) ?? access.project
+  )
 }
 
 export async function GET(
@@ -155,6 +213,12 @@ export async function PUT(
     projectId: access.project.id,
     workspaceId: access.authResult.workspace.id
   })
+  const project = await refreshManagedPreviewAfterFileChange({
+    request,
+    access,
+    files: allFiles,
+    changeType: 'file_save'
+  })
   const spec = createBrokCodeRuntimeSpec({
     projectId: access.project.id,
     workspaceId: access.authResult.workspace.id,
@@ -171,6 +235,9 @@ export async function PUT(
     return NextResponse.json({
       file: savedFiles[0] ?? null,
       files: savedFiles,
+      project: publicProject(project),
+      allFiles,
+      previewUrl: project.previewUrl,
       runtimeWorkspace: runtimeWorkspace.manifest
     })
   } catch (error) {
@@ -271,10 +338,18 @@ export async function POST(
     projectId: access.project.id,
     workspaceId: access.authResult.workspace.id
   })
+  const project = await refreshManagedPreviewAfterFileChange({
+    request,
+    access,
+    files: allFiles,
+    changeType: 'file_operations'
+  })
 
   return NextResponse.json({
     changes: applied.changes,
     files: allFiles,
+    project: publicProject(project),
+    previewUrl: project.previewUrl,
     resolutionChoices: ['review_diff', 'retry_latest_context']
   })
 }

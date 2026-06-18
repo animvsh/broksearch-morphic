@@ -3493,6 +3493,16 @@ export function BrokCodeApp({
               : (current?.deploymentUrl ?? null)
         }))
       }
+      if (body?.project && typeof body.project === 'object') {
+        const project = body.project as BrokCodeProject
+        if (project.id) {
+          setProjects(current => [
+            project,
+            ...current.filter(item => item.id !== project.id)
+          ])
+          setActiveProjectId(project.id)
+        }
+      }
 
       setMessages(current => [
         ...current,
@@ -4730,7 +4740,7 @@ export function BrokCodeApp({
                   }}
                 >
                   <Rocket className="size-4" />
-                  {isDeploying ? 'Publishing...' : 'Publish managed app'}
+                  {isDeploying ? 'Publishing...' : '1-click deploy'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>

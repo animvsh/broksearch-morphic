@@ -1,7 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { type FormEvent, useCallback, useMemo, useState } from 'react'
 
 import {
   ArrowRight,
@@ -67,7 +66,6 @@ type BrokBuildEmptyStateProps = {
 }
 
 export function BrokBuildEmptyState({ chips }: BrokBuildEmptyStateProps) {
-  const router = useRouter()
   const [value, setValue] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -77,17 +75,14 @@ export function BrokBuildEmptyState({ chips }: BrokBuildEmptyStateProps) {
   )
 
   const handleSubmit = useCallback(
-    async (prompt: string) => {
-      const trimmed = prompt.trim()
-      if (!trimmed || submitting) return
+    (event: FormEvent<HTMLFormElement>) => {
+      if (!value.trim() || submitting) {
+        event.preventDefault()
+        return
+      }
       setSubmitting(true)
-      const params = new URLSearchParams({
-        prompt: trimmed,
-        autostart: '1'
-      })
-      router.push(`/build/new?${params.toString()}`)
     },
-    [router, submitting]
+    [submitting, value]
   )
 
   return (
@@ -111,12 +106,12 @@ export function BrokBuildEmptyState({ chips }: BrokBuildEmptyStateProps) {
         </p>
 
         <form
+          action="/build/new"
           className="mt-10 w-full"
-          onSubmit={event => {
-            event.preventDefault()
-            handleSubmit(value)
-          }}
+          method="get"
+          onSubmit={handleSubmit}
         >
+          <input type="hidden" name="autostart" value="1" />
           <label className="sr-only" htmlFor="brok-build-prompt">
             Describe the app you want to build
           </label>
@@ -126,6 +121,7 @@ export function BrokBuildEmptyState({ chips }: BrokBuildEmptyStateProps) {
               className="min-h-[64px] flex-1 resize-none rounded-xl border-0 bg-transparent px-4 py-3 text-base shadow-none outline-none placeholder:text-muted-foreground/70 focus:ring-0 focus-visible:ring-0"
               placeholder={placeholder}
               value={value}
+              name="prompt"
               onChange={event => setValue(event.target.value)}
               onKeyDown={event => {
                 if (
@@ -134,16 +130,17 @@ export function BrokBuildEmptyState({ chips }: BrokBuildEmptyStateProps) {
                   !event.nativeEvent.isComposing
                 ) {
                   event.preventDefault()
-                  handleSubmit(value)
+                  event.currentTarget.form?.requestSubmit()
                 }
               }}
+              required
               rows={2}
             />
             <Button
               type="submit"
               size="lg"
               className="h-12 rounded-xl px-5"
-              disabled={!value.trim() || submitting}
+              disabled={submitting}
             >
               {submitting ? 'Starting…' : 'Build'}
               <ArrowRight className="ml-1.5 h-4 w-4" />

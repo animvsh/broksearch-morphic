@@ -4,6 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  clearBrokCodeProjectPreview,
   createBrokCodeProject,
   deleteBrokCodeProject,
   getBrokCodeProject,
@@ -294,6 +295,49 @@ describe('BrokCode project file store', () => {
     expect(updatedProject?.metadata?.preview).toMatchObject({
       mode: 'managed_static',
       fileCount: 1
+    })
+  })
+
+  it('clears stale managed preview URLs when the project is no longer renderable', async () => {
+    const project = await createBrokCodeProject({
+      workspaceId,
+      userId,
+      name: 'Preview Clear App'
+    })
+
+    await updateBrokCodeProjectPreview({
+      projectId: project.id,
+      workspaceId,
+      userId,
+      previewUrl:
+        'https://www.brok.fyi/api/brokcode/previews/clear-app/index.html',
+      metadata: {
+        mode: 'managed_live_preview',
+        fileCount: 1
+      }
+    })
+    await clearBrokCodeProjectPreview({
+      projectId: project.id,
+      workspaceId,
+      userId,
+      metadata: {
+        mode: 'managed_live_preview',
+        fileCount: 0,
+        unavailableReason: 'missing_renderable_entry'
+      }
+    })
+
+    const updatedProject = await getBrokCodeProject({
+      id: project.id,
+      workspaceId,
+      userId
+    })
+    expect(updatedProject?.status).toBe('draft')
+    expect(updatedProject?.previewUrl).toBeNull()
+    expect(updatedProject?.metadata?.preview).toMatchObject({
+      mode: 'managed_live_preview',
+      fileCount: 0,
+      unavailableReason: 'missing_renderable_entry'
     })
   })
 

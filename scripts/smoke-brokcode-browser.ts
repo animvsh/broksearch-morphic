@@ -13,6 +13,7 @@ const projectId = crypto.randomUUID()
 const sessionId = crypto.randomUUID()
 const runtimeId = crypto.randomUUID()
 const projectName = 'Browser Smoke Bakery'
+const browserEditMarker = 'Editor saved blackberry cruffins before publish.'
 const previewPath = `/api/brokcode/previews/${projectId}/index.html`
 const deployPath = `/brokcode/apps/browser-smoke--${projectId}/index.html`
 const recoveredTaskId = 'browser-smoke-task'
@@ -23,6 +24,7 @@ const generatedFiles = new Map<string, string>()
 let recoveredTaskStatus: 'running' | 'cancelled' = 'running'
 let taskEventFollowed = false
 let taskCancelRequested = false
+let browserEditSaveSeen = false
 
 function runtime(status: 'preparing' | 'ready' | 'stopped' = 'ready') {
   return {
@@ -541,6 +543,12 @@ async function routeBrokCodeSmoke(route: Route) {
     }
     if (body.path && typeof body.content === 'string') {
       generatedFiles.set(body.path, body.content)
+      if (
+        body.path === 'index.html' &&
+        body.content.includes(browserEditMarker)
+      ) {
+        browserEditSaveSeen = true
+      }
     }
     await route.fulfill(
       json({
@@ -746,6 +754,9 @@ async function main() {
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Unknown follow task error'
+        if (includeRecoveryFlow) {
+          throw new Error(`Follow-task recovery flow failed: ${message}`)
+        }
         console.warn(
           `Follow-task recovery flow unavailable or changed; skipping. (${message})`
         )
@@ -821,12 +832,64 @@ async function main() {
       .getByText('Newsletter signup saved for the morning bake.')
       .waitFor()
 
-    await page.getByTestId('brokcode-actions-trigger').click()
-    await page.getByText('1-click deploy').click()
-    await page.getByText('App is live on its managed URL.').waitFor({
+    await page.getByRole('tab', { name: 'Files' }).click()
+    await page.getByRole('button', { name: 'index.html', exact: true }).click()
+    await page.getByRole('button', { name: 'Edit' }).click()
+
+    const fileEditor = page.locator(
+      'textarea:not([data-testid="brokcode-command-input"])'
+    )
+    await fileEditor.waitFor({ timeout: 10_000 })
+    const originalIndexHtml = await fileEditor.inputValue()
+    const editedIndexHtml = originalIndexHtml.includes(browserEditMarker)
+      ? originalIndexHtml
+      : originalIndexHtml.replace(
+          '      <a class="button" href="#menu">View menu</a>',
+          [
+            '      <a class="button" href="#menu">View menu</a>',
+            `      <p data-smoke-edit="saved">${browserEditMarker}</p>`
+          ].join('\n')
+        )
+    if (!editedIndexHtml.includes(browserEditMarker)) {
+      throw new Error('BrokCode browser smoke could not prepare UI edit.')
+    }
+
+    await fileEditor.fill(editedIndexHtml)
+    await page.waitForFunction(
+      () =>
+        Array.from(document.querySelectorAll('button')).some(
+          button => button.textContent?.trim() === 'Save' && !button.disabled
+        ),
+      undefined,
+      { timeout: 10_000 }
+    )
+    await page.getByRole('button', { name: 'Save' }).last().click()
+    await previewFrame.getByText(browserEditMarker).waitFor({
       timeout: 10_000
     })
+    if (!browserEditSaveSeen) {
+      throw new Error(
+        'BrokCode browser UI edit was not saved through files API.'
+      )
+    }
+
+    await page.getByTestId('brokcode-actions-trigger').click()
+    await page.getByText('1-click deploy').click()
+    await page.getByText('App is published on its managed URL.').waitFor({
+      timeout: 10_000
+    })
+    await page.waitForFunction(
+      expectedSrc => {
+        const frame = document.querySelector<HTMLIFrameElement>(
+          '[data-testid="brokcode-preview-frame"]'
+        )
+        return frame?.src === expectedSrc
+      },
+      `${baseUrl}${deployPath}`,
+      { timeout: 10_000 }
+    )
     await previewFrame.getByRole('heading', { name: projectName }).waitFor()
+    await previewFrame.getByText(browserEditMarker).waitFor()
 
     const overflow = await page.evaluate(
       () =>

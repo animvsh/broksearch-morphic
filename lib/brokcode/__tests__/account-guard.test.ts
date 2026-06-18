@@ -69,6 +69,7 @@ function realAuthResult(scopes: string[] = ['code:write']) {
 describe('enforceBrokCodeAccountOwnership', () => {
   afterEach(() => {
     delete process.env.BROKCODE_ALLOW_LOCAL_AUTH_FALLBACK
+    delete process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK
     vi.clearAllMocks()
     mocks.getCurrentUserMock.mockResolvedValue(null)
     mocks.isAnonymousAuthModeMock.mockReturnValue(false)
@@ -95,9 +96,17 @@ describe('enforceBrokCodeAccountOwnership', () => {
     ).resolves.toBeNull()
   })
 
-  it('rejects real API keys without the BrokCode write scope', async () => {
+  it('allows the shared local smoke flag to enable local fallback API keys', async () => {
+    process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK = 'true'
+
+    await expect(
+      enforceBrokCodeAccountOwnership(fallbackAuthResult)
+    ).resolves.toBeNull()
+  })
+
+  it('rejects non-local API keys without code write scope', async () => {
     const response = await enforceBrokCodeAccountOwnership(
-      realAuthResult(['chat:write'])
+      realAuthResult(['search:write', 'usage:read'])
     )
 
     expect(response?.status).toBe(403)
@@ -107,6 +116,7 @@ describe('enforceBrokCodeAccountOwnership', () => {
         message: 'This API key requires the code:write scope.'
       }
     })
+    expect(mocks.getCurrentUserMock).not.toHaveBeenCalled()
   })
 
   it('allows real API keys with the BrokCode write scope when no browser user is present', async () => {

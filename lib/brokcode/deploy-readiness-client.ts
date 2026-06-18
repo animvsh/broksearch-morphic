@@ -3,6 +3,9 @@ import type { GeneratedBrokCodeQualityReport } from './generated-files'
 export type BrokCodeManagedDeployReadinessStatus =
   | 'ready'
   | 'missing_entrypoint'
+  | 'backend_not_applied'
+  | 'backend_not_rewired'
+  | 'degraded_fallback'
   | 'quality_blocked'
 
 export type BrokCodeManagedDeployReadiness = {
@@ -82,7 +85,13 @@ export function summarizeBrokCodeDeployReadiness({
       label:
         readiness.status === 'missing_entrypoint'
           ? 'Missing app'
-          : 'Quality gate',
+          : readiness.status === 'backend_not_applied'
+            ? 'Backend pending'
+            : readiness.status === 'backend_not_rewired'
+              ? 'Backend rewire needed'
+              : readiness.status === 'degraded_fallback'
+                ? 'Runtime proof needed'
+                : 'Quality gate',
       tone: 'blocked',
       detail: readiness.message
     }

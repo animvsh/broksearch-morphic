@@ -310,6 +310,13 @@ async function fetchTaskResultWithRecovery(
 
 async function seedApiKeyIfNeeded() {
   if (apiKey !== 'brok_sk_local_smoke') return
+  if (
+    process.env.BROK_ENABLE_LOCAL_AUTH_FALLBACK === 'true' &&
+    process.env.BROK_SMOKE_API_KEY === apiKey
+  ) {
+    console.log('brokcode smoke using local auth fallback key')
+    return
+  }
 
   const seedToken = process.env.SMOKE_SEED_TOKEN
   if (seedToken) {

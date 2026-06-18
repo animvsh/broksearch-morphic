@@ -22,6 +22,19 @@ function encode(event: BrokStreamEvent) {
   return `event: brok\ndata: ${JSON.stringify(event)}\n\n`
 }
 
+function isCloudLikeBuildRuntime() {
+  return (
+    process.env.BROK_CLOUD_DEPLOYMENT === 'true' ||
+    process.env.MORPHIC_CLOUD_DEPLOYMENT === 'true' ||
+    process.env.NODE_ENV === 'production'
+  )
+}
+
+function requiresBrokCodeExecution(value: unknown) {
+  if (isCloudLikeBuildRuntime()) return true
+  return value === true
+}
+
 export async function POST(request: Request) {
   const access = await requireFeatureAccessForApi('brokcode')
   if (!access.ok) return access.response
@@ -60,13 +73,29 @@ export async function POST(request: Request) {
   const accountMismatch = authResult.success
     ? await enforceBrokCodeAccountOwnership(authResult)
     : null
+  if (accountMismatch) return accountMismatch
+  if (!authResult.success && isCloudLikeBuildRuntime()) {
+    return NextResponse.json(
+      {
+        error: {
+          type: 'authentication_error',
+          code: authResult.error,
+          message:
+            'Brok Build requires BrokCode project authentication in production. Sign in with BrokCode access or provide a code:write Brok API key.'
+        }
+      },
+      { status: authResult.status }
+    )
+  }
   const brokCodeProject =
     authResult.success && !accountMismatch
       ? {
           workspaceId: authResult.workspace.id,
           userId: authResult.apiKey.userId,
           request,
-          requireBrokCodeExecution: body.require_brokcode_execution === true
+          requireBrokCodeExecution: requiresBrokCodeExecution(
+            body.require_brokcode_execution
+          )
         }
       : undefined
 

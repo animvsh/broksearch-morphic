@@ -7,7 +7,8 @@ import {
 } from '@/lib/brokcode/preview'
 import {
   getBrokCodeProjectByHandle,
-  listBrokCodeProjectFilesByProjectId
+  getLatestBrokCodeDeploymentFileSnapshot,
+  listBrokCodeProjectDeployments
 } from '@/lib/brokcode/project-store'
 
 export const runtime = 'nodejs'
@@ -57,17 +58,53 @@ export async function GET(
     })
   }
 
-  const files = await listBrokCodeProjectFilesByProjectId({
-    projectId: project.id
-  })
-  if (!hasRenderableManagedPreview(files)) {
-    return new NextResponse('BrokCode app has no renderable index.html.', {
+  const managedDeployments = (
+    await listBrokCodeProjectDeployments({
+      projectId: project.id,
+      workspaceId: project.workspaceId,
+      userId: project.userId,
+      maxResults: 25
+    })
+  ).filter(
+    deployment =>
+      deployment.provider === 'managed_preview' &&
+      deployment.status === 'deployed'
+  )
+  if (managedDeployments.length === 0) {
+    return new NextResponse('BrokCode app has no published snapshot.', {
       status: 404,
       headers: {
         'Cache-Control': 'no-store',
         'Content-Type': 'text/plain; charset=utf-8'
       }
     })
+  }
+
+  const files = await getLatestBrokCodeDeploymentFileSnapshot({
+    projectId: project.id,
+    workspaceId: project.workspaceId,
+    userId: project.userId
+  })
+  if (files.length === 0) {
+    return new NextResponse('BrokCode app has no published snapshot.', {
+      status: 404,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Content-Type': 'text/plain; charset=utf-8'
+      }
+    })
+  }
+  if (!hasRenderableManagedPreview(files)) {
+    return new NextResponse(
+      'BrokCode app published snapshot has no renderable index.html.',
+      {
+        status: 404,
+        headers: {
+          'Cache-Control': 'no-store',
+          'Content-Type': 'text/plain; charset=utf-8'
+        }
+      }
+    )
   }
   const asset = getManagedPreviewAsset({
     files,

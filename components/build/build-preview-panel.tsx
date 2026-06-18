@@ -20,6 +20,10 @@ type PreviewProps = {
   previewUrl: string | null
   phase: BrokBuildPhase
   files: BrokBuildFilePreview[]
+  degraded?: boolean
+  errorMessage?: string | null
+  unavailableReason?: string | null
+  reloadToken?: number
 }
 
 type DeviceMode = 'desktop' | 'tablet' | 'mobile'
@@ -30,7 +34,15 @@ const DEVICE_WIDTHS: Record<DeviceMode, string> = {
   mobile: 'mx-auto w-[390px] max-w-full'
 }
 
-export function BuildPreviewPanel({ previewUrl, phase, files }: PreviewProps) {
+export function BuildPreviewPanel({
+  previewUrl,
+  phase,
+  files,
+  degraded = false,
+  errorMessage = null,
+  unavailableReason = null,
+  reloadToken = 0
+}: PreviewProps) {
   const [device, setDevice] = useState<DeviceMode>('desktop')
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -91,7 +103,10 @@ export function BuildPreviewPanel({ previewUrl, phase, files }: PreviewProps) {
             previewUrl={previewUrl}
             phase={phase}
             files={files}
-            reloadKey={reloadKey}
+            degraded={degraded}
+            errorMessage={errorMessage}
+            unavailableReason={unavailableReason}
+            reloadKey={`${reloadToken}-${reloadKey}`}
           />
         </div>
       </div>
@@ -131,18 +146,36 @@ type ContentProps = {
   previewUrl: string | null
   phase: BrokBuildPhase
   files: BrokBuildFilePreview[]
-  reloadKey: number
+  degraded: boolean
+  errorMessage: string | null
+  unavailableReason: string | null
+  reloadKey: string
 }
 
-function PreviewContent({ previewUrl, phase, files, reloadKey }: ContentProps) {
+function PreviewContent({
+  previewUrl,
+  phase,
+  files,
+  degraded,
+  errorMessage,
+  unavailableReason,
+  reloadKey
+}: ContentProps) {
   if (previewUrl) {
     return (
-      <iframe
-        key={reloadKey}
-        title="Brok Build preview"
-        src={previewUrl}
-        className="h-full w-full bg-background"
-      />
+      <div className="relative h-full w-full">
+        {degraded ? (
+          <div className="absolute left-3 top-3 z-10 max-w-[calc(100%-1.5rem)] rounded-md border border-amber-500/40 bg-background/95 px-3 py-2 text-xs text-amber-700 shadow-sm backdrop-blur dark:text-amber-300">
+            Runtime fallback preview. Open BrokCode to inspect and rerun the build.
+          </div>
+        ) : null}
+        <iframe
+          key={reloadKey}
+          title="Brok Build preview"
+          src={previewUrl}
+          className="h-full w-full bg-background"
+        />
+      </div>
     )
   }
 
@@ -159,13 +192,25 @@ function PreviewContent({ previewUrl, phase, files, reloadKey }: ContentProps) {
     return (
       <EmptyState
         title="Preview failed to build."
-        subtitle="Brok is fixing it. Open the console to view details."
+        subtitle={errorMessage ?? 'Open the console to view details.'}
         tone="error"
       />
     )
   }
 
   if (phase === 'ready') {
+    if (files.length > 0) {
+      return (
+        <EmptyState
+          title="Preview unavailable."
+          subtitle={
+            unavailableReason ??
+            'Add a renderable index.html and save, then refresh the preview.'
+          }
+          tone="warning"
+        />
+      )
+    }
     return (
       <EmptyState
         title="Project scaffold is ready."
@@ -186,13 +231,17 @@ function EmptyState({
 }: {
   title: string
   subtitle: string
-  tone?: 'error'
+  tone?: 'error' | 'warning'
 }) {
   return (
     <div
       className={cn(
         'flex h-full flex-col items-center justify-center gap-3 p-8 text-center',
-        tone === 'error' ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground'
+        tone === 'error'
+          ? 'text-rose-600 dark:text-rose-400'
+          : tone === 'warning'
+            ? 'text-amber-700 dark:text-amber-300'
+            : 'text-muted-foreground'
       )}
     >
       <div
@@ -200,10 +249,12 @@ function EmptyState({
           'flex h-10 w-10 items-center justify-center rounded-full',
           tone === 'error'
             ? 'bg-rose-500/10'
+            : tone === 'warning'
+              ? 'bg-amber-500/10'
             : 'bg-foreground/[0.04]'
         )}
       >
-        {tone === 'error' ? (
+        {tone === 'error' || tone === 'warning' ? (
           <span className="text-lg">!</span>
         ) : (
           <Loader2 className="h-4 w-4 animate-spin" />
